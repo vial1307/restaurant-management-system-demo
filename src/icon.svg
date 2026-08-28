@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="食徒 Kitchen OS">
+  <rect width="192" height="192" rx="42" fill="#112724"/>
+  <rect x="29" y="29" width="134" height="134" rx="38" fill="#def3df"/>
+  <text x="96" y="121" text-anchor="middle" font-size="90" font-family="system-ui, sans-serif" font-weight="700" fill="#112724">食</text>
+</svg>
