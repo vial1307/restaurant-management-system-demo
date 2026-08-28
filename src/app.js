@@ -393,6 +393,26 @@ function procurementDateLabel(date, language) {
   return new Intl.DateTimeFormat(localeFor(language), { weekday: "short", month: "numeric", day: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
 
+const PROCUREMENT_WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const PROCUREMENT_WEEKDAY_LABELS = {
+  vi: { mon: "T2", tue: "T3", wed: "T4", thu: "T5", fri: "T6", sat: "T7", sun: "CN" },
+  zh: { mon: "一", tue: "二", wed: "三", thu: "四", fri: "五", sat: "六", sun: "日" },
+};
+
+function procurementScheduleEditor(category, coverage, context) {
+  const { language } = context;
+  const closed = new Set(coverage.closedDays);
+  const coverageDates = coverage.dates.map((date) => procurementDateLabel(date, language)).join(" + ");
+  const restLabel = closed.size
+    ? PROCUREMENT_WEEKDAYS.filter((day) => closed.has(day)).map((day) => PROCUREMENT_WEEKDAY_LABELS[language][day]).join("、")
+    : (language === "zh" ? "尚未設定" : "Chưa thiết lập");
+  return `<div class="supplier-schedule ${coverage.orderable ? "" : "schedule-closed"}">
+    <label class="supplier-order-date"><span>${language === "zh" ? "叫貨日期" : "Ngày gọi hàng"}</span><input type="date" value="${escapeHtml(coverage.orderDate)}" data-field="procurementOrderDate" data-category="${escapeHtml(category)}"/></label>
+    <div class="supplier-rest-days"><span>${language === "zh" ? "休息日" : "Ngày nghỉ"} · <strong>${escapeHtml(restLabel)}</strong></span><div>${PROCUREMENT_WEEKDAYS.map((day) => `<button class="${closed.has(day) ? "closed" : ""}" type="button" data-action="procurement-toggle-closed" data-category="${escapeHtml(category)}" data-day="${day}" aria-pressed="${closed.has(day)}">${PROCUREMENT_WEEKDAY_LABELS[language][day]}</button>`).join("")}</div></div>
+    <div class="supplier-coverage"><span>${language === "zh" ? "本次涵蓋" : "Lần này bao phủ"}</span>${coverage.orderable ? `<strong>${escapeHtml(coverageDates || "—")}</strong>` : `<strong class="closed-message">${language === "zh" ? "叫貨日為休息日" : "Ngày gọi trùng ngày nghỉ"}</strong>`}</div>
+  </div>`;
+}
+
 function procurementBalance(line, language) {
   if (line.shortage > 0) return `<span class="procurement-gap">${language === "zh" ? "叫貨前缺" : "Thiếu trước khi gọi"} ${compactNumber(line.shortage, language)} ${escapeHtml(line.demandUnit)}</span>`;
   return `<span class="procurement-covered">${language === "zh" ? "現有庫存足夠" : "Tồn hiện tại đủ dùng"}</span>`;
@@ -417,24 +437,21 @@ function procurementRow(line, context, factory = false) {
   </article>`;
 }
 
-function procurementSection(title, subtitle, lines, context, factory = false) {
+function procurementSection(title, subtitle, lines, context, category, coverage, factory = false) {
   const { language } = context;
-  return `<section class="card procurement-card">${cardHeading(title, `<span class="tag tag-neutral">${lines.length} ${language === "zh" ? "品項" : "mặt hàng"}</span>`, `<p>${escapeHtml(subtitle)}</p>`)}<div class="procurement-table-head"><span>${language === "zh" ? "品項 / 叫貨規格" : "Mặt hàng / quy cách"}</span><span>${language === "zh" ? "現有" : "Hiện có"}</span><span>${language === "zh" ? "需求" : "Nhu cầu"}</span><span>${language === "zh" ? "待到貨" : "Đang giao"}</span><span>${language === "zh" ? "建議叫貨" : "Đề xuất gọi"}</span></div>${lines.map((line) => procurementRow(line, context, factory)).join("") || `<p class="empty-state">${language === "zh" ? "目前沒有品項。" : "Chưa có mặt hàng."}</p>`}</section>`;
+  return `<section class="card procurement-card">${cardHeading(title, `<span class="tag tag-neutral">${lines.length} ${language === "zh" ? "品項" : "mặt hàng"}</span>`, `<p>${escapeHtml(subtitle)}</p>`)}${procurementScheduleEditor(category, coverage, context)}<div class="procurement-table-head"><span>${language === "zh" ? "品項 / 叫貨規格" : "Mặt hàng / quy cách"}</span><span>${language === "zh" ? "現有" : "Hiện có"}</span><span>${language === "zh" ? "需求" : "Nhu cầu"}</span><span>${language === "zh" ? "待到貨" : "Đang giao"}</span><span>${language === "zh" ? "建議叫貨" : "Đề xuất gọi"}</span></div>${lines.map((line) => procurementRow(line, context, factory)).join("") || `<p class="empty-state">${language === "zh" ? "目前沒有品項。" : "Chưa có mặt hàng."}</p>`}</section>`;
 }
 
 function procurementPage(context) {
   const { state, record, language } = context;
-  const plan = calculateProcurementPlan(state.selectedDate, record);
-  const dates = plan.coverage.dates.map((date) => procurementDateLabel(date, language)).join(" + ");
+  const plan = calculateProcurementPlan(state.selectedDate, record, state.settings);
   const noodles = plan.lines.filter((line) => line.category === "noodles");
   const vegetables = plan.lines.filter((line) => line.category === "vegetables");
   const totalOrders = [...plan.lines, ...plan.factory].filter((line) => line.orderUnits > 0).length;
   const title = language === "zh" ? "叫貨中心" : "Trung tâm gọi hàng";
   const subtitle = language === "zh" ? "依交貨範圍、現有庫存與待到貨量計算建議叫貨。" : "Tính lượng cần gọi từ lịch cung ứng, tồn hiện tại và hàng đang chờ giao.";
-  const schedule = !plan.coverage.orderable
-    ? `<div class="procurement-schedule closed"><strong>${language === "zh" ? "週六供應商休息" : "Thứ Bảy nhà cung cấp nghỉ"}</strong><span>${language === "zh" ? "週末用量應於週五一起叫貨。" : "Lượng dùng cuối tuần phải được gọi chung vào thứ Sáu."}</span></div>`
-    : `<div class="procurement-schedule ${plan.coverage.dayCode === "fri" ? "weekend-order" : ""}"><div><span>${language === "zh" ? "本次叫貨涵蓋" : "Lần gọi này bao phủ"}</span><strong>${escapeHtml(dates)}</strong></div><div><span>${language === "zh" ? "計算方式" : "Cách tính"}</span><strong>${language === "zh" ? "需求 − 現有 − 待到貨" : "Nhu cầu − tồn − đang giao"}</strong></div><div><span>${language === "zh" ? "需叫貨品項" : "Mặt hàng cần gọi"}</span><strong>${totalOrders}</strong></div></div>`;
-  return `${heading(title, subtitle, `<a class="secondary-button" href="#inventory">${icon("inventory")}${language === "zh" ? "更新庫存" : "Cập nhật tồn kho"}</a>`)}${schedule}<div class="procurement-stack">${procurementSection(language === "zh" ? "麵區叫貨" : "Gọi hàng khu mì", language === "zh" ? "粗麵 5斤/包、細麵 2.5斤/包、冷凍麵 30片/箱；週末需求預設 3 箱，再扣現有庫存。" : "Mì to 5 cân/bao, mì nhỏ 2,5 cân/bao, mì đông lạnh 30 miếng/thùng; nhu cầu cuối tuần mặc định 3 thùng rồi mới trừ tồn.", noodles, context)}${procurementSection(language === "zh" ? "蔬菜叫貨" : "Gọi rau", language === "zh" ? "顆白菜平日 4斤、假日每日 6斤，每包 2斤；高麗菜依顆數輸入。" : "Cải thìa ngày thường 4 cân, cuối tuần 6 cân/ngày, mỗi bao 2 cân; bắp cải nhập theo cây.", vegetables, context)}${procurementSection(language === "zh" ? "工廠叫貨" : "Gọi hàng xưởng", language === "zh" ? "依大冷凍現有量補到各品項的庫存標準。" : "Dựa trên tồn tủ đông lớn để bổ sung đến định mức từng mặt hàng.", plan.factory, context, true)}</div>`;
+  const schedule = `<div class="procurement-schedule"><div><span>${language === "zh" ? "計算方式" : "Cách tính"}</span><strong>${language === "zh" ? "需求 − 現有 − 待到貨" : "Nhu cầu − tồn − đang giao"}</strong></div><div><span>${language === "zh" ? "需叫貨品項" : "Mặt hàng cần gọi"}</span><strong>${totalOrders}</strong></div><div><span>${language === "zh" ? "週五規則" : "Quy tắc thứ Sáu"}</span><strong>${language === "zh" ? "涵蓋週六＋週日" : "Bao phủ T7 + Chủ nhật"}</strong></div></div>`;
+  return `${heading(title, subtitle, `<a class="secondary-button" href="#inventory">${icon("inventory")}${language === "zh" ? "更新庫存" : "Cập nhật tồn kho"}</a>`)}${schedule}<div class="procurement-stack">${procurementSection(language === "zh" ? "麵區叫貨" : "Gọi hàng khu mì", language === "zh" ? "粗麵 5斤/包、細麵 2.5斤/包、冷凍麵 30片/箱；週末需求預設 3 箱，再扣現有庫存。" : "Mì to 5 cân/bao, mì nhỏ 2,5 cân/bao, mì đông lạnh 30 miếng/thùng; nhu cầu cuối tuần mặc định 3 thùng rồi mới trừ tồn.", noodles, context, "noodles", plan.coverages.noodles)}${procurementSection(language === "zh" ? "蔬菜叫貨" : "Gọi rau", language === "zh" ? "顆白菜平日 4斤、假日每日 6斤，每包 2斤；高麗菜依顆數輸入。" : "Cải thìa ngày thường 4 cân, cuối tuần 6 cân/ngày, mỗi bao 2 cân; bắp cải nhập theo cây.", vegetables, context, "vegetables", plan.coverages.vegetables)}${procurementSection(language === "zh" ? "工廠叫貨" : "Gọi hàng xưởng", language === "zh" ? "依大冷凍現有量補到各品項的庫存標準；休息日請依工廠實際排程設定。" : "Dựa trên tồn tủ đông lớn để bổ sung đến định mức; hãy đặt ngày nghỉ theo lịch thực tế của xưởng.", plan.factory, context, "factory", plan.coverages.factory, true)}</div>`;
 }
 
 function taskLabel(task, context) {
@@ -572,6 +589,7 @@ root.addEventListener("click", (event) => {
   if (action === "select-work-area") { view.workArea = target.dataset.area; render(); }
   if (action === "select-zone") { view.zone = target.dataset.zone; render(); }
   if (action === "select-task-filter") { view.taskFilter = target.dataset.filter; render(); }
+  if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
     if (item) store.updateItem(item.id, "quantity", item.quantity + Number(target.dataset.delta));
@@ -598,6 +616,7 @@ root.addEventListener("change", (event) => {
   if (field === "remaining") store.updateRemaining(key, element.value);
   if (field === "riceRemaining") store.updateRice(element.value);
   if (field === "procurement") store.updateProcurementLine(id, key, element.value);
+  if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
   if (field === "item") store.updateItem(id, key, element.value);
   if (field === "workItem") store.updateWorkItem(id, key, element.value);
   if (field === "calendarMonth") { view.calendarMonth = Number(element.value); render(); }
