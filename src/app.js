@@ -223,7 +223,7 @@ function topbar(context) {
     <div class="date-switcher"><button class="icon-button" data-action="shift-date" data-offset="-1" aria-label="${escapeHtml(text.yesterday)}">${icon("chevronLeft")}</button>
       <button class="date-label" data-action="toggle-calendar" aria-expanded="${view.calendarOpen}" aria-label="${escapeHtml(text.selectDate)}"><span>${escapeHtml(text.serviceDate)}</span><strong>${escapeHtml(dateLabel(state.selectedDate, language))}</strong></button>
       <button class="icon-button" data-action="shift-date" data-offset="1" aria-label="${escapeHtml(text.tomorrow)}">${icon("chevronRight")}</button>${view.calendarOpen ? dateCalendar(context) : ""}</div>
-    <div class="topbar-actions">${offline ? `<span class="offline-status" title="${escapeHtml(text.offlineSaved)}">${escapeHtml(text.offline)}</span>` : ""}<button class="language-button" data-action="toggle-language">${language === "vi" ? "中文" : "VI"}</button></div>
+    <div class="topbar-actions">${offline ? `<span class="offline-status" title="${escapeHtml(text.offlineSaved)}">${escapeHtml(text.offline)}</span>` : ""}<div class="language-switch topbar-language-switch" aria-label="${escapeHtml(text.language)}"><button class="${language === "vi" ? "active" : ""}" data-action="set-language" data-language="vi">VI</button><button class="${language === "zh" ? "active" : ""}" data-action="set-language" data-language="zh">中文</button></div></div>
   </header>`;
 }
 
