@@ -40,11 +40,23 @@ export function dayCodeForDate(date) {
   return DAY_CODES[parsed.getDay()] ?? "mon";
 }
 
-export function procurementCoverage(date) {
+export function procurementCoverage(date, closedDays = ["sat"]) {
   const dayCode = dayCodeForDate(date);
-  if (dayCode === "sat") return { orderable: false, dayCode, dates: [], nextOrderDate: shiftDate(date, 1) };
-  const dates = dayCode === "fri" ? [shiftDate(date, 1), shiftDate(date, 2)] : [shiftDate(date, 1)];
-  return { orderable: true, dayCode, dates, nextOrderDate: dayCode === "fri" ? shiftDate(date, 2) : shiftDate(date, 1) };
+  const closed = new Set(closedDays.filter((entry) => DAY_CODES.includes(entry)));
+  let nextOrderDate = shiftDate(date, 1);
+  for (let count = 0; count < 7 && closed.has(dayCodeForDate(nextOrderDate)); count += 1) nextOrderDate = shiftDate(nextOrderDate, 1);
+  if (closed.has(dayCode)) return { orderable: false, dayCode, closedDays: [...closed], dates: [], nextOrderDate };
+
+  const dates = [shiftDate(date, 1)];
+  let cursor = dates[0];
+  if (closed.has(dayCodeForDate(cursor))) {
+    for (let count = 0; count < 7; count += 1) {
+      cursor = shiftDate(cursor, 1);
+      dates.push(cursor);
+      if (!closed.has(dayCodeForDate(cursor))) break;
+    }
+  }
+  return { orderable: true, dayCode, closedDays: [...closed], dates, nextOrderDate };
 }
 
 function procurementStock(record, product) {
@@ -65,12 +77,19 @@ function plannedProcurementDemand(product, coverage) {
   }, 0);
 }
 
-export function calculateProcurementPlan(date, record) {
-  const coverage = procurementCoverage(date);
+export function calculateProcurementPlan(date, record, settings = {}) {
   const saved = record?.procurement ?? {};
   const planned = saved.planned ?? {};
   const incoming = saved.incoming ?? {};
+  const orderDates = saved.orderDates ?? {};
+  const scheduleDefaults = { noodles: ["sat"], vegetables: ["sat"], factory: [] };
+  const coverages = Object.fromEntries(["noodles", "vegetables", "factory"].map((category) => {
+    const closedDays = settings?.procurementSchedules?.[category]?.closedDays ?? scheduleDefaults[category];
+    const orderDate = orderDates[category] || date;
+    return [category, { ...procurementCoverage(orderDate, closedDays), orderDate, category }];
+  }));
   const lines = PROCUREMENT_PRODUCTS.map((product) => {
+    const coverage = coverages[product.category];
     const defaultDemand = plannedProcurementDemand(product, coverage);
     const demand = Object.hasOwn(planned, product.id) ? clampNumber(planned[product.id]) : defaultDemand;
     const current = procurementStock(record, product);
@@ -110,11 +129,11 @@ export function calculateProcurementPlan(date, record) {
   for (const item of freezer.values()) {
     const incomingUnits = clampNumber(incoming[item.id]);
     const shortage = Math.max(0, item.target - item.current - incomingUnits);
-    const orderUnits = Math.ceil(shortage);
+    const orderUnits = coverages.factory.orderable ? Math.ceil(shortage) : 0;
     factory.push({ ...item, demand: item.target, defaultDemand: item.target, incomingUnits, incomingQuantity: incomingUnits, shortage, orderUnits, orderQuantity: orderUnits, balance: item.current + incomingUnits + orderUnits - item.target });
   }
 
-  return { coverage, lines, factory };
+  return { coverage: coverages.noodles, coverages, lines, factory };
 }
 
 export function calculateRice(date, remaining, settings) {
