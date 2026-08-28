@@ -114,6 +114,11 @@ export const DEFAULT_SETTINGS = {
   riceWeekday: 2000,
   riceWeekend: 3000,
   riceSkipAbove: 2000,
+  procurementSchedules: {
+    noodles: { closedDays: ["sat"] },
+    vegetables: { closedDays: ["sat"] },
+    factory: { closedDays: [] },
+  },
   checklist: [
     { id: "check-soup", zh: "檢查湯底是否變酸", vi: "Kiểm tra nước lẩu có bị chua" },
     { id: "check-squid", zh: "花枝漿退冰並貼日期", vi: "Rã đông chả mực và dán ngày" },
@@ -139,7 +144,7 @@ export function createDefaultRecord(date, inventory = DEFAULT_ITEMS, workInvento
     riceRemaining: 800,
     inventory: normalizedInventory,
     workInventory: workInventory ? structuredClone(workInventory) : buildWorkInventory(normalizedInventory),
-    procurement: { planned: {}, incoming: {} },
+    procurement: { planned: {}, incoming: {}, orderDates: { noodles: date, vegetables: date, factory: date } },
     completedTasks: {},
     customTasks: [],
     updatedAt: new Date().toISOString(),
@@ -206,11 +211,21 @@ export function hydrateState(raw, date = formatDateKey()) {
         if (!record.workInventory.some((entry) => entry.stockKey === item.stockKey)) record.workInventory.push(item);
       }
       record.procurement = record.procurement && typeof record.procurement === "object"
-        ? { planned: record.procurement.planned ?? {}, incoming: record.procurement.incoming ?? {} }
-        : { planned: {}, incoming: {} };
+        ? { planned: record.procurement.planned ?? {}, incoming: record.procurement.incoming ?? {}, orderDates: { noodles: record.date, vegetables: record.date, factory: record.date, ...(record.procurement.orderDates ?? {}) } }
+        : { planned: {}, incoming: {}, orderDates: { noodles: record.date, vegetables: record.date, factory: record.date } };
     }
 
-    const settings = { ...structuredClone(DEFAULT_SETTINGS), ...(parsed.settings ?? {}) };
+    const defaults = structuredClone(DEFAULT_SETTINGS);
+    const savedSchedules = parsed.settings?.procurementSchedules ?? {};
+    const settings = {
+      ...defaults,
+      ...(parsed.settings ?? {}),
+      procurementSchedules: Object.fromEntries(["noodles", "vegetables", "factory"].map((category) => [category, {
+        ...defaults.procurementSchedules[category],
+        ...(savedSchedules[category] ?? {}),
+        closedDays: Array.isArray(savedSchedules[category]?.closedDays) ? savedSchedules[category].closedDays.filter((day) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].includes(day)) : defaults.procurementSchedules[category].closedDays,
+      }])),
+    };
     const state = {
       version: 1,
       settings,
@@ -301,6 +316,26 @@ export function createStore(storage = globalThis.localStorage) {
         record.procurement ??= { planned: {}, incoming: {} };
         const bucket = key === "planned" ? record.procurement.planned : record.procurement.incoming;
         bucket[id] = clampNumber(value);
+      });
+    },
+    updateProcurementOrderDate(category, value) {
+      return update((draft) => {
+        if (!["noodles", "vegetables", "factory"].includes(category) || !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return;
+        const record = draft.records[draft.selectedDate];
+        record.procurement ??= { planned: {}, incoming: {}, orderDates: {} };
+        record.procurement.orderDates ??= {};
+        record.procurement.orderDates[category] = String(value);
+      });
+    },
+    toggleProcurementClosedDay(category, day) {
+      return update((draft) => {
+        if (!["noodles", "vegetables", "factory"].includes(category) || !["sun", "mon", "tue", "wed", "thu", "fri", "sat"].includes(day)) return;
+        draft.settings.procurementSchedules ??= structuredClone(DEFAULT_SETTINGS.procurementSchedules);
+        draft.settings.procurementSchedules[category] ??= { closedDays: [] };
+        const closedDays = draft.settings.procurementSchedules[category].closedDays ?? [];
+        draft.settings.procurementSchedules[category].closedDays = closedDays.includes(day)
+          ? closedDays.filter((entry) => entry !== day)
+          : [...closedDays, day];
       });
     },
     updateItem(id, key, value) {
