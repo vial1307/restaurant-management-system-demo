@@ -1,16 +1,16 @@
-const CACHE_NAME = "shitu-kitchen-os-v5";
+const CACHE_NAME = "shitu-kitchen-os-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=5",
-  "./src/app.js?v=5",
+  "./manifest.webmanifest?v=6",
+  "./src/app.js?v=6",
   "./src/store.js",
   "./src/rules.js",
   "./src/i18n.js",
   "./src/operations.js",
   "./src/management.js",
   "./src/qr.js",
-  "./src/styles.css?v=5",
+  "./src/styles.css?v=6",
   "./src/icon.svg",
 ];
 
