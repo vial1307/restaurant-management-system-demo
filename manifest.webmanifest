@@ -1,0 +1,19 @@
+{
+  "name": "食徒 Kitchen OS · Quản lý bếp",
+  "short_name": "Kitchen OS",
+  "description": "Quản lý kho, SOP, đào tạo và chấm công song ngữ Trung–Việt.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7f5",
+  "theme_color": "#112724",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "./src/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
