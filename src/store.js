@@ -32,6 +32,9 @@ export const DEFAULT_ITEMS = [
   { id: "stewed-rice", label: "燴飯", labelVi: "Cơm sốt", quantity: 6, minimum: 5, unit: "盒", zone: "four-door" },
   { id: "dry-noodle-sauce", label: "乾麵醬", labelVi: "Sốt mì khô", quantity: 1, minimum: 2, unit: "包", zone: "large-fridge" },
   { id: "beef-juice", label: "牛肉汁", labelVi: "Nước sốt bò", quantity: 1, minimum: 2, unit: "包", zone: "large-fridge" },
+  { id: "frozen-noodles", label: "冷凍麵", labelVi: "Mì đông lạnh", quantity: 60, minimum: 30, unit: "片", zone: "large-freezer" },
+  { id: "baby-cabbage", label: "顆白菜", labelVi: "Cải thìa", quantity: 4, minimum: 4, unit: "斤", zone: "large-fridge" },
+  { id: "cabbage", label: "高麗菜", labelVi: "Bắp cải", quantity: 3, minimum: 2, unit: "顆", zone: "large-fridge" },
   { id: "tofu-large", label: "豆乾", labelVi: "Đậu khô", quantity: 20, minimum: 20, unit: "盒", zone: "large-fridge" },
   { id: "duck-tongue-large", label: "鴨舌", labelVi: "Lưỡi vịt", quantity: 14, minimum: 20, unit: "盒", zone: "large-fridge" },
   { id: "duck-wing-large", label: "鴨翅", labelVi: "Cánh vịt", quantity: 10, minimum: 10, unit: "盒", zone: "large-freezer" },
@@ -136,6 +139,7 @@ export function createDefaultRecord(date, inventory = DEFAULT_ITEMS, workInvento
     riceRemaining: 800,
     inventory: normalizedInventory,
     workInventory: workInventory ? structuredClone(workInventory) : buildWorkInventory(normalizedInventory),
+    procurement: { planned: {}, incoming: {} },
     completedTasks: {},
     customTasks: [],
     updatedAt: new Date().toISOString(),
@@ -188,6 +192,9 @@ export function hydrateState(raw, date = formatDateKey()) {
         stockKey: stockKeyFor(item),
         workArea: item.workArea || inferWorkArea(item),
       }));
+      for (const item of DEFAULT_ITEMS.filter((entry) => ["frozen-noodles", "baby-cabbage", "cabbage"].includes(entry.id))) {
+        if (!record.inventory.some((entry) => entry.id === item.id)) record.inventory.push({ ...structuredClone(item), stockKey: stockKeyFor(item), workArea: item.workArea || inferWorkArea(item) });
+      }
       record.workInventory = Array.isArray(record.workInventory)
         ? record.workInventory.map((item) => ({
             ...item,
@@ -195,6 +202,12 @@ export function hydrateState(raw, date = formatDateKey()) {
             workArea: item.workArea || inferWorkArea(item),
           }))
         : buildWorkInventory(record.inventory);
+      for (const item of buildWorkInventory(record.inventory)) {
+        if (!record.workInventory.some((entry) => entry.stockKey === item.stockKey)) record.workInventory.push(item);
+      }
+      record.procurement = record.procurement && typeof record.procurement === "object"
+        ? { planned: record.procurement.planned ?? {}, incoming: record.procurement.incoming ?? {} }
+        : { planned: {}, incoming: {} };
     }
 
     const settings = { ...structuredClone(DEFAULT_SETTINGS), ...(parsed.settings ?? {}) };
@@ -280,6 +293,14 @@ export function createStore(storage = globalThis.localStorage) {
     updateRice(value) {
       return update((draft) => {
         draft.records[draft.selectedDate].riceRemaining = clampNumber(value);
+      });
+    },
+    updateProcurementLine(id, key, value) {
+      return update((draft) => {
+        const record = draft.records[draft.selectedDate];
+        record.procurement ??= { planned: {}, incoming: {} };
+        const bucket = key === "planned" ? record.procurement.planned : record.procurement.incoming;
+        bucket[id] = clampNumber(value);
       });
     },
     updateItem(id, key, value) {
