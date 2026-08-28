@@ -3,6 +3,7 @@ import {
   buildGeneratedTasks,
   buildInventoryAlerts,
   calendarDays,
+  calculateProcurementPlan,
   calculateReservations,
   calculateRice,
   completionSummary,
@@ -61,6 +62,7 @@ const ICONS = {
   inventory: "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Zm-9 2.5L4.3 6.8M12 10.5l7.7-3.7M12 10.5v11",
   reservations: "M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m3 10h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01",
   preparation: "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
+  procurement: "M3 4h2l2.4 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7m3 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm7 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
   sop: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Zm3.5 6h6m-6 4h6",
   attendance: "M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   schedule: "M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m3 10h8m-8 4h5",
@@ -86,7 +88,7 @@ const ICONS = {
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5 5 5 5-5m-5 5V3",
 };
 
-const ROUTES = ["dashboard", "inventory", "reservations", "preparation", "sop", "attendance", "schedule", "reports", "remote", "settings"];
+const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "sop", "attendance", "schedule", "reports", "remote", "settings"];
 
 function icon(name, className = "") {
   return `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"></path></svg>`;
@@ -387,6 +389,54 @@ function reservationsPage(context) {
     <article class="card portions-card">${cardHeading(text.sectionPrep)}<p class="helper-text">${escapeHtml(text.reservationRule)}</p>${reservations.tables ? reservations.portions.map((portion) => portionSummary(portion, context, true)).join("") : `<p class="empty-state">${escapeHtml(text.zeroReservations)}</p>`}</article>${riceCard(context, true)}</section>`;
 }
 
+function procurementDateLabel(date, language) {
+  return new Intl.DateTimeFormat(localeFor(language), { weekday: "short", month: "numeric", day: "numeric" }).format(new Date(`${date}T12:00:00`));
+}
+
+function procurementBalance(line, language) {
+  if (line.shortage > 0) return `<span class="procurement-gap">${language === "zh" ? "叫貨前缺" : "Thiếu trước khi gọi"} ${compactNumber(line.shortage, language)} ${escapeHtml(line.demandUnit)}</span>`;
+  return `<span class="procurement-covered">${language === "zh" ? "現有庫存足夠" : "Tồn hiện tại đủ dùng"}</span>`;
+}
+
+function procurementRow(line, context, factory = false) {
+  const { language } = context;
+  const name = language === "zh" ? line.label : line.labelVi;
+  const secondary = language === "zh" ? line.labelVi : line.label;
+  const packageRule = line.orderSize === 1 && line.orderUnit === line.demandUnit
+    ? `${language === "zh" ? "依" : "Tính theo"} ${line.orderUnit}`
+    : `1 ${line.orderUnit} = ${compactNumber(line.orderSize, language)} ${line.demandUnit}`;
+  const orderStatus = line.orderUnits > 0
+    ? `<strong>${line.orderUnits} ${escapeHtml(line.orderUnit)}</strong><small>= ${compactNumber(line.orderQuantity, language)} ${escapeHtml(line.demandUnit)}</small>`
+    : `<strong class="order-none">${language === "zh" ? "不用叫貨" : "Chưa cần gọi"}</strong>`;
+  return `<article class="procurement-row" data-procurement-id="${escapeHtml(line.id)}">
+    <div class="procurement-product"><strong>${escapeHtml(name)}</strong><small>${escapeHtml(secondary)} · ${escapeHtml(packageRule)}</small></div>
+    <div class="procurement-current"><span>${language === "zh" ? "現有庫存" : "Tồn hiện tại"}</span><strong>${compactNumber(line.current, language)} ${escapeHtml(line.demandUnit)}</strong></div>
+    <label class="procurement-input"><span>${factory ? (language === "zh" ? "目標庫存" : "Mức cần có") : (language === "zh" ? "預計用量" : "Dự kiến sử dụng")}</span>${factory ? `<strong>${compactNumber(line.demand, language)} ${escapeHtml(line.demandUnit)}</strong>` : `<input type="number" min="0" step="0.5" value="${escapeHtml(line.demand)}" data-field="procurement" data-key="planned" data-id="${escapeHtml(line.id)}"/><small>${escapeHtml(line.demandUnit)}</small>`}</label>
+    <label class="procurement-input"><span>${language === "zh" ? "已叫待到貨" : "Đã gọi, chờ giao"}</span><input type="number" min="0" step="1" value="${escapeHtml(line.incomingUnits)}" data-field="procurement" data-key="incoming" data-id="${escapeHtml(line.id)}"/><small>${escapeHtml(line.orderUnit)}</small></label>
+    <div class="procurement-result">${procurementBalance(line, language)}${orderStatus}<small class="procurement-after ${line.balance < 0 ? "negative" : ""}">${language === "zh" ? "叫貨後預計剩" : "Dự kiến dư sau khi gọi"} ${compactNumber(Math.max(0, line.balance), language)} ${escapeHtml(line.demandUnit)}</small></div>
+  </article>`;
+}
+
+function procurementSection(title, subtitle, lines, context, factory = false) {
+  const { language } = context;
+  return `<section class="card procurement-card">${cardHeading(title, `<span class="tag tag-neutral">${lines.length} ${language === "zh" ? "品項" : "mặt hàng"}</span>`, `<p>${escapeHtml(subtitle)}</p>`)}<div class="procurement-table-head"><span>${language === "zh" ? "品項 / 叫貨規格" : "Mặt hàng / quy cách"}</span><span>${language === "zh" ? "現有" : "Hiện có"}</span><span>${language === "zh" ? "需求" : "Nhu cầu"}</span><span>${language === "zh" ? "待到貨" : "Đang giao"}</span><span>${language === "zh" ? "建議叫貨" : "Đề xuất gọi"}</span></div>${lines.map((line) => procurementRow(line, context, factory)).join("") || `<p class="empty-state">${language === "zh" ? "目前沒有品項。" : "Chưa có mặt hàng."}</p>`}</section>`;
+}
+
+function procurementPage(context) {
+  const { state, record, language } = context;
+  const plan = calculateProcurementPlan(state.selectedDate, record);
+  const dates = plan.coverage.dates.map((date) => procurementDateLabel(date, language)).join(" + ");
+  const noodles = plan.lines.filter((line) => line.category === "noodles");
+  const vegetables = plan.lines.filter((line) => line.category === "vegetables");
+  const totalOrders = [...plan.lines, ...plan.factory].filter((line) => line.orderUnits > 0).length;
+  const title = language === "zh" ? "叫貨中心" : "Trung tâm gọi hàng";
+  const subtitle = language === "zh" ? "依交貨範圍、現有庫存與待到貨量計算建議叫貨。" : "Tính lượng cần gọi từ lịch cung ứng, tồn hiện tại và hàng đang chờ giao.";
+  const schedule = !plan.coverage.orderable
+    ? `<div class="procurement-schedule closed"><strong>${language === "zh" ? "週六供應商休息" : "Thứ Bảy nhà cung cấp nghỉ"}</strong><span>${language === "zh" ? "週末用量應於週五一起叫貨。" : "Lượng dùng cuối tuần phải được gọi chung vào thứ Sáu."}</span></div>`
+    : `<div class="procurement-schedule ${plan.coverage.dayCode === "fri" ? "weekend-order" : ""}"><div><span>${language === "zh" ? "本次叫貨涵蓋" : "Lần gọi này bao phủ"}</span><strong>${escapeHtml(dates)}</strong></div><div><span>${language === "zh" ? "計算方式" : "Cách tính"}</span><strong>${language === "zh" ? "需求 − 現有 − 待到貨" : "Nhu cầu − tồn − đang giao"}</strong></div><div><span>${language === "zh" ? "需叫貨品項" : "Mặt hàng cần gọi"}</span><strong>${totalOrders}</strong></div></div>`;
+  return `${heading(title, subtitle, `<a class="secondary-button" href="#inventory">${icon("inventory")}${language === "zh" ? "更新庫存" : "Cập nhật tồn kho"}</a>`)}${schedule}<div class="procurement-stack">${procurementSection(language === "zh" ? "麵區叫貨" : "Gọi hàng khu mì", language === "zh" ? "粗麵 5斤/包、細麵 2.5斤/包、冷凍麵 30片/箱；週末需求預設 3 箱，再扣現有庫存。" : "Mì to 5 cân/bao, mì nhỏ 2,5 cân/bao, mì đông lạnh 30 miếng/thùng; nhu cầu cuối tuần mặc định 3 thùng rồi mới trừ tồn.", noodles, context)}${procurementSection(language === "zh" ? "蔬菜叫貨" : "Gọi rau", language === "zh" ? "顆白菜平日 4斤、假日每日 6斤，每包 2斤；高麗菜依顆數輸入。" : "Cải thìa ngày thường 4 cân, cuối tuần 6 cân/ngày, mỗi bao 2 cân; bắp cải nhập theo cây.", vegetables, context)}${procurementSection(language === "zh" ? "工廠叫貨" : "Gọi hàng xưởng", language === "zh" ? "依大冷凍現有量補到各品項的庫存標準。" : "Dựa trên tồn tủ đông lớn để bổ sung đến định mức từng mặt hàng.", plan.factory, context, true)}</div>`;
+}
+
 function taskLabel(task, context) {
   const { language, text } = context;
   if (task.kind === "reservation") return `${text.taskPrep} ${text[task.key]}`;
@@ -474,7 +524,7 @@ function addItemModal(context) {
 function render() {
   const context = currentContext();
   const active = route();
-  const pages = { dashboard, inventory, reservations: reservationsPage, preparation: preparationPage, sop: management.sopPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
+  const pages = { dashboard, inventory, procurement: procurementPage, reservations: reservationsPage, preparation: preparationPage, sop: management.sopPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
   root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
@@ -547,6 +597,7 @@ root.addEventListener("change", (event) => {
   if (field === "reservation") store.updateReservation(key, element.value);
   if (field === "remaining") store.updateRemaining(key, element.value);
   if (field === "riceRemaining") store.updateRice(element.value);
+  if (field === "procurement") store.updateProcurementLine(id, key, element.value);
   if (field === "item") store.updateItem(id, key, element.value);
   if (field === "workItem") store.updateWorkItem(id, key, element.value);
   if (field === "calendarMonth") { view.calendarMonth = Number(element.value); render(); }
