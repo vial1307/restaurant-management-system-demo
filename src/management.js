@@ -1,6 +1,7 @@
 import { assessShiftCapacity, attendanceTotals, calculateAttendance, currentStaff, DEPARTMENTS, excelWorkbook, learningFor, qualifiedAreas, roleCan, roleLabel, schedulesForDate, STAFFING_SHIFTS, STAFF_ROLES } from "./operations.js";
 import { qrSvg } from "./qr.js";
 import { WORK_AREAS, ZONES } from "./store.js";
+import { CUSTOM_SKILL_GROUP, flatSkillCatalog, SKILL_GROUPS, skillProfileSummary } from "./skills.js";
 
 function isoClock(value, language = "vi") {
   if (!value) return "—";
@@ -177,6 +178,99 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     return `${heading(text.sop, text.sopSubtitle, actions)}${areaTabs(context, true)}${sectionTabs(context)}${content}`;
   }
 
+  function skillCopy(language) {
+    return language === "zh" ? {
+      title: "技能目錄",
+      subtitle: "先替各工作區選定實際需要的技能，之後所有訓練與評估都以這份清單為準。",
+      introTitle: "這裡設定的是門市要求，不是員工成績",
+      intro: "勾選「納入本站」後，再指定為必要、計分或僅供參考。未勾選代表本站不採用，不會被判定為員工未達標。",
+      add: "新增門市技能",
+      included: "納入本站",
+      core: "必要條件",
+      scored: "納入評分",
+      reference: "僅供參考",
+      unused: "本站不採用",
+      active: "已採用技能",
+      coreCount: "必要",
+      scoredCount: "計分",
+      referenceCount: "參考",
+      suggested: "建議列為必要",
+      empty: "此分類尚未選擇任何技能。展開後可逐項設定。",
+      customTitle: "新增門市自訂技能",
+      viName: "越文名稱",
+      zhName: "中文名稱",
+      viDetail: "越文說明",
+      zhDetail: "中文說明",
+      critical: "建議列為必要條件",
+      save: "新增至技能目錄",
+      delete: "刪除這項自訂技能？",
+      rights: "只有管理者可以調整各區標準；帶訓人員之後會依已核定的項目進行評估。",
+    } : {
+      title: "Danh mục kỹ năng",
+      subtitle: "Chọn đúng những kỹ năng mỗi khu thực sự yêu cầu; phần đào tạo và đánh giá sau này sẽ dựa trên danh mục này.",
+      introTitle: "Đây là nơi đặt tiêu chuẩn của quán, chưa phải nơi chấm nhân viên",
+      intro: "Tích “Áp dụng cho khu” rồi chọn kỹ năng bắt buộc, tính điểm hoặc chỉ tham khảo. Mục không tích được hiểu là quán không dùng cho khu này, không phải nhân viên chưa đạt.",
+      add: "Thêm kỹ năng của quán",
+      included: "Áp dụng cho khu",
+      core: "Bắt buộc phải đạt",
+      scored: "Dùng để tính điểm",
+      reference: "Chỉ tham khảo",
+      unused: "Khu này không áp dụng",
+      active: "Kỹ năng đang áp dụng",
+      coreCount: "Bắt buộc",
+      scoredCount: "Tính điểm",
+      referenceCount: "Tham khảo",
+      suggested: "Nên đặt là bắt buộc",
+      empty: "Nhóm này chưa có kỹ năng nào được chọn. Mở nhóm để thiết lập từng mục.",
+      customTitle: "Thêm kỹ năng riêng của quán",
+      viName: "Tên để người Việt đọc",
+      zhName: "台灣管理者閱讀的名稱",
+      viDetail: "Mô tả tiếng Việt",
+      zhDetail: "中文說明",
+      critical: "Đề xuất đặt làm kỹ năng bắt buộc",
+      save: "Thêm vào danh mục",
+      delete: "Xóa kỹ năng tự tạo này?",
+      rights: "Chỉ quản lý được thay đổi tiêu chuẩn từng khu; người đào tạo sẽ đánh giá theo danh sách đã được xác định.",
+    };
+  }
+
+  function skillStatusOptions(copy, selected) {
+    return [
+      ["core", copy.core],
+      ["scored", copy.scored],
+      ["reference", copy.reference],
+    ].map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+
+  function skillRow(skill, context, copy) {
+    const { state, language } = context;
+    const canManage = permitted(state, "skills:manage");
+    const status = state.operations.skillProfiles?.[view.skillsArea]?.[skill.id] || "inactive";
+    const active = status !== "inactive";
+    return `<div class="skill-catalog-row ${active ? `is-active status-${status}` : "is-inactive"}" data-skill-id="${escapeHtml(skill.id)}"><label class="skill-apply-toggle"><input type="checkbox" data-action="skill-toggle" data-area="${escapeHtml(view.skillsArea)}" data-id="${escapeHtml(skill.id)}" ${active ? "checked" : ""} ${canManage ? "" : "disabled"}/><span>${escapeHtml(copy.included)}</span></label><div class="skill-copy"><div class="skill-title-line"><strong>${escapeHtml(skill[language].title)}</strong>${skill.critical ? `<span class="tag tag-low">${escapeHtml(copy.suggested)}</span>` : ""}${skill.custom ? `<span class="tag tag-neutral">${escapeHtml(language === "zh" ? "門市自訂" : "Tự thêm")}</span>` : ""}</div><p>${escapeHtml(skill[language].detail || "—")}</p></div><div class="skill-assignment"><select data-field="skill-status" data-area="${escapeHtml(view.skillsArea)}" data-id="${escapeHtml(skill.id)}" ${active && canManage ? "" : "disabled"} aria-label="${escapeHtml(active ? copy.included : copy.unused)}">${skillStatusOptions(copy, active ? status : (skill.critical ? "core" : "scored"))}</select>${skill.custom && canManage ? `<button class="inventory-action-button delete-action" data-action="skill-delete" data-id="${escapeHtml(skill.id)}" aria-label="${escapeHtml(copy.delete)}">${icon("trash")}</button>` : ""}</div></div>`;
+  }
+
+  function skillsPage(context) {
+    const { state, language } = context;
+    const copy = skillCopy(language);
+    const canManage = permitted(state, "skills:manage");
+    const summary = skillProfileSummary(state.operations, view.skillsArea);
+    const groups = [...SKILL_GROUPS, CUSTOM_SKILL_GROUP];
+    const allSkills = flatSkillCatalog(state.operations.customSkills);
+    const actions = canManage ? `<button class="primary-button" data-action="skill-add">${icon("plus")}${escapeHtml(copy.add)}</button>` : "";
+    const tabs = `<div class="zone-tabs management-area-tabs">${WORK_AREAS.map((area) => {
+      const areaSummary = skillProfileSummary(state.operations, area.id);
+      return `<button class="filter-tab ${view.skillsArea === area.id ? "selected" : ""}" data-action="skills-area" data-area="${area.id}">${escapeHtml(area[language])} <span>${areaSummary.active}</span></button>`;
+    }).join("")}</div>`;
+    const groupCards = groups.map((group, index) => {
+      const skills = allSkills.filter((skill) => skill.groupId === group.id);
+      if (!skills.length && group.id === "custom") return "";
+      const selected = skills.filter((skill) => state.operations.skillProfiles?.[view.skillsArea]?.[skill.id]).length;
+      return `<details class="card skill-group-card" ${index === 0 || selected ? "open" : ""}><summary><span><strong>${escapeHtml(group[language])}</strong><small>${selected}/${skills.length} ${escapeHtml(copy.active.toLowerCase())}</small></span><span class="skill-group-count">${selected}</span></summary><div class="skill-group-body">${skills.length ? skills.map((skill) => skillRow(skill, context, copy)).join("") : `<p class="empty-state">${escapeHtml(copy.empty)}</p>`}</div></details>`;
+    }).join("");
+    return `${heading(copy.title, copy.subtitle, actions)}${tabs}<article class="card skill-catalog-intro"><div>${icon("spark")}<span><strong>${escapeHtml(copy.introTitle)}</strong><p>${escapeHtml(copy.intro)}</p></span></div><small>${escapeHtml(copy.rights)}</small></article><section class="skill-profile-summary"><div><span>${escapeHtml(copy.active)}</span><strong>${summary.active}</strong></div><div><span>${escapeHtml(copy.coreCount)}</span><strong>${summary.core}</strong></div><div><span>${escapeHtml(copy.scoredCount)}</span><strong>${summary.scored}</strong></div><div><span>${escapeHtml(copy.referenceCount)}</span><strong>${summary.reference}</strong></div></section><section class="skill-catalog-list">${groupCards}</section>`;
+  }
+
   function attendanceRow(entry, context) {
     const { state, text, language } = context;
     const wage = calculateAttendance(entry, state.operations.payroll);
@@ -339,6 +433,10 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       catch { markup = `<p class="helper-text">${escapeHtml(url)}</p>`; }
       return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card qr-modal" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(text.stationQr)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><div class="station-qr-content">${markup}<strong>${escapeHtml(area.zh)} · ${escapeHtml(area.vi)}</strong><small>${escapeHtml(url)}</small><button class="primary-button" data-action="qr-print">${icon("print")}${escapeHtml(text.printQr)}</button></div></section></div>`;
     }
+    if (view.managementModal === "skill") {
+      const copy = skillCopy(language);
+      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card skill-modal" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(copy.customTitle)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-custom-skill"><div class="bilingual-skill-fields">${draftField(copy.viName, "viTitle", "", { required: true })}${draftField(copy.viDetail, "viDetail", "", { textarea: true, rows: 3 })}${draftField(copy.zhName, "zhTitle", "", { required: true })}${draftField(copy.zhDetail, "zhDetail", "", { textarea: true, rows: 3 })}</div><label class="skill-critical-checkbox"><input type="checkbox" name="critical" value="yes"/><span><strong>${escapeHtml(copy.critical)}</strong><small>${escapeHtml(language === "zh" ? "新增後仍需在各區分別勾選是否採用。" : "Sau khi thêm, vẫn cần chọn riêng khu nào sẽ áp dụng.")}</small></span></label><button class="primary-button" type="submit">${icon("plus")}${escapeHtml(copy.save)}</button></form></section></div>`;
+    }
     if (view.managementModal === "staff") {
       const member = state.operations.staff.find((item) => item.id === view.editingStaffId);
       return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(member ? text.editStaff : text.addStaff)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-staff">${draftField(text.staffName, "name", member?.name || "", { required: true })}<label class="management-field"><span>${escapeHtml(text.role)}</span><select name="role">${STAFF_ROLES.map((role) => `<option value="${role.id}" ${(member?.role || "parttime") === role.id ? "selected" : ""}>${escapeHtml(role[language])}</option>`).join("")}</select></label><label class="management-field"><span>${escapeHtml(text.workstation)}</span><select name="area">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(member?.area || view.sopArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label>${draftField(text.hourlyRate, "hourlyRate", member?.hourlyRate ?? 230, { type: "number" })}${draftField(text.accessPin, "pin", member?.pin || "", { type: "password" })}<button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)}</button></form></section></div>`;
@@ -385,6 +483,15 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
   function handleClick(target, event, context) {
     const { state, text } = context;
     const action = target.dataset.action;
+    if (action === "skills-area") { view.skillsArea = target.dataset.area; render(); return true; }
+    if (action === "skill-add" && permitted(state, "skills:manage")) { view.managementModal = "skill"; render(); return true; }
+    if (action === "skill-toggle" && permitted(state, "skills:manage")) {
+      const skill = flatSkillCatalog(state.operations.customSkills).find((item) => item.id === target.dataset.id);
+      const current = state.operations.skillProfiles?.[target.dataset.area]?.[target.dataset.id];
+      store.setSkillAssignment(target.dataset.area, target.dataset.id, current ? "inactive" : (skill?.critical ? "core" : "scored"));
+      return true;
+    }
+    if (action === "skill-delete" && permitted(state, "skills:manage") && window.confirm(skillCopy(state.settings.language).delete)) { store.removeCustomSkill(target.dataset.id); return true; }
     if (action === "sop-area") { view.sopArea = target.dataset.area; view.sopSelected = null; view.sopDraft = null; render(); return true; }
     if (action === "sop-panel") { view.sopPanel = target.dataset.panel; view.sopDraft = null; render(); return true; }
     if (action === "sop-select") { view.sopSelected = target.dataset.id; render(); return true; }
@@ -456,6 +563,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
 
   async function handleChange(element) {
     const field = element.dataset.field;
+    if (field === "skill-status") { store.setSkillAssignment(element.dataset.area, element.dataset.id, element.value); return true; }
     if (field === "schedule-month") { view.scheduleMonth = element.value; render(); return true; }
     if (field === "schedule-shift") { view.scheduleShift = element.value; render(); return true; }
     if (field === "report-scope") { view.reportScope = element.value; view.reportTarget = "all"; render(); return true; }
@@ -481,6 +589,12 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
 
   function handleSubmit(form, data) {
     const kind = form.dataset.form;
+    if (kind === "save-custom-skill") {
+      const input = { viTitle: String(data.get("viTitle") || ""), viDetail: String(data.get("viDetail") || ""), zhTitle: String(data.get("zhTitle") || ""), zhDetail: String(data.get("zhDetail") || ""), critical: data.get("critical") === "yes" };
+      view.managementModal = null;
+      store.addCustomSkill(input);
+      return true;
+    }
     if (kind === "save-sop") {
       const utensils = view.sopDraft.utensils.map((_, index) => ({ name: String(data.get(`utensilName:${index}`) || ""), cc: Number(data.get(`utensilCc:${index}`) || 0), count: Number(data.get(`utensilCount:${index}`) || 1) }));
       const draft = { ...view.sopDraft, area: String(data.get("area") || view.sopDraft.area), label: String(data.get("label") || "").trim(), labelVi: String(data.get("labelVi") || "").trim(), cookSeconds: Number(data.get("cookSeconds") || 0), dineContainer: String(data.get("dineContainer") || ""), takeawayContainer: String(data.get("takeawayContainer") || ""), dineNote: String(data.get("dineNote") || ""), takeawayNote: String(data.get("takeawayNote") || ""), plating: String(data.get("plating") || ""), steps: String(data.get("steps") || "").split(/\r?\n/).map((step) => step.trim()).filter(Boolean), utensils };
@@ -567,5 +681,5 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     return false;
   }
 
-  return { sopPage, attendancePage, schedulePage, reportsPage, remotePage, staffCard, managementModal, handleClick, handleChange, handleSubmit, reportData };
+  return { sopPage, skillsPage, attendancePage, schedulePage, reportsPage, remotePage, staffCard, managementModal, handleClick, handleChange, handleSubmit, reportData };
 }
