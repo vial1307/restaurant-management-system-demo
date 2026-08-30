@@ -1,4 +1,4 @@
-import { flatSkillCatalog, normalizeCustomSkill, normalizeSkillProfiles } from "./skills.js";
+import { flatSkillCatalog, normalizeCustomSkill, normalizeSkillAssessment, normalizeSkillProfiles } from "./skills.js";
 
 export const STAFF_ROLES = [
   { id: "manager", vi: "Quản lý", zh: "管理者" },
@@ -8,8 +8,8 @@ export const STAFF_ROLES = [
 ];
 
 const ROLE_PERMISSIONS = {
-  manager: ["sop:edit", "sop:approve", "sop:delete", "skills:manage", "staff:manage", "attendance:manage", "reports:export", "checks:record", "schedule:manage", "jobs:manage", "tasks:assign"],
-  supervisor: ["sop:edit", "attendance:manage", "reports:export", "checks:record"],
+  manager: ["sop:edit", "sop:approve", "sop:delete", "skills:manage", "skills:evaluate", "skills:approve", "staff:manage", "attendance:manage", "reports:export", "checks:record", "schedule:manage", "jobs:manage", "tasks:assign"],
+  supervisor: ["sop:edit", "skills:evaluate", "attendance:manage", "reports:export", "checks:record"],
   employee: ["checks:record"],
   parttime: ["checks:record"],
 };
@@ -150,6 +150,8 @@ export function createOperationalState(settings = {}) {
     jobCatalog: clone(DEFAULT_JOB_CATALOG),
     customSkills: [],
     skillProfiles: { noodles: {}, soup: {}, seafood: {}, meat: {} },
+    skillAssessments: [],
+    skillApprovals: [],
     pendingSync: 0,
   };
 }
@@ -164,7 +166,14 @@ export function hydrateOperations(input, settings = {}) {
     ? input.sops.map((item) => ({ ...normalizeSop(item), revision: Number.isFinite(Number(item.revision)) ? Math.max(0, Number(item.revision)) : 1, status: item.status || "published", pending: item.pending ? normalizeSop(item.pending) : null, updatedAt: item.updatedAt || null, updatedBy: item.updatedBy || null, versions: Array.isArray(item.versions) ? item.versions : [] }))
     : fallback.sops;
   const customSkills = Array.isArray(input.customSkills) ? input.customSkills.map(normalizeCustomSkill).filter(Boolean) : [];
-  const skillProfiles = normalizeSkillProfiles(input.skillProfiles, flatSkillCatalog(customSkills).map((skill) => skill.id));
+  const validSkillIds = flatSkillCatalog(customSkills).map((skill) => skill.id);
+  const skillProfiles = normalizeSkillProfiles(input.skillProfiles, validSkillIds);
+  const skillAssessments = Array.isArray(input.skillAssessments)
+    ? input.skillAssessments.map((entry) => normalizeSkillAssessment(entry, validSkillIds)).filter(Boolean)
+    : [];
+  const skillApprovals = Array.isArray(input.skillApprovals)
+    ? input.skillApprovals.filter((entry) => entry && String(entry.staffId || "") && ["noodles", "soup", "seafood", "meat"].includes(entry.area) && ["D", "C", "B", "A"].includes(entry.level)).map((entry) => ({ ...entry, staffId: String(entry.staffId), level: String(entry.level) }))
+    : [];
 
   return {
     sops,
@@ -181,6 +190,8 @@ export function hydrateOperations(input, settings = {}) {
       : fallback.jobCatalog,
     customSkills,
     skillProfiles,
+    skillAssessments,
+    skillApprovals,
     pendingSync: Math.max(0, Number(input.pendingSync) || 0),
   };
 }
