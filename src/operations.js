@@ -35,6 +35,55 @@ const DEFAULT_JOB_CATALOG = [
   { id: "job-cashier-close", department: "outside", area: "cashier", label: "收銀對帳", labelVi: "Đối soát thu ngân", sopArea: "", evidence: "approval", active: true },
 ];
 
+export const MENU_CATALOG = [
+  { id: "menu-handmade-noodles", label: "手工麵", labelVi: "Mì thủ công", area: "noodles", frequency: "common", sopId: "sop-handmade-noodles" },
+  { id: "menu-thin-noodles", label: "細麵", labelVi: "Mì sợi nhỏ", area: "noodles", frequency: "common", sopId: "sop-thin-noodles" },
+  { id: "menu-original-broth", label: "原味湯底", labelVi: "Nước canh nguyên vị", area: "soup", frequency: "common", sopId: "sop-original-broth" },
+  { id: "menu-shrimp", label: "白蝦", labelVi: "Tôm trắng", area: "seafood", frequency: "common", sopId: "sop-shrimp" },
+  { id: "menu-clams", label: "蛤蜊", labelVi: "Nghêu", area: "seafood", frequency: "common", sopId: "sop-clams" },
+  { id: "menu-beef-brisket", label: "牛胸肉", labelVi: "Thịt ức bò", area: "meat", frequency: "common", sopId: "sop-beef-brisket" },
+  { id: "menu-pork", label: "豬肉", labelVi: "Thịt heo", area: "meat", frequency: "common", sopId: "sop-pork" },
+  { id: "menu-silver-ear", label: "銀耳基底", labelVi: "Nền chè nấm tuyết", area: "soup", frequency: "rare", sopId: "" },
+  { id: "menu-tapioca", label: "山粉圓", labelVi: "Hạt sơn phấn viên", area: "soup", frequency: "rare", sopId: "" },
+  { id: "menu-shishang", label: "食尚", labelVi: "Món hải sản 食尚", area: "seafood", frequency: "rare", sopId: "" },
+  { id: "menu-chuanwei", label: "川味", labelVi: "Món vị Tứ Xuyên", area: "seafood", frequency: "rare", sopId: "" },
+  { id: "menu-dumplings", label: "餃類", labelVi: "Nhóm món sủi cảo", area: "seafood", frequency: "rare", sopId: "" },
+];
+
+export const TRAINING_STATUSES = ["assigned", "practicing", "pending_check", "passed"];
+
+const DEFAULT_TRAINING_RECORDS = [
+  { id: "training-hd-silver-ear", assigneeName: "鄭文海登", label: "銀耳基底（剪＋上爐）", labelVi: "Nền chè nấm tuyết: cắt và đưa lên bếp", category: "menu", area: "soup", menuItemId: "menu-silver-ear", sopId: "", skillId: "sop-sequence", status: "pending_check", attempts: 1, note: "教育完成，待獨立實作確認 / Đã hướng dẫn, chờ kiểm tra làm độc lập" },
+  { id: "training-hd-tapioca", assigneeName: "鄭文海登", label: "山粉圓煮法", labelVi: "Cách nấu hạt sơn phấn viên", category: "menu", area: "soup", menuItemId: "menu-tapioca", sopId: "", skillId: "timer-operation", status: "pending_check", attempts: 1, note: "教育完成，待實際出餐確認 / Đã học, chờ kiểm tra khi xuất món thực tế" },
+  { id: "training-hd-inventory", assigneeName: "鄭文海登", label: "津鼎盤點第一次", labelVi: "Kiểm kê Jinding lần đầu", category: "external", area: "noodles", menuItemId: "", sopId: "", skillId: "count-stock", status: "pending_check", attempts: 1, note: "已完成第一次盤點；下次需自行完成 / Đã kiểm kê lần đầu, lần sau cần tự làm" },
+  { id: "training-hd-products", assigneeName: "鄭文海登", label: "認識產品及叫貨數量", labelVi: "Nhận biết sản phẩm và số lượng gọi hàng", category: "external", area: "noodles", menuItemId: "", sopId: "", skillId: "delivery-schedule", status: "practicing", attempts: 1, note: "需結合庫存、到貨日與供應商休假 / Cần kết hợp tồn kho, lịch giao và ngày nghỉ nhà cung cấp" },
+  { id: "training-hd-dessert", assigneeName: "鄭文海登", label: "外場喊甜點會出餐", labelVi: "Nghe sảnh gọi món tráng miệng và xuất món", category: "external", area: "soup", menuItemId: "", sopId: "", skillId: "understand-kitchen-calls", status: "practicing", attempts: 1, note: "需觀察尖峰時是否仍能正確出餐 / Cần quan sát thêm trong giờ cao điểm" },
+  { id: "training-lun-order", assigneeName: "Lun", label: "第二次叫貨：自行盤點填寫，主管核對", labelVi: "Gọi hàng lần hai: tự kiểm kê, tự điền, quản lý đối chiếu", category: "external", area: "noodles", menuItemId: "", sopId: "", skillId: "restock-vs-order", status: "assigned", attempts: 0, note: "主管只核對結果，不代替填寫 / Quản lý chỉ kiểm tra, không làm thay" },
+  { id: "training-nam-shishang", assigneeName: "阮進成南", label: "海鮮台－食尚", labelVi: "Khu hải sản – món 食尚", category: "menu", area: "seafood", menuItemId: "menu-shishang", sopId: "", skillId: "sop-sequence", status: "pending_check", attempts: 1, note: "已教育，待獨立出餐測試 / Đã học, chờ kiểm tra xuất món độc lập" },
+  { id: "training-nam-chuanwei", assigneeName: "阮進成南", label: "海鮮台－川味", labelVi: "Khu hải sản – món vị Tứ Xuyên", category: "menu", area: "seafood", menuItemId: "menu-chuanwei", sopId: "", skillId: "sop-sequence", status: "pending_check", attempts: 1, note: "已教育，待獨立出餐測試 / Đã học, chờ kiểm tra xuất món độc lập" },
+  { id: "training-nam-dumplings", assigneeName: "阮進成南", label: "海鮮台－餃類", labelVi: "Khu hải sản – nhóm món sủi cảo", category: "menu", area: "seafood", menuItemId: "menu-dumplings", sopId: "", skillId: "timer-operation", status: "pending_check", attempts: 1, note: "已教育，待確認不同品項時間 / Đã học, cần kiểm tra thời gian từng loại" },
+  { id: "training-nam-chicken", assigneeName: "阮進成南", label: "雞肉切法", labelVi: "Kỹ thuật cắt thịt gà", category: "station", area: "meat", menuItemId: "", sopId: "", skillId: "knife-cut-standard", status: "practicing", attempts: 2, note: "已練習兩次，切法仍需加強 / Đã luyện hai lần, cần tiếp tục sửa kỹ thuật cắt" },
+  { id: "training-lun-schedule", assigneeName: "Lun", label: "教育訓練排程持續發布於崗位表", labelVi: "Tiếp tục đăng lịch đào tạo trên bảng vị trí", category: "external", area: "noodles", menuItemId: "", sopId: "", skillId: "teach-sop", status: "assigned", attempts: 0, note: "持續性管理工作 / Công việc quản lý cần duy trì" },
+];
+
+export function normalizeTrainingRecord(input = {}) {
+  const status = TRAINING_STATUSES.includes(input.status) ? input.status : "assigned";
+  return {
+    id: String(input.id || `training-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+    assigneeName: String(input.assigneeName || "").trim(),
+    label: String(input.label || input.labelVi || "").trim(),
+    labelVi: String(input.labelVi || input.label || "").trim(),
+    category: ["menu", "station", "external"].includes(input.category) ? input.category : "external",
+    area: ["noodles", "soup", "seafood", "meat"].includes(input.area) ? input.area : "noodles",
+    menuItemId: String(input.menuItemId || ""),
+    sopId: String(input.sopId || ""),
+    skillId: String(input.skillId || ""),
+    status,
+    attempts: Math.max(0, Math.round(Number(input.attempts) || 0)),
+    note: String(input.note || "").trim(),
+  };
+}
+
 export const DEFAULT_PAYROLL_POLICY = {
   latePenaltyEnabled: false,
   lateGraceMinutes: 0,
@@ -152,6 +201,8 @@ export function createOperationalState(settings = {}) {
     skillProfiles: { noodles: {}, soup: {}, seafood: {}, meat: {} },
     skillAssessments: [],
     skillApprovals: [],
+    menuCatalog: clone(MENU_CATALOG),
+    trainingRecords: clone(DEFAULT_TRAINING_RECORDS),
     pendingSync: 0,
   };
 }
@@ -192,6 +243,10 @@ export function hydrateOperations(input, settings = {}) {
     skillProfiles,
     skillAssessments,
     skillApprovals,
+    menuCatalog: Array.isArray(input.menuCatalog) && input.menuCatalog.length ? input.menuCatalog : fallback.menuCatalog,
+    trainingRecords: Array.isArray(input.trainingRecords) && input.trainingRecords.length
+      ? input.trainingRecords.map(normalizeTrainingRecord).filter((entry) => entry.assigneeName && (entry.label || entry.labelVi))
+      : fallback.trainingRecords,
     pendingSync: Math.max(0, Number(input.pendingSync) || 0),
   };
 }
