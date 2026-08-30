@@ -1,6 +1,6 @@
 import { clampNumber, formatDateKey, inventorySources } from "./rules.js";
 import { createOperationalState, currentStaff, hydrateOperations, normalizeJob, normalizeSchedule, normalizeSop, roleCan } from "./operations.js";
-import { flatSkillCatalog, normalizeCustomSkill, SKILL_ASSIGNMENT_STATUSES } from "./skills.js";
+import { assessEmployeeSkills, flatSkillCatalog, normalizeCustomSkill, normalizeSkillAssessment, SKILL_ASSIGNMENT_STATUSES } from "./skills.js";
 
 export const STORAGE_KEY = "shitu-kitchen-os-v1";
 
@@ -578,6 +578,7 @@ export function createStore(storage = globalThis.localStorage) {
         draft.operations.skillProfiles[area] ??= {};
         if (status === "inactive") delete draft.operations.skillProfiles[area][skillId];
         else draft.operations.skillProfiles[area][skillId] = status;
+        draft.operations.skillApprovals = draft.operations.skillApprovals.filter((entry) => entry.area !== area);
         const skill = flatSkillCatalog(draft.operations.customSkills).find((item) => item.id === skillId);
         audit(draft, "skill-profile", skill?.zh?.title || skill?.vi?.title || skillId, `${area} · ${status}`);
       });
@@ -598,7 +599,53 @@ export function createStore(storage = globalThis.localStorage) {
         if (!skill) return;
         draft.operations.customSkills = draft.operations.customSkills.filter((item) => item.id !== id);
         for (const area of ["noodles", "soup", "seafood", "meat"]) delete draft.operations.skillProfiles[area]?.[id];
+        draft.operations.skillApprovals = [];
         audit(draft, "skill-delete", skill.zh.title, skill.vi.title);
+      });
+    },
+    saveSkillAssessment(input) {
+      return update((draft) => {
+        if (!permitted(draft, "skills:evaluate")) return;
+        const member = draft.operations.staff.find((item) => item.id === input.staffId && item.active);
+        const evaluator = currentStaff(draft);
+        if (!member || !evaluator) return;
+        const activeIds = Object.keys(draft.operations.skillProfiles?.[input.area] || {});
+        const normalized = normalizeSkillAssessment({
+          ...input,
+          staffName: member.name,
+          evaluatorId: evaluator.id,
+          evaluatorName: evaluator.name,
+          evaluatorRole: evaluator.role,
+          at: new Date().toISOString(),
+        }, activeIds);
+        if (!normalized) return;
+        draft.operations.skillAssessments.unshift(normalized);
+        draft.operations.skillAssessments = draft.operations.skillAssessments.slice(0, 1000);
+        audit(draft, "skill-assessment", member.name, `${normalized.area} · ${normalized.ratings.length}`);
+      });
+    },
+    approveSkillLevel(staffId, area) {
+      return update((draft) => {
+        if (!permitted(draft, "skills:approve")) return;
+        const member = draft.operations.staff.find((item) => item.id === staffId && item.active);
+        const result = assessEmployeeSkills(draft.operations, staffId, area);
+        if (!member || !result.approvalReady || !result.suggestedLevel) return;
+        const approver = currentStaff(draft);
+        draft.operations.skillApprovals.unshift({
+          id: globalThis.crypto?.randomUUID?.() ?? `skill-approval-${Date.now()}`,
+          staffId,
+          staffName: member.name,
+          area,
+          level: result.suggestedLevel,
+          coverage: result.coverage,
+          average: result.average,
+          evaluatorCount: result.evaluatorCount,
+          approverId: approver.id,
+          approverName: approver.name,
+          at: new Date().toISOString(),
+        });
+        draft.operations.skillApprovals = draft.operations.skillApprovals.slice(0, 500);
+        audit(draft, "skill-level-approve", member.name, `${area} · ${result.suggestedLevel}`);
       });
     },
     markSopLearned(sopId, staffId = state.operations.activeStaffId) {
