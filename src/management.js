@@ -178,10 +178,103 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     return `${heading(text.sop, text.sopSubtitle, actions)}${areaTabs(context, true)}${sectionTabs(context)}${content}`;
   }
 
+  function trainingStatusCopy(language) {
+    return language === "zh" ? {
+      assigned: "已安排",
+      practicing: "練習中",
+      pending_check: "已教學，待實作確認",
+      passed: "已通過",
+    } : {
+      assigned: "Đã giao học",
+      practicing: "Đang luyện tập",
+      pending_check: "Đã học, chờ kiểm tra",
+      passed: "Đã đạt",
+    };
+  }
+
+  function menuPage(context) {
+    const { state, language } = context;
+    const copy = language === "zh" ? {
+      title: "門市菜單",
+      subtitle: "集中查看常見與少見品項、SOP 連結，以及每位員工是否已完成獨立實作確認。",
+      all: "全部品項",
+      rare: "少見品項",
+      missingSop: "尚未建立 SOP",
+      pending: "待實作確認",
+      common: "常見",
+      rareLabel: "少見",
+      selectStaff: "查看人員",
+      everyone: "全部人員",
+      dish: "品項",
+      station: "工作區",
+      frequency: "出現頻率",
+      sop: "SOP 連結",
+      training: "教學與實作確認",
+      openSop: "開啟 SOP",
+      needSop: "需建立 SOP",
+      noTraining: "尚無訓練紀錄",
+      trainedNotPassed: "完成教學不等於通過；仍需由主管觀察獨立操作。",
+    } : {
+      title: "Menu món của quán",
+      subtitle: "Theo dõi món thường gặp, món ít gặp, liên kết SOP và việc từng nhân viên đã được kiểm tra thực hành độc lập hay chưa.",
+      all: "Tất cả món",
+      rare: "Món ít gặp",
+      missingSop: "Chưa có SOP",
+      pending: "Chờ kiểm tra",
+      common: "Thường gặp",
+      rareLabel: "Ít gặp",
+      selectStaff: "Xem theo nhân viên",
+      everyone: "Tất cả nhân viên",
+      dish: "Món",
+      station: "Khu phụ trách",
+      frequency: "Mức độ gặp",
+      sop: "Liên kết SOP",
+      training: "Đào tạo và kiểm tra thực hành",
+      openSop: "Mở SOP",
+      needSop: "Cần tạo SOP",
+      noTraining: "Chưa có lịch sử đào tạo",
+      trainedNotPassed: "Đã được hướng dẫn không đồng nghĩa đã đạt; quản lý vẫn cần quan sát lúc nhân viên tự làm.",
+    };
+    const items = state.operations.menuCatalog || [];
+    const records = state.operations.trainingRecords || [];
+    const names = [...new Set(records.map((entry) => entry.assigneeName).filter(Boolean))];
+    const selectedStaff = names.includes(view.menuStaff) ? view.menuStaff : "all";
+    view.menuStaff = selectedStaff;
+    const statusCopy = trainingStatusCopy(language);
+    const filter = ["all", "rare", "missing-sop", "pending"].includes(view.menuFilter) ? view.menuFilter : "all";
+    const visible = items.filter((item) => {
+      const itemRecords = records.filter((entry) => entry.menuItemId === item.id && (selectedStaff === "all" || entry.assigneeName === selectedStaff));
+      const hasSop = Boolean(item.sopId && state.operations.sops.some((sop) => sop.id === item.sopId && sop.revision > 0));
+      if (filter === "rare") return item.frequency === "rare";
+      if (filter === "missing-sop") return !hasSop;
+      if (filter === "pending") return !itemRecords.length || itemRecords.some((entry) => entry.status !== "passed");
+      return true;
+    });
+    const counts = {
+      common: items.filter((item) => item.frequency === "common").length,
+      rare: items.filter((item) => item.frequency === "rare").length,
+      missing: items.filter((item) => !item.sopId || !state.operations.sops.some((sop) => sop.id === item.sopId && sop.revision > 0)).length,
+      pending: items.filter((item) => {
+        const itemRecords = records.filter((entry) => entry.menuItemId === item.id && (selectedStaff === "all" || entry.assigneeName === selectedStaff));
+        return !itemRecords.length || itemRecords.some((entry) => entry.status !== "passed");
+      }).length,
+    };
+    const filters = [["all", copy.all], ["rare", copy.rare], ["missing-sop", copy.missingSop], ["pending", copy.pending]].map(([id, label]) => `<button class="filter-tab ${filter === id ? "selected" : ""}" data-action="menu-filter" data-filter="${id}">${escapeHtml(label)}</button>`).join("");
+    const rows = visible.map((item) => {
+      const itemRecords = records.filter((entry) => entry.menuItemId === item.id && (selectedStaff === "all" || entry.assigneeName === selectedStaff));
+      const sop = state.operations.sops.find((entry) => entry.id === item.sopId && entry.revision > 0);
+      const training = itemRecords.length ? itemRecords.map((entry) => `<span class="menu-training-chip status-${escapeHtml(entry.status)}"><strong>${escapeHtml(entry.assigneeName)}</strong><small>${escapeHtml(statusCopy[entry.status] || entry.status)}</small></span>`).join("") : `<span class="tag tag-low">${escapeHtml(copy.noTraining)}</span>`;
+      const sopLink = sop ? `<a class="secondary-button compact-button" href="#sop?zone=${escapeHtml(item.area)}&sop=${escapeHtml(sop.id)}">${icon("sop")}${escapeHtml(copy.openSop)} · v${sop.revision}</a>` : `<a class="tag tag-low menu-sop-missing" href="#sop?zone=${escapeHtml(item.area)}">${escapeHtml(copy.needSop)}</a>`;
+      return `<article class="menu-catalog-row"><div class="menu-dish-name"><strong>${escapeHtml(language === "zh" ? item.label : item.labelVi)}</strong><small>${escapeHtml(language === "zh" ? item.labelVi : item.label)}</small></div><span>${escapeHtml(workAreaLabel(item.area, language))}</span><span class="tag ${item.frequency === "rare" ? "tag-low" : "tag-neutral"}">${escapeHtml(item.frequency === "rare" ? copy.rareLabel : copy.common)}</span><div>${sopLink}</div><div class="menu-training-list">${training}</div></article>`;
+    }).join("");
+    const stats = `<section class="menu-summary-grid"><div><span>${escapeHtml(copy.common)}</span><strong>${counts.common}</strong></div><div><span>${escapeHtml(copy.rareLabel)}</span><strong>${counts.rare}</strong></div><div><span>${escapeHtml(copy.missingSop)}</span><strong>${counts.missing}</strong></div><div><span>${escapeHtml(copy.pending)}</span><strong>${counts.pending}</strong></div></section>`;
+    return `${heading(copy.title, copy.subtitle)}<article class="card menu-catalog-toolbar"><div class="zone-tabs">${filters}</div><label><span>${escapeHtml(copy.selectStaff)}</span><select data-field="menu-staff"><option value="all">${escapeHtml(copy.everyone)}</option>${names.map((name) => `<option value="${escapeHtml(name)}" ${name === selectedStaff ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label></article>${stats}<p class="menu-training-rule">${escapeHtml(copy.trainedNotPassed)}</p><article class="card menu-catalog-card"><div class="menu-catalog-head"><span>${escapeHtml(copy.dish)}</span><span>${escapeHtml(copy.station)}</span><span>${escapeHtml(copy.frequency)}</span><span>${escapeHtml(copy.sop)}</span><span>${escapeHtml(copy.training)}</span></div>${rows || `<p class="empty-state">${escapeHtml(copy.noTraining)}</p>`}</article>`;
+  }
+
   function skillCopy(language) {
     return language === "zh" ? {
-      title: "技能目錄",
-      subtitle: "先替各工作區選定實際需要的技能，之後所有訓練與評估都以這份清單為準。",
+      title: "員工能力",
+      subtitle: "從整體能力、各區細項到實際訓練過程，持續記錄每位員工能做到什麼、還需要練習什麼。",
       introTitle: "這裡設定的是門市要求，不是員工成績",
       intro: "勾選「納入本站」後，再指定為必要、計分或僅供參考。未勾選代表本站不採用，不會被判定為員工未達標。",
       add: "新增門市技能",
@@ -205,8 +298,19 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       save: "新增至技能目錄",
       delete: "刪除這項自訂技能？",
       rights: "只有管理者可以調整各區標準；帶訓人員之後會依已核定的項目進行評估。",
-      standardsTab: "各區技能標準",
-      assessmentTab: "員工進度評估",
+      overviewTab: "整體能力與訓練",
+      standardsTab: "各區能力細項",
+      assessmentTab: "逐項能力評估",
+      overallTitle: "四區能力總覽",
+      overallHint: "區域等級來自該區已選定的必要與計分項目；尚未評估不會被當作不合格。",
+      trainingPlanTitle: "實際教育訓練與區外工作",
+      trainingPlanHint: "把菜單品項、盤點、叫貨、外場出餐與帶訓排程一起記錄，並連回相關 SOP 或能力細項。",
+      noAssessment: "尚未評估",
+      relatedStandard: "關聯標準",
+      attempts: "練習次數",
+      categoryMenu: "菜單品項",
+      categoryStation: "區域技能",
+      categoryExternal: "區外工作",
       selectEmployee: "選擇員工",
       progress: "評估進度",
       suggestedLevel: "建議等級",
@@ -241,8 +345,8 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       waitingVerification: "能力已達建議等級，等待第二位人員複核",
       verified: "已完成雙人複核",
     } : {
-      title: "Danh mục kỹ năng",
-      subtitle: "Chọn đúng những kỹ năng mỗi khu thực sự yêu cầu; phần đào tạo và đánh giá sau này sẽ dựa trên danh mục này.",
+      title: "Năng lực nhân viên",
+      subtitle: "Theo dõi năng lực tổng thể, kỹ năng chi tiết từng khu và toàn bộ quá trình học, luyện tập, kiểm tra thực tế của mỗi nhân viên.",
       introTitle: "Đây là nơi đặt tiêu chuẩn của quán, chưa phải nơi chấm nhân viên",
       intro: "Tích “Áp dụng cho khu” rồi chọn kỹ năng bắt buộc, tính điểm hoặc chỉ tham khảo. Mục không tích được hiểu là quán không dùng cho khu này, không phải nhân viên chưa đạt.",
       add: "Thêm kỹ năng của quán",
@@ -266,8 +370,19 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       save: "Thêm vào danh mục",
       delete: "Xóa kỹ năng tự tạo này?",
       rights: "Chỉ quản lý được thay đổi tiêu chuẩn từng khu; người đào tạo sẽ đánh giá theo danh sách đã được xác định.",
-      standardsTab: "Tiêu chuẩn từng khu",
-      assessmentTab: "Đánh giá tiến độ nhân viên",
+      overviewTab: "Tổng thể và đào tạo",
+      standardsTab: "Chi tiết năng lực từng khu",
+      assessmentTab: "Đánh giá từng kỹ năng",
+      overallTitle: "Tổng quan năng lực bốn khu",
+      overallHint: "Cấp từng khu được tính từ những kỹ năng bắt buộc và tính điểm đã chọn; mục chưa quan sát không bị coi là nhân viên không đạt.",
+      trainingPlanTitle: "Đào tạo thực tế và công việc ngoài khu",
+      trainingPlanHint: "Ghi chung món trong menu, kiểm kê, gọi hàng, nghe sảnh gọi món và công việc đào tạo; mỗi mục liên kết về SOP hoặc kỹ năng liên quan.",
+      noAssessment: "Chưa đánh giá",
+      relatedStandard: "Tiêu chuẩn liên quan",
+      attempts: "Số lần luyện",
+      categoryMenu: "Món trong menu",
+      categoryStation: "Kỹ năng tại khu",
+      categoryExternal: "Công việc ngoài khu",
       selectEmployee: "Chọn nhân viên",
       progress: "Tiến độ đã đánh giá",
       suggestedLevel: "Cấp hệ thống đề xuất",
@@ -380,18 +495,47 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     return `<article class="card skill-assessment-toolbar"><label><span>${escapeHtml(copy.selectEmployee)}</span><select data-field="skills-staff">${staff.map((member) => `<option value="${escapeHtml(member.id)}" ${member.id === staffId ? "selected" : ""}>${escapeHtml(member.name)} · ${escapeHtml(roleLabel(member.role, language))}</option>`).join("")}</select></label><div><span>${escapeHtml(copy.currentEvaluator)}</span><strong>${escapeHtml(evaluator.name)} · ${escapeHtml(roleLabel(evaluator.role, language))}</strong></div></article>${stats}${levelGuide}<form class="card skill-assessment-form" data-form="save-skill-assessment"><div class="skill-rating-list">${rows}</div><label class="management-field full-width"><span>${escapeHtml(copy.assessmentNote)}</span><textarea name="note" rows="3" placeholder="${escapeHtml(copy.assessmentNoteHint)}" ${canEvaluate ? "" : "disabled"}></textarea></label><div class="skill-assessment-actions">${canEvaluate ? `<button class="primary-button" type="submit">${icon("check")}${escapeHtml(copy.saveAssessment)}</button>` : ""}${approval}</div></form><article class="card skill-history-card">${cardHeading(copy.assessmentHistory, `<span class="tag tag-neutral">${sessions.length}</span>`)}<div class="skill-history-list">${history}</div></article>`;
   }
 
+  function competencyOverviewPanel(context, copy) {
+    const { state, language } = context;
+    const staff = state.operations.staff.filter((member) => member.active);
+    if (!staff.some((member) => member.id === view.skillsStaffId)) view.skillsStaffId = staff[0]?.id || "";
+    const staffId = view.skillsStaffId;
+    const statusCopy = trainingStatusCopy(language);
+    const categoryCopy = { menu: copy.categoryMenu, station: copy.categoryStation, external: copy.categoryExternal };
+    const catalog = flatSkillCatalog(state.operations.customSkills);
+    const canEvaluate = permitted(state, "skills:evaluate");
+    const areaCards = WORK_AREAS.map((area) => {
+      const result = assessEmployeeSkills(state.operations, staffId, area.id);
+      const level = result.approval?.level || result.suggestedLevel || "—";
+      const profile = skillProfileSummary(state.operations, area.id);
+      return `<article class="competency-area-card"><span>${escapeHtml(area[language])}</span><strong>${escapeHtml(level)}</strong><small>${result.total ? `${result.coverage}% · ${result.observed}/${result.total}` : escapeHtml(copy.noAssessment)}</small><div class="wide-progress"><span style="width:${result.coverage}%"></span></div><a href="#skills?zone=${escapeHtml(area.id)}&panel=assessment">${escapeHtml(language === "zh" ? `查看 ${profile.active} 項細節` : `Xem ${profile.active} kỹ năng chi tiết`)}</a></article>`;
+    }).join("");
+    const trainingRows = (state.operations.trainingRecords || []).map((record) => {
+      const skill = catalog.find((entry) => entry.id === record.skillId);
+      const linkedSop = state.operations.sops.find((entry) => entry.id === record.sopId && entry.revision > 0);
+      const menuItem = state.operations.menuCatalog?.find((entry) => entry.id === record.menuItemId);
+      let link = skill ? `<a href="#skills?zone=${escapeHtml(record.area)}&panel=catalog">${escapeHtml(skill[language]?.title || record.skillId)}</a>` : "—";
+      if (linkedSop) link = `<a href="#sop?zone=${escapeHtml(record.area)}&sop=${escapeHtml(linkedSop.id)}">${escapeHtml(language === "zh" ? linkedSop.label : linkedSop.labelVi)}</a>`;
+      else if (menuItem) link = `<a href="#menu">${escapeHtml(language === "zh" ? menuItem.label : menuItem.labelVi)}</a>`;
+      const options = Object.entries(statusCopy).map(([value, label]) => `<option value="${value}" ${record.status === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+      return `<article class="training-progress-row"><div class="training-person"><strong>${escapeHtml(record.assigneeName)}</strong><small>${escapeHtml(categoryCopy[record.category])} · ${escapeHtml(workAreaLabel(record.area, language))}</small></div><div class="training-topic"><strong>${escapeHtml(language === "zh" ? record.label : record.labelVi)}</strong><small>${escapeHtml(record.note || "—")}</small></div><div class="training-standard"><span>${escapeHtml(copy.relatedStandard)}</span>${link}</div><div class="training-attempts"><span>${escapeHtml(copy.attempts)}</span><strong>${record.attempts}</strong></div><label class="training-status-field"><select data-field="training-status" data-id="${escapeHtml(record.id)}" ${canEvaluate ? "" : "disabled"}>${options}</select></label></article>`;
+    }).join("");
+    return `<article class="card skill-assessment-toolbar competency-overview-toolbar"><label><span>${escapeHtml(copy.selectEmployee)}</span><select data-field="skills-staff">${staff.map((member) => `<option value="${escapeHtml(member.id)}" ${member.id === staffId ? "selected" : ""}>${escapeHtml(member.name)} · ${escapeHtml(roleLabel(member.role, language))}</option>`).join("")}</select></label><p>${escapeHtml(copy.overallHint)}</p></article><section class="competency-overview-heading"><h2>${escapeHtml(copy.overallTitle)}</h2></section><section class="competency-area-grid">${areaCards}</section><article class="card training-plan-card">${cardHeading(copy.trainingPlanTitle, `<span class="tag tag-neutral">${state.operations.trainingRecords?.length || 0}</span>`)}<p class="helper-text">${escapeHtml(copy.trainingPlanHint)}</p><div class="training-progress-list">${trainingRows}</div></article>`;
+  }
+
   function skillsPage(context) {
     const { state, language } = context;
     const copy = skillCopy(language);
     const canManage = permitted(state, "skills:manage");
-    const catalogMode = view.skillsPanel !== "assessment";
-    const actions = catalogMode && canManage ? `<button class="primary-button" data-action="skill-add">${icon("plus")}${escapeHtml(copy.add)}</button>` : "";
-    const panelTabs = `<div class="inventory-view-switch skills-panel-switch"><button class="inventory-view-button ${catalogMode ? "selected" : ""}" data-action="skills-panel" data-panel="catalog">${escapeHtml(copy.standardsTab)}</button><button class="inventory-view-button ${catalogMode ? "" : "selected"}" data-action="skills-panel" data-panel="assessment">${escapeHtml(copy.assessmentTab)}</button></div>`;
+    const panel = ["overview", "catalog", "assessment"].includes(view.skillsPanel) ? view.skillsPanel : "overview";
+    const actions = panel === "catalog" && canManage ? `<button class="primary-button" data-action="skill-add">${icon("plus")}${escapeHtml(copy.add)}</button>` : "";
+    const panelTabs = `<div class="inventory-view-switch skills-panel-switch"><button class="inventory-view-button ${panel === "overview" ? "selected" : ""}" data-action="skills-panel" data-panel="overview">${escapeHtml(copy.overviewTab)}</button><button class="inventory-view-button ${panel === "catalog" ? "selected" : ""}" data-action="skills-panel" data-panel="catalog">${escapeHtml(copy.standardsTab)}</button><button class="inventory-view-button ${panel === "assessment" ? "selected" : ""}" data-action="skills-panel" data-panel="assessment">${escapeHtml(copy.assessmentTab)}</button></div>`;
     const areaTabs = `<div class="zone-tabs management-area-tabs">${WORK_AREAS.map((area) => {
       const areaSummary = skillProfileSummary(state.operations, area.id);
       return `<button class="filter-tab ${view.skillsArea === area.id ? "selected" : ""}" data-action="skills-area" data-area="${area.id}">${escapeHtml(area[language])} <span>${areaSummary.active}</span></button>`;
     }).join("")}</div>`;
-    return `${heading(copy.title, copy.subtitle, actions)}${panelTabs}${areaTabs}${catalogMode ? skillsCatalogPanel(context, copy) : skillAssessmentPanel(context, copy)}`;
+    const content = panel === "overview" ? competencyOverviewPanel(context, copy) : panel === "catalog" ? skillsCatalogPanel(context, copy) : skillAssessmentPanel(context, copy);
+    return `${heading(copy.title, copy.subtitle, actions)}${panelTabs}${panel === "overview" ? "" : areaTabs}${content}`;
   }
 
   function attendanceRow(entry, context) {
@@ -606,6 +750,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
   function handleClick(target, event, context) {
     const { state, text } = context;
     const action = target.dataset.action;
+    if (action === "menu-filter") { view.menuFilter = target.dataset.filter; render(); return true; }
     if (action === "skills-area") { view.skillsArea = target.dataset.area; render(); return true; }
     if (action === "skills-panel") { view.skillsPanel = target.dataset.panel; render(); return true; }
     if (action === "skill-add" && permitted(state, "skills:manage")) { view.managementModal = "skill"; render(); return true; }
@@ -689,6 +834,8 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
   async function handleChange(element) {
     const field = element.dataset.field;
     if (field === "skill-status") { store.setSkillAssignment(element.dataset.area, element.dataset.id, element.value); return true; }
+    if (field === "menu-staff") { view.menuStaff = element.value; render(); return true; }
+    if (field === "training-status") { store.updateTrainingStatus(element.dataset.id, element.value); return true; }
     if (field === "skills-staff") { view.skillsStaffId = element.value; render(); return true; }
     if (field === "schedule-month") { view.scheduleMonth = element.value; render(); return true; }
     if (field === "schedule-shift") { view.scheduleShift = element.value; render(); return true; }
@@ -816,5 +963,5 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     return false;
   }
 
-  return { sopPage, skillsPage, attendancePage, schedulePage, reportsPage, remotePage, staffCard, managementModal, handleClick, handleChange, handleSubmit, reportData };
+  return { sopPage, menuPage, skillsPage, attendancePage, schedulePage, reportsPage, remotePage, staffCard, managementModal, handleClick, handleChange, handleSubmit, reportData };
 }
