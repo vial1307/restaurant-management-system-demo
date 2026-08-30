@@ -594,9 +594,21 @@ a { color: inherit; text-decoration: none; }
 .skill-assessment-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
 .skill-assessment-stats > div { display: grid; min-height: 88px; align-content: center; gap: 6px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 11px; background: #fff; box-shadow: var(--shadow); }
 .skill-assessment-stats > div.level-result { border-color: #c9dfd4; background: linear-gradient(135deg, #eef8f3, #fff); }
+.skill-assessment-stats > div.level-result.awaiting-verification { border-color: #e8c98f; background: linear-gradient(135deg, #fff8e9, #fff); }
 .skill-assessment-stats span, .skill-assessment-stats > div > small { color: var(--muted); font-size: 9px; line-height: 1.35; }
 .skill-assessment-stats strong { color: var(--forest); font-size: 22px; }
 .skill-assessment-stats strong > small { margin-left: 2px; color: var(--muted); font-size: 9px; }
+.skill-level-guide { margin-bottom: 13px; padding: 17px 18px; }
+.skill-level-guide-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 13px; }
+.skill-level-guide-heading > svg { width: 19px; height: 19px; flex: 0 0 auto; color: var(--green); }
+.skill-level-guide-heading strong { color: var(--forest); font-size: 12px; }
+.skill-level-guide-heading p { margin-top: 5px; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.skill-level-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.skill-level-comparison section { min-height: 88px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.skill-level-comparison section.level-b { border-color: #ccd9df; background: #f5f9fa; }
+.skill-level-comparison section.level-a { border-color: #c9dfd4; background: #f1f8f4; }
+.skill-level-comparison strong { color: var(--forest); font-size: 11px; }
+.skill-level-comparison p { margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .skill-assessment-form { padding-top: 5px; }
 .skill-rating-list { margin-bottom: 15px; }
 .skill-rating-row { display: grid; min-height: 94px; grid-template-columns: minmax(260px, 1fr) 105px 230px; align-items: center; gap: 13px; padding: 13px 0; border-bottom: 1px solid var(--line); }
@@ -779,6 +791,7 @@ a { color: inherit; text-decoration: none; }
   .skill-assessment-toolbar { display: grid; align-items: stretch; }
   .skill-assessment-toolbar select { width: 100%; min-width: 0; }
   .skill-assessment-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skill-level-comparison { grid-template-columns: 1fr; }
   .skill-rating-row { grid-template-columns: 1fr auto; gap: 9px; }
   .skill-rating-copy { grid-column: 1 / -1; }
   .skill-rating-consensus { grid-column: 1; }
