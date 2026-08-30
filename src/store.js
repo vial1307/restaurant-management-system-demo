@@ -1,5 +1,6 @@
 import { clampNumber, formatDateKey, inventorySources } from "./rules.js";
 import { createOperationalState, currentStaff, hydrateOperations, normalizeJob, normalizeSchedule, normalizeSop, roleCan } from "./operations.js";
+import { flatSkillCatalog, normalizeCustomSkill, SKILL_ASSIGNMENT_STATUSES } from "./skills.js";
 
 export const STORAGE_KEY = "shitu-kitchen-os-v1";
 
@@ -566,6 +567,38 @@ export function createStore(storage = globalThis.localStorage) {
         if (!sop) return;
         draft.operations.sops = draft.operations.sops.filter((item) => item.id !== id);
         audit(draft, "sop-delete", sop.label || sop.labelVi);
+      });
+    },
+    setSkillAssignment(area, skillId, status) {
+      return update((draft) => {
+        if (!permitted(draft, "skills:manage")) return;
+        if (!["noodles", "soup", "seafood", "meat"].includes(area)) return;
+        const valid = flatSkillCatalog(draft.operations.customSkills).some((skill) => skill.id === skillId);
+        if (!valid || !SKILL_ASSIGNMENT_STATUSES.includes(status)) return;
+        draft.operations.skillProfiles[area] ??= {};
+        if (status === "inactive") delete draft.operations.skillProfiles[area][skillId];
+        else draft.operations.skillProfiles[area][skillId] = status;
+        const skill = flatSkillCatalog(draft.operations.customSkills).find((item) => item.id === skillId);
+        audit(draft, "skill-profile", skill?.zh?.title || skill?.vi?.title || skillId, `${area} · ${status}`);
+      });
+    },
+    addCustomSkill(input) {
+      return update((draft) => {
+        if (!permitted(draft, "skills:manage")) return;
+        const skill = normalizeCustomSkill(input);
+        if (!skill) return;
+        draft.operations.customSkills.push(skill);
+        audit(draft, "skill-add", skill.zh.title, skill.vi.title);
+      });
+    },
+    removeCustomSkill(id) {
+      return update((draft) => {
+        if (!permitted(draft, "skills:manage")) return;
+        const skill = draft.operations.customSkills.find((item) => item.id === id);
+        if (!skill) return;
+        draft.operations.customSkills = draft.operations.customSkills.filter((item) => item.id !== id);
+        for (const area of ["noodles", "soup", "seafood", "meat"]) delete draft.operations.skillProfiles[area]?.[id];
+        audit(draft, "skill-delete", skill.zh.title, skill.vi.title);
       });
     },
     markSopLearned(sopId, staffId = state.operations.activeStaffId) {
