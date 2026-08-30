@@ -234,3 +234,100 @@ export function skillProfileSummary(operations, area) {
     return summary;
   }, { active: 0, core: 0, scored: 0, reference: 0 });
 }
+
+export const SKILL_LEVELS = [0, 1, 2, 3, 4];
+
+export function normalizeSkillAssessment(input = {}, validSkillIds = []) {
+  const allowed = new Set(validSkillIds);
+  const area = ["noodles", "soup", "seafood", "meat"].includes(input.area) ? input.area : "noodles";
+  const ratings = Array.isArray(input.ratings)
+    ? input.ratings.map((entry) => ({ skillId: String(entry.skillId || ""), level: Number(entry.level) }))
+      .filter((entry) => allowed.has(entry.skillId) && SKILL_LEVELS.includes(entry.level))
+    : [];
+  if (!String(input.staffId || "") || !String(input.evaluatorId || "") || !ratings.length) return null;
+  return {
+    id: String(input.id || `assessment-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`),
+    staffId: String(input.staffId),
+    staffName: String(input.staffName || ""),
+    area,
+    evaluatorId: String(input.evaluatorId),
+    evaluatorName: String(input.evaluatorName || ""),
+    evaluatorRole: String(input.evaluatorRole || ""),
+    ratings,
+    note: String(input.note || "").trim(),
+    at: String(input.at || new Date().toISOString()),
+  };
+}
+
+export function latestSkillRatings(operations, staffId, area) {
+  const latest = new Map();
+  const sessions = (operations?.skillAssessments || [])
+    .filter((entry) => entry.staffId === staffId && entry.area === area)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  for (const session of sessions) {
+    for (const rating of session.ratings || []) {
+      const key = `${session.evaluatorId}:${rating.skillId}`;
+      if (!latest.has(key)) latest.set(key, { ...rating, evaluatorId: session.evaluatorId, evaluatorName: session.evaluatorName, at: session.at });
+    }
+  }
+  return [...latest.values()];
+}
+
+export function assessEmployeeSkills(operations, staffId, area) {
+  const profile = operations?.skillProfiles?.[area] || {};
+  const gradingSkills = Object.entries(profile).filter(([, status]) => status === "core" || status === "scored");
+  const latest = latestSkillRatings(operations, staffId, area);
+  const bySkill = new Map();
+  for (const rating of latest) {
+    if (!bySkill.has(rating.skillId)) bySkill.set(rating.skillId, []);
+    bySkill.get(rating.skillId).push(rating);
+  }
+  const rows = gradingSkills.map(([skillId, status]) => {
+    const ratings = bySkill.get(skillId) || [];
+    const average = ratings.length ? ratings.reduce((sum, entry) => sum + entry.level, 0) / ratings.length : null;
+    return { skillId, status, ratings, average };
+  });
+  const observed = rows.filter((row) => row.average !== null);
+  const coverage = rows.length ? Math.round(observed.length / rows.length * 100) : 0;
+  const evaluators = new Map(latest.map((entry) => [entry.evaluatorId, entry.evaluatorName]));
+  const weighted = observed.reduce((summary, row) => {
+    const weight = row.status === "core" ? 2 : 1;
+    summary.points += row.average * weight;
+    summary.weight += weight;
+    return summary;
+  }, { points: 0, weight: 0 });
+  const average = weighted.weight ? weighted.points / weighted.weight : null;
+  const coreRows = rows.filter((row) => row.status === "core");
+  const coreComplete = coreRows.every((row) => row.average !== null);
+  const coreMinimum = coreComplete && coreRows.length ? Math.min(...coreRows.map((row) => row.average)) : coreRows.length ? null : 4;
+  let suggestedLevel = null;
+  if (coverage >= 50 && average !== null) {
+    suggestedLevel = "D";
+    if (coverage >= 60 && coreComplete && coreMinimum >= 2 && average >= 2) suggestedLevel = "C";
+    if (coverage >= 80 && coreComplete && coreMinimum >= 3 && average >= 3) suggestedLevel = "B";
+    if (coverage === 100 && coreComplete && coreMinimum >= 3.5 && average >= 3.7 && evaluators.size >= 2) suggestedLevel = "A";
+  }
+  const approvalReady = Boolean(suggestedLevel)
+    && coverage >= 80
+    && (!["A", "B"].includes(suggestedLevel) || evaluators.size >= 2);
+  const latestAssessmentAt = (operations?.skillAssessments || [])
+    .filter((entry) => entry.staffId === staffId && entry.area === area)
+    .reduce((latestAt, entry) => String(entry.at) > latestAt ? String(entry.at) : latestAt, "");
+  const approval = (operations?.skillApprovals || [])
+    .filter((entry) => entry.staffId === staffId && entry.area === area)
+    .sort((a, b) => String(b.at).localeCompare(String(a.at)))[0] || null;
+  return {
+    total: rows.length,
+    observed: observed.length,
+    coverage,
+    average: average === null ? null : Math.round(average * 100) / 100,
+    coreComplete,
+    coreMinimum,
+    evaluatorCount: evaluators.size,
+    evaluators: [...evaluators.entries()].map(([id, name]) => ({ id, name })),
+    suggestedLevel,
+    approvalReady,
+    approval: approval && String(approval.at) >= latestAssessmentAt ? approval : null,
+    rows,
+  };
+}
