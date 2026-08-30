@@ -232,6 +232,14 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       provisional: "暫定",
       currentEvaluator: "目前評估人",
       coreIncomplete: "必要技能尚未全部完成評估",
+      levelGuideTitle: "B 與 A 的差別",
+      levelBTitle: "B · 可獨立穩定作業",
+      levelBDesc: "能獨立顧好本站，熟悉一般流程，也能處理已熟悉的尖峰單量；遇到複雜異常時仍可能需要主管協助。",
+      levelATitle: "A · 能掌控整個工作區",
+      levelADesc: "除了具備 B 的能力，還能在塞單時重新排單與分工、預先發現缺料或延誤、處理異常，並可帶訓與修正他人。",
+      levelGuideRule: "能獨自撐過尖峰是 A 的重要條件，但還要看異常處理、區域掌控與帶訓能力。",
+      waitingVerification: "能力已達建議等級，等待第二位人員複核",
+      verified: "已完成雙人複核",
     } : {
       title: "Danh mục kỹ năng",
       subtitle: "Chọn đúng những kỹ năng mỗi khu thực sự yêu cầu; phần đào tạo và đánh giá sau này sẽ dựa trên danh mục này.",
@@ -285,6 +293,14 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       provisional: "Tạm thời",
       currentEvaluator: "Người đang đánh giá",
       coreIncomplete: "Chưa đánh giá đủ các kỹ năng bắt buộc",
+      levelGuideTitle: "Cấp B và A khác nhau thế nào?",
+      levelBTitle: "B · Thành thạo vận hành",
+      levelBDesc: "Tự đứng và giữ ổn định khu, làm tốt quy trình thường ngày và xử lý được lượng đơn cao điểm đã quen; tình huống phức tạp vẫn có thể cần quản lý hỗ trợ.",
+      levelATitle: "A · Làm chủ khu",
+      levelADesc: "Ngoài toàn bộ năng lực B, còn biết cứu khu khi nghẽn, sắp xếp lại đơn và người hỗ trợ, phát hiện sớm thiếu hàng hoặc chậm món, xử lý bất thường và hướng dẫn người khác.",
+      levelGuideRule: "Tự xử lý được giờ cao điểm là điều kiện quan trọng của A, nhưng chưa đủ nếu chưa thể xử lý bất thường, kiểm soát toàn khu và đào tạo người khác.",
+      waitingVerification: "Năng lực đã đạt mức đề xuất, đang chờ người thứ hai xác nhận",
+      verified: "Đã có hai người đánh giá",
     };
   }
 
@@ -344,8 +360,14 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     }));
     const sessions = state.operations.skillAssessments.filter((entry) => entry.staffId === staffId && entry.area === view.skillsArea).slice(0, 8);
     const statusLabel = { core: copy.core, scored: copy.scored, reference: copy.reference };
-    const stats = `<section class="skill-assessment-stats"><div class="level-result"><span>${escapeHtml(result.approval ? copy.approvedLevel : copy.suggestedLevel)}</span><strong>${escapeHtml(result.approval?.level || result.suggestedLevel || "—")}</strong><small>${result.approval ? `${escapeHtml(result.approval.approverName)} · ${escapeHtml(isoDateTime(result.approval.at, language))}` : escapeHtml(copy.provisional)}</small></div><div><span>${escapeHtml(copy.progress)}</span><strong>${result.coverage}%</strong><small>${result.observed}/${result.total} ${escapeHtml(copy.observedSkills.toLowerCase())}</small></div><div><span>${escapeHtml(copy.average)}</span><strong>${result.average ?? "—"}<small>/4</small></strong><small>${result.coreComplete ? escapeHtml(copy.coreCount) : escapeHtml(copy.coreIncomplete)}</small></div><div><span>${escapeHtml(copy.evaluators)}</span><strong>${result.evaluatorCount}</strong><small>${escapeHtml(result.evaluators.map((entry) => entry.name).join(" · ") || "—")}</small></div></section>`;
-    if (!activeSkills.length) return `${stats}<article class="card"><p class="empty-state">${escapeHtml(copy.noStandards)}</p></article>`;
+    const needsSecondEvaluator = ["A", "B"].includes(result.suggestedLevel) && result.evaluatorCount < 2;
+    const levelState = result.approval
+      ? `${escapeHtml(result.approval.approverName)} · ${escapeHtml(isoDateTime(result.approval.at, language))}`
+      : needsSecondEvaluator ? `1/2 · ${escapeHtml(copy.waitingVerification)}`
+        : result.evaluatorCount >= 2 ? escapeHtml(copy.verified) : escapeHtml(copy.provisional);
+    const stats = `<section class="skill-assessment-stats"><div class="level-result ${needsSecondEvaluator ? "awaiting-verification" : ""}"><span>${escapeHtml(result.approval ? copy.approvedLevel : copy.suggestedLevel)}</span><strong>${escapeHtml(result.approval?.level || result.suggestedLevel || "—")}</strong><small>${levelState}</small></div><div><span>${escapeHtml(copy.progress)}</span><strong>${result.coverage}%</strong><small>${result.observed}/${result.total} ${escapeHtml(copy.observedSkills.toLowerCase())}</small></div><div><span>${escapeHtml(copy.average)}</span><strong>${result.average ?? "—"}<small>/4</small></strong><small>${result.coreComplete ? escapeHtml(copy.coreCount) : escapeHtml(copy.coreIncomplete)}</small></div><div><span>${escapeHtml(copy.evaluators)}</span><strong>${result.evaluatorCount}</strong><small>${escapeHtml(result.evaluators.map((entry) => entry.name).join(" · ") || "—")}</small></div></section>`;
+    const levelGuide = `<article class="card skill-level-guide"><div class="skill-level-guide-heading">${icon("spark")}<div><strong>${escapeHtml(copy.levelGuideTitle)}</strong><p>${escapeHtml(copy.levelGuideRule)}</p></div></div><div class="skill-level-comparison"><section class="level-b"><strong>${escapeHtml(copy.levelBTitle)}</strong><p>${escapeHtml(copy.levelBDesc)}</p></section><section class="level-a"><strong>${escapeHtml(copy.levelATitle)}</strong><p>${escapeHtml(copy.levelADesc)}</p></section></div></article>`;
+    if (!activeSkills.length) return `${stats}${levelGuide}<article class="card"><p class="empty-state">${escapeHtml(copy.noStandards)}</p></article>`;
     const rows = activeSkills.map((skill) => {
       const status = profile[skill.id];
       const average = averages.get(skill.id);
@@ -355,7 +377,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     const readyMessage = result.approvalReady ? "" : `<p class="assessment-warning">${escapeHtml(["A", "B"].includes(result.suggestedLevel) && result.evaluatorCount < 2 ? copy.needTwo : copy.notReady)}</p>`;
     const approval = canApprove ? `<div class="skill-approval-action"><button class="secondary-button" type="button" data-action="skill-approve" data-staff-id="${escapeHtml(staffId)}" data-area="${escapeHtml(view.skillsArea)}" ${result.approvalReady ? "" : "disabled"}>${icon("check")}${escapeHtml(copy.approveLevel)}${result.suggestedLevel ? ` · ${result.suggestedLevel}` : ""}</button>${readyMessage}</div>` : "";
     const history = sessions.length ? sessions.map((session) => `<div class="skill-history-row"><span><strong>${escapeHtml(session.evaluatorName)}</strong><small>${escapeHtml(roleLabel(session.evaluatorRole, language))} · ${escapeHtml(isoDateTime(session.at, language))}</small></span><strong>${session.ratings.length} ${escapeHtml(copy.observedSkills.toLowerCase())}</strong>${session.note ? `<p>${escapeHtml(session.note)}</p>` : ""}</div>`).join("") : `<p class="empty-state">${escapeHtml(copy.noRating)}</p>`;
-    return `<article class="card skill-assessment-toolbar"><label><span>${escapeHtml(copy.selectEmployee)}</span><select data-field="skills-staff">${staff.map((member) => `<option value="${escapeHtml(member.id)}" ${member.id === staffId ? "selected" : ""}>${escapeHtml(member.name)} · ${escapeHtml(roleLabel(member.role, language))}</option>`).join("")}</select></label><div><span>${escapeHtml(copy.currentEvaluator)}</span><strong>${escapeHtml(evaluator.name)} · ${escapeHtml(roleLabel(evaluator.role, language))}</strong></div></article>${stats}<form class="card skill-assessment-form" data-form="save-skill-assessment"><div class="skill-rating-list">${rows}</div><label class="management-field full-width"><span>${escapeHtml(copy.assessmentNote)}</span><textarea name="note" rows="3" placeholder="${escapeHtml(copy.assessmentNoteHint)}" ${canEvaluate ? "" : "disabled"}></textarea></label><div class="skill-assessment-actions">${canEvaluate ? `<button class="primary-button" type="submit">${icon("check")}${escapeHtml(copy.saveAssessment)}</button>` : ""}${approval}</div></form><article class="card skill-history-card">${cardHeading(copy.assessmentHistory, `<span class="tag tag-neutral">${sessions.length}</span>`)}<div class="skill-history-list">${history}</div></article>`;
+    return `<article class="card skill-assessment-toolbar"><label><span>${escapeHtml(copy.selectEmployee)}</span><select data-field="skills-staff">${staff.map((member) => `<option value="${escapeHtml(member.id)}" ${member.id === staffId ? "selected" : ""}>${escapeHtml(member.name)} · ${escapeHtml(roleLabel(member.role, language))}</option>`).join("")}</select></label><div><span>${escapeHtml(copy.currentEvaluator)}</span><strong>${escapeHtml(evaluator.name)} · ${escapeHtml(roleLabel(evaluator.role, language))}</strong></div></article>${stats}${levelGuide}<form class="card skill-assessment-form" data-form="save-skill-assessment"><div class="skill-rating-list">${rows}</div><label class="management-field full-width"><span>${escapeHtml(copy.assessmentNote)}</span><textarea name="note" rows="3" placeholder="${escapeHtml(copy.assessmentNoteHint)}" ${canEvaluate ? "" : "disabled"}></textarea></label><div class="skill-assessment-actions">${canEvaluate ? `<button class="primary-button" type="submit">${icon("check")}${escapeHtml(copy.saveAssessment)}</button>` : ""}${approval}</div></form><article class="card skill-history-card">${cardHeading(copy.assessmentHistory, `<span class="tag tag-neutral">${sessions.length}</span>`)}<div class="skill-history-list">${history}</div></article>`;
   }
 
   function skillsPage(context) {
