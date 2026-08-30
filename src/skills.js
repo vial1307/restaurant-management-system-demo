@@ -305,7 +305,7 @@ export function assessEmployeeSkills(operations, staffId, area) {
     suggestedLevel = "D";
     if (coverage >= 60 && coreComplete && coreMinimum >= 2 && average >= 2) suggestedLevel = "C";
     if (coverage >= 80 && coreComplete && coreMinimum >= 3 && average >= 3) suggestedLevel = "B";
-    if (coverage === 100 && coreComplete && coreMinimum >= 3.5 && average >= 3.7 && evaluators.size >= 2) suggestedLevel = "A";
+    if (coverage === 100 && coreComplete && coreMinimum >= 3.5 && average >= 3.7) suggestedLevel = "A";
   }
   const approvalReady = Boolean(suggestedLevel)
     && coverage >= 80
