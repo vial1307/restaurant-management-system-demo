@@ -1,5 +1,5 @@
 import { clampNumber, formatDateKey, inventorySources } from "./rules.js";
-import { createOperationalState, currentStaff, hydrateOperations, normalizeJob, normalizeSchedule, normalizeSop, roleCan } from "./operations.js";
+import { createOperationalState, currentStaff, hydrateOperations, normalizeJob, normalizeSchedule, normalizeSop, roleCan, TRAINING_STATUSES } from "./operations.js";
 import { assessEmployeeSkills, flatSkillCatalog, normalizeCustomSkill, normalizeSkillAssessment, SKILL_ASSIGNMENT_STATUSES } from "./skills.js";
 
 export const STORAGE_KEY = "shitu-kitchen-os-v1";
@@ -646,6 +646,16 @@ export function createStore(storage = globalThis.localStorage) {
         });
         draft.operations.skillApprovals = draft.operations.skillApprovals.slice(0, 500);
         audit(draft, "skill-level-approve", member.name, `${area} · ${result.suggestedLevel}`);
+      });
+    },
+    updateTrainingStatus(id, status) {
+      return update((draft) => {
+        if (!permitted(draft, "skills:evaluate") || !TRAINING_STATUSES.includes(status)) return;
+        const record = draft.operations.trainingRecords.find((entry) => entry.id === id);
+        if (!record) return;
+        record.status = status;
+        if (status === "passed") record.checkedAt = new Date().toISOString();
+        audit(draft, "training-status", record.label || record.labelVi, `${record.assigneeName} · ${status}`);
       });
     },
     markSopLearned(sopId, staffId = state.operations.activeStaffId) {
