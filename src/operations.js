@@ -1,3 +1,5 @@
+import { flatSkillCatalog, normalizeCustomSkill, normalizeSkillProfiles } from "./skills.js";
+
 export const STAFF_ROLES = [
   { id: "manager", vi: "Quản lý", zh: "管理者" },
   { id: "supervisor", vi: "Tổ trưởng", zh: "組長" },
@@ -6,7 +8,7 @@ export const STAFF_ROLES = [
 ];
 
 const ROLE_PERMISSIONS = {
-  manager: ["sop:edit", "sop:approve", "sop:delete", "staff:manage", "attendance:manage", "reports:export", "checks:record", "schedule:manage", "jobs:manage", "tasks:assign"],
+  manager: ["sop:edit", "sop:approve", "sop:delete", "skills:manage", "staff:manage", "attendance:manage", "reports:export", "checks:record", "schedule:manage", "jobs:manage", "tasks:assign"],
   supervisor: ["sop:edit", "attendance:manage", "reports:export", "checks:record"],
   employee: ["checks:record"],
   parttime: ["checks:record"],
@@ -146,6 +148,8 @@ export function createOperationalState(settings = {}) {
     payroll: clone(DEFAULT_PAYROLL_POLICY),
     schedules: [],
     jobCatalog: clone(DEFAULT_JOB_CATALOG),
+    customSkills: [],
+    skillProfiles: { noodles: {}, soup: {}, seafood: {}, meat: {} },
     pendingSync: 0,
   };
 }
@@ -159,6 +163,8 @@ export function hydrateOperations(input, settings = {}) {
   const sops = Array.isArray(input.sops)
     ? input.sops.map((item) => ({ ...normalizeSop(item), revision: Number.isFinite(Number(item.revision)) ? Math.max(0, Number(item.revision)) : 1, status: item.status || "published", pending: item.pending ? normalizeSop(item.pending) : null, updatedAt: item.updatedAt || null, updatedBy: item.updatedBy || null, versions: Array.isArray(item.versions) ? item.versions : [] }))
     : fallback.sops;
+  const customSkills = Array.isArray(input.customSkills) ? input.customSkills.map(normalizeCustomSkill).filter(Boolean) : [];
+  const skillProfiles = normalizeSkillProfiles(input.skillProfiles, flatSkillCatalog(customSkills).map((skill) => skill.id));
 
   return {
     sops,
@@ -173,6 +179,8 @@ export function hydrateOperations(input, settings = {}) {
     jobCatalog: Array.isArray(input.jobCatalog) && input.jobCatalog.length
       ? input.jobCatalog.map(normalizeJob).filter(Boolean)
       : fallback.jobCatalog,
+    customSkills,
+    skillProfiles,
     pendingSync: Math.max(0, Number(input.pendingSync) || 0),
   };
 }
