@@ -33,6 +33,7 @@ const view = {
   calendarMonth: null,
   calendarYear: null,
   sopArea: "noodles",
+  skillsArea: "noodles",
   sopSelected: "sop-handmade-noodles",
   sopService: "dine",
   sopPanel: "standards",
@@ -64,6 +65,7 @@ const ICONS = {
   preparation: "M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
   procurement: "M3 4h2l2.4 10.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H7m3 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm7 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
   sop: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Zm3.5 6h6m-6 4h6",
+  skills: "M9 3h6l1 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3l1-2Zm0 7 2 2 4-4m-6 9h6",
   attendance: "M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   schedule: "M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m3 10h8m-8 4h5",
   reports: "M3 3v18h18M8 15v-4m5 4V7m5 8v-7",
@@ -88,7 +90,7 @@ const ICONS = {
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5 5 5 5-5m-5 5V3",
 };
 
-const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "sop", "attendance", "schedule", "reports", "remote", "settings"];
+const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "sop", "skills", "attendance", "schedule", "reports", "remote", "settings"];
 
 function icon(name, className = "") {
   return `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"></path></svg>`;
@@ -541,7 +543,7 @@ function addItemModal(context) {
 function render() {
   const context = currentContext();
   const active = route();
-  const pages = { dashboard, inventory, procurement: procurementPage, reservations: reservationsPage, preparation: preparationPage, sop: management.sopPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
+  const pages = { dashboard, inventory, procurement: procurementPage, reservations: reservationsPage, preparation: preparationPage, sop: management.sopPage, skills: management.skillsPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
   root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
@@ -611,7 +613,7 @@ root.addEventListener("change", (event) => {
   const element = event.target;
   const { field, key, id } = element.dataset;
   if (!field) return;
-  if (["payroll", "sop-photos", "inspection-photo", "schedule-month", "schedule-shift", "report-scope", "report-target", "report-category", "report-from", "report-to"].includes(field)) { void management.handleChange(element); return; }
+  if (["payroll", "skill-status", "sop-photos", "inspection-photo", "schedule-month", "schedule-shift", "report-scope", "report-target", "report-category", "report-from", "report-to"].includes(field)) { void management.handleChange(element); return; }
   if (field === "reservation") store.updateReservation(key, element.value);
   if (field === "remaining") store.updateRemaining(key, element.value);
   if (field === "riceRemaining") store.updateRice(element.value);
