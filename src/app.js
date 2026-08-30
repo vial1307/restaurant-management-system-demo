@@ -34,6 +34,8 @@ const view = {
   calendarYear: null,
   sopArea: "noodles",
   skillsArea: "noodles",
+  skillsPanel: "catalog",
+  skillsStaffId: null,
   sopSelected: "sop-handmade-noodles",
   sopService: "dine",
   sopPanel: "standards",
@@ -613,7 +615,7 @@ root.addEventListener("change", (event) => {
   const element = event.target;
   const { field, key, id } = element.dataset;
   if (!field) return;
-  if (["payroll", "skill-status", "sop-photos", "inspection-photo", "schedule-month", "schedule-shift", "report-scope", "report-target", "report-category", "report-from", "report-to"].includes(field)) { void management.handleChange(element); return; }
+  if (["payroll", "skill-status", "skills-staff", "sop-photos", "inspection-photo", "schedule-month", "schedule-shift", "report-scope", "report-target", "report-category", "report-from", "report-to"].includes(field)) { void management.handleChange(element); return; }
   if (field === "reservation") store.updateReservation(key, element.value);
   if (field === "remaining") store.updateRemaining(key, element.value);
   if (field === "riceRemaining") store.updateRice(element.value);
