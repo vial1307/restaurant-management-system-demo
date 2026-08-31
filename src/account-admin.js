@@ -1,4 +1,5 @@
 import { tr, currentLocale } from './locales.js';
+import { getSupabase, isSupabaseConfigured } from './supabase-client.js';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';
@@ -38,6 +39,42 @@ function loadAccounts(){
   return seeded;
 }
 function saveAccounts(list){ localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list)); }
+
+let cloudAccountsLoading = null;
+async function refreshAccountsFromCloud(){
+  const s=session();
+  if(!isSupabaseConfigured() || s?.role!=='admin') return loadAccounts();
+  if(cloudAccountsLoading) return cloudAccountsLoading;
+  cloudAccountsLoading=(async()=>{
+    try{
+      const supabase=await getSupabase();
+      const {data,error}=await supabase
+        .from('profiles')
+        .select('id,username,display_name,role,location,active,permissions,preferred_language')
+        .order('created_at',{ascending:true});
+      if(error || !Array.isArray(data)) return loadAccounts();
+      const list=data.map(p=>({
+        id:p.id,
+        username:p.username,
+        password:'',
+        name:p.display_name,
+        role:p.role,
+        location:p.location,
+        active:p.active,
+        permissions:p.permissions||{},
+        preferredLanguage:p.preferred_language||'vi',
+        provider:'supabase',
+      }));
+      saveAccounts(list);
+      return list;
+    }catch{
+      return loadAccounts();
+    }finally{
+      cloudAccountsLoading=null;
+    }
+  })();
+  return cloudAccountsLoading;
+}
 function session(){ try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch{return null} }
 function setSession(account){
   const authRole = account.role === 'admin' ? 'admin' : account.role === 'central' ? 'central' : 'branch';
@@ -62,8 +99,8 @@ function applyRoleAccess(){
   const s = session();
   if (!s?.id) return;
   const account = loadAccounts().find(a=>a.id===s.id);
-  if (!account || !account.active) return;
-  const permissions = normalizePermissions(account.role, account.permissions);
+  if (account && account.active===false) return;
+  const permissions = normalizePermissions(s.accountRole || account?.role || 'employee', s.permissions || account?.permissions);
   document.querySelectorAll('.desktop-nav .nav-item, .mobile-nav .nav-item').forEach(a=>{
     const href=(a.getAttribute('href')||'').replace(/^#/,'').split('?')[0];
     if (!href) return;
@@ -110,32 +147,51 @@ function adminPanel(){
   return `<article class="card account-admin-card"><div class="account-card-head"><div><h2>${esc(label('accountManagement'))}</h2><p>${esc(label('accountSubtitle'))}</p></div><button class="secondary-button" data-account-add>＋ ${esc(label('addAccount'))}</button></div><div class="account-table"><div class="account-table-head"><span>${esc(label('employeeName'))}</span><span>${esc(label('account'))}</span><span>${esc(label('role'))}</span><span>${esc(label('location'))}</span><span>${esc(label('status'))}</span><span></span></div>${accounts.map(a=>`<div class="account-row"><div><strong>${esc(a.name)}</strong><small>${esc(a.id)}</small></div><span>${esc(a.username)}</span><span>${esc(roleLabel(a.role))}</span><span>${esc(locationLabel(a.location))}</span><span class="account-status ${a.active?'on':'off'}">${esc(a.active?label('active'):label('disabled'))}</span><button class="icon-button account-edit" data-account-edit="${esc(a.id)}">✎</button></div>`).join('')}</div><p class="account-storage-note">${esc(label('temporaryStorage'))}</p></article>`;
 }
 
+let settingsCloudSynced=false;
 function renderSettingsAccounts(){
-  if(!location.hash.startsWith('#settings')) return;
+  if(!location.hash.startsWith('#settings')) { settingsCloudSynced=false; return; }
   const layout=document.querySelector('.settings-layout');
   if(!layout || layout.querySelector('.account-admin-card,.account-self-card')) return;
   layout.insertAdjacentHTML('beforeend', accountCard()+adminPanel());
   bindSettings();
+  if(session()?.role==='admin' && !settingsCloudSynced){
+    settingsCloudSynced=true;
+    void refreshAccountsFromCloud().then(()=>{
+      if(location.hash.startsWith('#settings')) refreshSettings();
+    });
+  }
 }
 
 function permissionGrid(account){
   const p=normalizePermissions(account.role, account.permissions);
-  return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${MODULES.map(k=>`<div class="permission-row"><span>${esc(moduleLabel(k))}</span><label><input type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}></label><label><input type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}></label></div>`).join('')}</div>`;
+  return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${MODULES.map(k=>`<div class="permission-row"><span>${esc(moduleLabel(k))}</span><label class="permission-toggle" title="${esc(label('view'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label><label class="permission-toggle" title="${esc(label('edit'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label></div>`).join('')}</div>`;
 }
 
-function openEditor(id=''){
-  const list=loadAccounts();
+async function openEditor(id=''){
+  const list=await refreshAccountsFromCloud();
   const account=id?list.find(a=>a.id===id):{id:'',username:'',password:'',name:'',role:'employee',location:'fuxing',active:true,permissions:clone(ROLE_DEFAULTS.employee)};
   if(!account) return;
   const editing=Boolean(id);
   const host=document.createElement('div'); host.className='account-modal-backdrop'; host.dataset.accountModal='';
-  host.innerHTML=`<section class="account-modal"><div class="account-card-head"><div><h2>${esc(editing?label('editAccount'):label('addAccount'))}</h2><p>${editing?esc(account.username):''}</p></div><button class="icon-button" data-account-close>×</button></div><form data-account-form data-edit-id="${esc(id)}"><div class="account-form-grid"><label><span>${esc(label('employeeName'))}</span><input name="name" required value="${esc(account.name)}"></label><label><span>${esc(label('account'))}</span><input name="username" required value="${esc(account.username)}" autocomplete="off"></label><label><span>${esc(editing?label('newPassword'):label('password'))}</span><input name="password" type="password" ${editing?'':'required minlength="6"'} autocomplete="new-password" placeholder="${editing?'••••••':''}"></label><label><span>${esc(label('role'))}</span><select name="role">${['admin','manager','supervisor','employee','parttime','central'].map(r=>`<option value="${r}" ${account.role===r?'selected':''}>${esc(roleLabel(r))}</option>`).join('')}</select></label><label><span>${esc(label('location'))}</span><select name="location"><option value="all" ${account.location==='all'?'selected':''}>${esc(label('allLocations'))}</option><option value="fuxing" ${account.location==='fuxing'?'selected':''}>${esc(label('fuxing'))}</option><option value="central" ${account.location==='central'?'selected':''}>${esc(label('centralKitchen'))}</option></select></label><label class="account-active-toggle"><span>${esc(label('status'))}</span><input name="active" type="checkbox" ${account.active?'checked':''}> ${esc(label('active'))}</label></div>${permissionGrid(account)}<p class="account-form-message" data-account-form-message></p><div class="account-form-actions">${editing&&account.id!=='admin'?`<button type="button" class="danger-button" data-account-delete="${esc(account.id)}">${esc(label('delete'))}</button>`:''}<button type="button" class="secondary-button" data-account-close>${esc(label('cancel'))}</button><button type="submit" class="primary-button">${esc(label('save'))}</button></div></form></section>`;
+  host.innerHTML=`<section class="account-modal"><div class="account-card-head"><div><h2>${esc(editing?label('editAccount'):label('addAccount'))}</h2><p>${editing?esc(account.username):''}</p></div><button class="icon-button" data-account-close>×</button></div><form data-account-form data-edit-id="${esc(id)}"><div class="account-form-grid"><label><span>${esc(label('employeeName'))}</span><input name="name" required value="${esc(account.name)}"></label><label><span>${esc(label('account'))}</span><input name="username" required value="${esc(account.username)}" autocomplete="off"></label><label><span>${esc(editing?label('newPassword'):label('password'))}</span><input name="password" type="password" ${editing?'':'required minlength="6"'} autocomplete="new-password" placeholder="${editing?'••••••':''}"></label><label><span>${esc(label('role'))}</span><select name="role">${['admin','manager','supervisor','employee','parttime','central'].map(r=>`<option value="${r}" ${account.role===r?'selected':''}>${esc(roleLabel(r))}</option>`).join('')}</select></label><label><span>${esc(label('location'))}</span><select name="location"><option value="all" ${account.location==='all'?'selected':''}>${esc(label('allLocations'))}</option><option value="fuxing" ${account.location==='fuxing'?'selected':''}>${esc(label('fuxing'))}</option><option value="central" ${account.location==='central'?'selected':''}>${esc(label('centralKitchen'))}</option></select></label><label class="account-active-toggle"><span>${esc(label('status'))}</span><span class="account-switch"><input name="active" type="checkbox" ${account.active?'checked':''}><span class="account-switch-ui" aria-hidden="true"></span><strong>${esc(label('active'))}</strong></span></label></div>${permissionGrid(account)}<p class="account-form-message" data-account-form-message></p><div class="account-form-actions">${editing&&account.id!=='admin'?`<button type="button" class="danger-button" data-account-delete="${esc(account.id)}">${esc(label('delete'))}</button>`:''}<button type="button" class="secondary-button" data-account-close>${esc(label('cancel'))}</button><button type="submit" class="primary-button">${esc(label('save'))}</button></div></form></section>`;
   document.body.append(host);
   bindModal(host);
 }
 
 function bindModal(host){
   host.querySelectorAll('[data-account-close]').forEach(b=>b.onclick=()=>host.remove());
+  host.addEventListener('change',(event)=>{
+    const input=event.target;
+    if(!(input instanceof HTMLInputElement) || !input.classList.contains('permission-checkbox')) return;
+    const name=input.name||'';
+    const match=name.match(/^perm:(.+):(view|edit)$/);
+    if(!match) return;
+    const [,moduleKey,kind]=match;
+    const viewBox=host.querySelector(`input[name="perm:${CSS.escape(moduleKey)}:view"]`);
+    const editBox=host.querySelector(`input[name="perm:${CSS.escape(moduleKey)}:edit"]`);
+    if(kind==='edit' && input.checked && viewBox) viewBox.checked=true;
+    if(kind==='view' && !input.checked && editBox) editBox.checked=false;
+  });
   const roleSelect=host.querySelector('select[name="role"]');
   roleSelect?.addEventListener('change',()=>{
     const fake={role:roleSelect.value,permissions:clone(ROLE_DEFAULTS[roleSelect.value]||ROLE_DEFAULTS.employee)};
@@ -171,8 +227,8 @@ function refreshSettings(){
 }
 
 function bindSettings(){
-  document.querySelector('[data-account-add]')?.addEventListener('click',()=>openEditor());
-  document.querySelectorAll('[data-account-edit]').forEach(b=>b.addEventListener('click',()=>openEditor(b.dataset.accountEdit)));
+  document.querySelector('[data-account-add]')?.addEventListener('click',()=>{ void openEditor(); });
+  document.querySelectorAll('[data-account-edit]').forEach(b=>b.addEventListener('click',()=>{ void openEditor(b.dataset.accountEdit); }));
   document.querySelector('[data-account-self-password]')?.addEventListener('submit',e=>{
     e.preventDefault(); const form=e.currentTarget, data=new FormData(form), msg=form.querySelector('[data-account-self-message]');
     const s=session(), list=loadAccounts(), idx=list.findIndex(a=>a.id===s?.id); if(idx<0)return;
