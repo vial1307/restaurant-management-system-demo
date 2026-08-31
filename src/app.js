@@ -697,7 +697,35 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("offline", render);
 window.addEventListener("online", () => { if (store.getState().operations.pendingSync) store.clearPendingSync(); else render(); });
 if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:") {
-  globalThis.navigator.serviceWorker.register("./sw.js").catch(() => {});
+  let reloadingForWorker = false;
+  globalThis.navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloadingForWorker) return;
+    reloadingForWorker = true;
+    window.location.reload();
+  });
+
+  globalThis.navigator.serviceWorker
+    .register("./sw.js?v=25", { updateViaCache: "none" })
+    .then(async (registration) => {
+      await registration.update().catch(() => {});
+      if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
+
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed" && globalThis.navigator.serviceWorker.controller) {
+            worker.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      });
+
+      // Safari/iOS may keep a tab open for a long time. Re-check when returning to the app.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") registration.update().catch(() => {});
+      });
+      window.addEventListener("focus", () => registration.update().catch(() => {}));
+    })
+    .catch(() => {});
 }
 store.subscribe(render);
 render();
