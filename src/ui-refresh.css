@@ -691,5 +691,6 @@ html[lang="vi"] .central-row small{line-height:1.35}
   input,select,textarea{font-size:max(16px,1em)}
   .quantity-input,.minimum-input,.inline-number{font-size:16px}
   .search-box>input,.central-toolbar input{font-size:16px}
-  button,.nav-item,.filter-tab{min-touch-target-size:40px}
+  .filter-tab,.central-tabs button,.central-zone-tabs button,.language-switch button{min-height:40px}
+  .icon-button,.quantity-button,.inventory-action-button{min-width:36px;min-height:36px}
 }
