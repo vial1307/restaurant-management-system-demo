@@ -159,20 +159,51 @@ function rowMatches(row, query) {
 }
 
 function installSearchEnhancer() {
+  const genericRows = [
+    ".menu-catalog-row",
+    ".staff-row",
+    ".management-list-row",
+    ".account-row",
+    ".sop-list-item",
+    ".training-progress-row",
+    ".skill-catalog-row",
+    ".history-item",
+    ".report-table tbody tr"
+  ].join(",");
+
   document.addEventListener("input", (event) => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
     const isMain = input.dataset.field === "inventorySearch";
     const isCentral = input.hasAttribute("data-central-search");
-    if (!isMain && !isCentral) return;
+    const placeholder = input.getAttribute("placeholder") || "";
+    const isGenericSearch = input.type === "search" || /tìm|search|搜尋|pinyin|注音/i.test(placeholder);
+    if (!isMain && !isCentral && !isGenericSearch) return;
 
     const query = input.value;
-    // Main app natively handles Chinese/Vietnamese. Intercept latin/zhuyin so pinyin searches stay fast.
-    if (!/[a-zA-Zㄅ-ㄩˊˇˋ˙]/.test(query)) return;
-    event.stopImmediatePropagation();
-    const scope = isCentral ? input.closest(".central-card") : input.closest(".page-content");
-    const selector = isCentral ? ".central-row" : ".inventory-row";
-    scope?.querySelectorAll(selector).forEach((row) => row.style.display = rowMatches(row, query) ? "" : "none");
+
+    if (isMain || isCentral) {
+      // Main app natively handles Chinese. Intercept Latin / Vietnamese / Zhuyin
+      // so Vietnamese without accents, Pinyin and 注音 can all use the same local index.
+      if (!query || /[a-zA-ZÀ-ỹㄅ-ㄩˊˇˋ˙]/.test(query)) {
+        event.stopImmediatePropagation();
+        const scope = isCentral ? input.closest(".central-card") : input.closest(".page-content");
+        const selector = isCentral ? ".central-row" : ".inventory-row";
+        scope?.querySelectorAll(selector).forEach((row) => {
+          row.style.display = rowMatches(row, query) ? "" : "none";
+        });
+      }
+      return;
+    }
+
+    // Generic list search used by management pages. The visible Chinese label is
+    // expanded to Pinyin + 注音 before matching, while Vietnamese diacritics are normalized.
+    const scope = input.closest(".card,.page-content,.account-modal") || document.querySelector(".page-content");
+    const rows = scope?.querySelectorAll(genericRows);
+    if (!rows?.length) return;
+    rows.forEach((row) => {
+      row.style.display = rowMatches(row, query) ? "" : "none";
+    });
   }, true);
 }
 
