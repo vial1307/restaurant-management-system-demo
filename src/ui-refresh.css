@@ -463,3 +463,233 @@ html[lang="vi"] .central-row small{line-height:1.35}
   .central-stats span,.central-stats small{font-size:8.5px}
   .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 52px 58px}
 }
+
+
+/* v24 — responsive matrix for current common phone sizes
+   Targets: 320/360/375/390/393/412/414/430/480px + small tablets.
+   Breakpoints are content-driven so Android/iPhone CSS viewport differences remain safe. */
+
+@supports(padding:max(0px)){
+  @media(max-width:760px){
+    .topbar{
+      padding-left:max(9px,env(safe-area-inset-left));
+      padding-right:max(9px,env(safe-area-inset-right));
+      padding-top:max(7px,env(safe-area-inset-top));
+    }
+    .page-content{
+      padding-left:max(9px,env(safe-area-inset-left));
+      padding-right:max(9px,env(safe-area-inset-right));
+      padding-bottom:calc(78px + env(safe-area-inset-bottom));
+    }
+    .mobile-nav{
+      height:calc(62px + env(safe-area-inset-bottom));
+      padding-bottom:env(safe-area-inset-bottom);
+      padding-left:env(safe-area-inset-left);
+      padding-right:env(safe-area-inset-right);
+    }
+    .account-form-actions{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  }
+}
+
+/* Small tablet / large phone landscape: 600–760 CSS px */
+@media(min-width:600px) and (max-width:760px){
+  .page-content{padding-inline:14px}
+  .stats-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .stat-card{min-height:96px}
+  .dashboard-grid{grid-template-columns:1fr 1fr}
+  .dashboard-grid>.card{min-width:0}
+  .settings-layout{grid-template-columns:1fr 1fr}
+  .staff-settings-card,.account-admin-card,.account-self-card{grid-column:1/-1}
+  .central-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .central-toolbar{flex-direction:row;align-items:center}
+  .central-toolbar input{width:min(280px,42vw)}
+  .calendar-popover{inset:64px 14px auto;width:min(430px,calc(100vw - 28px));margin-inline:auto}
+  .modal-card{width:min(620px,calc(100vw - 20px))}
+  .account-modal{width:min(700px,calc(100vw - 16px))}
+}
+
+/* Large phones: 430–599px (Plus/Max class, many Android 1080p devices) */
+@media(min-width:430px) and (max-width:599px){
+  .page-content{padding-inline:11px}
+  .page-heading h1{font-size:21px}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat-card{min-height:94px}
+  .central-stats article{padding:9px}
+  .central-stats span,.central-stats small{font-size:9.5px}
+  .central-stats strong{font-size:19px}
+  .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 64px 72px}
+  .account-row{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+  .calendar-day{height:42px}
+  .mobile-nav{grid-auto-columns:minmax(72px,1fr)}
+}
+
+/* Mainstream phones: 390–429px (390/393/412/414/428/430 class) */
+@media(min-width:390px) and (max-width:429px){
+  .page-content{padding-inline:9px}
+  .page-heading{align-items:flex-start}
+  .page-heading h1{font-size:20px}
+  .page-heading p{font-size:11.3px}
+  .page-heading>.primary-button,.page-heading>.secondary-button{
+    max-width:42%;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .stat-card{min-height:90px;padding:9px}
+  .stat-value{font-size:20px}
+  .central-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .central-stats article{padding:7px 6px}
+  .central-stats span,.central-stats small{font-size:8.8px}
+  .central-stats strong{font-size:18px}
+  .central-tabs button{font-size:11.2px}
+  .central-zone-tabs button{font-size:11px}
+  .central-row,.central-list .central-row:has([data-central-adjust]){padding:8px}
+  .central-row input{min-width:72px}
+  .search-box{padding-inline:10px}
+  .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 56px 64px}
+  .permission-head{font-size:9.8px}
+  .permission-row{font-size:11.2px}
+  .mobile-nav{grid-auto-columns:minmax(68px,1fr)}
+}
+
+/* 360–389px (common Android 360/384 and iPhone 375 CSS layouts) */
+@media(min-width:360px) and (max-width:389px){
+  .topbar{padding-inline:7px}
+  .topbar-mobile-brand>strong{display:none}
+  .page-content{padding-inline:7px}
+  .page-heading{align-items:flex-start}
+  .page-heading h1{font-size:19px}
+  .page-heading p{font-size:10.9px}
+  .page-heading>.primary-button,.page-heading>.secondary-button{
+    min-height:35px;
+    max-width:39%;
+    padding-inline:7px;
+    font-size:10.5px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .stats-grid{gap:5px}
+  .stat-card{min-height:86px;padding:8px}
+  .stat-top{font-size:9.8px}
+  .stat-value{font-size:19px}
+  .stat-card>p{font-size:9px}
+  .card{padding:9px}
+  .filters-row{gap:5px}
+  .filter-tab{min-height:34px;padding-inline:8px;font-size:11px}
+  .search-box{height:41px;padding-inline:9px}
+  .inventory-row,.work-row{padding:8px}
+  .inventory-work-area,.inventory-zone,.quantity-control,.storage-threshold,.work-row>.inventory-source{padding-left:12px}
+  .mobile-field-label{min-width:74px;font-size:10px}
+  .quantity-button,.inventory-action-button{width:33px;height:33px}
+  .central-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .central-stats article:last-child{grid-column:1/-1}
+  .central-stats span,.central-stats small{font-size:9px}
+  .central-stats strong{font-size:18px}
+  .central-tabs button{padding-inline:8px;font-size:11px}
+  .central-zone-tabs button{padding-inline:8px;font-size:10.7px}
+  .central-row,.central-list .central-row:has([data-central-adjust]){
+    grid-template-columns:minmax(0,1fr) 78px;
+  }
+  .central-row input,.central-action{width:78px;font-size:11.5px}
+  .account-modal{padding:8px}
+  .account-card-head{top:-8px;margin:-8px -8px 7px;padding:9px 8px}
+  .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 50px 57px;padding-inline:5px}
+  .permission-head{font-size:9.2px}
+  .permission-row{font-size:10.8px}
+  .permission-row input{width:18px;height:18px}
+  .account-form-actions{margin-inline:-8px;padding-inline:8px}
+  .calendar-popover{inset:58px 5px auto;padding:8px}
+  .calendar-shortcut{padding-inline:8px}
+  .calendar-day{height:39px}
+  .mobile-nav{grid-auto-columns:minmax(64px,1fr)}
+  .mobile-nav>.nav-item{font-size:9px}
+}
+
+/* Compact phones: <=359px (320/340/359 CSS px) */
+@media(max-width:359px){
+  html{font-size:15px}
+  body{min-width:0}
+  .topbar{padding-inline:5px}
+  .topbar-mobile-brand>strong{display:none}
+  .topbar-mobile-brand>.brand-mark{width:31px;height:31px}
+  .topbar-language-switch>button{min-width:30px;padding-inline:4px;font-size:10px}
+  .auth-user-chip button{padding-inline:6px;font-size:10px}
+  .date-switcher{gap:4px}
+  .date-label>span{font-size:9.5px}
+  .date-label>strong{font-size:12px}
+  .icon-button{width:34px;height:34px}
+  .page-content{padding:11px 5px 76px}
+  .page-heading{gap:5px;margin-bottom:8px;align-items:flex-start}
+  .page-heading h1{font-size:18px}
+  .page-heading p{font-size:10.3px}
+  .page-heading>.primary-button,.page-heading>.secondary-button{
+    min-height:34px;max-width:38%;padding-inline:6px;font-size:10px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .stats-grid{grid-template-columns:1fr 1fr;gap:4px}
+  .stat-card{min-height:82px;padding:7px}
+  .stat-icon{width:24px;height:24px}
+  .stat-value{font-size:18px}
+  .stat-card>p{font-size:8.6px}
+  .card{padding:8px}
+  .card-heading h2{font-size:13px}
+  .filter-tab{min-height:33px;padding-inline:7px;font-size:10.5px}
+  .search-box{height:40px;padding-inline:8px}
+  .search-box>input{font-size:12px}
+  .inventory-view-button{font-size:10.5px}
+  .inventory-row,.work-row{padding:7px}
+  .inventory-item-name strong{font-size:12px}
+  .inventory-item-name small{font-size:9.8px}
+  .inventory-work-area,.inventory-zone,.quantity-control,.storage-threshold,.work-row>.inventory-source{padding-left:9px}
+  .mobile-field-label{min-width:66px;font-size:9.5px}
+  .inventory-select{min-width:105px;font-size:10.5px}
+  .quantity-button,.inventory-action-button{width:32px;height:32px}
+  .quantity-input{width:34px}
+  .central-stats{grid-template-columns:1fr 1fr}
+  .central-stats article{padding:6px}
+  .central-stats article:last-child{grid-column:1/-1}
+  .central-stats span,.central-stats small{font-size:8.4px}
+  .central-stats strong{font-size:17px}
+  .central-tabs button{min-height:36px;padding-inline:7px;font-size:10.5px}
+  .central-zone-tabs button{min-height:33px;padding-inline:7px;font-size:10px}
+  .central-row,.central-list .central-row:has([data-central-adjust]){
+    grid-template-columns:minmax(0,1fr) 72px;
+    padding:7px;
+  }
+  .central-row input,.central-action{width:72px;height:36px;padding-inline:4px;font-size:10.5px}
+  .zone-pill{font-size:9.2px;padding-inline:5px}
+  .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 45px 52px;padding-inline:4px}
+  .permission-head{font-size:8.8px}
+  .permission-row{font-size:10.2px}
+  .account-form-grid label{font-size:10.8px}
+  .account-form-grid input,.account-form-grid select{font-size:12px}
+  .calendar-popover{inset:56px 3px auto;padding:7px}
+  .calendar-shortcut{min-height:32px;padding-inline:7px;font-size:10px}
+  .calendar-weekdays>span{font-size:10px}
+  .calendar-day{height:36px;font-size:11.5px}
+  .mobile-nav{height:59px;grid-auto-columns:minmax(60px,1fr)}
+  .mobile-nav>.nav-item{min-height:49px;font-size:8.5px}
+  .mobile-nav>.nav-item>.icon{width:17px;height:17px}
+}
+
+/* Phone landscape: preserve usable vertical space */
+@media(max-width:900px) and (max-height:500px) and (orientation:landscape){
+  .topbar{position:relative;min-height:50px;padding-block:5px}
+  .date-switcher{order:0;width:auto;min-width:250px}
+  .topbar-mobile-brand{display:none}
+  .page-content{padding-top:9px;padding-bottom:66px}
+  .page-heading{margin-bottom:8px}
+  .page-heading h1{font-size:18px}
+  .calendar-popover{position:fixed;inset:5px 5px auto auto;width:min(390px,55vw);max-height:calc(100vh - 10px)}
+  .account-modal,.modal-card{max-height:calc(100vh - 10px)}
+  .mobile-nav{height:55px}
+}
+
+/* Avoid iOS text zoom and keep controls reliably tappable without making cards tall. */
+@media(max-width:760px){
+  input,select,textarea{font-size:max(16px,1em)}
+  .quantity-input,.minimum-input,.inline-number{font-size:16px}
+  .search-box>input,.central-toolbar input{font-size:16px}
+  button,.nav-item,.filter-tab{min-touch-target-size:40px}
+}
