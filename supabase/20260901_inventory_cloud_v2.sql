@@ -452,6 +452,193 @@ $;
 revoke all on function public.transfer_inventory(uuid,uuid,uuid,numeric,text) from public, anon;
 grant execute on function public.transfer_inventory(uuid,uuid,uuid,numeric,text) to authenticated;
 
+-- Management-only catalog synchronization.
+-- Quantities are never silently overwritten here; stocktake quantities must use set_inventory_quantity().
+create or replace function public.sync_inventory_catalog_item(p_item jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_role text;
+  v_item_id uuid;
+  v_key text;
+  v_zh text;
+  v_vi text;
+  v_unit text;
+  v_work_area text;
+  v_storage_only boolean;
+  v_loc jsonb;
+  v_location_id uuid;
+  v_location_site text;
+  v_selected_ids uuid[] := array[]::uuid[];
+  v_existing record;
+begin
+  select p.role into v_role
+  from public.profiles p
+  where p.id=(select auth.uid()) and p.active=true;
+
+  if v_role not in ('admin','manager','supervisor')
+     or not coalesce((select private.has_permission('inventory','edit')),false) then
+    raise exception 'CATALOG_EDIT_NOT_ALLOWED';
+  end if;
+
+  v_key:=nullif(trim(p_item->>'key'),'');
+  v_zh:=nullif(trim(p_item->>'zh'),'');
+  v_vi:=nullif(trim(p_item->>'vi'),'');
+  v_unit:=nullif(trim(p_item->>'unit'),'');
+  v_work_area:=coalesce(nullif(trim(p_item->>'work_area'),''),'noodles');
+  v_storage_only:=coalesce((p_item->>'storage_only')::boolean,false);
+
+  if v_key is null or v_zh is null or v_vi is null or v_unit is null then
+    raise exception 'INVALID_CATALOG_ITEM';
+  end if;
+  if v_work_area not in ('noodles','soup','seafood','meat') then
+    raise exception 'INVALID_WORK_AREA';
+  end if;
+  if jsonb_typeof(coalesce(p_item->'locations','[]'::jsonb)) <> 'array' then
+    raise exception 'INVALID_LOCATIONS';
+  end if;
+
+  select id into v_item_id
+  from public.inventory_items
+  where item_key=v_key
+  limit 1;
+
+  if v_item_id is null then
+    insert into public.inventory_items(
+      item_key,name_zh_tw,name_vi,unit,work_area,storage_only,active,updated_at
+    ) values(
+      v_key,v_zh,v_vi,v_unit,v_work_area,v_storage_only,true,now()
+    )
+    returning id into v_item_id;
+  else
+    update public.inventory_items
+    set name_zh_tw=v_zh,
+        name_vi=v_vi,
+        unit=v_unit,
+        work_area=v_work_area,
+        storage_only=v_storage_only,
+        active=true,
+        updated_at=now()
+    where id=v_item_id;
+  end if;
+
+  for v_loc in
+    select value from jsonb_array_elements(coalesce(p_item->'locations','[]'::jsonb))
+  loop
+    select id,site into v_location_id,v_location_site
+    from public.inventory_locations
+    where code=v_loc->>'code' and active=true
+    limit 1;
+
+    if v_location_id is null then
+      raise exception 'LOCATION_NOT_FOUND';
+    end if;
+    if not coalesce((select private.location_allowed(v_location_site)),false) then
+      raise exception 'LOCATION_NOT_ALLOWED';
+    end if;
+
+    v_selected_ids:=array_append(v_selected_ids,v_location_id);
+
+    insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+    values(
+      v_item_id,
+      v_location_id,
+      0,
+      greatest(0,coalesce((v_loc->>'minimum')::numeric,0))
+    )
+    on conflict (item_id,location_id) do update
+    set minimum_quantity=excluded.minimum_quantity,
+        updated_at=now();
+  end loop;
+
+  -- A removed location is only safe to detach when no stock remains there.
+  for v_existing in
+    select s.location_id,s.quantity,l.site
+    from public.inventory_stock s
+    join public.inventory_locations l on l.id=s.location_id
+    where s.item_id=v_item_id
+      and not (s.location_id=any(v_selected_ids))
+  loop
+    if not coalesce((select private.location_allowed(v_existing.site)),false) then
+      continue;
+    end if;
+    if v_existing.quantity <> 0 then
+      raise exception 'LOCATION_HAS_STOCK';
+    end if;
+    delete from public.inventory_stock
+    where item_id=v_item_id and location_id=v_existing.location_id;
+  end loop;
+
+  return v_item_id;
+end;
+$;
+
+revoke all on function public.sync_inventory_catalog_item(jsonb) from public, anon;
+grant execute on function public.sync_inventory_catalog_item(jsonb) to authenticated;
+
+create or replace function public.archive_inventory_item(p_item_key text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_role text;
+  v_item_id uuid;
+  v_has_disallowed boolean;
+  v_stock numeric;
+begin
+  select p.role into v_role
+  from public.profiles p
+  where p.id=(select auth.uid()) and p.active=true;
+
+  if v_role not in ('admin','manager','supervisor')
+     or not coalesce((select private.has_permission('inventory','edit')),false) then
+    raise exception 'CATALOG_EDIT_NOT_ALLOWED';
+  end if;
+
+  select id into v_item_id
+  from public.inventory_items
+  where item_key=p_item_key and active=true
+  limit 1;
+  if v_item_id is null then
+    return false;
+  end if;
+
+  select coalesce(sum(quantity),0) into v_stock
+  from public.inventory_stock
+  where item_id=v_item_id;
+  if v_stock <> 0 then
+    raise exception 'ITEM_HAS_STOCK';
+  end if;
+
+  select exists(
+    select 1
+    from public.inventory_stock s
+    join public.inventory_locations l on l.id=s.location_id
+    where s.item_id=v_item_id
+      and not (select private.location_allowed(l.site))
+  ) into v_has_disallowed;
+
+  if coalesce(v_has_disallowed,false) then
+    raise exception 'LOCATION_NOT_ALLOWED';
+  end if;
+
+  delete from public.inventory_stock where item_id=v_item_id;
+  update public.inventory_items
+  set active=false,updated_at=now()
+  where id=v_item_id;
+
+  return true;
+end;
+$;
+
+revoke all on function public.archive_inventory_item(text) from public, anon;
+grant execute on function public.archive_inventory_item(text) to authenticated;
+
 -- Allow Realtime changes for inventory. Ignore duplicate-publication errors.
 do $$
 begin
