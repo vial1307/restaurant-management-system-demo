@@ -31,6 +31,10 @@ const EXTRA = {
   "Tên nhân viên":"Tên nhân viên · 員工姓名",
   "Mật khẩu mới":"Mật khẩu mới · 新密碼",
   "Xác nhận mật khẩu":"Xác nhận mật khẩu · 確認新密碼",
+  "盤點數量":"Số kiểm kê · 盤點數量",
+  "盤點調整":"Điều chỉnh kiểm kê · 盤點調整",
+  "央廚進出庫紀錄":"Lịch sử nhập/xuất bếp trung tâm · 央廚進出庫紀錄",
+  "主管以上可查看；資料來自 Supabase。":"Chủ quản trở lên được xem; dữ liệu từ Supabase. · 主管以上可查看；資料來自 Supabase。",
   "Mật khẩu hiện tại":"Mật khẩu hiện tại · 目前密碼",
   "Đổi mật khẩu":"Đổi mật khẩu · 變更密碼",
 };
