@@ -188,6 +188,19 @@ document.addEventListener("submit", async (event) => {
 
 document.addEventListener("click", async (event) => {
   if (!isSupabaseConfigured()) return;
+
+  const logoutButton = event.target.closest(".auth-user-chip button");
+  if (logoutButton) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const supabase = await getSupabase();
+    await supabase?.auth.signOut();
+    localStorage.removeItem(AUTH_KEY);
+    location.hash = "#dashboard";
+    location.reload();
+    return;
+  }
+
   const deleteButton = event.target.closest("[data-account-delete]");
   if (!deleteButton) return;
   event.preventDefault();
