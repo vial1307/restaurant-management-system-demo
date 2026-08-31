@@ -253,6 +253,16 @@ $$;
 revoke all on function public.set_inventory_minimum(uuid,uuid,numeric) from public, anon;
 grant execute on function public.set_inventory_minimum(uuid,uuid,numeric) to authenticated;
 
+-- Supervisors may resolve staff display names for inventory audit history.
+drop policy if exists "profiles read own or management" on public.profiles;
+create policy "profiles read own or management"
+on public.profiles for select
+to authenticated
+using (
+  id = (select auth.uid())
+  or (select private.current_role()) in ('admin','manager','supervisor')
+);
+
 -- Supervisors are management-level for inventory history.
 drop policy if exists "inventory transactions management read" on public.inventory_transactions;
 create policy "inventory transactions management read"
