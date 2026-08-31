@@ -23,8 +23,10 @@ import {
   canDirectInventoryAdjust,
   canInventoryEdit,
   cloudAdjustQuantity,
+  cloudArchiveFuxingItem,
   cloudSetMinimum,
   cloudSetQuantity,
+  cloudSyncFuxingCatalogItem,
   cloudTransferInventory,
   fuxingItemKey,
   fuxingLocationCode,
@@ -853,7 +855,20 @@ root.addEventListener("click", (event) => {
     if (!canDirectInventoryAdjust()) return;
     view.editingStockKey = target.dataset.stockKey; view.modal = "add-item"; render();
   }
-  if (action === "delete-item" && canDirectInventoryAdjust() && window.confirm(translate(state.settings.language).deleteConfirm)) store.removeIngredient(target.dataset.stockKey);
+  if (action === "delete-item" && canDirectInventoryAdjust() && window.confirm(translate(state.settings.language).deleteConfirm)) {
+    const stockKey = target.dataset.stockKey;
+    void cloudArchiveFuxingItem(stockKey).then((result) => {
+      if (result.ok || result.fallback) {
+        store.removeIngredient(stockKey);
+        return;
+      }
+      const message = result.error?.message === "ITEM_HAS_STOCK"
+        ? "Không thể xóa mặt hàng khi vẫn còn tồn kho. Hãy điều chỉnh về 0 trước. · 品項仍有庫存，請先盤點調整為 0。"
+        : "Không thể xóa mặt hàng khỏi dữ liệu cloud. · 無法從雲端刪除品項。";
+      window.alert(message);
+      void syncInventoryNow("fuxing", { reloadBranch: true });
+    });
+  }
   if (action === "close-modal" && (target === event.target || target.closest(".icon-button"))) { view.modal = null; view.editingStockKey = null; render(); }
   if (action === "reset" && window.confirm(translate(state.settings.language).resetConfirm)) store.reset();
 });
@@ -985,9 +1000,23 @@ root.addEventListener("submit", (event) => {
     };
     view.modal = null;
     view.editingStockKey = null;
-    if (form.dataset.form === "edit-item") store.updateIngredient(stockKey, item);
-    else store.addItem(item);
-    setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
+    if (form.dataset.form === "edit-item") {
+      store.updateIngredient(stockKey, item);
+      setTimeout(() => {
+        void cloudSyncFuxingCatalogItem(stockKey).then((result) => {
+          if (!result.ok && !result.fallback) {
+            const message = result.error?.message === "LOCATION_HAS_STOCK"
+              ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
+              : "Không thể đồng bộ chỉnh sửa mặt hàng. · 品項修改無法同步至雲端。";
+            window.alert(message);
+            void syncInventoryNow("fuxing", { reloadBranch: true });
+          }
+        });
+      }, 0);
+    } else {
+      store.addItem(item);
+      setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
+    }
   }
 });
 
