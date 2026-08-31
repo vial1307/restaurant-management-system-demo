@@ -1,6 +1,6 @@
 const CACHE_PREFIX = "shitu-kitchen-os-";
 const CACHE_NAME = `${CACHE_PREFIX}v28`;
-const VERSION = "27";
+const VERSION = "28";
 const APP_SHELL = [
   "./",
   "./index.html",
