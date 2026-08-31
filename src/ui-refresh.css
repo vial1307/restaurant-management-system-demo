@@ -784,3 +784,37 @@ html[lang="vi"] .central-row small{line-height:1.35}
     width:86px;
   }
 }
+
+
+/* v31 — account-level read-only and historical inventory states */
+.inventory-readonly-field{
+  display:inline-flex;
+  align-items:center;
+  min-height:34px;
+  padding:0 8px;
+  border-radius:8px;
+  background:#f2f6f4;
+  color:#52645d;
+  font-size:12px;
+  font-weight:650;
+}
+.inventory-readonly-notice{
+  margin:-4px 0 10px;
+  padding:9px 11px;
+  border:1px solid #ecd5a8;
+  border-radius:9px;
+  background:#fff8e8;
+  color:#805813;
+  font-size:12px;
+  font-weight:650;
+  line-height:1.45;
+}
+.account-readonly-control[aria-disabled="true"],
+.account-readonly-form [aria-disabled="true"]{
+  opacity:.58;
+  cursor:not-allowed;
+}
+@media(max-width:760px){
+  .inventory-readonly-field{min-height:36px;font-size:11.5px}
+  .inventory-readonly-notice{margin-bottom:8px;padding:8px 9px;font-size:11px}
+}
