@@ -81,6 +81,7 @@ export function inventoryCloudState() {
 
 export function canInventoryEdit() {
   if (!hasInventoryPermission("edit")) return false;
+  if (inventoryCloudState() === "ready" && globalThis.navigator?.onLine === false) return false;
   const site = currentSite();
   return site !== "fuxing" || isCurrentBranchInventoryDate();
 }
@@ -215,16 +216,42 @@ async function verifyMigration() {
     migrationAvailable = false;
     return false;
   }
+
+  const prior = localStorage.getItem(CLOUD_FLAG_KEY);
+  if (globalThis.navigator?.onLine === false && prior === "ready") {
+    // Once cloud mode has been enabled, never downgrade to local-authoritative writes just because the device is offline.
+    migrationAvailable = true;
+    dispatchStatus("offline");
+    return true;
+  }
+
   try {
     const supabase = await getSupabase();
     const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
-    migrationAvailable = !error && Number(version) >= 3;
-  } catch {
-    migrationAvailable = false;
+    if (!error && Number(version) >= 3) {
+      migrationAvailable = true;
+      localStorage.setItem(CLOUD_FLAG_KEY, "ready");
+      dispatchStatus("ready");
+      return true;
+    }
+    // A previously validated cloud database remains authoritative during temporary API/network failures.
+    if (prior === "ready" && error) {
+      migrationAvailable = true;
+      dispatchStatus("unreachable", { error: error.message });
+      return true;
+    }
+  } catch (error) {
+    if (prior === "ready") {
+      migrationAvailable = true;
+      dispatchStatus("unreachable", { error: error?.message || String(error) });
+      return true;
+    }
   }
-  localStorage.setItem(CLOUD_FLAG_KEY, migrationAvailable ? "ready" : "migration-needed");
-  dispatchStatus(migrationAvailable ? "ready" : "migration-needed");
-  return migrationAvailable;
+
+  migrationAvailable = false;
+  localStorage.setItem(CLOUD_FLAG_KEY, "migration-needed");
+  dispatchStatus("migration-needed");
+  return false;
 }
 
 export async function bootstrapFuxingInventory() {
