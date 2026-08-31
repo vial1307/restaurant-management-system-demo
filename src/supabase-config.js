@@ -4,8 +4,8 @@
 export const SUPABASE_URL = "https://zqbpeizgxcaxrtpsujlr.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_VMJOEhq8ngTVjEeeYQj_5g_VeNdwJ36";
 
-// Keep authentication migration disabled until schema.sql is applied and the first admin is bootstrapped.
-export const SUPABASE_ENABLED = false;
+// Supabase authentication is active.
+export const SUPABASE_ENABLED = true;
 
 export const SUPABASE_CONFIGURED =
   SUPABASE_ENABLED &&
