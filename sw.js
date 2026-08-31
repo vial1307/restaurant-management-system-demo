@@ -1,66 +1,100 @@
-const CACHE_NAME = "shitu-kitchen-os-v24";
+const CACHE_PREFIX = "shitu-kitchen-os-";
+const CACHE_NAME = "${CACHE_PREFIX}v25";
+const VERSION = "25";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=24",
-  "./src/app.js?v=24",
-  "./src/supabase-config.js",
-  "./src/supabase-client.js",
-  "./src/supabase-auth-bridge.js?v=24",
-  "./src/store.js",
-  "./src/rules.js",
-  "./src/i18n.js",
-  "./src/locales.js",
-  "./src/operations.js",
-  "./src/management.js",
-  "./src/skills.js",
-  "./src/qr.js",
-  "./src/styles.css?v=24",
-  "./src/auth-layer.css?v=24",
-  "./src/account-admin.css?v=24",
-  "./src/ui-refresh.css?v=24",
-  "./src/auth-layer.js?v=24",
-  "./src/search-i18n-layer.js?v=24",
-  "./src/account-admin.js?v=24",
-  "./src/ui-refresh.js?v=24",
-  "./src/icon.svg",
+  "./manifest.webmanifest?v=25",
+  "./src/app.js?v=25",
+  "./src/supabase-config.js?v=25",
+  "./src/supabase-client.js?v=25",
+  "./src/supabase-auth-bridge.js?v=25",
+  "./src/store.js?v=25",
+  "./src/rules.js?v=25",
+  "./src/i18n.js?v=25",
+  "./src/locales.js?v=25",
+  "./src/operations.js?v=25",
+  "./src/management.js?v=25",
+  "./src/skills.js?v=25",
+  "./src/qr.js?v=25",
+  "./src/styles.css?v=25",
+  "./src/auth-layer.css?v=25",
+  "./src/account-admin.css?v=25",
+  "./src/ui-refresh.css?v=25",
+  "./src/auth-layer.js?v=25",
+  "./src/search-i18n-layer.js?v=25",
+  "./src/account-admin.js?v=25",
+  "./src/ui-refresh.js?v=25",
+  "./src/icon.svg?v=25",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((names) => Promise.all(names.filter((name) => name.startsWith("shitu-kitchen-os-") && name !== CACHE_NAME).map((name) => caches.delete(name))))
-      .then(() => self.clients.claim()),
+    Promise.all([
+      caches.keys().then((names) =>
+        Promise.all(
+          names
+            .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
+            .map((name) => caches.delete(name))
+        )
+      ),
+      self.clients.claim(),
+    ])
   );
 });
 
+async function networkFirst(request, fallbackUrl) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request, { cache: "no-store" });
+    if (response && response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch {
+    return (await cache.match(request)) || (fallbackUrl ? await cache.match(fallbackUrl) : undefined) || Response.error();
+  }
+}
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  const network = fetch(request, { cache: "no-store" })
+    .then(async (response) => {
+      if (response && response.ok) await cache.put(request, response.clone());
+      return response;
+    })
+    .catch(() => undefined);
+  return cached || (await network) || Response.error();
+}
+
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
+  if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
 
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
-          return response;
-        })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html"))),
-    );
+    event.respondWith(networkFirst(event.request, "./index.html"));
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-      }
-      return response;
-    })),
-  );
+  // JS/CSS/manifest must check network first so new releases appear immediately.
+  if (/\.(?:js|css|webmanifest)$/i.test(url.pathname)) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
+  // Static images/icons can remain fast while refreshing in background.
+  event.respondWith(staleWhileRevalidate(event.request));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data?.type === "GET_VERSION") event.source?.postMessage({ type: "SW_VERSION", version: VERSION });
 });
