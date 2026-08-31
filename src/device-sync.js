@@ -111,6 +111,12 @@ async function syncNow({ reload = true } = {}) {
     let profile;
     try { profile = await getMyProfile(); } catch { return; }
     if (!profile?.id) return;
+    if (profile.active === false) {
+      try { await supabase.auth.signOut(); } catch {}
+      localStorage.removeItem(AUTH_KEY);
+      location.reload();
+      return;
+    }
 
     await ensureBroadcastChannel(supabase, profile.id);
 
