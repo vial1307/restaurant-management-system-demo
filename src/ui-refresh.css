@@ -1,0 +1,465 @@
+/* Kitchen OS UI refresh v22
+   Dense, touch-friendly layout for phones while keeping desktop readable. */
+
+:root{
+  --ink:#172622;
+  --muted:#64756f;
+  --soft:#91a09a;
+  --line:#dbe4e0;
+  --paper:#ffffff;
+  --page:#f3f7f5;
+  --forest:#103c34;
+  --forest-light:#175348;
+  --green:#087b62;
+  --green-soft:#e8f6f1;
+  --amber:#a96816;
+  --amber-soft:#fff3dc;
+  --red:#b6453c;
+  --red-soft:#fff0ed;
+  --blue:#4666a8;
+  --blue-soft:#eef3ff;
+  --shadow:0 4px 18px rgb(26 54 45 / 6%);
+  --radius:11px;
+  --control-h:38px;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Segoe UI",Roboto,Arial,sans-serif;
+}
+html{font-size:15px}
+body{font-size:14px;line-height:1.45;background:var(--page)}
+button,input,select,textarea{font-size:13px}
+button{touch-action:manipulation}
+::placeholder{color:#92a09b;opacity:1}
+
+/* Global density */
+.sidebar{width:244px;padding:20px 13px 13px}
+.main-shell{margin-left:244px}
+.brand{gap:10px;padding:0 5px 20px}
+.brand-mark{width:39px;height:39px;border-radius:11px;font-size:23px}
+.brand strong{font-size:15px}
+.brand small,.profile-card small{font-size:11px}
+.sidebar-label{margin:3px 7px 8px;font-size:10px}
+.desktop-nav{gap:3px}
+.nav-item{min-height:41px;gap:10px;padding:0 10px;border-radius:9px;font-size:13.5px;font-weight:620}
+.nav-item .icon{width:18px;height:18px}
+.sidebar-summary{padding:12px;border-radius:10px}
+.profile-card{margin-top:9px;padding:9px 4px 1px}
+
+.topbar{min-height:66px;padding:8px 28px}
+.date-switcher{gap:9px}
+.date-label{min-width:175px;padding:2px 3px}
+.date-label>span{font-size:11px;font-weight:600;color:#718079}
+.date-label>strong{font-size:14px}
+.icon-button{width:36px;height:36px;border-radius:8px}
+.language-button{min-height:34px}
+.topbar-language-switch>button{min-height:30px;padding-inline:9px;font-size:12px}
+.auth-user-chip{min-height:38px}
+
+.page-content{width:min(1220px,100%);padding:22px 28px 62px}
+.page-heading{gap:12px;margin-bottom:16px}
+.page-heading h1{margin-bottom:4px;font-size:25px;letter-spacing:-.025em}
+.page-heading p,.card-heading p{font-size:12.5px;line-height:1.45}
+.card{padding:14px;border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-heading{min-height:25px;margin-bottom:10px}
+.card-heading h2{font-size:15px}
+.card-heading p{margin-top:3px}
+.helper-text{font-size:12px;line-height:1.5;margin:7px 0 10px}
+.empty-state{padding:13px 4px;font-size:12.5px}
+
+.primary-button,.secondary-button,.danger-button,.restock-button{
+  min-height:var(--control-h);
+  border-radius:8px;
+  padding:0 11px;
+  font-size:12.5px;
+  font-weight:700;
+}
+.primary-button{background:var(--forest)}
+.primary-button:hover{background:var(--forest-light)}
+.secondary-button{border-color:#d2ddd8}
+.danger-button{margin-top:4px}
+.page-actions,.topbar-actions{gap:6px}
+.icon-button,.inventory-action-button,.quantity-button{transition:background .12s,border-color .12s,color .12s}
+
+/* Inputs / filters */
+.search-box{
+  min-width:250px;
+  height:40px;
+  padding:0 11px;
+  border-color:#cfdcd6;
+  border-radius:9px;
+  box-shadow:0 1px 3px rgb(22 50 41 / 3%);
+}
+.search-box>input{font-size:13px}
+.search-box:focus-within{border-color:#7ab5a3;box-shadow:0 0 0 3px rgb(8 123 98 / 8%)}
+.filter-tab{
+  min-height:36px;
+  padding:0 10px;
+  border-color:#e0e7e4;
+  background:#fff;
+  font-size:12px;
+}
+.filter-tab.selected{border-color:#b9d8cc;background:var(--green-soft);color:#096f59}
+.zone-tabs,.task-filters{gap:5px}
+.inventory-view-switch{margin-bottom:12px;padding:3px}
+.inventory-view-button{min-height:36px;font-size:12px}
+.storage-filter{font-size:12px}
+.storage-filter>select{height:38px;font-size:12.5px}
+.management-field>input,.management-field>select,.management-field>textarea,
+.schedule-toolbar input,.schedule-toolbar select,.report-filter-card input,.report-filter-card select,
+.modal-card input,.modal-card select,.account-form-grid input,.account-form-grid select{
+  min-height:40px;
+  font-size:13px;
+  border-color:#d3ddd9;
+}
+
+/* Cards / status colors */
+.stats-grid{gap:10px;margin-bottom:12px}
+.stat-card{min-height:112px;padding:14px;border-radius:11px}
+.stat-top{font-size:12px;font-weight:600}
+.stat-value{margin-top:9px;font-size:25px}
+.stat-card>p{margin-top:4px;font-size:11px;line-height:1.4}
+.tag{min-height:25px;padding:0 8px;font-size:11px}
+.tag-ok{background:#e5f5ef;color:#087259}
+.tag-low{background:#fff0d3;color:#9a5d0b}
+.tag-empty{background:#ffebe7;color:#a63c33}
+.tag-neutral{background:#eef2f0;color:#596a64}
+.capacity-summary{padding:10px}
+.capacity-zone{padding:8px}
+.summary-pill{padding:6px 9px;font-size:11px}
+
+/* Calendar: stronger hierarchy and clearer state colors */
+.calendar-popover{
+  width:340px;
+  padding:12px;
+  border-color:#cfddd7;
+  border-radius:12px;
+  box-shadow:0 16px 42px rgb(18 48 39 / 16%);
+}
+.calendar-shortcuts{gap:5px;padding-bottom:9px}
+.calendar-shortcut{
+  min-height:32px;
+  padding:0 9px;
+  border-color:#d4dfda;
+  background:#f9fbfa;
+  color:#53655f;
+  font-size:11px;
+  font-weight:650;
+}
+.calendar-shortcut:hover{background:#dff2eb;color:#096d57}
+.calendar-toolbar{margin:10px 0 7px}
+.calendar-selects>select{height:34px;font-size:12px}
+.calendar-weekdays>span{padding:5px 0;color:#667a72;font-size:11px;font-weight:700}
+.calendar-day{height:38px;border-radius:8px;font-size:12px;font-weight:600}
+.calendar-day:hover{background:#e4f4ee}
+.calendar-day.outside-month{color:#b0bbb7}
+.calendar-day.today{border-color:#7fc0ad;background:#f0faf6;color:#08745c}
+.calendar-day.selected{border-color:#0d6653;background:#0d6653;color:#fff;box-shadow:0 2px 7px rgb(13 102 83 / 22%)}
+
+/* Inventory: reduce unused vertical space, improve readability */
+.inventory-summary{margin:-3px 0 12px}
+.filters-row{gap:10px;margin-bottom:10px}
+.storage-tab-groups{gap:8px;margin-bottom:10px}
+.storage-tab-group{gap:4px}
+.storage-group-label{font-size:11px}
+.inventory-table{border-radius:11px}
+.inventory-table-head,.inventory-row{padding-inline:11px}
+.inventory-table-head{min-height:38px;font-size:11px;font-weight:700;background:#f5f8f7}
+.inventory-row{min-height:57px}
+.inventory-group-heading{min-height:32px;padding-inline:11px}
+.inventory-group-heading>strong{font-size:11px}
+.inventory-item-name{gap:8px}
+.inventory-item-name>div{gap:2px}
+.inventory-item-name strong{font-size:12.5px}
+.inventory-item-name small,.inventory-zone,.inventory-minimum>small,.quantity-control>small{font-size:11px}
+.inventory-select{min-height:33px;font-size:11.5px}
+.quantity-button{width:31px;height:31px}
+.quantity-input{width:42px;font-size:14px}
+.minimum-input{font-size:12px}
+.inventory-action-button{width:31px;height:31px}
+.restock-button{min-height:34px;font-size:12px}
+.source-quantity{font-size:10.5px}
+.source-quantity>strong{font-size:11px}
+
+/* Operational rows */
+.portion-row{min-height:52px}
+.portion-row strong{font-size:13px}
+.portion-row>div:first-child>small{font-size:11px}
+.task-row{min-height:56px;gap:9px}
+.task-row.compact{min-height:48px}
+.task-copy{gap:3px}
+.task-copy>strong{font-size:12.5px}
+.task-copy>small{font-size:11px}
+.alert-row{min-height:50px}
+.item-title{gap:2px}
+.item-title strong{font-size:12.5px}
+.item-title small,.alert-quantity{font-size:11px}
+.setting-row{min-height:49px}
+.setting-row>span:first-child{font-size:12.5px}
+.setting-control>input{height:36px;font-size:12.5px}
+.language-switch>button{min-height:31px;padding:0 9px;font-size:11.5px}
+.history-item{min-height:40px}
+.history-item>span{font-size:12px}
+
+/* Central kitchen */
+.central-heading{margin-bottom:12px}
+.central-heading h1{font-size:25px;margin:2px 0 3px}
+.central-heading p{font-size:12.5px}
+.central-stats{gap:9px;margin-bottom:10px}
+.central-stats article{padding:12px;border-radius:11px}
+.central-stats span,.central-stats small{font-size:11px}
+.central-stats strong{margin:3px 0 1px;font-size:23px}
+.central-tabs{gap:2px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none}
+.central-tabs::-webkit-scrollbar{display:none}
+.central-tabs button{min-height:39px;padding:7px 11px;font-size:12.5px;white-space:nowrap}
+.central-card{border-radius:11px}
+.central-toolbar{gap:8px;padding:10px}
+.central-zone-tabs{gap:4px}
+.central-zone-tabs button{min-height:35px;padding:0 9px;font-size:11.5px}
+.central-toolbar input{height:39px;font-size:13px}
+.central-table-head{padding:8px 12px;font-size:11px}
+.central-row{padding:9px 12px}
+.central-row>div:first-child strong{font-size:13px}
+.central-row>div:first-child small{margin-top:1px;font-size:11px}
+.central-current strong{font-size:17px}
+.zone-pill{padding:4px 7px;font-size:10.5px}
+.central-row input,.central-action{height:37px;font-size:12.5px}
+.history-title{padding:12px}
+.central-history article{padding:10px 12px}
+
+/* Account / permission management */
+.account-card-head{gap:10px;margin-bottom:10px}
+.account-card-head h2{font-size:16px}
+.account-card-head p{font-size:12px}
+.account-table{border-radius:11px}
+.account-table-head,.account-row{gap:8px;padding:9px 11px}
+.account-table-head{font-size:11px}
+.account-row{min-height:50px;font-size:12.5px}
+.account-row small{font-size:10.5px}
+.account-status{font-size:11px;padding:4px 7px}
+.account-storage-note{margin-top:9px;font-size:11px}
+.account-modal{width:min(980px,97vw);max-height:94vh;padding:14px;border-radius:13px}
+.account-form-grid{gap:9px}
+.account-form-grid label{gap:4px;font-size:12px}
+.permission-grid{margin-top:11px;border-radius:10px}
+.permission-head,.permission-row{grid-template-columns:1fr 92px 92px;min-height:37px;padding:0 11px}
+.permission-head{font-size:11px}
+.permission-row{font-size:12px}
+.permission-row input{width:18px;height:18px;accent-color:var(--green)}
+.account-form-actions{gap:7px;margin-top:11px}
+
+/* SOP, reports and management */
+.sop-layout{gap:10px}
+.sop-list{padding:9px}
+.sop-list-item{min-height:50px;padding:7px}
+.sop-list-item strong{font-size:12px}
+.sop-list-item small{font-size:10.5px}
+.sop-detail-heading,.sop-editor-heading{margin-bottom:10px}
+.sop-detail-heading h2,.sop-editor-heading h2{font-size:16px}
+.sop-specifications>div{padding:9px 0}
+.sop-specifications dt,.sop-specifications dd{font-size:12px}
+.sop-step{min-height:38px;padding:5px 0}
+.sop-step>strong{font-size:12px}
+.management-list-row{min-height:48px}
+.management-list-row strong{font-size:12px}
+.management-list-row small{font-size:10.5px}
+.report-table th,.report-table td{padding:8px 7px;font-size:11.5px}
+.attendance-row{min-height:61px}
+.attendance-row strong{font-size:11.5px}
+.attendance-row small{font-size:10px}
+
+/* Make bilingual labels readable: Vietnamese primary, Chinese compact but not tiny */
+html[lang="vi"] small,
+html[lang="vi"] .item-title small,
+html[lang="vi"] .inventory-item-name small,
+html[lang="vi"] .central-row small{line-height:1.35}
+
+/* Tablet */
+@media(max-width:1100px){
+  .sidebar{width:218px}
+  .main-shell{margin-left:218px}
+  .topbar,.page-content{padding-inline:18px}
+  .search-box{min-width:220px}
+}
+
+/* Phone */
+@media(max-width:760px){
+  html{font-size:16px}
+  body{min-width:320px;font-size:14px}
+  .topbar{
+    min-height:58px;
+    gap:6px;
+    padding:7px 10px;
+    box-shadow:0 1px 8px rgb(21 50 41 / 5%);
+  }
+  .topbar-mobile-brand{gap:7px}
+  .topbar-mobile-brand>.brand-mark{width:33px;height:33px;font-size:19px}
+  .topbar-mobile-brand>strong{font-size:12.5px}
+  .topbar-actions{gap:4px}
+  .auth-user-chip{min-height:34px;padding:3px}
+  .auth-user-chip button{padding:6px 8px;font-size:11px}
+  .topbar-language-switch{padding:2px}
+  .topbar-language-switch>button{min-width:34px;min-height:28px;padding:0 6px;font-size:11px}
+  .date-switcher{gap:6px}
+  .date-label{min-height:38px}
+  .date-label>span{font-size:10.5px}
+  .date-label>strong{font-size:13px}
+  .icon-button{width:36px;height:36px}
+
+  .page-content{padding:14px 9px 80px}
+  .page-heading{align-items:center;gap:7px;margin-bottom:11px}
+  .page-heading h1{margin-bottom:2px;font-size:20px;line-height:1.18}
+  .page-heading p{font-size:11.5px;line-height:1.35}
+  .page-heading>.primary-button,.page-heading>.secondary-button{
+    flex:0 0 auto;min-height:36px;padding:0 8px;font-size:11px
+  }
+
+  .card{padding:11px;border-radius:10px}
+  .card-heading{margin-bottom:7px}
+  .card-heading h2{font-size:14px}
+  .card-heading p{font-size:11px}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:8px}
+  .stat-card{min-height:91px;padding:10px}
+  .stat-top{font-size:10.5px}
+  .stat-icon{width:27px;height:27px}
+  .stat-value{margin-top:5px;font-size:21px}
+  .stat-card>p{font-size:9.8px}
+  .dashboard-grid,.reservations-layout,.settings-layout{gap:8px}
+
+  .primary-button,.secondary-button,.danger-button,.restock-button{min-height:38px;font-size:12px}
+  .filters-row{gap:7px;margin-bottom:8px}
+  .zone-tabs,.task-filters,.central-zone-tabs{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    scrollbar-width:none;
+    padding-bottom:1px;
+  }
+  .zone-tabs::-webkit-scrollbar,.task-filters::-webkit-scrollbar,.central-zone-tabs::-webkit-scrollbar{display:none}
+  .filter-tab{min-height:35px;flex:0 0 auto;padding:0 9px;font-size:11.5px}
+  .search-box{height:42px}
+  .search-box>input{font-size:13px}
+  .storage-filter>select{height:40px}
+
+  .inventory-view-switch{margin-bottom:8px}
+  .inventory-view-button{min-height:38px;font-size:11.5px}
+  .inventory-view-description{font-size:11px}
+  .storage-tab-groups{gap:6px;margin-bottom:8px}
+  .inventory-group+.inventory-group{margin-top:8px}
+  .inventory-group-heading{min-height:28px}
+  .inventory-row,.work-row{
+    min-height:0;
+    gap:5px;
+    margin-bottom:6px;
+    padding:9px 10px;
+    border-radius:9px;
+  }
+  .inventory-item-name strong{font-size:13px}
+  .inventory-item-name small{font-size:10.5px}
+  .inventory-work-area,.inventory-zone{padding-left:16px}
+  .mobile-field-label{min-width:82px;font-size:10.5px}
+  .inventory-select{min-height:34px;font-size:11.5px}
+  .quantity-control{margin-top:2px;padding-left:16px}
+  .quantity-button{width:34px;height:34px}
+  .quantity-input{font-size:14px}
+  .inventory-action-button{width:34px;height:34px}
+  .storage-threshold{padding-left:16px;font-size:9.5px}
+  .work-row>.inventory-source{padding-left:16px}
+  .source-quantity{padding:3px 5px}
+
+  .portion-row{min-height:46px;gap:7px}
+  .portion-row strong{font-size:12.5px}
+  .portion-metrics{gap:9px}
+  .portion-needed{min-width:48px;font-size:16px}
+  .task-row{min-height:48px}
+  .task-copy>strong{font-size:12.5px}
+  .task-copy>small{font-size:10.5px}
+  .alert-row{min-height:45px}
+  .item-title strong{font-size:12px}
+
+  .calendar-popover{
+    position:fixed;
+    inset:60px 7px auto;
+    width:auto;
+    max-height:calc(100vh - 75px);
+    overflow:auto;
+    padding:10px;
+  }
+  .calendar-shortcuts{flex-wrap:nowrap;overflow-x:auto}
+  .calendar-shortcut{flex:0 0 auto;min-height:34px;font-size:11px}
+  .calendar-day{height:40px;font-size:12.5px}
+
+  .central-heading{gap:6px;margin-bottom:8px}
+  .central-heading h1{font-size:20px}
+  .central-heading p{font-size:11.5px}
+  .central-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:7px}
+  .central-stats article{min-width:0;padding:8px}
+  .central-stats span,.central-stats small{font-size:9px;line-height:1.25}
+  .central-stats strong{font-size:18px}
+  .central-tabs{margin-bottom:7px}
+  .central-tabs button{min-height:38px;padding:6px 9px;font-size:11.5px}
+  .central-toolbar{padding:8px}
+  .central-toolbar input{height:42px}
+  .central-row,.central-list .central-row:has([data-central-adjust]){
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:6px;
+    padding:8px 9px;
+  }
+  .central-row>div:first-child strong{font-size:13px}
+  .central-row>div:first-child small{font-size:10.5px}
+  .zone-pill{font-size:10px}
+  .central-current strong{font-size:16px}
+  .central-row input,.central-action{height:38px}
+  .history-title{padding:9px}
+  .central-history article{padding:9px}
+
+  .setting-row{min-height:45px;gap:7px}
+  .setting-row>span:first-child{font-size:12px}
+  .setting-control>input{height:38px}
+  .language-switch>button{min-height:34px;font-size:11px}
+  .history-item{min-height:38px}
+
+  .account-modal-backdrop{padding:6px}
+  .account-modal{
+    width:100%;
+    max-height:96vh;
+    padding:10px;
+    border-radius:10px;
+  }
+  .account-card-head{position:sticky;top:-10px;z-index:2;margin:-10px -10px 8px;padding:10px;background:#fff;border-bottom:1px solid var(--line)}
+  .account-form-grid,.account-self-card .account-form-grid{grid-template-columns:1fr;gap:7px}
+  .account-form-grid label{font-size:11.5px}
+  .account-form-grid input,.account-form-grid select{height:40px}
+  .permission-grid{margin-top:8px}
+  .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 58px 66px;min-height:36px;padding:0 7px}
+  .permission-head{font-size:10px}
+  .permission-row{font-size:11.5px}
+  .permission-row input{width:19px;height:19px}
+  .account-form-actions{position:sticky;bottom:-10px;margin:8px -10px -10px;padding:8px 10px;background:#fff;border-top:1px solid var(--line)}
+  .account-form-actions>*{flex:1}
+
+  .account-row{padding:8px 9px}
+  .sop-list{gap:4px}
+  .sop-list-item{min-height:42px;padding:6px}
+  .sop-specifications>div{gap:7px;padding:7px 0}
+  .sop-specifications dt,.sop-specifications dd{font-size:11.5px}
+  .management-form-grid{gap:8px}
+  .management-field{gap:4px}
+  .management-field>span{font-size:10.5px}
+
+  .modal-backdrop{padding:6px}
+  .modal-card{width:100%;max-height:95vh;overflow:auto;padding:11px;border-radius:10px}
+  .modal-card>form{gap:9px}
+  .modal-card form>label,.modal-grid>label{gap:4px;font-size:11.5px}
+  .modal-locations{gap:6px;padding:8px}
+  .modal-location-row{gap:4px}
+
+  .mobile-nav{height:62px}
+  .mobile-nav>.nav-item{min-height:52px;gap:2px;padding:2px;font-size:9.5px;font-weight:650}
+  .mobile-nav>.nav-item>.icon{width:18px;height:18px}
+}
+
+@media(max-width:390px){
+  .page-content{padding-inline:7px}
+  .stats-grid{gap:5px}
+  .stat-card{padding:8px}
+  .central-stats article{padding:7px 5px}
+  .central-stats span,.central-stats small{font-size:8.5px}
+  .permission-head,.permission-row{grid-template-columns:minmax(0,1fr) 52px 58px}
+}
