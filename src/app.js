@@ -18,6 +18,18 @@ import {
 import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
+import {
+  bootstrapFuxingInventory,
+  canDirectInventoryAdjust,
+  cloudAdjustQuantity,
+  cloudSetMinimum,
+  cloudSetQuantity,
+  fuxingItemKey,
+  fuxingLocationCode,
+  fuxingWorkLocationCode,
+  reconcileFuxingSnapshot,
+  syncInventoryNow,
+} from "./inventory-cloud.js";
 
 const store = createStore();
 const root = document.querySelector("#app");
@@ -297,7 +309,11 @@ function storageSources(item, record, destination = "work") {
 
 function quantityControl(item, kind = "item") {
   const action = kind === "workItem" ? "adjust-work-item" : "adjust-item";
-  return `<div class="quantity-control"><button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="-1" aria-label="Decrease">${icon("minus")}</button>${numberInput(item.quantity, `data-field="${kind}" data-key="quantity" data-id="${escapeHtml(item.id)}"`, "quantity-input")}<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="1" aria-label="Increase">${icon("plus")}</button><small>${escapeHtml(item.unit)}</small></div>`;
+  const direct = canDirectInventoryAdjust();
+  const value = direct
+    ? numberInput(item.quantity, `data-field="${kind}" data-key="quantity" data-id="${escapeHtml(item.id)}"`, "quantity-input")
+    : `<strong class="quantity-readonly" aria-label="Current quantity">${escapeHtml(item.quantity)}</strong>`;
+  return `<div class="quantity-control"><button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="-1" aria-label="Decrease">${icon("minus")}</button>${value}<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="1" aria-label="Increase">${icon("plus")}</button><small>${escapeHtml(item.unit)}</small></div>`;
 }
 
 function inventoryStatusBadge(item, text) {
@@ -315,7 +331,7 @@ function storageInventoryRow(item, context) {
   return `<article class="inventory-row storage-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span><select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.workstation)}">${WORK_AREAS.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label>
     <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span><select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.storageLocation)}">${ZONES.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select></label>
-    <div class="inventory-storage">${quantityControl(item)}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input")}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}${canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}<button class="inventory-action-button" data-action="open-edit-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button><button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button></div></article>`;
+    <div class="inventory-storage">${quantityControl(item)}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}${canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}<button class="inventory-action-button" data-action="open-edit-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button><button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button></div></article>`;
 }
 
 function workInventoryRow(item, context) {
@@ -333,7 +349,7 @@ function workInventoryRow(item, context) {
   }));
   return `<article class="inventory-row work-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span><select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.workstation)}">${WORK_AREAS.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label>
-    ${quantityControl(item, "workItem")}<div class="inventory-minimum">${numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}"`, "minimum-input")}<small>${escapeHtml(item.unit)}</small></div>
+    ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
     <div class="inventory-source"><div class="source-quantities">${mainSources.map((entry) => `<span class="source-quantity ${entry.quantity === 0 ? "source-empty" : ""}" data-source-zone="${entry.zone}">${escapeHtml(entry.zone === "large-freezer" ? text.freezerShort : text.fridgeShort)} <strong>${entry.quantity}</strong></span>`).join("")}</div><small>${escapeHtml(source ? `${text.takeFrom} ${zoneLabel(source.zone, language)}` : text.noSource)}</small></div>
     <div class="inventory-transfer">${needed > 0 ? `<button class="restock-button" data-action="restock-work-item" data-id="${escapeHtml(item.id)}" ${available <= 0 ? "disabled" : ""}>${icon("plus")}${Math.min(needed, available) || needed}</button>` : `<span class="tag tag-ok">${escapeHtml(text.ready)}</span>`}</div></article>`;
 }
@@ -599,14 +615,52 @@ root.addEventListener("click", (event) => {
   if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
-    if (item) store.updateItem(item.id, "quantity", item.quantity + Number(target.dataset.delta));
+    if (item) {
+      const delta = Number(target.dataset.delta);
+      const next = Math.max(0, Number(item.quantity || 0) + delta);
+      const actualDelta = next - Number(item.quantity || 0);
+      if (actualDelta) {
+        store.updateItem(item.id, "quantity", next);
+        void cloudAdjustQuantity({
+          itemKey: fuxingItemKey(item.stockKey),
+          locationCode: fuxingLocationCode(item.zone),
+          direction: actualDelta > 0 ? "in" : "out",
+          amount: Math.abs(actualDelta),
+          note: "庫存快速調整 / Điều chỉnh nhanh tồn kho",
+        }).then((result) => {
+          if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+        });
+      }
+    }
   }
   if (action === "adjust-work-item") {
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
-    if (item) store.updateWorkItem(item.id, "quantity", item.quantity + Number(target.dataset.delta));
+    if (item) {
+      const delta = Number(target.dataset.delta);
+      const next = Math.max(0, Number(item.quantity || 0) + delta);
+      const actualDelta = next - Number(item.quantity || 0);
+      if (actualDelta) {
+        store.updateWorkItem(item.id, "quantity", next);
+        void cloudAdjustQuantity({
+          itemKey: fuxingItemKey(item.stockKey),
+          locationCode: fuxingWorkLocationCode(item.workArea),
+          direction: actualDelta > 0 ? "in" : "out",
+          amount: Math.abs(actualDelta),
+          note: "工作區數量調整 / Điều chỉnh số lượng khu làm việc",
+        }).then((result) => {
+          if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+        });
+      }
+    }
   }
-  if (action === "restock-work-item" && !target.disabled) store.restockWorkItem(target.dataset.id);
-  if (action === "restock-storage-item" && !target.disabled) store.restockStorageItem(target.dataset.id);
+  if (action === "restock-work-item" && !target.disabled) {
+    store.restockWorkItem(target.dataset.id);
+    void reconcileFuxingSnapshot("補工作區 / Bổ sung khu làm việc");
+  }
+  if (action === "restock-storage-item" && !target.disabled) {
+    store.restockStorageItem(target.dataset.id);
+    void reconcileFuxingSnapshot("儲位補貨 / Bổ sung vị trí kho");
+  }
   if (action === "open-add-item") { view.editingStockKey = null; view.modal = "add-item"; render(); }
   if (action === "open-edit-item") { view.editingStockKey = target.dataset.stockKey; view.modal = "add-item"; render(); }
   if (action === "delete-item" && window.confirm(translate(state.settings.language).deleteConfirm)) store.removeIngredient(target.dataset.stockKey);
@@ -624,8 +678,66 @@ root.addEventListener("change", (event) => {
   if (field === "riceRemaining") store.updateRice(element.value);
   if (field === "procurement") store.updateProcurementLine(id, key, element.value);
   if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
-  if (field === "item") store.updateItem(id, key, element.value);
-  if (field === "workItem") store.updateWorkItem(id, key, element.value);
+  if (field === "item") {
+    const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === id);
+    if (!item) return;
+    if (key === "quantity") {
+      if (!canDirectInventoryAdjust()) { render(); return; }
+      const next = Math.max(0, Number(element.value) || 0);
+      store.updateItem(id, key, next);
+      void cloudSetQuantity({
+        itemKey: fuxingItemKey(item.stockKey),
+        locationCode: fuxingLocationCode(item.zone),
+        quantity: next,
+        note: "盤點調整 / Điều chỉnh kiểm kê",
+      }).then((result) => {
+        if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+      });
+      return;
+    }
+    if (key === "minimum") {
+      if (!canDirectInventoryAdjust()) { render(); return; }
+      const next = Math.max(0, Number(element.value) || 0);
+      store.updateItem(id, key, next);
+      void cloudSetMinimum({
+        itemKey: fuxingItemKey(item.stockKey),
+        locationCode: fuxingLocationCode(item.zone),
+        minimum: next,
+      });
+      return;
+    }
+    store.updateItem(id, key, element.value);
+  }
+  if (field === "workItem") {
+    const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === id);
+    if (!item) return;
+    if (key === "quantity") {
+      if (!canDirectInventoryAdjust()) { render(); return; }
+      const next = Math.max(0, Number(element.value) || 0);
+      store.updateWorkItem(id, key, next);
+      void cloudSetQuantity({
+        itemKey: fuxingItemKey(item.stockKey),
+        locationCode: fuxingWorkLocationCode(item.workArea),
+        quantity: next,
+        note: "工作區盤點調整 / Điều chỉnh kiểm kê khu làm việc",
+      }).then((result) => {
+        if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+      });
+      return;
+    }
+    if (key === "minimum") {
+      if (!canDirectInventoryAdjust()) { render(); return; }
+      const next = Math.max(0, Number(element.value) || 0);
+      store.updateWorkItem(id, key, next);
+      void cloudSetMinimum({
+        itemKey: fuxingItemKey(item.stockKey),
+        locationCode: fuxingWorkLocationCode(item.workArea),
+        minimum: next,
+      });
+      return;
+    }
+    store.updateWorkItem(id, key, element.value);
+  }
   if (field === "calendarMonth") { view.calendarMonth = Number(element.value); render(); }
   if (field === "calendarYear") { view.calendarYear = Number(element.value); render(); }
   if (field === "setting") store.updateSetting(key, element.value);
@@ -674,6 +786,7 @@ root.addEventListener("submit", (event) => {
     view.editingStockKey = null;
     if (form.dataset.form === "edit-item") store.updateIngredient(stockKey, item);
     else store.addItem(item);
+    setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
   }
 });
 
@@ -729,3 +842,4 @@ if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:")
 }
 store.subscribe(render);
 render();
+setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
