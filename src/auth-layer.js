@@ -93,7 +93,7 @@ function loginScreen(error = "") {
     setSession(user);
     document.body.classList.remove("auth-locked");
     host.remove();
-    if (user.role === "central") location.hash = "#inventory";
+    if (user.location === "central" || user.role === "central") location.hash = "#inventory";
     applyAccess();
   });
 }
@@ -191,19 +191,26 @@ function applyAccess() {
     document.querySelector("#auth-layer")?.remove();
     addLogout(user);
 
-    if (user.role === "central") {
+    const permissions = user.permissions || {};
+    if (Object.keys(permissions).length) {
       document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
-        const href = a.getAttribute("href") || "";
-        a.style.display = href.startsWith("#inventory") ? "" : "none";
+        const moduleKey = (a.getAttribute("href") || "").replace(/^#/, "").split("?")[0];
+        if (permissions[moduleKey]) a.style.display = permissions[moduleKey].view ? "" : "none";
       });
+    }
+
+    const centralOnlyRole = user.accountRole === "central" || user.role === "central";
+    const centralWorkplace = user.location === "central";
+
+    // 央廚 is a site context, not only a job title:
+    // any account assigned to 央廚 opens the dedicated 央廚庫存 page at #inventory.
+    if (centralOnlyRole) {
       document.querySelector(".sidebar-summary")?.setAttribute("hidden", "");
       if (!location.hash.startsWith("#inventory")) location.hash = "#inventory";
-      if (location.hash.startsWith("#inventory")) centralPage(user);
-    } else if (user.role === "branch") {
-      document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
-        const href = a.getAttribute("href") || "";
-        a.style.display = ["#dashboard", "#inventory", "#reservations", "#preparation", "#menu", "#sop"].some(k => href.startsWith(k)) ? "" : "none";
-      });
+    }
+
+    if (centralWorkplace && location.hash.startsWith("#inventory")) {
+      centralPage(user);
     } else if (user.role === "admin" && location.hash.startsWith("#inventory")) {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
