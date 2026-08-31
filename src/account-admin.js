@@ -91,7 +91,7 @@ function interceptLogin(){
     setSession(account);
     document.body.classList.remove('auth-locked');
     document.querySelector('#auth-layer')?.remove();
-    location.hash = account.role === 'central' ? '#inventory' : '#dashboard';
+    location.hash = account.location === 'central' ? '#inventory' : (account.permissions?.dashboard?.view === false ? '#inventory' : '#dashboard');
     location.reload();
   }, true);
 }
