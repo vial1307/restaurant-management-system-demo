@@ -242,7 +242,7 @@ export function buildInventoryAlerts(record) {
   const freezerStocks = new Map();
 
   for (const item of record.inventory ?? []) {
-    if (item.zone !== "large-freezer") continue;
+    if (item.zone !== "large-freezer" || clampNumber(item.minimum) <= 0) continue;
     const stockKey = item.stockKey ?? item.id;
     const existing = freezerStocks.get(stockKey);
     if (existing) {
@@ -256,7 +256,7 @@ export function buildInventoryAlerts(record) {
       stockKey,
       kind: "reserve",
       quantity: clampNumber(item.quantity),
-      minimum: Math.max(1, clampNumber(item.minimum)),
+      minimum: clampNumber(item.minimum),
     });
   }
 
