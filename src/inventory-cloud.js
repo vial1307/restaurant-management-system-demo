@@ -671,7 +671,8 @@ export async function cloudArchiveFuxingItem(stockKey) {
     dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
     return { ok: false, fallback: false, error };
   }
-  return { ok: Boolean(data), fallback: false };
+  // false means the item was already absent/inactive in cloud, which is also safe locally.
+  return { ok: data === true || data === false, fallback: false };
 }
 
 export function fuxingLocationCode(zone) {
