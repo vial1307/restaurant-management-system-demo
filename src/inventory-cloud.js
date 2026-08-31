@@ -55,15 +55,34 @@ function role() {
   return s?.accountRole || (s?.role === "admin" ? "admin" : s?.role === "central" ? "central" : "employee");
 }
 
-export function canDirectInventoryAdjust() {
-  return ["admin", "manager", "supervisor"].includes(role());
-}
-
 function hasInventoryPermission(action = "view") {
   const s = session();
   if (!s) return false;
   if (s.role === "admin" || s.accountRole === "admin") return true;
   return Boolean(s.permissions?.inventory?.[action]);
+}
+
+function todayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function isCurrentBranchInventoryDate() {
+  const state = appState();
+  return Boolean(state?.selectedDate && state.selectedDate === todayKey());
+}
+
+export function canInventoryEdit() {
+  if (!hasInventoryPermission("edit")) return false;
+  const site = currentSite();
+  return site !== "fuxing" || isCurrentBranchInventoryDate();
+}
+
+export function canDirectInventoryAdjust() {
+  return canInventoryEdit() && ["admin", "manager", "supervisor"].includes(role());
 }
 
 function currentSite() {
@@ -100,8 +119,16 @@ function selectedBranchRecord() {
   return { state, record };
 }
 
+function currentBranchRecord() {
+  const state = appState();
+  if (!state?.records) return { state: null, record: null };
+  const date = todayKey();
+  return { state, record: state.records[date] || null };
+}
+
 function buildFuxingCatalog() {
-  const { record } = selectedBranchRecord();
+  const { record } = currentBranchRecord();
+  if (!record) return [];
   const inventory = Array.isArray(record?.inventory) && record.inventory.length
     ? record.inventory
     : DEFAULT_ITEMS;
@@ -312,7 +339,7 @@ function applyCentral(rows) {
 function applyFuxing(rows) {
   if (!rows.length) return false;
   const state = appState();
-  if (!state?.records?.[state.selectedDate]) return false;
+  if (!state?.records?.[state.selectedDate] || state.selectedDate !== todayKey()) return false;
   const record = state.records[state.selectedDate];
   record.inventory ??= [];
   record.workInventory ??= [];
@@ -399,6 +426,10 @@ function applyFuxing(rows) {
 
 export async function syncInventoryNow(site = currentSite(), { reloadBranch = true } = {}) {
   if (!site || syncing || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
+  if (site === "fuxing" && !isCurrentBranchInventoryDate()) {
+    dispatchStatus("historical-readonly", { site });
+    return false;
+  }
   syncing = true;
   try {
     const rows = await fetchSite(site);
@@ -433,7 +464,8 @@ export async function cloudAdjustQuantity({
   amount,
   note = "",
 }) {
-  if (!(await verifyMigration()) || !hasInventoryPermission("edit")) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
   const value = Math.max(0, Number(amount) || 0);
@@ -459,7 +491,8 @@ export async function cloudSetQuantity({
   quantity,
   note = "盤點調整 / Điều chỉnh kiểm kê",
 }) {
-  if (!(await verifyMigration()) || !canDirectInventoryAdjust()) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
   const { error } = await rpc("set_inventory_quantity", {
@@ -481,7 +514,8 @@ export async function cloudSetMinimum({
   locationCode,
   minimum,
 }) {
-  if (!(await verifyMigration()) || !canDirectInventoryAdjust()) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
   const { error } = await rpc("set_inventory_minimum", {
@@ -498,8 +532,42 @@ export async function cloudSetMinimum({
 }
 
 
+export async function cloudTransferInventory({
+  itemKey,
+  sourceLocationCode,
+  destinationLocationCode,
+  amount,
+  note = "庫存轉撥 / Chuyển kho",
+}) {
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
+
+  const source = await resolveIds(itemKey, sourceLocationCode);
+  const destination = await resolveIds(itemKey, destinationLocationCode);
+  if (!source.item || !source.location || !destination.location) return { ok: false, fallback: true };
+
+  const value = Math.max(0, Number(amount) || 0);
+  if (!value) return { ok: false, fallback: false };
+
+  const { error } = await rpc("transfer_inventory", {
+    p_item_id: source.item.id,
+    p_source_location_id: source.location.id,
+    p_destination_location_id: destination.location.id,
+    p_amount: value,
+    p_note: note,
+  });
+  if (error) {
+    dispatchStatus("error", { error: error.message, stage: "transfer" });
+    return { ok: false, fallback: false, error };
+  }
+
+  await syncInventoryNow(siteFromLocationCode(sourceLocationCode), { reloadBranch: false });
+  return { ok: true };
+}
+
 export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
-  if (!(await verifyMigration()) || !hasInventoryPermission("edit")) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
   const rows = await fetchSite("fuxing");
   const { record } = selectedBranchRecord();
   if (!record) return { ok: false, fallback: true };
