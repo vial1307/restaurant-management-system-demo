@@ -168,7 +168,7 @@ function cloudHistoryView(log) {
     const direction = x.direction;
     const sign = direction === "out" ? "−" : direction === "in" ? "+" : "↔";
     const tone = direction === "out" ? "history-out" : direction === "in" ? "history-in" : "history-adjust";
-    return `<article><div><strong>${esc(x.item?.name_zh_tw || "—")}</strong><small>${new Date(x.created_at).toLocaleString("zh-TW")} · ${esc(x.note || "")}</small></div><span>${esc(x.location?.name_zh_tw || "")}</span><strong class="${tone}">${sign}${x.amount} ${esc(x.item?.unit || "")}</strong><small>${x.before_quantity} → ${x.after_quantity}</small></article>`;
+    return `<article><div><strong>${esc(x.item?.name_zh_tw || "—")}</strong><small>${new Date(x.created_at).toLocaleString("zh-TW")} · ${esc(x.actor?.display_name || x.actor?.username || "—")} · ${esc(x.note || "")}</small></div><span>${esc(x.location?.name_zh_tw || "")}</span><strong class="${tone}">${sign}${x.amount} ${esc(x.item?.unit || "")}</strong><small>${x.before_quantity} → ${x.after_quantity}</small></article>`;
   }).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
 }
 
