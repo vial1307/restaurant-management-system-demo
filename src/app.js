@@ -111,6 +111,104 @@ const ICONS = {
 
 const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "menu", "sop", "skills", "attendance", "schedule", "reports", "remote", "settings"];
 
+const AUTH_KEY = "shitu-kitchen-auth-v1";
+const MANAGEMENT_ACTION_EDIT_MODULE = {
+  "skill-add":"skills",
+  "skill-toggle":"skills",
+  "skill-delete":"skills",
+  "skill-approve":"skills",
+  "sop-add":"sop",
+  "sop-edit":"sop",
+  "sop-add-utensil":"sop",
+  "sop-remove-utensil":"sop",
+  "sop-remove-photo":"sop",
+  "sop-delete":"sop",
+  "sop-approve":"sop",
+  "sop-restore":"sop",
+  "schedule-add":"schedule",
+  "schedule-edit":"schedule",
+  "schedule-delete":"schedule",
+  "job-add":"remote",
+  "job-edit":"remote",
+  "job-delete":"remote",
+  "staff-add":"settings",
+  "staff-edit":"settings",
+  "clock-in-open":"attendance",
+  "clock-out":"attendance",
+  "attendance-edit":"attendance",
+};
+const FIELD_EDIT_MODULE = {
+  reservation:"reservations",
+  remaining:"reservations",
+  riceRemaining:"reservations",
+  procurement:"procurement",
+  procurementOrderDate:"procurement",
+  payroll:"attendance",
+  "training-status":"skills",
+  "skill-status":"skills",
+  "sop-photos":"sop",
+  "inspection-photo":"sop",
+  setting:"settings",
+  task:"preparation",
+};
+const FORM_EDIT_MODULE = {
+  "add-task":"preparation",
+  "save-skill-assessment":"skills",
+  "save-custom-skill":"skills",
+  "save-sop":"sop",
+  "save-staff":"settings",
+  "clock-in":"attendance",
+  "edit-attendance":"attendance",
+  "save-schedule":"schedule",
+  "save-job":"remote",
+  "save-inspection":"sop",
+};
+
+function accountSession() {
+  try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); }
+  catch { return null; }
+}
+
+function accountCan(moduleKey, action = "view") {
+  const user = accountSession();
+  if (!user) return false;
+  if (user.role === "admin" || user.accountRole === "admin") return true;
+  return Boolean(user.permissions?.[moduleKey]?.[action]);
+}
+
+function applyAccountEditState() {
+  const page = root.querySelector(".page-content");
+  if (!page) return;
+
+  for (const [field, moduleKey] of Object.entries(FIELD_EDIT_MODULE)) {
+    if (accountCan(moduleKey, "edit")) continue;
+    page.querySelectorAll(`[data-field="${CSS.escape(field)}"]`).forEach((control) => {
+      if ("disabled" in control) control.disabled = true;
+      control.setAttribute("aria-disabled", "true");
+    });
+  }
+
+  for (const [action, moduleKey] of Object.entries(MANAGEMENT_ACTION_EDIT_MODULE)) {
+    if (accountCan(moduleKey, "edit")) continue;
+    page.querySelectorAll(`[data-action="${CSS.escape(action)}"]`).forEach((control) => {
+      if ("disabled" in control) control.disabled = true;
+      control.setAttribute("aria-disabled", "true");
+      control.classList.add("account-readonly-control");
+    });
+  }
+
+  for (const [formName, moduleKey] of Object.entries(FORM_EDIT_MODULE)) {
+    if (accountCan(moduleKey, "edit")) continue;
+    page.querySelectorAll(`form[data-form="${CSS.escape(formName)}"]`).forEach((form) => {
+      form.querySelectorAll("input,select,textarea,button").forEach((control) => {
+        control.disabled = true;
+        control.setAttribute("aria-disabled", "true");
+      });
+      form.classList.add("account-readonly-form");
+    });
+  }
+}
+
 function icon(name, className = "") {
   return `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[name]}"></path></svg>`;
 }
@@ -633,6 +731,7 @@ function render() {
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
   root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  applyAccountEditState();
 }
 
 const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render });
@@ -642,6 +741,13 @@ root.addEventListener("click", (event) => {
   if (!target) return;
   const state = store.getState();
   const action = target.dataset.action;
+  const requiredEditModule = MANAGEMENT_ACTION_EDIT_MODULE[action];
+  if (requiredEditModule && !accountCan(requiredEditModule, "edit")) {
+    event.preventDefault();
+    return;
+  }
+  if (action === "procurement-toggle-closed" && !accountCan("procurement", "edit")) return;
+  if (action === "reset" && !accountCan("settings", "edit")) return;
   if (management.handleClick(target, event, currentContext())) return;
 
   if (action === "shift-date") { view.calendarOpen = false; store.selectDate(shiftDate(state.selectedDate, Number(target.dataset.offset))); }
@@ -753,6 +859,11 @@ root.addEventListener("change", (event) => {
   const element = event.target;
   const { field, key, id } = element.dataset;
   if (!field) return;
+  const requiredEditModule = FIELD_EDIT_MODULE[field];
+  if (requiredEditModule && !accountCan(requiredEditModule, "edit")) {
+    render();
+    return;
+  }
   if (["payroll", "menu-staff", "training-status", "skill-status", "skills-staff", "sop-photos", "inspection-photo", "schedule-month", "schedule-shift", "report-scope", "report-target", "report-category", "report-from", "report-to"].includes(field)) { void management.handleChange(element); return; }
   if (field === "reservation") store.updateReservation(key, element.value);
   if (field === "remaining") store.updateRemaining(key, element.value);
@@ -841,6 +952,9 @@ root.addEventListener("input", (event) => {
 root.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.target;
+  const formName = form.dataset.form || "";
+  const requiredEditModule = FORM_EDIT_MODULE[formName];
+  if (requiredEditModule && !accountCan(requiredEditModule, "edit")) return;
   const data = new FormData(form);
   if (management.handleSubmit(form, data)) return;
   if (form.dataset.form === "add-task") {
