@@ -191,3 +191,5 @@ new MutationObserver(schedule).observe(document.querySelector('#app')||document.
 window.addEventListener('hashchange',schedule);
 document.addEventListener('click',e=>{ if(e.target.closest('[data-action="set-language"]')) setTimeout(()=>{refreshSettings();},20); });
 schedule();
+
+window.addEventListener('shitu:accounts-synced',()=>{ refreshSettings(); });
