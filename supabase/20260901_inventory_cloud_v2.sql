@@ -222,7 +222,7 @@ returns public.inventory_stock
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_role text;
   v_allowed boolean;
@@ -309,7 +309,7 @@ returns public.inventory_stock
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_allowed boolean;
   v_site text;
