@@ -233,3 +233,376 @@ input,textarea{
 .keyboard-open .page-content{
   padding-bottom:18px !important;
 }
+
+
+/* v27 — mobile-first functional layout pass
+   Phone is the primary operating surface; desktop/tablet keep the richer layout. */
+@media(max-width:760px){
+  :root{
+    --mobile-gap:8px;
+    --mobile-radius:10px;
+    --mobile-control:42px;
+  }
+
+  /* Full-screen sheets for create/edit flows: less wasted space, easier one-hand use. */
+  .modal-backdrop,.account-modal-backdrop{
+    align-items:end !important;
+    padding:0 !important;
+  }
+  .modal-card,.account-modal{
+    width:100% !important;
+    max-width:100% !important;
+    height:min(94dvh,var(--visual-height)) !important;
+    max-height:min(94dvh,var(--visual-height)) !important;
+    margin:0 !important;
+    border-radius:16px 16px 0 0 !important;
+    padding:10px !important;
+    overscroll-behavior:contain;
+  }
+  .modal-card>.card-heading,.account-card-head{
+    position:sticky;
+    top:-10px;
+    z-index:8;
+    margin:-10px -10px 8px !important;
+    padding:10px 10px 8px !important;
+    border-bottom:1px solid var(--line);
+    background:#fff;
+  }
+  .modal-card>.card-heading h2,.account-card-head h2{
+    font-size:18px !important;
+    line-height:1.2;
+  }
+  .modal-card>.card-heading .icon-button,.account-card-head .icon-button{
+    width:40px !important;
+    height:40px !important;
+    flex:0 0 40px;
+  }
+
+  /* Forms: compact 2-column on normal phones, single-column only when truly narrow. */
+  .account-form-grid,.management-form-grid,.modal-meta-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:8px !important;
+  }
+  .account-form-grid label,.management-field,.modal-grid>label{
+    min-width:0;
+  }
+  .account-form-grid label,.management-field>span,.modal-card form>label{
+    font-size:12px !important;
+    line-height:1.25;
+  }
+  .account-form-grid input,.account-form-grid select,
+  .management-field>input,.management-field>select,
+  .modal-card input,.modal-card select{
+    min-height:var(--mobile-control) !important;
+    height:var(--mobile-control) !important;
+    padding-inline:9px !important;
+  }
+  .account-active-toggle{
+    justify-content:center !important;
+    align-self:end;
+    min-height:var(--mobile-control);
+    padding:0 8px;
+    border:1px solid var(--line);
+    border-radius:9px;
+  }
+  .account-active-toggle input{
+    width:20px !important;
+    height:20px !important;
+  }
+
+  /* Permission matrix: this is used frequently on phone, keep each row one compact tap target. */
+  .permission-grid{
+    margin-top:8px !important;
+    border-radius:10px !important;
+  }
+  .permission-head,.permission-row{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) 56px 64px !important;
+    min-height:44px !important;
+    height:44px;
+    padding:0 8px !important;
+    gap:4px !important;
+    align-items:center !important;
+  }
+  .permission-head{
+    position:sticky;
+    top:52px;
+    z-index:7;
+    background:#f4f8f6 !important;
+    font-size:11px !important;
+    line-height:1.15;
+  }
+  .permission-row{
+    font-size:13px !important;
+    line-height:1.2;
+  }
+  .permission-row>span,.permission-head>span{
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .permission-row label{
+    display:grid !important;
+    width:100%;
+    height:44px;
+    place-items:center;
+    margin:0 !important;
+  }
+  .permission-row input[type="checkbox"]{
+    display:block !important;
+    width:22px !important;
+    height:22px !important;
+    min-height:0 !important;
+    margin:0 !important;
+    padding:0 !important;
+    appearance:auto !important;
+    -webkit-appearance:checkbox !important;
+    accent-color:var(--green);
+  }
+  .account-form-actions{
+    position:sticky !important;
+    bottom:-10px !important;
+    z-index:9;
+    display:grid !important;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:7px !important;
+    margin:8px -10px -10px !important;
+    padding:8px 10px max(8px,env(safe-area-inset-bottom)) !important;
+    border-top:1px solid var(--line);
+    background:#fff;
+  }
+  .account-form-actions button{
+    min-width:0;
+    min-height:44px !important;
+    padding:0 8px !important;
+    font-size:13px !important;
+  }
+
+  /* General page tools */
+  .page-actions,.schedule-toolbar,.report-filter-card,.menu-catalog-toolbar{
+    gap:6px !important;
+  }
+  .schedule-toolbar,.report-filter-card{
+    display:grid !important;
+    grid-template-columns:1fr 1fr;
+    align-items:end;
+  }
+  .schedule-toolbar>label,.report-filter-card>label{
+    min-width:0 !important;
+    width:100%;
+  }
+  .schedule-toolbar input,.schedule-toolbar select,
+  .report-filter-card input,.report-filter-card select{
+    width:100%;
+    min-height:42px;
+  }
+
+  /* Settings: reduce scrolling and make values easier to hit. */
+  .settings-layout{gap:8px !important}
+  .setting-row{
+    min-height:48px !important;
+    padding-block:3px;
+  }
+  .setting-row>span:first-child{
+    flex:1;
+    min-width:0;
+    padding-right:8px;
+    font-size:13px !important;
+    line-height:1.3;
+  }
+  .setting-control{
+    flex:0 0 auto;
+  }
+  .setting-control>input{
+    width:96px !important;
+    min-height:40px !important;
+  }
+  .history-item{
+    min-height:44px !important;
+  }
+
+  /* Bottom navigation: enough label size without taking too much vertical room. */
+  .mobile-nav{
+    grid-auto-columns:minmax(72px,1fr) !important;
+    overflow-x:auto;
+    overscroll-behavior-x:contain;
+    scrollbar-width:none;
+  }
+  .mobile-nav::-webkit-scrollbar{display:none}
+  .mobile-nav>.nav-item{
+    min-height:54px !important;
+    padding:3px 5px !important;
+    font-size:10.5px !important;
+    line-height:1.12;
+  }
+  .mobile-nav>.nav-item>.icon{
+    width:20px !important;
+    height:20px !important;
+  }
+
+  /* Reservation / preparation */
+  .shift-inputs{
+    gap:6px !important;
+    margin:12px 0 !important;
+  }
+  .shift-inputs>label{
+    padding:10px 7px !important;
+  }
+  .shift-number{
+    font-size:26px !important;
+  }
+  .reservation-result,.reservation-buffer,.reservation-target{
+    min-height:48px !important;
+  }
+  .add-task-form{
+    gap:6px !important;
+    margin-top:10px !important;
+  }
+
+  /* SOP / menu / skill sections: horizontal mode switches, compact list cards. */
+  .management-section-switch,.skills-panel-switch{
+    display:flex !important;
+    width:100% !important;
+    flex-wrap:nowrap !important;
+    overflow-x:auto !important;
+    gap:4px !important;
+    scrollbar-width:none;
+  }
+  .management-section-switch::-webkit-scrollbar,.skills-panel-switch::-webkit-scrollbar{display:none}
+  .management-section-switch>.inventory-view-button,
+  .skills-panel-switch>.inventory-view-button{
+    flex:0 0 auto !important;
+    width:auto !important;
+    min-height:40px !important;
+    padding-inline:10px !important;
+  }
+  .sop-list{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    overflow-x:auto !important;
+    gap:5px !important;
+    scrollbar-width:none;
+  }
+  .sop-list::-webkit-scrollbar{display:none}
+  .sop-list-heading{display:none !important}
+  .sop-list-item{
+    flex:0 0 min(180px,68vw) !important;
+    min-height:48px !important;
+  }
+  .menu-summary-grid,.competency-area-grid,.skill-assessment-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:6px !important;
+  }
+  .competency-area-card{
+    min-height:105px !important;
+    padding:10px !important;
+  }
+
+  /* Attendance / staff / schedules: card-like rows rather than desktop table spacing. */
+  .attendance-row,.schedule-person-row,.job-catalog-row{
+    gap:7px !important;
+    padding:9px 0 !important;
+  }
+  .attendance-row strong,.schedule-person-row strong,.job-catalog-row strong{
+    font-size:12.5px !important;
+  }
+  .attendance-row small,.schedule-person-row small,.job-catalog-row small{
+    font-size:10.5px !important;
+  }
+  .attendance-actions,.inventory-actions{
+    gap:5px !important;
+  }
+
+  /* Reports: keep filters mobile, tables scroll only inside their card. */
+  .report-table-wrap{
+    width:100%;
+    max-width:100%;
+    overflow-x:auto !important;
+    border-radius:9px;
+  }
+  .report-table{
+    min-width:600px;
+  }
+  .report-table th,.report-table td{
+    padding:8px 7px !important;
+    font-size:11.5px !important;
+    white-space:nowrap;
+  }
+
+  /* Inventory: the most-used page gets priority. */
+  .inventory-summary{
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  .inventory-summary::-webkit-scrollbar{display:none}
+  .summary-pill{flex:0 0 auto}
+  .filters-row{
+    display:grid !important;
+    grid-template-columns:1fr;
+  }
+  .filters-row>.search-box,.filters-row>.storage-filter{
+    width:100%;
+  }
+  .storage-filter{
+    display:grid !important;
+    grid-template-columns:auto minmax(0,1fr);
+  }
+  .storage-filter>select{
+    width:100% !important;
+    min-width:0 !important;
+  }
+  .inventory-row,.work-row{
+    box-shadow:0 2px 10px rgb(23 55 46 / 4%);
+  }
+
+  /* Central kitchen: actions remain visible without making product rows tall. */
+  .central-toolbar{
+    gap:6px !important;
+  }
+  .central-list .central-row:has([data-central-adjust]){
+    grid-template-columns:minmax(0,1fr) 82px !important;
+    grid-auto-rows:auto;
+  }
+  .central-list .central-row:has([data-central-adjust])>.zone-pill{
+    grid-column:1;
+  }
+  .central-list .central-row:has([data-central-adjust])>.central-current{
+    grid-column:2;
+    grid-row:1;
+    justify-self:end;
+  }
+  .central-list .central-row:has([data-central-adjust])>input{
+    grid-column:1;
+    width:100% !important;
+    min-width:0;
+  }
+  .central-list .central-row:has([data-central-adjust])>.central-action{
+    grid-column:2;
+    width:82px !important;
+  }
+}
+
+/* Narrow phones: keep sheets single-column but permission matrix compact. */
+@media(max-width:369px){
+  .account-form-grid,.management-form-grid,.modal-meta-grid{
+    grid-template-columns:1fr !important;
+  }
+  .permission-head,.permission-row{
+    grid-template-columns:minmax(0,1fr) 48px 54px !important;
+    padding-inline:5px !important;
+  }
+  .permission-row{font-size:12px !important}
+  .account-form-actions{grid-template-columns:1fr 1fr}
+  .account-form-actions .danger-button{grid-column:1/-1;order:3}
+  .schedule-toolbar,.report-filter-card{grid-template-columns:1fr}
+}
+
+/* Desktop remains optimized, but forms and tables do not become unnecessarily spacious. */
+@media(min-width:761px){
+  .account-modal{max-height:90vh}
+  .permission-row{min-height:40px}
+  .permission-row input[type="checkbox"]{accent-color:var(--green)}
+  .management-field>input,.management-field>select,
+  .account-form-grid input,.account-form-grid select{min-height:38px}
+}
