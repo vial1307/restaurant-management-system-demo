@@ -165,7 +165,9 @@ begin
   join public.inventory_locations l on l.id=p_location_id
   where p.id=(select auth.uid()) and p.active=true;
 
-  if v_role not in ('admin','manager','supervisor') or not coalesce(v_allowed,false) then
+  if v_role not in ('admin','manager','supervisor')
+     or not coalesce(v_allowed,false)
+     or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'DIRECT_ADJUST_NOT_ALLOWED';
   end if;
 
@@ -229,7 +231,9 @@ begin
   join public.inventory_locations l on l.id=p_location_id
   where p.id=(select auth.uid()) and p.active=true;
 
-  if v_role not in ('admin','manager','supervisor') or not coalesce(v_allowed,false) then
+  if v_role not in ('admin','manager','supervisor')
+     or not coalesce(v_allowed,false)
+     or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'MINIMUM_EDIT_NOT_ALLOWED';
   end if;
 
@@ -256,12 +260,197 @@ on public.inventory_transactions for select
 to authenticated
 using (
   (select private.current_role()) in ('admin','manager','supervisor')
+  and (select private.has_permission('inventory','view'))
   and exists (
     select 1 from public.inventory_locations l
     where l.id=inventory_transactions.location_id
       and (select private.location_allowed(l.site))
   )
 );
+
+-- Harden inventory writes: browser clients may read stock, but all mutations must go through audited RPCs.
+revoke insert, update on public.inventory_stock from authenticated;
+revoke insert on public.inventory_transactions from authenticated;
+grant select on public.inventory_stock to authenticated;
+grant select on public.inventory_transactions to authenticated;
+
+create or replace function public.adjust_inventory(
+  p_item_id uuid,
+  p_location_id uuid,
+  p_direction text,
+  p_amount numeric,
+  p_note text default ''
+)
+returns public.inventory_stock
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_allowed boolean;
+  v_before numeric(12,2);
+  v_after numeric(12,2);
+  v_row public.inventory_stock;
+begin
+  select (select private.has_permission('inventory','edit'))
+         and (select private.location_allowed(l.site))
+    into v_allowed
+  from public.inventory_locations l
+  where l.id=p_location_id and l.active=true;
+
+  if not coalesce(v_allowed,false) then
+    raise exception 'INVENTORY_EDIT_NOT_ALLOWED';
+  end if;
+  if p_direction not in ('in','out') then
+    raise exception 'INVALID_DIRECTION';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'INVALID_AMOUNT';
+  end if;
+
+  insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+  values(p_item_id,p_location_id,0,0)
+  on conflict (item_id,location_id) do nothing;
+
+  select quantity into v_before
+  from public.inventory_stock
+  where item_id=p_item_id and location_id=p_location_id
+  for update;
+
+  if v_before is null then
+    raise exception 'STOCK_ROW_NOT_FOUND';
+  end if;
+
+  v_after := case when p_direction='in'
+    then v_before+p_amount
+    else v_before-p_amount
+  end;
+
+  if v_after < 0 then
+    raise exception 'INSUFFICIENT_STOCK';
+  end if;
+
+  update public.inventory_stock
+  set quantity=v_after,updated_at=now()
+  where item_id=p_item_id and location_id=p_location_id
+  returning * into v_row;
+
+  insert into public.inventory_transactions(
+    item_id,location_id,direction,amount,before_quantity,after_quantity,note,actor_id
+  ) values(
+    p_item_id,p_location_id,p_direction,p_amount,
+    v_before,v_after,coalesce(p_note,''),(select auth.uid())
+  );
+
+  return v_row;
+end;
+$;
+
+revoke all on function public.adjust_inventory(uuid,uuid,text,numeric,text) from public, anon;
+grant execute on function public.adjust_inventory(uuid,uuid,text,numeric,text) to authenticated;
+
+-- Atomic stock transfer between two locations of the same site.
+-- Used for reserve -> service/work-area replenishment and prevents stale-device overwrite.
+create or replace function public.transfer_inventory(
+  p_item_id uuid,
+  p_source_location_id uuid,
+  p_destination_location_id uuid,
+  p_amount numeric,
+  p_note text default ''
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $
+declare
+  v_source_site text;
+  v_destination_site text;
+  v_source_before numeric(12,2);
+  v_destination_before numeric(12,2);
+  v_source_after numeric(12,2);
+  v_destination_after numeric(12,2);
+begin
+  if p_source_location_id=p_destination_location_id then
+    raise exception 'SAME_LOCATION';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'INVALID_AMOUNT';
+  end if;
+  if not coalesce((select private.has_permission('inventory','edit')),false) then
+    raise exception 'INVENTORY_EDIT_NOT_ALLOWED';
+  end if;
+
+  select site into v_source_site
+  from public.inventory_locations
+  where id=p_source_location_id and active=true;
+  select site into v_destination_site
+  from public.inventory_locations
+  where id=p_destination_location_id and active=true;
+
+  if v_source_site is null or v_destination_site is null or v_source_site<>v_destination_site then
+    raise exception 'INVALID_TRANSFER_LOCATIONS';
+  end if;
+  if not coalesce((select private.location_allowed(v_source_site)),false) then
+    raise exception 'LOCATION_NOT_ALLOWED';
+  end if;
+
+  insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+  values(p_item_id,p_source_location_id,0,0)
+  on conflict (item_id,location_id) do nothing;
+  insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+  values(p_item_id,p_destination_location_id,0,0)
+  on conflict (item_id,location_id) do nothing;
+
+  -- Lock in UUID order to keep concurrent transfers deterministic.
+  perform 1
+  from public.inventory_stock
+  where item_id=p_item_id
+    and location_id in (p_source_location_id,p_destination_location_id)
+  order by location_id
+  for update;
+
+  select quantity into v_source_before
+  from public.inventory_stock
+  where item_id=p_item_id and location_id=p_source_location_id;
+  select quantity into v_destination_before
+  from public.inventory_stock
+  where item_id=p_item_id and location_id=p_destination_location_id;
+
+  if v_source_before < p_amount then
+    raise exception 'INSUFFICIENT_STOCK';
+  end if;
+
+  v_source_after:=v_source_before-p_amount;
+  v_destination_after:=v_destination_before+p_amount;
+
+  update public.inventory_stock
+  set quantity=v_source_after,updated_at=now()
+  where item_id=p_item_id and location_id=p_source_location_id;
+
+  update public.inventory_stock
+  set quantity=v_destination_after,updated_at=now()
+  where item_id=p_item_id and location_id=p_destination_location_id;
+
+  insert into public.inventory_transactions(
+    item_id,location_id,direction,amount,before_quantity,after_quantity,note,actor_id
+  ) values
+    (p_item_id,p_source_location_id,'out',p_amount,v_source_before,v_source_after,
+     coalesce(nullif(trim(p_note),''),'轉撥出庫 / Chuyển kho ra'),(select auth.uid())),
+    (p_item_id,p_destination_location_id,'in',p_amount,v_destination_before,v_destination_after,
+     coalesce(nullif(trim(p_note),''),'轉撥入庫 / Chuyển kho vào'),(select auth.uid()));
+
+  return jsonb_build_object(
+    'source_before',v_source_before,
+    'source_after',v_source_after,
+    'destination_before',v_destination_before,
+    'destination_after',v_destination_after
+  );
+end;
+$;
+
+revoke all on function public.transfer_inventory(uuid,uuid,uuid,numeric,text) from public, anon;
+grant execute on function public.transfer_inventory(uuid,uuid,uuid,numeric,text) to authenticated;
 
 -- Allow Realtime changes for inventory. Ignore duplicate-publication errors.
 do $$
