@@ -343,4 +343,9 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   const user = session();
   if (user?.location === "central" || user?.role === "admin") centralPage(user);
 });
+window.addEventListener("shitu:inventory-cloud-status", () => {
+  if (!location.hash.startsWith("#inventory") || !document.querySelector(".central-heading")) return;
+  const user = session();
+  if (user?.location === "central" || user?.role === "admin") centralPage(user);
+});
 scheduleAccess();
