@@ -643,6 +643,18 @@ $;
 revoke all on function public.archive_inventory_item(text) from public, anon;
 grant execute on function public.archive_inventory_item(text) to authenticated;
 
+-- Frontend compatibility marker. Increment when required inventory RPC contracts change.
+create or replace function public.kitchen_inventory_schema_version()
+returns integer
+language sql
+stable
+security invoker
+set search_path = ''
+as $ select 3 $;
+
+revoke all on function public.kitchen_inventory_schema_version() from public, anon;
+grant execute on function public.kitchen_inventory_schema_version() to authenticated;
+
 -- Allow Realtime changes for inventory. Ignore duplicate-publication errors.
 do $$
 begin
