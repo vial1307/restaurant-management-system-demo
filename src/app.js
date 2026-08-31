@@ -31,6 +31,7 @@ import {
   fuxingItemKey,
   fuxingLocationCode,
   fuxingWorkLocationCode,
+  inventoryCloudState,
   isCurrentBranchInventoryDate,
   syncInventoryNow,
 } from "./inventory-cloud.js";
@@ -564,7 +565,11 @@ function inventory(context) {
   const editable = canInventoryEdit();
   const catalogManage = canDirectInventoryAdjust();
   const historical = !isCurrentBranchInventoryDate();
-  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${historical ? `<div class="inventory-readonly-notice">Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看，請切回今天後再調整庫存。</div>` : ""}
+  const cloudState = inventoryCloudState();
+  const cloudNotice = cloudState === "migration-needed"
+    ? `<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。</div>`
+    : "";
+  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice">Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看，請切回今天後再調整庫存。</div>` : ""}
     <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${entries.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
