@@ -97,14 +97,8 @@ begin
       now()
     )
     on conflict (item_key) where item_key is not null
-    do update set
-      name_zh_tw=excluded.name_zh_tw,
-      name_vi=excluded.name_vi,
-      unit=excluded.unit,
-      work_area=excluded.work_area,
-      storage_only=excluded.storage_only,
-      active=true,
-      updated_at=now()
+    -- Bootstrap is seed-only. Never let a stale browser overwrite cloud catalog metadata.
+    do update set item_key=excluded.item_key
     returning id into v_item_id;
 
     for v_loc in select value from jsonb_array_elements(coalesce(v_item->'locations','[]'::jsonb))
@@ -124,8 +118,8 @@ begin
         greatest(0,coalesce((v_loc->>'quantity')::numeric,0)),
         greatest(0,coalesce((v_loc->>'minimum')::numeric,0))
       )
-      on conflict (item_id,location_id) do update
-      set minimum_quantity=excluded.minimum_quantity;
+      -- Existing cloud quantity/minimum is authoritative. Bootstrap only creates missing rows.
+      on conflict (item_id,location_id) do nothing;
 
       v_count := v_count + 1;
     end loop;
