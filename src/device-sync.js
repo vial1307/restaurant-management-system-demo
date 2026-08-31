@@ -93,6 +93,9 @@ async function ensureBroadcastChannel(supabase, userId) {
       const changed = applyLanguageToLocalState(payload?.preferred_language);
       if (changed) location.reload();
     })
+    .on("broadcast", { event: "profile" }, () => {
+      void syncNow();
+    })
     .subscribe();
 }
 
