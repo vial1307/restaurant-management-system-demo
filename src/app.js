@@ -1044,6 +1044,9 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("offline", render);
 window.addEventListener("online", () => { if (store.getState().operations.pendingSync) store.clearPendingSync(); else render(); });
+window.addEventListener("shitu:inventory-cloud-status", () => {
+  if (route() === "inventory" && !document.querySelector(".central-heading")) render();
+});
 if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:") {
   let reloadingForWorker = false;
   globalThis.navigator.serviceWorker.addEventListener("controllerchange", () => {
