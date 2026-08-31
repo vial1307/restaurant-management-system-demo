@@ -41,7 +41,13 @@ export async function getMyProfile() {
     .eq("id", authData.user.id)
     .single();
   if (error) throw error;
-  return data;
+  return {
+    ...data,
+    preferred_language:
+      authData.user.user_metadata?.preferred_language ||
+      data.preferred_language ||
+      "vi",
+  };
 }
 
 export async function mirrorSupabaseSessionToLegacy(profile) {
@@ -55,6 +61,7 @@ export async function mirrorSupabaseSessionToLegacy(profile) {
     accountRole: profile.role,
     location: profile.location,
     permissions: profile.permissions || {},
+    preferredLanguage: profile.preferred_language || "vi",
     provider: "supabase",
   }));
 }
