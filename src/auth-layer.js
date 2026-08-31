@@ -289,6 +289,11 @@ function applyAccess() {
         location.hash = `#${firstAllowed}`;
         return;
       }
+      const page = document.querySelector(".page-content");
+      if (page) {
+        page.innerHTML = '<section class="card access-empty-state"><h1>Chưa được cấp quyền · 尚未開放權限</h1><p>Hãy liên hệ quản trị viên để được cấp chức năng cần sử dụng. · 請聯絡系統管理員開放所需功能。</p></section>';
+      }
+      return;
     }
 
     const centralOnlyRole = user.accountRole === "central" || user.role === "central";
