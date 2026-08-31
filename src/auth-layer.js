@@ -1,6 +1,7 @@
 import {
   bootstrapCentralInventory,
   canDirectInventoryAdjust,
+  canInventoryEdit,
   centralItemKey,
   centralLocationCode,
   cloudAdjustQuantity,
@@ -13,11 +14,6 @@ const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
 const HISTORY_KEY = "shitu-central-kitchen-history-v1";
 
-const ACCOUNTS = [
-  { id: "admin", username: "admin", password: "admin123", name: "系統管理員", role: "admin", location: "all" },
-  { id: "central", username: "yangchu", password: "123456", name: "央廚員工", role: "central", location: "central" },
-  { id: "fuxing", username: "fuxing", password: "123456", name: "復興店員工", role: "branch", location: "fuxing" },
-];
 
 const CENTRAL_ZONES = ["央廚冷凍", "央廚4門", "央廚臥櫃", "央廚冷藏"];
 
@@ -69,9 +65,6 @@ const DEFAULT_PRODUCTS = [
 function session() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
 }
-function setSession(account) {
-  localStorage.setItem(AUTH_KEY, JSON.stringify({ id: account.id, username: account.username, name: account.name, role: account.role, location: account.location }));
-}
 function announceCentralStock(items) {
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent("shitu:central-stock-ready", { detail: { items } }));
@@ -105,18 +98,8 @@ function loginScreen(error = "") {
   document.body.classList.add("auth-locked");
   let host = document.querySelector("#auth-layer");
   if (!host) { host = document.createElement("div"); host.id = "auth-layer"; document.body.append(host); }
-  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚或復興店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">目前為測試登入，之後會改接 Supabase。</div></section></div>`;
-  host.querySelector("form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const user = ACCOUNTS.find(a => a.username === String(data.get("username")).trim() && a.password === String(data.get("password")));
-    if (!user) return loginScreen("帳號或密碼不正確");
-    setSession(user);
-    document.body.classList.remove("auth-locked");
-    host.remove();
-    if (user.location === "central" || user.role === "central") location.hash = "#inventory";
-    applyAccess();
-  });
+  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚或復興店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">Supabase Auth · 帳號與權限雲端同步</div></section></div>`;
+
 }
 
 function addLogout(user) {
@@ -125,20 +108,24 @@ function addLogout(user) {
   const chip = document.createElement("div");
   chip.className = "auth-user-chip";
   chip.innerHTML = `<span><strong>${esc(user.name)}</strong><small>${user.location === "central" ? "央廚" : user.location === "fuxing" ? "復興店" : "Admin"}</small></span><button type="button">登出</button>`;
-  chip.querySelector("button").onclick = () => { localStorage.removeItem(AUTH_KEY); location.hash = "#dashboard"; loginScreen(); };
   top.prepend(chip);
 }
 
-function branchSwitcher(user) {
+function branchSwitcher(user, active = "fuxing") {
   if (user.role !== "admin") return "";
-  return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="active">復興店</button><button data-warehouse="central">央廚</button></div>`;
+  return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
 }
 
 function centralPage(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
   const items = loadStock();
-  const mode = content.dataset.centralMode || "overview";
+  const canEdit = user.role === "admin" || Boolean(user.permissions?.inventory?.edit);
+  let mode = content.dataset.centralMode || "overview";
+  if ((mode === "in" || mode === "out") && !canEdit) {
+    mode = "overview";
+    content.dataset.centralMode = mode;
+  }
   const selectedZone = content.dataset.centralZone || "all";
   const query = content.dataset.centralSearch || "";
   const filtered = items.filter(i => (selectedZone === "all" || i.zone === selectedZone) && `${i.zh} ${i.vi}`.toLowerCase().includes(query.toLowerCase()));
@@ -147,9 +134,9 @@ function centralPage(user) {
   const canViewHistory = ["admin", "manager", "supervisor"].includes(accountRole);
   const log = canViewHistory && mode === "history" ? history() : [];
 
-  content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user)}</div>
+  content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     <section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button><button data-central-mode="in" class="${mode === "in" ? "active" : ""}">入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">出庫</button>${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">出庫</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
   `;
   bindCentral(user);
@@ -204,6 +191,7 @@ function bindCentral(user) {
     }, 120);
   };
   content.querySelectorAll("[data-central-adjust]").forEach(b => b.onclick = async () => {
+    if (!canInventoryEdit()) return;
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralAdjust);
     if (!item) return;
@@ -292,6 +280,15 @@ function applyAccess() {
         const moduleKey = (a.getAttribute("href") || "").replace(/^#/, "").split("?")[0];
         if (permissions[moduleKey]) a.style.display = permissions[moduleKey].view ? "" : "none";
       });
+    }
+
+    const currentModule = (location.hash || "#dashboard").replace(/^#/, "").split("?")[0];
+    if (permissions[currentModule]?.view === false) {
+      const firstAllowed = Object.keys(permissions).find((key) => permissions[key]?.view);
+      if (firstAllowed) {
+        location.hash = `#${firstAllowed}`;
+        return;
+      }
     }
 
     const centralOnlyRole = user.accountRole === "central" || user.role === "central";
