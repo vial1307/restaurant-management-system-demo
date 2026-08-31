@@ -51,7 +51,7 @@ The frontend maps it internally to `username@staff.shitu.local` for Supabase Aut
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
 
 
-## 6. Enable cross-device inventory sync (v29)
+## 6. Enable cross-device inventory sync (v30)
 
 After the original schema is installed, run:
 
