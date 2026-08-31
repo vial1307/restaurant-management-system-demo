@@ -19,7 +19,7 @@ body{
   overscroll-behavior-x:none;
 }
 img,svg,video,canvas{max-width:100%}
-input,button,select,textarea{
+button,input:not([type="checkbox"]):not([type="radio"]),select,textarea{
   max-width:100%;
   -webkit-appearance:none;
   appearance:none;
@@ -27,6 +27,13 @@ input,button,select,textarea{
 select{
   -webkit-appearance:auto;
   appearance:auto;
+}
+input[type="checkbox"],input[type="radio"]{
+  max-width:100%;
+  -webkit-appearance:auto;
+  appearance:auto;
+  accent-color:var(--green,#087b62);
+  cursor:pointer;
 }
 button,a,[role="button"]{
   touch-action:manipulation;
