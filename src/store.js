@@ -20,6 +20,76 @@ export const ZONES = [
 
 export const PRIMARY_ZONES = ["large-freezer", "large-fridge"];
 
+const LARGE_FREEZER_SHEET_ITEMS = [
+  // 湯台 · Khu canh
+  { id: "freezer-fried-squid", label: "炸魷魚", labelVi: "Mực chiên", minimum: 2, unit: "包", workArea: "soup" },
+  { id: "freezer-crispy-ribs", label: "排骨酥", labelVi: "Sườn non chiên giòn", minimum: 3, unit: "斤", workArea: "soup" },
+  { id: "freezer-fried-taro", label: "炸芋頭", labelVi: "Khoai môn chiên", minimum: 3, unit: "包", workArea: "soup" },
+  { id: "freezer-buniu-concentrate", label: "不牛濃縮", labelVi: "Cốt cô đặc 不牛", minimum: 3, unit: "包", workArea: "soup" },
+  { id: "freezer-pork-knuckle", label: "豬腳", labelVi: "Chân giò heo", minimum: 5, unit: "包", workArea: "soup" },
+  { id: "freezer-sous-vide-pork-shoulder", label: "舒肥梅花豬", labelVi: "Nạc vai heo sous-vide", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-beef-noodle-broth", label: "牛麵湯", labelVi: "Nước dùng mì bò", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-clear-stew-broth", label: "清燉湯", labelVi: "Nước dùng bò hầm trong", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-kombu-broth-large", label: "昆布湯(大)", labelVi: "Nước dùng kombu túi lớn", minimum: 5, unit: "包", workArea: "soup" },
+  { id: "freezer-kombu-broth-small", label: "昆布湯(小)", labelVi: "Nước dùng kombu túi nhỏ", minimum: 15, unit: "包", workArea: "soup" },
+  { id: "freezer-taro-chicken-soup", label: "芋頭雞湯", labelVi: "Canh gà khoai môn", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-light-mala-broth", label: "輕麻湯包", labelVi: "Gói nước dùng mala nhẹ", minimum: 30, unit: "包", workArea: "soup" },
+  { id: "freezer-heavy-mala-broth", label: "重麻湯包", labelVi: "Gói nước dùng mala đậm", minimum: 50, unit: "包", workArea: "soup" },
+  { id: "freezer-sichuan-mala-broth", label: "川麻湯包", labelVi: "Gói nước dùng mala Tứ Xuyên", minimum: 15, unit: "包", workArea: "soup" },
+  { id: "freezer-oxtail-meat-2kg", label: "牛尾肉袋(2K/包)", labelVi: "Túi thịt đuôi bò 2 kg", minimum: 10, unit: "包", workArea: "soup" },
+  { id: "freezer-noodle-oil-1kg", label: "麵油(1K)", labelVi: "Dầu mì 1 kg", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-heavy-mala-oil-3kg", label: "重麻油(3K/包)", labelVi: "Dầu mala đậm 3 kg", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-beef-tendon-3kg", label: "牛筋(3K)蒸湯", labelVi: "Gân bò 3 kg nấu nước dùng", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-beef-bag", label: "牛肉袋", labelVi: "Túi thịt bò", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-noodle-oil", label: "麵油", labelVi: "Dầu mì", minimum: 0, unit: "包", workArea: "soup" },
+  { id: "freezer-heavy-mala-oil", label: "重麻油", labelVi: "Dầu mala đậm", minimum: 0, unit: "包", workArea: "soup" },
+
+  // 麵台 · Khu mì
+  { id: "freezer-hell-beef-rice", label: "地獄牛肉燴飯", labelVi: "Cơm sốt thịt bò địa ngục", minimum: 30, unit: "包", workArea: "noodles" },
+  { id: "freezer-rice-sauce-180g", label: "燴飯汁(180g)", labelVi: "Sốt cơm 180 g", minimum: 10, unit: "包", workArea: "noodles" },
+  { id: "freezer-hell-tripe", label: "地獄牛肚", labelVi: "Dạ dày bò địa ngục", minimum: 20, unit: "包", workArea: "noodles" },
+  { id: "freezer-sous-vide-steak", label: "舒肥牛排", labelVi: "Bít tết bò sous-vide", minimum: 15, unit: "包", workArea: "noodles" },
+  { id: "freezer-secret-garlic-sauce", label: "秘蒜醬", labelVi: "Sốt tỏi bí truyền", minimum: 20, unit: "包", workArea: "noodles" },
+  { id: "freezer-mild-dipping-sauce", label: "微辣沾醬", labelVi: "Sốt chấm cay nhẹ", minimum: 20, unit: "包", workArea: "noodles" },
+  { id: "oxtail-rice-freezer", stockKey: "oxtail-rice", label: "牛尾追飯", labelVi: "Cơm đuôi bò", minimum: 100, unit: "包", workArea: "noodles" },
+  { id: "freezer-braised-tofu", label: "滷膠豆干", labelVi: "Đậu phụ khô kho 滷膠", minimum: 30, unit: "包", workArea: "noodles" },
+  { id: "freezer-braised-duck-wing", label: "滷膠鴨翅", labelVi: "Cánh vịt kho 滷膠", minimum: 10, unit: "包", workArea: "noodles" },
+  { id: "freezer-braised-duck-tongue", label: "滷膠鴨舌", labelVi: "Lưỡi vịt kho 滷膠", minimum: 20, unit: "包", workArea: "noodles" },
+  { id: "freezer-braised-duck-intestine", label: "滷膠鴨腸", labelVi: "Lòng vịt kho 滷膠", minimum: 20, unit: "包", workArea: "noodles" },
+  { id: "freezer-tiger-skin-chicken-feet", label: "虎皮G腳(包)", labelVi: "Chân gà da hổ", minimum: 10, unit: "包", workArea: "noodles" },
+
+  // 肉台 · Khu thịt
+  { id: "freezer-tender-beef", label: "滑牛肉(包)", labelVi: "Thịt bò mềm ướp", minimum: 10, unit: "包", workArea: "meat" },
+  { id: "freezer-rice-cake", label: "追飯糕(包)", labelVi: "Bánh 追飯糕", minimum: 10, unit: "包", workArea: "meat" },
+  { id: "freezer-pr-short-rib", label: "PR牛小排", labelVi: "Sườn bò non PR", minimum: 1, unit: "包", workArea: "meat" },
+  { id: "freezer-pr-marbled-beef", label: "PR雪花", labelVi: "Bò vân mỡ PR", minimum: 2, unit: "包", workArea: "meat" },
+  { id: "freezer-ch-marbled-beef", label: "CH雪花", labelVi: "Bò vân mỡ CH", minimum: 1, unit: "包", workArea: "meat" },
+  { id: "freezer-lamb-shoulder", label: "羊肩包", labelVi: "Gói vai cừu", minimum: 1, unit: "包", workArea: "meat" },
+  { id: "freezer-ribeye", label: "肋眼", labelVi: "Thịt bò ribeye", minimum: 1, unit: "包", workArea: "meat" },
+  { id: "freezer-pork-collar-box", label: "梅花豬", labelVi: "Nạc vai heo", minimum: 1, unit: "箱", workArea: "meat" },
+
+  // 海鮮台 · Khu hải sản
+  { id: "freezer-yellow-beef-brisket", label: "黃牛胸", labelVi: "Ức bò vàng", minimum: 3, unit: "包", workArea: "seafood" },
+  { id: "freezer-wagyu", label: "和牛", labelVi: "Thịt bò Wagyu", minimum: 0, unit: "包", workArea: "seafood" },
+  { id: "freezer-yellow-throat", label: "黃喉", labelVi: "Hoàng hầu", minimum: 3, unit: "包", workArea: "seafood" },
+  { id: "freezer-frog", label: "田雞", labelVi: "Thịt ếch", minimum: 20, unit: "包", workArea: "seafood" },
+  { id: "freezer-large-intestine", label: "大腸", labelVi: "Lòng già", minimum: 30, unit: "包", workArea: "seafood" },
+  { id: "freezer-braised-tripe", label: "滷牛肚", labelVi: "Dạ dày bò kho", minimum: 30, unit: "包", workArea: "seafood" },
+  { id: "freezer-grass-prawn", label: "草蝦", labelVi: "Tôm sú", minimum: 1, unit: "箱", workArea: "seafood" },
+  { id: "freezer-beef-egg-dumpling", label: "牛肉蛋餃", labelVi: "Há cảo trứng nhân bò", minimum: 10, unit: "包", workArea: "seafood" },
+  { id: "freezer-french-bread", label: "法國麵包", labelVi: "Bánh mì Pháp", minimum: 20, unit: "個", workArea: "seafood" },
+  { id: "freezer-croissant", label: "可頌", labelVi: "Bánh croissant", minimum: 15, unit: "個", workArea: "seafood" },
+  { id: "freezer-cuttlefish-paste", label: "花枝漿", labelVi: "Chả mực", minimum: 20, unit: "包", workArea: "seafood" },
+
+  // 二樓臥櫃 · Tủ đông nằm tầng 2
+  { id: "freezer-pork-egg-dumpling", label: "豬肉蛋餃", labelVi: "Há cảo trứng nhân heo", minimum: 1, unit: "包", workArea: "seafood" },
+  { id: "freezer-sanji-fish-dumpling", label: "三記魚餃", labelVi: "Sủi cảo cá Sanji", minimum: 20, unit: "包", workArea: "seafood" },
+  { id: "freezer-duck-meatball", label: "鴨肉丸", labelVi: "Viên thịt vịt", minimum: 1, unit: "包", workArea: "seafood" },
+  { id: "freezer-tofu-skin", label: "腐皮", labelVi: "Tàu hũ ky", minimum: 4, unit: "斤", workArea: "seafood" },
+  { id: "freezer-taro-ball", label: "芋頭丸", labelVi: "Viên khoai môn", minimum: 1, unit: "包", workArea: "seafood" },
+  { id: "freezer-lobster", label: "龍蝦", labelVi: "Tôm hùm", minimum: 5, unit: "隻", workArea: "seafood" },
+].map((item) => ({ ...item, quantity: item.minimum, zone: "large-freezer", storageOnly: true, freezerSheet: true }));
+
 export const DEFAULT_ITEMS = [
   { id: "tofu-kitchen", label: "豆乾", labelVi: "Đậu khô", quantity: 7, minimum: 10, unit: "盒", zone: "kitchen" },
   { id: "duck-tongue-kitchen", label: "鴨舌", labelVi: "Lưỡi vịt", quantity: 4, minimum: 10, unit: "盒", zone: "kitchen" },
@@ -33,14 +103,15 @@ export const DEFAULT_ITEMS = [
   { id: "stewed-rice", label: "燴飯", labelVi: "Cơm sốt", quantity: 6, minimum: 5, unit: "盒", zone: "four-door" },
   { id: "dry-noodle-sauce", label: "乾麵醬", labelVi: "Sốt mì khô", quantity: 1, minimum: 2, unit: "包", zone: "large-fridge" },
   { id: "beef-juice", label: "牛肉汁", labelVi: "Nước sốt bò", quantity: 1, minimum: 2, unit: "包", zone: "large-fridge" },
-  { id: "frozen-noodles", label: "冷凍麵", labelVi: "Mì đông lạnh", quantity: 60, minimum: 30, unit: "片", zone: "large-freezer" },
+  { id: "frozen-noodles", label: "冷凍麵", labelVi: "Mì đông lạnh", quantity: 60, minimum: 60, unit: "片", zone: "large-freezer" },
   { id: "baby-cabbage", label: "顆白菜", labelVi: "Cải thìa", quantity: 4, minimum: 4, unit: "斤", zone: "large-fridge" },
   { id: "cabbage", label: "高麗菜", labelVi: "Bắp cải", quantity: 3, minimum: 2, unit: "顆", zone: "large-fridge" },
   { id: "tofu-large", label: "豆乾", labelVi: "Đậu khô", quantity: 20, minimum: 20, unit: "盒", zone: "large-fridge" },
   { id: "duck-tongue-large", label: "鴨舌", labelVi: "Lưỡi vịt", quantity: 14, minimum: 20, unit: "盒", zone: "large-fridge" },
   { id: "duck-wing-large", label: "鴨翅", labelVi: "Cánh vịt", quantity: 10, minimum: 10, unit: "盒", zone: "large-freezer" },
-  { id: "duck-intestine-large", label: "鴨腸", labelVi: "Lòng vịt", quantity: 8, minimum: 10, unit: "盒", zone: "large-freezer" },
-].map((item) => ({ ...item, workArea: "noodles" }));
+  { id: "duck-intestine-large", label: "鴨腸", labelVi: "Lòng vịt", quantity: 3, minimum: 3, unit: "包", zone: "large-freezer", workArea: "seafood" },
+  ...LARGE_FREEZER_SHEET_ITEMS,
+].map((item) => ({ ...item, workArea: item.workArea || "noodles" }));
 
 const STOCK_KEYS = {
   "tofu-kitchen": "tofu",
@@ -79,6 +150,7 @@ export function buildWorkInventory(inventory) {
   const grouped = new Map();
 
   for (const item of inventory) {
+    if (item.storageOnly) continue;
     const stockKey = stockKeyFor(item);
     const previous = grouped.get(stockKey);
     if (!previous || item.zone === "kitchen") grouped.set(stockKey, item);
@@ -198,8 +270,16 @@ export function hydrateState(raw, date = formatDateKey()) {
         stockKey: stockKeyFor(item),
         workArea: item.workArea || inferWorkArea(item),
       }));
-      for (const item of DEFAULT_ITEMS.filter((entry) => ["frozen-noodles", "baby-cabbage", "cabbage"].includes(entry.id))) {
+      for (const item of DEFAULT_ITEMS.filter((entry) => entry.freezerSheet || ["frozen-noodles", "baby-cabbage", "cabbage"].includes(entry.id))) {
         if (!record.inventory.some((entry) => entry.id === item.id)) record.inventory.push({ ...structuredClone(item), stockKey: stockKeyFor(item), workArea: item.workArea || inferWorkArea(item) });
+      }
+      const frozenNoodles = record.inventory.find((entry) => entry.id === "frozen-noodles");
+      if (frozenNoodles?.minimum === 30) frozenNoodles.minimum = 60;
+      const duckIntestine = record.inventory.find((entry) => entry.id === "duck-intestine-large");
+      if (duckIntestine?.minimum === 10 && duckIntestine?.zone === "large-freezer") {
+        duckIntestine.minimum = 3;
+        duckIntestine.unit = "包";
+        duckIntestine.workArea = "seafood";
       }
       record.workInventory = Array.isArray(record.workInventory)
         ? record.workInventory.map((item) => ({
