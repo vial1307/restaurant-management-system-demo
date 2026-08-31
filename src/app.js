@@ -923,16 +923,29 @@ root.addEventListener("change", (event) => {
     }
     if (key === "minimum") {
       if (!canDirectInventoryAdjust()) { render(); return; }
+      const previous = Number(item.minimum || 0);
       const next = Math.max(0, Number(element.value) || 0);
       store.updateItem(id, key, next);
       void cloudSetMinimum({
         itemKey: fuxingItemKey(item.stockKey),
         locationCode: fuxingLocationCode(item.zone),
         minimum: next,
+      }).then((result) => {
+        if (!result.ok && !result.fallback) {
+          store.updateItem(id, key, previous);
+          void syncInventoryNow("fuxing", { reloadBranch: true });
+        }
       });
       return;
     }
+    const previous = item[key];
     store.updateItem(id, key, element.value);
+    void cloudSyncFuxingCatalogItem(item.stockKey).then((result) => {
+      if (!result.ok && !result.fallback) {
+        store.updateItem(id, key, previous);
+        void syncInventoryNow("fuxing", { reloadBranch: true });
+      }
+    });
   }
   if (field === "workItem") {
     if (!canDirectInventoryAdjust()) { render(); return; }
@@ -958,16 +971,29 @@ root.addEventListener("change", (event) => {
     }
     if (key === "minimum") {
       if (!canDirectInventoryAdjust()) { render(); return; }
+      const previous = Number(item.minimum || 0);
       const next = Math.max(0, Number(element.value) || 0);
       store.updateWorkItem(id, key, next);
       void cloudSetMinimum({
         itemKey: fuxingItemKey(item.stockKey),
         locationCode: fuxingWorkLocationCode(item.workArea),
         minimum: next,
+      }).then((result) => {
+        if (!result.ok && !result.fallback) {
+          store.updateWorkItem(id, key, previous);
+          void syncInventoryNow("fuxing", { reloadBranch: true });
+        }
       });
       return;
     }
+    const previous = item[key];
     store.updateWorkItem(id, key, element.value);
+    void cloudSyncFuxingCatalogItem(item.stockKey).then((result) => {
+      if (!result.ok && !result.fallback) {
+        store.updateWorkItem(id, key, previous);
+        void syncInventoryNow("fuxing", { reloadBranch: true });
+      }
+    });
   }
   if (field === "calendarMonth") { view.calendarMonth = Number(element.value); render(); }
   if (field === "calendarYear") { view.calendarYear = Number(element.value); render(); }
