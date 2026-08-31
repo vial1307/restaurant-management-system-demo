@@ -213,11 +213,8 @@ async function verifyMigration() {
   }
   try {
     const supabase = await getSupabase();
-    const { error } = await supabase
-      .from("inventory_items")
-      .select("id,item_key")
-      .limit(1);
-    migrationAvailable = !error || !String(error.message || "").includes("item_key");
+    const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
+    migrationAvailable = !error && Number(version) >= 3;
   } catch {
     migrationAvailable = false;
   }
