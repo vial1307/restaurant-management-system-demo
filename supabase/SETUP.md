@@ -49,3 +49,22 @@ Staff continue to type a simple username such as `admin`, `yangchu`, or `fuxing`
 The frontend maps it internally to `username@staff.shitu.local` for Supabase Auth, so staff do not need to remember an email address.
 
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
+
+
+## 6. Enable cross-device inventory sync (v29)
+
+After the original schema is installed, run:
+
+`supabase/20260901_inventory_cloud_v2.sql`
+
+in **Supabase → SQL Editor** once.
+
+This migration adds:
+- Fuxing storage/work locations
+- stable cloud item keys
+- Supabase Realtime for inventory stock
+- audited in/out transactions
+- direct stocktake correction for supervisor / manager / admin only
+- management-level inventory history access
+
+After running it, reload Kitchen OS on each device. The first Admin session seeds the current inventory catalog into Supabase without overwriting an already-existing cloud quantity.
