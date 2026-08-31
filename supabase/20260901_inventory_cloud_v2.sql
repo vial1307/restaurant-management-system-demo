@@ -148,21 +148,31 @@ as $$
 declare
   v_role text;
   v_allowed boolean;
+  v_site text;
+  v_item_key text;
   v_before numeric(12,2);
   v_after numeric(12,2);
   v_row public.inventory_stock;
 begin
   select p.role,
-         (p.location='all' or p.location=l.site)
-    into v_role,v_allowed
+         (p.location='all' or p.location=l.site),
+         l.site,
+         i.item_key
+    into v_role,v_allowed,v_site,v_item_key
   from public.profiles p
   join public.inventory_locations l on l.id=p_location_id
+  join public.inventory_items i on i.id=p_item_id and i.active=true
   where p.id=(select auth.uid()) and p.active=true;
 
   if v_role not in ('admin','manager','supervisor')
      or not coalesce(v_allowed,false)
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'DIRECT_ADJUST_NOT_ALLOWED';
+  end if;
+
+  if (v_site='fuxing' and v_item_key not like 'fuxing:%')
+     or (v_site='central' and v_item_key not like 'central:%') then
+    raise exception 'ITEM_SITE_MISMATCH';
   end if;
 
   if p_quantity is null or p_quantity < 0 then
@@ -212,23 +222,33 @@ returns public.inventory_stock
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $
 declare
   v_role text;
   v_allowed boolean;
+  v_site text;
+  v_item_key text;
   v_row public.inventory_stock;
 begin
   select p.role,
-         (p.location='all' or p.location=l.site)
-    into v_role,v_allowed
+         (p.location='all' or p.location=l.site),
+         l.site,
+         i.item_key
+    into v_role,v_allowed,v_site,v_item_key
   from public.profiles p
   join public.inventory_locations l on l.id=p_location_id
+  join public.inventory_items i on i.id=p_item_id and i.active=true
   where p.id=(select auth.uid()) and p.active=true;
 
   if v_role not in ('admin','manager','supervisor')
      or not coalesce(v_allowed,false)
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'MINIMUM_EDIT_NOT_ALLOWED';
+  end if;
+
+  if (v_site='fuxing' and v_item_key not like 'fuxing:%')
+     or (v_site='central' and v_item_key not like 'central:%') then
+    raise exception 'ITEM_SITE_MISMATCH';
   end if;
 
   if p_minimum is null or p_minimum < 0 then
@@ -289,21 +309,30 @@ returns public.inventory_stock
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $
 declare
   v_allowed boolean;
+  v_site text;
+  v_item_key text;
   v_before numeric(12,2);
   v_after numeric(12,2);
   v_row public.inventory_stock;
 begin
   select (select private.has_permission('inventory','edit'))
-         and (select private.location_allowed(l.site))
-    into v_allowed
+         and (select private.location_allowed(l.site)),
+         l.site,
+         i.item_key
+    into v_allowed,v_site,v_item_key
   from public.inventory_locations l
+  join public.inventory_items i on i.id=p_item_id and i.active=true
   where l.id=p_location_id and l.active=true;
 
   if not coalesce(v_allowed,false) then
     raise exception 'INVENTORY_EDIT_NOT_ALLOWED';
+  end if;
+  if (v_site='fuxing' and v_item_key not like 'fuxing:%')
+     or (v_site='central' and v_item_key not like 'central:%') then
+    raise exception 'ITEM_SITE_MISMATCH';
   end if;
   if p_direction not in ('in','out') then
     raise exception 'INVALID_DIRECTION';
@@ -370,6 +399,7 @@ as $$
 declare
   v_source_site text;
   v_destination_site text;
+  v_item_key text;
   v_source_before numeric(12,2);
   v_destination_before numeric(12,2);
   v_source_after numeric(12,2);
@@ -391,12 +421,19 @@ begin
   select site into v_destination_site
   from public.inventory_locations
   where id=p_destination_location_id and active=true;
+  select item_key into v_item_key
+  from public.inventory_items
+  where id=p_item_id and active=true;
 
   if v_source_site is null or v_destination_site is null or v_source_site<>v_destination_site then
     raise exception 'INVALID_TRANSFER_LOCATIONS';
   end if;
   if not coalesce((select private.location_allowed(v_source_site)),false) then
     raise exception 'LOCATION_NOT_ALLOWED';
+  end if;
+  if (v_source_site='fuxing' and v_item_key not like 'fuxing:%')
+     or (v_source_site='central' and v_item_key not like 'central:%') then
+    raise exception 'ITEM_SITE_MISMATCH';
   end if;
 
   insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
@@ -468,6 +505,7 @@ declare
   v_role text;
   v_item_id uuid;
   v_key text;
+  v_expected_site text;
   v_zh text;
   v_vi text;
   v_unit text;
@@ -489,13 +527,18 @@ begin
   end if;
 
   v_key:=nullif(trim(p_item->>'key'),'');
+  v_expected_site:=case
+    when v_key like 'fuxing:%' then 'fuxing'
+    when v_key like 'central:%' then 'central'
+    else null
+  end;
   v_zh:=nullif(trim(p_item->>'zh'),'');
   v_vi:=nullif(trim(p_item->>'vi'),'');
   v_unit:=nullif(trim(p_item->>'unit'),'');
   v_work_area:=coalesce(nullif(trim(p_item->>'work_area'),''),'noodles');
   v_storage_only:=coalesce((p_item->>'storage_only')::boolean,false);
 
-  if v_key is null or v_zh is null or v_vi is null or v_unit is null then
+  if v_key is null or v_expected_site is null or v_zh is null or v_vi is null or v_unit is null then
     raise exception 'INVALID_CATALOG_ITEM';
   end if;
   if v_work_area not in ('noodles','soup','seafood','meat') then
@@ -539,6 +582,9 @@ begin
 
     if v_location_id is null then
       raise exception 'LOCATION_NOT_FOUND';
+    end if;
+    if v_location_site<>v_expected_site then
+      raise exception 'ITEM_SITE_MISMATCH';
     end if;
     if not coalesce((select private.location_allowed(v_location_site)),false) then
       raise exception 'LOCATION_NOT_ALLOWED';
@@ -592,6 +638,7 @@ as $$
 declare
   v_role text;
   v_item_id uuid;
+  v_expected_site text;
   v_has_disallowed boolean;
   v_stock numeric;
 begin
@@ -602,6 +649,16 @@ begin
   if v_role not in ('admin','manager','supervisor')
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'CATALOG_EDIT_NOT_ALLOWED';
+  end if;
+
+  v_expected_site:=case
+    when p_item_key like 'fuxing:%' then 'fuxing'
+    when p_item_key like 'central:%' then 'central'
+    else null
+  end;
+  if v_expected_site is null
+     or not coalesce((select private.location_allowed(v_expected_site)),false) then
+    raise exception 'LOCATION_NOT_ALLOWED';
   end if;
 
   select id into v_item_id
