@@ -810,7 +810,10 @@ root.addEventListener("click", (event) => {
           amount: Math.abs(actualDelta),
           note: "庫存快速調整 / Điều chỉnh nhanh tồn kho",
         }).then((result) => {
-          if (!result.ok && !result.fallback) void syncInventoryNow("fuxing", { reloadBranch: true });
+          if (!result.ok && !result.fallback) {
+            store.updateItem(item.id, "quantity", Number(item.quantity || 0) - actualDelta);
+            void syncInventoryNow("fuxing", { reloadBranch: true });
+          }
         });
       }
     }
@@ -831,7 +834,10 @@ root.addEventListener("click", (event) => {
           amount: Math.abs(actualDelta),
           note: "工作區數量調整 / Điều chỉnh số lượng khu làm việc",
         }).then((result) => {
-          if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+          if (!result.ok && !result.fallback) {
+            store.updateWorkItem(item.id, "quantity", Number(item.quantity || 0) - actualDelta);
+            void syncInventoryNow("fuxing", { reloadBranch: true });
+          }
         });
       }
     }
@@ -899,6 +905,7 @@ root.addEventListener("change", (event) => {
     if (!item) return;
     if (key === "quantity") {
       if (!canDirectInventoryAdjust()) { render(); return; }
+      const previous = Number(item.quantity || 0);
       const next = Math.max(0, Number(element.value) || 0);
       store.updateItem(id, key, next);
       void cloudSetQuantity({
@@ -907,7 +914,10 @@ root.addEventListener("change", (event) => {
         quantity: next,
         note: "盤點調整 / Điều chỉnh kiểm kê",
       }).then((result) => {
-        if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+        if (!result.ok && !result.fallback) {
+          store.updateItem(id, key, previous);
+          void syncInventoryNow("fuxing", { reloadBranch: true });
+        }
       });
       return;
     }
@@ -930,6 +940,7 @@ root.addEventListener("change", (event) => {
     if (!item) return;
     if (key === "quantity") {
       if (!canDirectInventoryAdjust()) { render(); return; }
+      const previous = Number(item.quantity || 0);
       const next = Math.max(0, Number(element.value) || 0);
       store.updateWorkItem(id, key, next);
       void cloudSetQuantity({
@@ -938,7 +949,10 @@ root.addEventListener("change", (event) => {
         quantity: next,
         note: "工作區盤點調整 / Điều chỉnh kiểm kê khu làm việc",
       }).then((result) => {
-        if (!result.ok && !result.fallback) void syncInventoryNow("fuxing");
+        if (!result.ok && !result.fallback) {
+          store.updateWorkItem(id, key, previous);
+          void syncInventoryNow("fuxing", { reloadBranch: true });
+        }
       });
       return;
     }
