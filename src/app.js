@@ -535,7 +535,7 @@ function addItemModal(context) {
   const item = existing[0] ?? {};
   const working = editing ? record.workInventory.find((entry) => entry.stockKey === view.editingStockKey) : null;
   const activeZone = view.zone !== "all" ? view.zone : "large-freezer";
-  const units = ["盒", "包", "塊", "條", "kg"];
+  const units = ["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"];
   const locations = ZONES.map((zone) => {
     const stored = existing.find((entry) => entry.zone === zone.id);
     const checked = editing ? Boolean(stored) : zone.id === activeZone;
