@@ -694,3 +694,53 @@ html[lang="vi"] .central-row small{line-height:1.35}
   .filter-tab,.central-tabs button,.central-zone-tabs button,.language-switch button{min-height:40px}
   .icon-button,.quantity-button,.inventory-action-button{min-width:36px;min-height:36px}
 }
+
+
+/* v25 — readability pass: larger inventory labels and quantities */
+.inventory-item-name strong{font-size:14px;font-weight:750;line-height:1.3}
+.inventory-item-name small{font-size:12px;line-height:1.35}
+.quantity-input{font-size:16px;font-weight:760}
+.quantity-control>small{font-size:12px;font-weight:650}
+.inventory-working>strong{font-size:15px;font-weight:760}
+.inventory-working>small{font-size:12px}
+.inventory-minimum .minimum-input{font-size:13px;font-weight:700}
+.source-quantity{font-size:11.5px}
+.source-quantity>strong{font-size:13px}
+.inventory-badge .tag{font-size:11.5px}
+.inventory-row{min-height:61px}
+.central-row>div:first-child strong{font-size:14px;font-weight:760;line-height:1.3}
+.central-row>div:first-child small{font-size:12px}
+.central-current strong{font-size:19px;font-weight:780}
+.central-current small{font-size:12px;font-weight:650}
+.central-row input{font-size:15px;font-weight:700}
+.central-action{font-size:13px}
+.stat-value{font-size:27px}
+
+@media(max-width:760px){
+  .inventory-item-name strong{font-size:14.5px}
+  .inventory-item-name small{font-size:11.5px}
+  .quantity-input{font-size:17px}
+  .quantity-control>small{font-size:12px}
+  .inventory-working>strong{font-size:16px}
+  .inventory-working>small{font-size:11.5px}
+  .minimum-input{font-size:14px}
+  .source-quantity{font-size:11px}
+  .source-quantity>strong{font-size:12.5px}
+  .inventory-badge .tag{font-size:11px}
+  .central-row>div:first-child strong{font-size:14.5px}
+  .central-row>div:first-child small{font-size:11.5px}
+  .central-current strong{font-size:18px}
+  .central-current small{font-size:11.5px}
+  .central-row input{font-size:16px}
+  .stat-value{font-size:22px}
+}
+
+@media(max-width:389px){
+  .inventory-item-name strong{font-size:13.8px}
+  .inventory-item-name small{font-size:10.8px}
+  .quantity-input{font-size:16.5px}
+  .inventory-working>strong{font-size:15px}
+  .central-row>div:first-child strong{font-size:13.8px}
+  .central-row>div:first-child small{font-size:10.8px}
+  .central-current strong{font-size:17px}
+}
