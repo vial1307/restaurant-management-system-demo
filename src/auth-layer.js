@@ -7,6 +7,7 @@ import {
   cloudAdjustQuantity,
   cloudSetQuantity,
   getCloudInventoryHistory,
+  inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
 
@@ -133,9 +134,13 @@ function centralPage(user) {
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
   const canViewHistory = ["admin", "manager", "supervisor"].includes(accountRole);
   const log = canViewHistory && mode === "history" ? history() : [];
+  const cloudState = inventoryCloudState();
+  const cloudNotice = cloudState === "migration-needed"
+    ? '<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。</div>'
+    : "";
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
-    <section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
+    ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
     <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">出庫</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
   `;
