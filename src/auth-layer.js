@@ -1,3 +1,14 @@
+import {
+  bootstrapCentralInventory,
+  canDirectInventoryAdjust,
+  centralItemKey,
+  centralLocationCode,
+  cloudAdjustQuantity,
+  cloudSetQuantity,
+  getCloudInventoryHistory,
+  syncInventoryNow,
+} from "./inventory-cloud.js";
+
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
 const HISTORY_KEY = "shitu-central-kitchen-history-v1";
@@ -61,13 +72,23 @@ function session() {
 function setSession(account) {
   localStorage.setItem(AUTH_KEY, JSON.stringify({ id: account.id, username: account.username, name: account.name, role: account.role, location: account.location }));
 }
+function announceCentralStock(items) {
+  queueMicrotask(() => {
+    window.dispatchEvent(new CustomEvent("shitu:central-stock-ready", { detail: { items } }));
+  });
+}
 function loadStock() {
   try {
     const saved = JSON.parse(localStorage.getItem(CENTRAL_KEY) || "null");
-    if (Array.isArray(saved) && saved.length) return saved;
+    if (Array.isArray(saved) && saved.length) {
+      announceCentralStock(saved);
+      return saved;
+    }
   } catch {}
-  localStorage.setItem(CENTRAL_KEY, JSON.stringify(DEFAULT_PRODUCTS));
-  return structuredClone(DEFAULT_PRODUCTS);
+  const seeded = structuredClone(DEFAULT_PRODUCTS);
+  localStorage.setItem(CENTRAL_KEY, JSON.stringify(seeded));
+  announceCentralStock(seeded);
+  return seeded;
 }
 function saveStock(items) { localStorage.setItem(CENTRAL_KEY, JSON.stringify(items)); }
 function history() {
@@ -122,26 +143,46 @@ function centralPage(user) {
   const query = content.dataset.centralSearch || "";
   const filtered = items.filter(i => (selectedZone === "all" || i.zone === selectedZone) && `${i.zh} ${i.vi}`.toLowerCase().includes(query.toLowerCase()));
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
-  const canViewHistory = user.role === "admin";
+  const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
+  const canViewHistory = ["admin", "manager", "supervisor"].includes(accountRole);
   const log = canViewHistory && mode === "history" ? history() : [];
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user)}</div>
     <section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
     <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button><button data-central-mode="in" class="${mode === "in" ? "active" : ""}">入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">出庫</button>${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : stockView(filtered, mode, selectedZone, query)}
+    ${mode === "history" && canViewHistory ? historyView(log) : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
   `;
   bindCentral(user);
+  void bootstrapCentralInventory(items);
+  if (mode === "history" && canViewHistory) {
+    void getCloudInventoryHistory("central", 300).then((cloudLog) => {
+      const current = document.querySelector(".page-content");
+      if (!current || current.dataset.centralMode !== "history" || !cloudLog.length) return;
+      const card = current.querySelector(".central-card");
+      if (card) card.outerHTML = cloudHistoryView(cloudLog);
+    });
+  }
 }
 
-function stockView(items, mode, selectedZone, query) {
+function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const editing = mode === "in" || mode === "out";
-  return `<section class="central-card"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
-    <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : ""}</div>
-    <div class="central-list">${items.map(i => `<article class="central-row"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
+  const direct = mode === "overview" && directAdjust;
+  return \`<section class="central-card"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="\${selectedZone === "all" ? "active" : ""}">全部</button>\${CENTRAL_ZONES.map(z => \`<button data-central-zone="\${esc(z)}" class="\${selectedZone === z ? "active" : ""}">\${esc(z)}</button>\`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="\${esc(query)}" /></div>
+    <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>\${editing ? \`<span>\${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>\` : direct ? "<span>盤點數量</span><span>調整</span>" : ""}</div>
+    <div class="central-list">\${items.map(i => \`<article class="central-row"><div><strong>\${esc(i.zh)}</strong><small>\${esc(i.vi)}</small></div><span class="zone-pill">\${esc(i.zone)}</span><div class="central-current"><strong>\${Number(i.qty || 0)}</strong><small>\${esc(i.unit)}</small></div>\${editing ? \`<input type="number" min="1" value="1" data-central-qty="\${esc(i.id)}"/><button class="central-action \${mode === "out" ? "out" : ""}" data-central-adjust="\${esc(i.id)}" data-direction="\${mode}">\${mode === "in" ? "+ 入庫" : "− 出庫"}</button>\` : direct ? \`<input type="number" min="0" value="\${Number(i.qty || 0)}" data-central-set-qty="\${esc(i.id)}"/><button class="central-action adjust" data-central-set="\${esc(i.id)}">盤點調整</button>\` : ""}</article>\`).join("") || \`<p class="central-empty">沒有符合條件的品項。</p>\`}</div></section>\`;
 }
 
 function historyView(log) {
   return `<section class="central-card"><div class="history-title"><div><h2>央廚進出貨紀錄</h2><p>僅主管／管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)}</small></div><span>${esc(x.zone)}</span><strong class="${x.direction === "out" ? "history-out" : "history-in"}">${x.direction === "out" ? "−" : "+"}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
+}
+
+function cloudHistoryView(log) {
+  return \`<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>主管以上可查看；資料來自 Supabase。</p></div><span>\${log.length} 筆</span></div><div class="central-history">\${log.map(x => {
+    const direction = x.direction;
+    const sign = direction === "out" ? "−" : direction === "in" ? "+" : "↔";
+    const tone = direction === "out" ? "history-out" : direction === "in" ? "history-in" : "history-adjust";
+    return \`<article><div><strong>\${esc(x.item?.name_zh_tw || "—")}</strong><small>\${new Date(x.created_at).toLocaleString("zh-TW")} · \${esc(x.note || "")}</small></div><span>\${esc(x.location?.name_zh_tw || "")}</span><strong class="\${tone}">\${sign}\${x.amount} \${esc(x.item?.unit || "")}</strong><small>\${x.before_quantity} → \${x.after_quantity}</small></article>\`;
+  }).join("") || \`<p class="central-empty">目前尚無操作紀錄。</p>\`}</div></section>\`;
 }
 
 let searchTimer = null;
@@ -162,18 +203,72 @@ function bindCentral(user) {
       next?.setSelectionRange(value.length, value.length);
     }, 120);
   };
-  content.querySelectorAll("[data-central-adjust]").forEach(b => b.onclick = () => {
+  content.querySelectorAll("[data-central-adjust]").forEach(b => b.onclick = async () => {
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralAdjust);
     if (!item) return;
-    const amount = Math.max(1, Number(content.querySelector(`[data-central-qty="${CSS.escape(item.id)}"]`)?.value || 1));
+    const amount = Math.max(1, Number(content.querySelector(\`[data-central-qty="\${CSS.escape(item.id)}"]\`)?.value || 1));
     const before = Number(item.qty || 0);
     const direction = b.dataset.direction;
     if (direction === "out" && amount > before) { alert("出庫數量不能大於目前庫存。"); return; }
-    item.qty = direction === "in" ? before + amount : before - amount;
-    saveStock(items);
-    pushHistory({ user: user.name, userId: user.id, direction, product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount, before, after: item.qty });
-    centralPage(user);
+
+    b.disabled = true;
+    const result = await cloudAdjustQuantity({
+      itemKey: centralItemKey(item.id),
+      locationCode: centralLocationCode(item.zone),
+      direction,
+      amount,
+      note: direction === "in" ? "央廚進貨入庫" : "央廚領料／出庫",
+    });
+
+    if (result.ok) {
+      await syncInventoryNow("central", { reloadBranch: false });
+      centralPage(user);
+      return;
+    }
+    if (result.fallback) {
+      item.qty = direction === "in" ? before + amount : before - amount;
+      saveStock(items);
+      pushHistory({ user: user.name, userId: user.id, direction, product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount, before, after: item.qty });
+      centralPage(user);
+      return;
+    }
+    b.disabled = false;
+    alert("雲端庫存更新失敗，請重新整理後再試。");
+  });
+
+  content.querySelectorAll("[data-central-set]").forEach(b => b.onclick = async () => {
+    if (!canDirectInventoryAdjust()) return;
+    const items = loadStock();
+    const item = items.find(i => i.id === b.dataset.centralSet);
+    if (!item) return;
+    const input = content.querySelector(\`[data-central-set-qty="\${CSS.escape(item.id)}"]\`);
+    const next = Math.max(0, Number(input?.value) || 0);
+    const before = Number(item.qty || 0);
+    if (next === before) return;
+
+    b.disabled = true;
+    const result = await cloudSetQuantity({
+      itemKey: centralItemKey(item.id),
+      locationCode: centralLocationCode(item.zone),
+      quantity: next,
+      note: "央廚盤點調整 / Điều chỉnh kiểm kê bếp trung tâm",
+    });
+
+    if (result.ok) {
+      await syncInventoryNow("central", { reloadBranch: false });
+      centralPage(user);
+      return;
+    }
+    if (result.fallback) {
+      item.qty = next;
+      saveStock(items);
+      pushHistory({ user: user.name, userId: user.id, direction: "adjust", product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount: Math.abs(next - before), before, after: next });
+      centralPage(user);
+      return;
+    }
+    b.disabled = false;
+    alert("盤點調整失敗，請重新整理後再試。");
   });
   content.querySelectorAll("[data-warehouse]").forEach(b => b.onclick = () => {
     if (b.dataset.warehouse === "fuxing") { content.dataset.centralView = "off"; location.hash = "#inventory"; setTimeout(() => location.reload(), 20); }
@@ -236,4 +331,9 @@ const observer = new MutationObserver(scheduleAccess);
 const appRoot = document.querySelector("#app");
 if (appRoot) observer.observe(appRoot, { childList: true });
 window.addEventListener("hashchange", scheduleAccess);
+window.addEventListener("shitu:inventory-cloud-updated", (event) => {
+  if (event.detail?.site !== "central" || !location.hash.startsWith("#inventory")) return;
+  const user = session();
+  if (user?.location === "central" || user?.role === "admin") centralPage(user);
+});
 scheduleAccess();
