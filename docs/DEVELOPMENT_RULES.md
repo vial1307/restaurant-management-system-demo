@@ -107,3 +107,79 @@ Before publishing each version:
 7. Check mobile layout at representative breakpoints.
 8. Update SQL migration/setup docs when schema changes.
 9. Commit all work to GitHub.
+
+
+## 9. Post-update engineering review
+
+After every update, fix, refactor, schema change, or deployment change, perform a full-system review rather than validating only the edited component.
+
+Mandatory review areas:
+
+### Architecture
+- Verify module boundaries remain clean: UI, auth/session, permissions, data access, sync/realtime, database.
+- Check for duplicated state sources and remove browser-only authoritative state.
+- Check that new code does not create VPS migration lock-in.
+
+### Authentication and authorization
+- Test login/logout/session restore.
+- Verify role, workplace, active/disabled account state, and per-module permissions.
+- Verify authorization exists server-side/RLS/RPC, not only in UI.
+- Test at least Admin plus one restricted account.
+
+### Data integrity
+- Verify shared data has a single cloud source of truth.
+- Check optimistic/local updates cannot overwrite newer cloud values.
+- Check audit trails for sensitive operations such as inventory correction.
+- Verify database migrations are idempotent where practical.
+- Check transaction boundaries for stock mutations.
+
+### Cross-device synchronization
+- Verify the same account gets the same data and permissions on PC, laptop, and mobile.
+- Test one-device write -> second-device read.
+- Test Realtime plus focus/visibility/poll fallback.
+- Confirm stale tabs converge back to cloud state.
+
+### Internationalization and search
+- Verify Vietnamese mode remains Vietnamese + Traditional Chinese.
+- Verify Chinese terminology follows Taiwan restaurant/operations usage.
+- Check newly added labels are present in translation catalogs.
+- Verify search across Chinese, Vietnamese, accentless Vietnamese, Pinyin, and Zhuyin where relevant.
+
+### Responsive UI
+- Review desktop, laptop, and the documented mobile breakpoint matrix.
+- Check touch targets, keyboard inputs, modals, tables, overflow, safe areas, and landscape mode.
+- Prioritize readability of inventory item names, quantities, units, status, and primary actions.
+
+### Performance
+- Check for repeated full-page renders, MutationObserver loops, duplicate subscriptions, memory leaks, and unnecessary network calls.
+- Debounce high-frequency search/input events.
+- Avoid repeated Supabase queries when cached/live data is already valid.
+- Confirm Service Worker does not serve mixed release versions.
+
+### Browser/PWA compatibility
+- Test normal and incognito/private browsing behavior where relevant.
+- Verify service-worker update/activation path.
+- Check offline/cache fallback does not become an alternative source of truth.
+- Verify forms and native controls remain functional across desktop/mobile browsers.
+
+### Security
+- Never expose secret/service_role keys to browser or repository.
+- Validate inputs at server/database boundary.
+- Review RLS/RPC policies after permission-related changes.
+- Confirm disabled users and insufficient roles cannot mutate protected data.
+
+### Release discipline
+Before calling an update complete:
+1. Review all edited files and adjacent dependencies.
+2. Run syntax validation on edited JavaScript/TypeScript modules.
+3. Review SQL migration syntax and permission implications.
+4. Bump release/cache/service-worker version consistently.
+5. Check app shell references all required new modules.
+6. Verify no new module was created but forgotten in index/service worker.
+7. Check PC/laptop/mobile consistency.
+8. Check auth, permission, language, data sync, and inventory mutation flows.
+9. Update documentation/migrations.
+10. Commit the complete change set to GitHub.
+11. Record any known limitation explicitly instead of silently deferring it.
+
+A change is not considered complete if it works only on the device or page where it was implemented.
