@@ -177,12 +177,12 @@ function accountCan(moduleKey, action = "view") {
 }
 
 function applyAccountEditState() {
-  const page = root.querySelector(".page-content");
-  if (!page) return;
+  const scope = root;
+  if (!scope) return;
 
   for (const [field, moduleKey] of Object.entries(FIELD_EDIT_MODULE)) {
     if (accountCan(moduleKey, "edit")) continue;
-    page.querySelectorAll(`[data-field="${CSS.escape(field)}"]`).forEach((control) => {
+    scope.querySelectorAll(`[data-field="${CSS.escape(field)}"]`).forEach((control) => {
       if ("disabled" in control) control.disabled = true;
       control.setAttribute("aria-disabled", "true");
     });
@@ -190,7 +190,7 @@ function applyAccountEditState() {
 
   for (const [action, moduleKey] of Object.entries(MANAGEMENT_ACTION_EDIT_MODULE)) {
     if (accountCan(moduleKey, "edit")) continue;
-    page.querySelectorAll(`[data-action="${CSS.escape(action)}"]`).forEach((control) => {
+    scope.querySelectorAll(`[data-action="${CSS.escape(action)}"]`).forEach((control) => {
       if ("disabled" in control) control.disabled = true;
       control.setAttribute("aria-disabled", "true");
       control.classList.add("account-readonly-control");
@@ -199,7 +199,7 @@ function applyAccountEditState() {
 
   for (const [formName, moduleKey] of Object.entries(FORM_EDIT_MODULE)) {
     if (accountCan(moduleKey, "edit")) continue;
-    page.querySelectorAll(`form[data-form="${CSS.escape(formName)}"]`).forEach((form) => {
+    scope.querySelectorAll(`form[data-form="${CSS.escape(formName)}"]`).forEach((form) => {
       form.querySelectorAll("input,select,textarea,button").forEach((control) => {
         control.disabled = true;
         control.setAttribute("aria-disabled", "true");
