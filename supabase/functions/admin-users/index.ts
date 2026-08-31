@@ -1,5 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+const VALID_ROLES = new Set(["admin","manager","supervisor","employee","parttime","central"]);
+const VALID_LOCATIONS = new Set(["all","fuxing","central"]);
+
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -77,7 +80,17 @@ Deno.serve(async (req) => {
       const role = String(body.role || "employee");
       const location = String(body.location || "fuxing");
       const permissions = body.permissions || defaultPermissions(role);
+      if (!displayName) return json({ error: "DISPLAY_NAME_REQUIRED" }, 400);
+      if (!VALID_ROLES.has(role)) return json({ error: "INVALID_ROLE" }, 400);
+      if (!VALID_LOCATIONS.has(location)) return json({ error: "INVALID_LOCATION" }, 400);
       if (password.length < 6) return json({ error: "PASSWORD_TOO_SHORT" }, 400);
+
+      const { data: duplicate } = await admin
+        .from("profiles")
+        .select("id")
+        .ilike("username", username)
+        .limit(1);
+      if (duplicate?.length) return json({ error: "USERNAME_EXISTS" }, 409);
 
       const email = emailForUsername(username);
       const { data: created, error: createError } = await admin.auth.admin.createUser({
@@ -108,17 +121,55 @@ Deno.serve(async (req) => {
       const id = String(body.id || "");
       if (!id) return json({ error: "MISSING_ID" }, 400);
 
+      const { data: targetProfile, error: targetError } = await admin
+        .from("profiles")
+        .select("username,display_name,role,location,active")
+        .eq("id", id)
+        .single();
+      if (targetError || !targetProfile) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
+
+      const requestedRole = "role" in body ? String(body.role || "") : targetProfile.role;
+      const requestedLocation = "location" in body ? String(body.location || "") : targetProfile.location;
+      if (!VALID_ROLES.has(requestedRole)) return json({ error: "INVALID_ROLE" }, 400);
+      if (!VALID_LOCATIONS.has(requestedLocation)) return json({ error: "INVALID_LOCATION" }, 400);
+
+      if (id === userData.user.id) {
+        if (requestedRole !== "admin" || requestedLocation !== "all" || body.active === false) {
+          return json({ error: "SELF_ADMIN_PROTECTED" }, 400);
+        }
+      }
+
       const patch: Record<string, unknown> = {};
       for (const key of ["display_name","role","location","active","permissions"]) {
         if (key in body) patch[key] = body[key];
       }
+      let authUsernameChanged = false;
       if ("username" in body) {
         const username = String(body.username || "").trim().toLowerCase();
+        emailForUsername(username);
+        const { data: duplicate } = await admin
+          .from("profiles")
+          .select("id")
+          .ilike("username", username)
+          .neq("id", id)
+          .limit(1);
+        if (duplicate?.length) return json({ error: "USERNAME_EXISTS" }, 409);
         patch.username = username;
+        const userMetadata: Record<string, unknown> = { username };
+        if ("display_name" in body) userMetadata.display_name = String(body.display_name || "").trim();
         const { error } = await admin.auth.admin.updateUserById(id, {
           email: emailForUsername(username),
           email_confirm: true,
-          user_metadata: { username },
+          user_metadata: userMetadata,
+        });
+        if (error) return json({ error: error.message }, 400);
+        authUsernameChanged = username !== targetProfile.username;
+      } else if ("display_name" in body) {
+        const { error } = await admin.auth.admin.updateUserById(id, {
+          user_metadata: {
+            username: targetProfile.username,
+            display_name: String(body.display_name || "").trim(),
+          },
         });
         if (error) return json({ error: error.message }, 400);
       }
@@ -127,8 +178,25 @@ Deno.serve(async (req) => {
         const { error } = await admin.auth.admin.updateUserById(id, { password: String(body.password) });
         if (error) return json({ error: error.message }, 400);
       }
+      if ("display_name" in patch && !String(patch.display_name || "").trim()) {
+        return json({ error: "DISPLAY_NAME_REQUIRED" }, 400);
+      }
       const { error } = await admin.from("profiles").update(patch).eq("id", id);
-      if (error) return json({ error: error.message }, 400);
+      if (error) {
+        if (authUsernameChanged) {
+          try {
+            await admin.auth.admin.updateUserById(id, {
+              email: emailForUsername(targetProfile.username),
+              email_confirm: true,
+              user_metadata: {
+                username: targetProfile.username,
+                display_name: targetProfile.display_name,
+              },
+            });
+          } catch {}
+        }
+        return json({ error: error.message }, 400);
+      }
       return json({ ok: true });
     }
 
