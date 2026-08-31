@@ -719,10 +719,20 @@ export async function getCloudInventoryHistory(site = currentSite(), limit = 200
     .select("id,item_key,name_zh_tw,name_vi,unit")
     .in("id", itemIds);
   const itemMap = new Map((items || []).map((item) => [item.id, item]));
+  const actorIds = [...new Set(tx.map((entry) => entry.actor_id).filter(Boolean))];
+  let actorMap = new Map();
+  if (actorIds.length) {
+    const { data: actors } = await supabase
+      .from("profiles")
+      .select("id,display_name,username,role")
+      .in("id", actorIds);
+    actorMap = new Map((actors || []).map((actor) => [actor.id, actor]));
+  }
   return tx.map((entry) => ({
     ...entry,
     item: itemMap.get(entry.item_id),
     location: locMap.get(entry.location_id),
+    actor: actorMap.get(entry.actor_id),
   }));
 }
 
