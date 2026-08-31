@@ -620,6 +620,60 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   return { ok: true, changed: changes.length };
 }
 
+export async function cloudSyncFuxingCatalogItem(stockKey) {
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+
+  const catalog = buildFuxingCatalog();
+  const item = catalog.find((entry) => entry.key === fuxingItemKey(stockKey));
+  if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
+  if (error) {
+    dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
+    return { ok: false, fallback: false, error };
+  }
+
+  // Quantities are intentionally updated through audited stocktake RPCs.
+  await fetchSite("fuxing");
+  for (const location of item.locations || []) {
+    const ids = await resolveIds(item.key, location.code);
+    if (!ids.item || !ids.location) continue;
+    const currentRows = await fetchSite("fuxing");
+    const current = currentRows.find((row) =>
+      row.item.id === ids.item.id && row.location.id === ids.location.id
+    );
+    const wanted = Math.max(0, Number(location.quantity) || 0);
+    const actual = Math.max(0, Number(current?.quantity) || 0);
+    if (wanted !== actual) {
+      const result = await cloudSetQuantity({
+        itemKey: item.key,
+        locationCode: location.code,
+        quantity: wanted,
+        note: "品項資料調整／盤點 / Chỉnh mặt hàng và kiểm kê",
+      });
+      if (!result.ok) return result;
+    }
+  }
+
+  await syncInventoryNow("fuxing", { reloadBranch: false });
+  return { ok: true };
+}
+
+export async function cloudArchiveFuxingItem(stockKey) {
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+
+  const { data, error } = await rpc("archive_inventory_item", {
+    p_item_key: fuxingItemKey(stockKey),
+  });
+  if (error) {
+    dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
+    return { ok: false, fallback: false, error };
+  }
+  return { ok: Boolean(data), fallback: false };
+}
+
 export function fuxingLocationCode(zone) {
   return FUXING_STORAGE_CODES[zone] || "";
 }
