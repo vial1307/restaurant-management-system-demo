@@ -1,12 +1,12 @@
-const CACHE_NAME = "shitu-kitchen-os-v21";
+const CACHE_NAME = "shitu-kitchen-os-v22";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=21",
-  "./src/app.js?v=21",
+  "./manifest.webmanifest?v=22",
+  "./src/app.js?v=22",
   "./src/supabase-config.js",
   "./src/supabase-client.js",
-  "./src/supabase-auth-bridge.js?v=21",
+  "./src/supabase-auth-bridge.js?v=22",
   "./src/store.js",
   "./src/rules.js",
   "./src/i18n.js",
@@ -15,12 +15,14 @@ const APP_SHELL = [
   "./src/management.js",
   "./src/skills.js",
   "./src/qr.js",
-  "./src/styles.css?v=21",
-  "./src/auth-layer.css?v=21",
-  "./src/account-admin.css?v=21",
-  "./src/auth-layer.js?v=21",
-  "./src/search-i18n-layer.js?v=21",
-  "./src/account-admin.js?v=21",
+  "./src/styles.css?v=22",
+  "./src/auth-layer.css?v=22",
+  "./src/account-admin.css?v=22",
+  "./src/ui-refresh.css?v=22",
+  "./src/auth-layer.js?v=22",
+  "./src/search-i18n-layer.js?v=22",
+  "./src/account-admin.js?v=22",
+  "./src/ui-refresh.js?v=22",
   "./src/icon.svg",
 ];
 
