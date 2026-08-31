@@ -632,7 +632,7 @@ async function boot() {
 
   const site = currentSite();
   if (site) {
-    await syncInventoryNow(site, { reloadBranch: false });
+    await syncInventoryNow(site, { reloadBranch: site === "fuxing" });
     await subscribeRealtime(site);
   }
 
