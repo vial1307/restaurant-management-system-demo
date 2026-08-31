@@ -497,6 +497,61 @@ export async function cloudSetMinimum({
   return { ok: true };
 }
 
+
+export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
+  if (!(await verifyMigration()) || !hasInventoryPermission("edit")) return { ok: false, fallback: true };
+  const rows = await fetchSite("fuxing");
+  const { record } = selectedBranchRecord();
+  if (!record) return { ok: false, fallback: true };
+
+  const local = new Map();
+  for (const entry of record.inventory || []) {
+    const stockKey = entry.stockKey || stockKeyFor(entry);
+    const code = FUXING_STORAGE_CODES[entry.zone];
+    if (code) local.set(`fuxing:${stockKey}|${code}`, Number(entry.quantity) || 0);
+  }
+  for (const entry of record.workInventory || []) {
+    const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
+    const code = fuxingWorkLocationCode(entry.workArea);
+    if (code) local.set(`fuxing:${stockKey}|${code}`, Number(entry.quantity) || 0);
+  }
+
+  const changes = [];
+  for (const row of rows) {
+    const key = `${row.item.item_key}|${row.location.code}`;
+    if (!local.has(key)) continue;
+    const target = local.get(key);
+    const current = Number(row.quantity) || 0;
+    if (target === current) continue;
+    changes.push({
+      itemId: row.item.id,
+      locationId: row.location.id,
+      direction: target > current ? "in" : "out",
+      amount: Math.abs(target - current),
+    });
+  }
+
+  if (!changes.length) return { ok: true, changed: 0 };
+
+  for (const change of changes) {
+    const { error } = await rpc("adjust_inventory", {
+      p_item_id: change.itemId,
+      p_location_id: change.locationId,
+      p_direction: change.direction,
+      p_amount: change.amount,
+      p_note: note,
+    });
+    if (error) {
+      dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
+      await syncInventoryNow("fuxing", { reloadBranch: false });
+      return { ok: false, fallback: false, error };
+    }
+  }
+
+  await syncInventoryNow("fuxing", { reloadBranch: false });
+  return { ok: true, changed: changes.length };
+}
+
 export function fuxingLocationCode(zone) {
   return FUXING_STORAGE_CODES[zone] || "";
 }
