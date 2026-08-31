@@ -167,9 +167,9 @@ function centralPage(user) {
 function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const editing = mode === "in" || mode === "out";
   const direct = mode === "overview" && directAdjust;
-  return \`<section class="central-card"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="\${selectedZone === "all" ? "active" : ""}">全部</button>\${CENTRAL_ZONES.map(z => \`<button data-central-zone="\${esc(z)}" class="\${selectedZone === z ? "active" : ""}">\${esc(z)}</button>\`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="\${esc(query)}" /></div>
-    <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>\${editing ? \`<span>\${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>\` : direct ? "<span>盤點數量</span><span>調整</span>" : ""}</div>
-    <div class="central-list">\${items.map(i => \`<article class="central-row"><div><strong>\${esc(i.zh)}</strong><small>\${esc(i.vi)}</small></div><span class="zone-pill">\${esc(i.zone)}</span><div class="central-current"><strong>\${Number(i.qty || 0)}</strong><small>\${esc(i.unit)}</small></div>\${editing ? \`<input type="number" min="1" value="1" data-central-qty="\${esc(i.id)}"/><button class="central-action \${mode === "out" ? "out" : ""}" data-central-adjust="\${esc(i.id)}" data-direction="\${mode}">\${mode === "in" ? "+ 入庫" : "− 出庫"}</button>\` : direct ? \`<input type="number" min="0" value="\${Number(i.qty || 0)}" data-central-set-qty="\${esc(i.id)}"/><button class="central-action adjust" data-central-set="\${esc(i.id)}">盤點調整</button>\` : ""}</article>\`).join("") || \`<p class="central-empty">沒有符合條件的品項。</p>\`}</div></section>\`;
+  return `<section class="central-card"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
+    <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? "<span>盤點數量</span><span>調整</span>" : ""}</div>
+    <div class="central-list">${items.map(i => `<article class="central-row"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust" data-central-set="${esc(i.id)}">盤點調整</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
 }
 
 function historyView(log) {
@@ -177,12 +177,12 @@ function historyView(log) {
 }
 
 function cloudHistoryView(log) {
-  return \`<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>主管以上可查看；資料來自 Supabase。</p></div><span>\${log.length} 筆</span></div><div class="central-history">\${log.map(x => {
+  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>主管以上可查看；資料來自 Supabase。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
     const direction = x.direction;
     const sign = direction === "out" ? "−" : direction === "in" ? "+" : "↔";
     const tone = direction === "out" ? "history-out" : direction === "in" ? "history-in" : "history-adjust";
-    return \`<article><div><strong>\${esc(x.item?.name_zh_tw || "—")}</strong><small>\${new Date(x.created_at).toLocaleString("zh-TW")} · \${esc(x.note || "")}</small></div><span>\${esc(x.location?.name_zh_tw || "")}</span><strong class="\${tone}">\${sign}\${x.amount} \${esc(x.item?.unit || "")}</strong><small>\${x.before_quantity} → \${x.after_quantity}</small></article>\`;
-  }).join("") || \`<p class="central-empty">目前尚無操作紀錄。</p>\`}</div></section>\`;
+    return `<article><div><strong>${esc(x.item?.name_zh_tw || "—")}</strong><small>${new Date(x.created_at).toLocaleString("zh-TW")} · ${esc(x.note || "")}</small></div><span>${esc(x.location?.name_zh_tw || "")}</span><strong class="${tone}">${sign}${x.amount} ${esc(x.item?.unit || "")}</strong><small>${x.before_quantity} → ${x.after_quantity}</small></article>`;
+  }).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
 }
 
 let searchTimer = null;
@@ -207,7 +207,7 @@ function bindCentral(user) {
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralAdjust);
     if (!item) return;
-    const amount = Math.max(1, Number(content.querySelector(\`[data-central-qty="\${CSS.escape(item.id)}"]\`)?.value || 1));
+    const amount = Math.max(1, Number(content.querySelector(`[data-central-qty="${CSS.escape(item.id)}"]`)?.value || 1));
     const before = Number(item.qty || 0);
     const direction = b.dataset.direction;
     if (direction === "out" && amount > before) { alert("出庫數量不能大於目前庫存。"); return; }
@@ -242,7 +242,7 @@ function bindCentral(user) {
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralSet);
     if (!item) return;
-    const input = content.querySelector(\`[data-central-set-qty="\${CSS.escape(item.id)}"]\`);
+    const input = content.querySelector(`[data-central-set-qty="${CSS.escape(item.id)}"]`);
     const next = Math.max(0, Number(input?.value) || 0);
     const before = Number(item.qty || 0);
     if (next === before) return;
