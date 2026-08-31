@@ -120,6 +120,7 @@ async function boot() {
     return;
   }
   await syncProfiles();
+  window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
 }
 
 document.addEventListener("submit", async (event) => {
