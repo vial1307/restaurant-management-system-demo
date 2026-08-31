@@ -75,6 +75,10 @@ export function isCurrentBranchInventoryDate() {
   return Boolean(state?.selectedDate && state.selectedDate === todayKey());
 }
 
+export function inventoryCloudState() {
+  return localStorage.getItem(CLOUD_FLAG_KEY) || "checking";
+}
+
 export function canInventoryEdit() {
   if (!hasInventoryPermission("edit")) return false;
   const site = currentSite();
