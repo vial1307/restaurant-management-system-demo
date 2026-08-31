@@ -143,6 +143,9 @@ Deno.serve(async (req) => {
       for (const key of ["display_name","role","location","active","permissions"]) {
         if (key in body) patch[key] = body[key];
       }
+      if ("display_name" in body && !String(body.display_name || "").trim()) {
+        return json({ error: "DISPLAY_NAME_REQUIRED" }, 400);
+      }
       let authUsernameChanged = false;
       if ("username" in body) {
         const username = String(body.username || "").trim().toLowerCase();
@@ -177,9 +180,6 @@ Deno.serve(async (req) => {
         if (String(body.password).length < 6) return json({ error: "PASSWORD_TOO_SHORT" }, 400);
         const { error } = await admin.auth.admin.updateUserById(id, { password: String(body.password) });
         if (error) return json({ error: error.message }, 400);
-      }
-      if ("display_name" in patch && !String(patch.display_name || "").trim()) {
-        return json({ error: "DISPLAY_NAME_REQUIRED" }, 400);
       }
       const { error } = await admin.from("profiles").update(patch).eq("id", id);
       if (error) {
