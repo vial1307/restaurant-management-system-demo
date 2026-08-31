@@ -122,8 +122,8 @@ function centralPage(user) {
   const query = content.dataset.centralSearch || "";
   const filtered = items.filter(i => (selectedZone === "all" || i.zone === selectedZone) && `${i.zh} ${i.vi}`.toLowerCase().includes(query.toLowerCase()));
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
-  const log = history();
   const canViewHistory = user.role === "admin";
+  const log = canViewHistory && mode === "history" ? history() : [];
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user)}</div>
     <section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
@@ -144,15 +144,28 @@ function historyView(log) {
   return `<section class="central-card"><div class="history-title"><div><h2>央廚進出貨紀錄</h2><p>僅主管／管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)}</small></div><span>${esc(x.zone)}</span><strong class="${x.direction === "out" ? "history-out" : "history-in"}">${x.direction === "out" ? "−" : "+"}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
 }
 
+let searchTimer = null;
 function bindCentral(user) {
   const content = document.querySelector(".page-content");
+  if (!content) return;
   content.querySelectorAll("[data-central-mode]").forEach(b => b.onclick = () => { content.dataset.centralMode = b.dataset.centralMode; centralPage(user); });
   content.querySelectorAll("[data-central-zone]").forEach(b => b.onclick = () => { content.dataset.centralZone = b.dataset.centralZone; centralPage(user); });
   const search = content.querySelector("[data-central-search]");
-  if (search) search.oninput = () => { content.dataset.centralSearch = search.value; centralPage(user); const next = content.querySelector("[data-central-search]"); next?.focus(); next?.setSelectionRange(search.value.length, search.value.length); };
+  if (search) search.oninput = () => {
+    const value = search.value;
+    content.dataset.centralSearch = value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      centralPage(user);
+      const next = document.querySelector(".page-content [data-central-search]");
+      next?.focus();
+      next?.setSelectionRange(value.length, value.length);
+    }, 120);
+  };
   content.querySelectorAll("[data-central-adjust]").forEach(b => b.onclick = () => {
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralAdjust);
+    if (!item) return;
     const amount = Math.max(1, Number(content.querySelector(`[data-central-qty="${CSS.escape(item.id)}"]`)?.value || 1));
     const before = Number(item.qty || 0);
     const direction = b.dataset.direction;
@@ -173,34 +186,47 @@ function applyAccess() {
   const user = session();
   if (!user) return loginScreen();
   patching = true;
-  document.body.classList.remove("auth-locked");
-  document.querySelector("#auth-layer")?.remove();
-  addLogout(user);
+  try {
+    document.body.classList.remove("auth-locked");
+    document.querySelector("#auth-layer")?.remove();
+    addLogout(user);
 
-  if (user.role === "central") {
-    document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
-      const href = a.getAttribute("href") || "";
-      a.style.display = href.startsWith("#inventory") ? "" : "none";
-    });
-    document.querySelector(".sidebar-summary")?.setAttribute("hidden", "");
-    if (!location.hash.startsWith("#inventory")) location.hash = "#inventory";
-    if (location.hash.startsWith("#inventory")) centralPage(user);
-  } else if (user.role === "branch") {
-    document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
-      const href = a.getAttribute("href") || "";
-      a.style.display = ["#dashboard", "#inventory", "#reservations", "#preparation", "#menu", "#sop"].some(k => href.startsWith(k)) ? "" : "none";
-    });
-  } else if (user.role === "admin" && location.hash.startsWith("#inventory")) {
-    const heading = document.querySelector(".page-heading");
-    if (heading && !heading.querySelector(".warehouse-switch")) {
-      heading.insertAdjacentHTML("beforeend", branchSwitcher(user));
-      heading.querySelector('[data-warehouse="central"]')?.addEventListener("click", () => centralPage(user));
+    if (user.role === "central") {
+      document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
+        const href = a.getAttribute("href") || "";
+        a.style.display = href.startsWith("#inventory") ? "" : "none";
+      });
+      document.querySelector(".sidebar-summary")?.setAttribute("hidden", "");
+      if (!location.hash.startsWith("#inventory")) location.hash = "#inventory";
+      if (location.hash.startsWith("#inventory")) centralPage(user);
+    } else if (user.role === "branch") {
+      document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
+        const href = a.getAttribute("href") || "";
+        a.style.display = ["#dashboard", "#inventory", "#reservations", "#preparation", "#menu", "#sop"].some(k => href.startsWith(k)) ? "" : "none";
+      });
+    } else if (user.role === "admin" && location.hash.startsWith("#inventory")) {
+      const heading = document.querySelector(".page-heading");
+      if (heading && !heading.querySelector(".warehouse-switch")) {
+        heading.insertAdjacentHTML("beforeend", branchSwitcher(user));
+        heading.querySelector('[data-warehouse="central"]')?.addEventListener("click", () => centralPage(user));
+      }
     }
+  } finally {
+    patching = false;
   }
-  patching = false;
 }
 
-const observer = new MutationObserver(() => queueMicrotask(applyAccess));
-observer.observe(document.documentElement, { childList: true, subtree: true });
-window.addEventListener("hashchange", () => setTimeout(applyAccess, 0));
-setTimeout(applyAccess, 0);
+let accessFrame = 0;
+function scheduleAccess() {
+  if (accessFrame) return;
+  accessFrame = requestAnimationFrame(() => {
+    accessFrame = 0;
+    applyAccess();
+  });
+}
+
+const observer = new MutationObserver(scheduleAccess);
+const appRoot = document.querySelector("#app");
+if (appRoot) observer.observe(appRoot, { childList: true });
+window.addEventListener("hashchange", scheduleAccess);
+scheduleAccess();
