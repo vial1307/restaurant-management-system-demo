@@ -38,14 +38,31 @@ function permissionsFromForm(data) {
 async function broadcastProfileChange(supabase, userId) {
   if (!supabase || !userId) return;
   const channel = supabase.channel(`kitchen-os-user-${userId}`);
-  channel.subscribe(async (status) => {
-    if (status !== "SUBSCRIBED") return;
-    try {
-      await channel.send({ type: "broadcast", event: "profile", payload: { userId } });
-    } finally {
-      setTimeout(() => { void supabase.removeChannel(channel); }, 500);
-    }
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const timeout = setTimeout(finish, 1800);
+    channel.subscribe(async (status) => {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        clearTimeout(timeout);
+        finish();
+        return;
+      }
+      if (status !== "SUBSCRIBED") return;
+      try {
+        await channel.send({ type: "broadcast", event: "profile", payload: { userId } });
+      } catch {
+      } finally {
+        clearTimeout(timeout);
+        finish();
+      }
+    });
   });
+  try { await supabase.removeChannel(channel); } catch {}
 }
 
 function initialRoute(profile) {
