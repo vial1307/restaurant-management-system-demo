@@ -289,7 +289,7 @@ returns public.inventory_stock
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_allowed boolean;
   v_before numeric(12,2);
@@ -348,7 +348,7 @@ begin
 
   return v_row;
 end;
-$;
+$$;
 
 revoke all on function public.adjust_inventory(uuid,uuid,text,numeric,text) from public, anon;
 grant execute on function public.adjust_inventory(uuid,uuid,text,numeric,text) to authenticated;
@@ -366,7 +366,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_source_site text;
   v_destination_site text;
@@ -451,7 +451,7 @@ begin
     'destination_after',v_destination_after
   );
 end;
-$;
+$$;
 
 revoke all on function public.transfer_inventory(uuid,uuid,uuid,numeric,text) from public, anon;
 grant execute on function public.transfer_inventory(uuid,uuid,uuid,numeric,text) to authenticated;
@@ -463,7 +463,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_role text;
   v_item_id uuid;
@@ -578,7 +578,7 @@ begin
 
   return v_item_id;
 end;
-$;
+$$;
 
 revoke all on function public.sync_inventory_catalog_item(jsonb) from public, anon;
 grant execute on function public.sync_inventory_catalog_item(jsonb) to authenticated;
@@ -588,7 +588,7 @@ returns boolean
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_role text;
   v_item_id uuid;
@@ -638,7 +638,7 @@ begin
 
   return true;
 end;
-$;
+$$;
 
 revoke all on function public.archive_inventory_item(text) from public, anon;
 grant execute on function public.archive_inventory_item(text) to authenticated;
@@ -650,7 +650,7 @@ language sql
 stable
 security invoker
 set search_path = ''
-as $ select 3 $;
+as $$ select 3 $$;
 
 revoke all on function public.kitchen_inventory_schema_version() from public, anon;
 grant execute on function public.kitchen_inventory_schema_version() to authenticated;
