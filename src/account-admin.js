@@ -22,17 +22,17 @@ const ROLE_DEFAULTS = {
   }
 };
 
-const DEFAULT_ACCOUNTS = [
-  { id:'admin', username:'admin', password:'admin123', name:'系統管理員', role:'admin', location:'all', active:true, permissions:ROLE_DEFAULTS.admin },
-  { id:'central', username:'yangchu', password:'123456', name:'央廚員工', role:'central', location:'central', active:true, permissions:ROLE_DEFAULTS.central },
-  { id:'fuxing', username:'fuxing', password:'123456', name:'復興店員工', role:'employee', location:'fuxing', active:true, permissions:ROLE_DEFAULTS.employee }
-];
+const DEFAULT_ACCOUNTS = []
 
 function clone(v){ return JSON.parse(JSON.stringify(v)); }
 function loadAccounts(){
   try {
     const saved = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || 'null');
-    if (Array.isArray(saved) && saved.length) return saved;
+    if (Array.isArray(saved) && saved.length) {
+      const sanitized = saved.map(({ password, ...account }) => ({ ...account, password: "" }));
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(sanitized));
+      return sanitized;
+    }
   } catch {}
   const seeded = clone(DEFAULT_ACCOUNTS);
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(seeded));
@@ -110,6 +110,7 @@ function applyRoleAccess(){
 }
 
 function interceptLogin(){
+  if (isSupabaseConfigured()) return;
   document.addEventListener('submit', (event)=>{
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.id !== 'auth-login-form') return;
@@ -135,7 +136,10 @@ function interceptLogin(){
 
 function accountCard(){
   const s=session();
-  const account=loadAccounts().find(a=>a.id===s?.id);
+  const account=loadAccounts().find(a=>a.id===s?.id) || (s?.id ? {
+    id:s.id, username:s.username || '', name:s.name || '', role:s.accountRole || s.role || 'employee',
+    location:s.location || 'fuxing', active:true, permissions:s.permissions || {}, password:''
+  } : null);
   if(!account) return '';
   return `<article class="card account-self-card"><div class="account-card-head"><div><h2>${esc(label('accountSettings'))}</h2><p>${esc(account.name)} · ${esc(account.username)}</p></div></div><form data-account-self-password><div class="account-form-grid"><label><span>${esc(label('currentPassword'))}</span><input type="password" name="current" required autocomplete="current-password"></label><label><span>${esc(label('newPassword'))}</span><input type="password" name="next" required minlength="6" autocomplete="new-password"></label><label><span>${esc(label('confirmPassword'))}</span><input type="password" name="confirm" required minlength="6" autocomplete="new-password"></label></div><div class="account-form-actions"><button class="primary-button" type="submit">${esc(label('changePassword'))}</button></div><p class="account-form-message" data-account-self-message></p></form></article>`;
 }
