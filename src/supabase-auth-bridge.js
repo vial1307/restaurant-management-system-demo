@@ -35,6 +35,14 @@ function permissionsFromForm(data) {
   return permissions;
 }
 
+function initialRoute(profile) {
+  const permissions = profile?.permissions || {};
+  if (profile?.location === "central" && permissions.inventory?.view !== false) return "#inventory";
+  if (permissions.dashboard?.view !== false) return "#dashboard";
+  const first = MODULES.find((key) => permissions[key]?.view);
+  return first ? `#${first}` : "#inventory";
+}
+
 async function syncProfiles() {
   const supabase = await getSupabase();
   if (!supabase) return;
@@ -109,7 +117,7 @@ document.addEventListener("submit", async (event) => {
       await syncProfiles();
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
-      location.hash = profile.role === "central" ? "#inventory" : "#dashboard";
+      location.hash = initialRoute(profile);
       location.reload();
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
