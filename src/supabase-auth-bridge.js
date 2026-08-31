@@ -35,6 +35,19 @@ function permissionsFromForm(data) {
   return permissions;
 }
 
+async function broadcastProfileChange(supabase, userId) {
+  if (!supabase || !userId) return;
+  const channel = supabase.channel(`kitchen-os-user-${userId}`);
+  channel.subscribe(async (status) => {
+    if (status !== "SUBSCRIBED") return;
+    try {
+      await channel.send({ type: "broadcast", event: "profile", payload: { userId } });
+    } finally {
+      setTimeout(() => { void supabase.removeChannel(channel); }, 500);
+    }
+  });
+}
+
 function initialRoute(profile) {
   const permissions = profile?.permissions || {};
   if (profile?.location === "central" && permissions.inventory?.view !== false) return "#inventory";
@@ -186,6 +199,7 @@ document.addEventListener("submit", async (event) => {
       const { data: result, error } = await supabase.functions.invoke("admin-users", { body });
       if (error || result?.error) throw new Error(result?.error || error?.message || "ADMIN_USER_FAILED");
       await syncProfiles();
+      if (id) await broadcastProfileChange(supabase, id);
       document.querySelector("[data-account-modal]")?.remove();
       location.reload();
     } catch (error) {
@@ -221,6 +235,7 @@ document.addEventListener("click", async (event) => {
     });
     if (error || data?.error) throw new Error(data?.error || error?.message || "DELETE_FAILED");
     await syncProfiles();
+    await broadcastProfileChange(supabase, deleteButton.dataset.accountDelete);
     document.querySelector("[data-account-modal]")?.remove();
     location.reload();
   } catch (error) {
