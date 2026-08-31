@@ -1,0 +1,235 @@
+/* Mobile browser compatibility layer v26
+   Safari / iOS WebView / LINE / Facebook / Instagram / Chrome Android.
+   Keeps the app full-width and prevents browser chrome / text autosizing from breaking layout. */
+
+html{
+  width:100%;
+  max-width:100%;
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  background:var(--page,#f3f7f5);
+}
+body,#app,.app-shell,.main-shell{
+  width:100%;
+  max-width:100%;
+}
+body{
+  overflow-x:hidden;
+  overscroll-behavior-x:none;
+}
+img,svg,video,canvas{max-width:100%}
+input,button,select,textarea{
+  max-width:100%;
+  -webkit-appearance:none;
+  appearance:none;
+}
+select{
+  -webkit-appearance:auto;
+  appearance:auto;
+}
+button,a,[role="button"]{
+  touch-action:manipulation;
+}
+input,textarea{
+  -webkit-user-select:text;
+  user-select:text;
+}
+.page-content,.topbar{
+  box-sizing:border-box;
+}
+
+/* Modern mobile viewport units; browsers that do not support them fall back to vh. */
+:root{
+  --app-vh:1vh;
+  --visual-height:100vh;
+  --visual-width:100vw;
+}
+@supports(height:100dvh){
+  :root{--visual-height:100dvh;--visual-width:100dvw}
+}
+
+/* iOS/WebView scroll behavior */
+.modal-card,.account-modal,.calendar-popover,.report-table-wrap,.training-plan-card{
+  -webkit-overflow-scrolling:touch;
+}
+
+/* Phone and in-app browser layout: explicit grid avoids the topbar collapsing into a narrow column. */
+@media(max-width:760px){
+  body,#app,.app-shell,.main-shell{
+    min-width:0 !important;
+    width:100% !important;
+    max-width:none !important;
+    margin-left:0 !important;
+  }
+
+  .topbar{
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "date date";
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+    align-items:center;
+    column-gap:7px;
+    row-gap:6px;
+    padding:
+      max(7px,env(safe-area-inset-top))
+      max(9px,env(safe-area-inset-right))
+      7px
+      max(9px,env(safe-area-inset-left));
+  }
+  .topbar-mobile-brand{
+    grid-area:brand;
+    min-width:0;
+    display:flex;
+  }
+  .topbar-actions{
+    grid-area:actions;
+    display:flex;
+    flex-wrap:nowrap !important;
+    align-items:center;
+    justify-content:flex-end;
+    min-width:0;
+    gap:4px;
+  }
+  .date-switcher{
+    grid-area:date;
+    order:initial !important;
+    width:100% !important;
+    min-width:0;
+    display:grid;
+    grid-template-columns:38px minmax(0,1fr) 38px;
+    align-items:center;
+    gap:6px;
+  }
+  .date-label{
+    width:100%;
+    min-width:0 !important;
+    text-align:center;
+  }
+  .date-label>span,.date-label>strong{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .auth-user-chip{
+    flex:0 0 auto;
+    width:auto;
+    min-width:0;
+  }
+  .auth-user-chip span{display:none !important}
+  .auth-user-chip button{
+    min-width:0;
+    white-space:nowrap;
+  }
+  .topbar-language-switch{
+    flex:0 0 auto;
+    white-space:nowrap;
+  }
+
+  .page-content{
+    width:100% !important;
+    max-width:none !important;
+    margin:0 !important;
+  }
+  .page-heading,.central-heading{
+    width:100%;
+    min-width:0;
+  }
+  .page-heading>div,.central-heading>div{min-width:0}
+  .page-heading h1,.page-heading p,.central-heading h1,.central-heading p{
+    overflow-wrap:anywhere;
+  }
+
+  .mobile-nav{
+    width:100% !important;
+    max-width:none !important;
+    left:0 !important;
+    right:0 !important;
+  }
+
+  /* Inputs use 16px to prevent Safari/LINE/FB WebView auto-zoom on focus. */
+  input,select,textarea{font-size:16px !important}
+  button{font-size:max(11px,inherit)}
+
+  /* Long bilingual controls may scroll horizontally instead of forcing page overflow. */
+  .zone-tabs,.task-filters,.central-zone-tabs,.central-tabs,.management-section-switch{
+    max-width:100%;
+    overscroll-behavior-inline:contain;
+  }
+  .search-box,.central-toolbar input{
+    width:100%;
+    max-width:100%;
+  }
+
+  /* Forms must never create a wider layout viewport in WebViews. */
+  .modal-grid,.modal-meta-grid,.modal-location-row,
+  .account-form-grid,.management-form-grid,.task-assignment-grid{
+    min-width:0;
+  }
+  .modal-card,.account-modal{
+    max-width:calc(100vw - 10px) !important;
+  }
+}
+
+/* iPhone 12/13 mini class and compact WebViews */
+@media(max-width:380px){
+  .topbar{
+    grid-template-columns:minmax(0,1fr) auto;
+    padding-inline:max(6px,env(safe-area-inset-left));
+  }
+  .topbar-mobile-brand>strong{font-size:12px}
+  .auth-user-chip button{padding-inline:6px}
+  .topbar-language-switch>button{padding-inline:5px}
+  .date-switcher{grid-template-columns:36px minmax(0,1fr) 36px}
+}
+
+/* Very narrow LINE / Facebook embedded webviews */
+@media(max-width:340px){
+  .topbar-mobile-brand>strong{display:none}
+  .topbar{column-gap:4px}
+  .auth-user-chip button{font-size:10px}
+  .topbar-language-switch>button{min-width:29px;font-size:10px}
+}
+
+/* Mobile landscape: avoid browser chrome consuming most of the screen. */
+@media(max-width:900px) and (max-height:520px) and (orientation:landscape){
+  .topbar{
+    position:relative;
+    grid-template-columns:auto minmax(250px,1fr) auto;
+    grid-template-areas:"brand date actions";
+    padding-block:5px;
+  }
+  .date-switcher{grid-template-columns:34px minmax(0,1fr) 34px}
+  .topbar-mobile-brand>strong{display:none}
+  .page-content{padding-top:8px}
+  .mobile-nav{height:54px}
+}
+
+/* Browser-specific classes set by browser-compat.js */
+.browser-ios .topbar{
+  -webkit-backdrop-filter:blur(12px);
+}
+.browser-ios .mobile-nav{
+  -webkit-backdrop-filter:blur(12px);
+}
+.browser-inapp .page-content{
+  /* Embedded browsers often report safe-area as zero; keep a small physical gutter. */
+  padding-left:max(8px,env(safe-area-inset-left));
+  padding-right:max(8px,env(safe-area-inset-right));
+}
+.browser-line .mobile-nav,
+.browser-facebook .mobile-nav,
+.browser-instagram .mobile-nav{
+  padding-bottom:max(env(safe-area-inset-bottom),4px);
+}
+.keyboard-open .mobile-nav{
+  /* Fixed bottom bars can cover focused inputs in iOS/Android WebViews. */
+  display:none !important;
+}
+.keyboard-open .page-content{
+  padding-bottom:18px !important;
+}
