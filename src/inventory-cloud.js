@@ -116,7 +116,7 @@ export function canManageCentralCatalog() {
 export function canManageBranchCatalog(site = activeInventorySite()) {
   const currentRole = role();
   const s=session();
-  if (!hasInventoryPermission("edit") || !["fuxing","yongji"].includes(site)) return false;
+  if (!canInventoryEdit() || !["fuxing","yongji"].includes(site)) return false;
   if (currentRole === "admin") return true;
   return currentRole === "manager" && s?.location === site;
 }
