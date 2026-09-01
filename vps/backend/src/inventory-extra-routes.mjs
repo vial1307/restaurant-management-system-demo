@@ -335,8 +335,8 @@ export async function registerInventoryExtraRoutes(app) {
              i.id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,i.unit,i.work_area,i.storage_only,
              s.site as from_site,d.site as to_site
            from public.inventory_items i
-           join public.inventory_locations s on s.id=$2 and s.active=true
-           join public.inventory_locations d on d.id=$3 and d.active=true
+           join public.inventory_locations s on s.id=$2 and s.active=true and s.kind='storage'
+           join public.inventory_locations d on d.id=$3 and d.active=true and d.kind='storage'
            where i.id=$1 and i.active=true
            limit 1`,
           [itemId,sourceLocationId,destinationLocationId]
@@ -360,6 +360,43 @@ export async function registerInventoryExtraRoutes(app) {
         );
 
         let destinationItem = destinationItemResult.rows[0];
+
+        if (destinationItem) {
+          const configured = await client.query(
+            `select s.location_id
+             from public.inventory_stock s
+             join public.inventory_locations l on l.id=s.location_id
+             where s.item_id=$1
+               and l.site=$2
+               and l.kind='storage'
+               and l.active=true
+             order by l.sort_order,l.code`,
+            [destinationItem.id,sourceItem.to_site]
+          );
+          const configuredIds = configured.rows.map((row)=>row.location_id);
+
+          if (configuredIds.length === 1 && configuredIds[0] !== destinationLocationId) {
+            throw Object.assign(new Error("DESTINATION_LOCATION_MUST_USE_CONFIGURED_SINGLE"), { statusCode:409 });
+          }
+
+          if (configuredIds.length > 1) {
+            const fixed = await client.query(
+              `select location_id
+               from public.inventory_receive_defaults
+               where site=$1 and catalog_key=$2
+               limit 1`,
+              [sourceItem.to_site,sourceItem.catalog_key]
+            );
+            const fixedLocationId = fixed.rows[0]?.location_id || "";
+            if (!fixedLocationId) {
+              throw Object.assign(new Error("DESTINATION_RECEIVE_DEFAULT_REQUIRED"), { statusCode:409 });
+            }
+            if (fixedLocationId !== destinationLocationId) {
+              throw Object.assign(new Error("DESTINATION_LOCATION_MUST_USE_RECEIVE_DEFAULT"), { statusCode:409 });
+            }
+          }
+        }
+
         if (!destinationItem) {
           const suffix = String(sourceItem.item_key).split(":").slice(1).join(":") || crypto.randomUUID();
           const created = await client.query(
