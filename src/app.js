@@ -1030,7 +1030,7 @@ function inventory(context) {
   const historical = !isCurrentBranchInventoryDate();
   const cloudNotice = cloudReady
     ? `<div class="inventory-sql-status inventory-sql-ready"><strong>SQL staging · 已連線</strong><small>Dữ liệu kho hiện đang ghi trực tiếp vào Supabase PostgreSQL. Khi phát hành chính thức sẽ chuyển backend sang VPS. · 現階段庫存直接寫入 Supabase PostgreSQL；正式版再切換至 VPS。</small></div>`
-    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL database chưa ở phiên bản mới nhất · SQL 資料庫尚未更新</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa để tránh mỗi thiết bị lưu một bản khác nhau. Hãy cập nhật SQL staging lên schema v10. · 為避免各裝置資料分岔，目前僅保留查看；請先將 staging SQL 更新至 schema v10。</small></div>`;
+    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL database chưa ở phiên bản mới nhất · SQL 資料庫尚未更新</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa để tránh mỗi thiết bị lưu một bản khác nhau. Hãy cập nhật SQL staging lên schema v11. · 為避免各裝置資料分岔，目前僅保留查看；請先將 staging SQL 更新至 schema v11。</small></div>`;
   const opsEnabled = editable && cloudReady && !historical && ["fuxing","yongji"].includes(site);
   const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
   const tabsEnabled = (opsEnabled || canViewHistory || catalogManageVisible) && ["fuxing","yongji"].includes(site);
@@ -1098,7 +1098,7 @@ function inventory(context) {
       : "";
     const manageDbNotice = catalogManage
       ? ""
-      : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"等待 SQL staging 更新":"Đang chờ cập nhật SQL staging"}</strong><small>${language==="zh"?"庫存管理頁已開放顯示，但在 SQL schema v10 完成前不允許寫入，避免資料只留在單一手機。":"Mục quản lý đã hiện, nhưng chưa cho ghi cho đến khi SQL schema v10 hoàn tất, để tránh dữ liệu chỉ nằm trên một điện thoại."}</small></div>`;
+      : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"等待 SQL staging 更新":"Đang chờ cập nhật SQL staging"}</strong><small>${language==="zh"?"庫存管理頁已開放顯示，但在 SQL schema v11 完成前不允許寫入，避免資料只留在單一手機。":"Mục quản lý đã hiện, nhưng chưa cho ghi cho đến khi SQL schema v11 hoàn tất, để tránh dữ liệu chỉ nằm trên một điện thoại."}</small></div>`;
     return `${heading(text.inventory, manageSubtitle, manageAction)}${cloudNotice}${opsTabs}${opsGuide}${manageDbNotice}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
@@ -1470,8 +1470,8 @@ root.addEventListener("click", (event) => {
   }
   if (action === "inventory-edit-sql-pending") {
     window.alert(state.settings.language === "zh"
-      ? "編輯功能已顯示，但 staging SQL 尚未更新至 schema v10，因此暫時鎖定寫入。更新 SQL 後重新登入即可直接使用。"
-      : "Nút chỉnh sửa đã được hiển thị, nhưng staging SQL chưa lên schema v10 nên tạm khóa ghi dữ liệu. Sau khi cập nhật SQL và đăng nhập lại sẽ dùng được ngay. · 編輯功能暫時等待 SQL schema v10。");
+      ? "編輯功能已顯示，但 staging SQL 尚未更新至 schema v11，因此暫時鎖定寫入。更新 SQL 後重新登入即可直接使用。"
+      : "Nút chỉnh sửa đã được hiển thị, nhưng staging SQL chưa lên schema v11 nên tạm khóa ghi dữ liệu. Sau khi cập nhật SQL và đăng nhập lại sẽ dùng được ngay. · 編輯功能暫時等待 SQL schema v11。");
     return;
   }
   if (action === "open-add-item") {
@@ -1759,7 +1759,7 @@ if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:")
   });
 
   globalThis.navigator.serviceWorker
-    .register("./sw.js?v=56", { updateViaCache: "none" })
+    .register("./sw.js?v=57", { updateViaCache: "none" })
     .then(async (registration) => {
       await registration.update().catch(() => {});
       if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
