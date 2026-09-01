@@ -1,4 +1,4 @@
-# Kitchen OS v39 — Manager Review Checklist
+# Kitchen OS v41 — Manager Review Checklist
 
 ## Current staging rule
 
@@ -10,7 +10,7 @@ Purpose: staging review before moving the system toward VPS deployment.
 ## Required setup before review
 
 1. Run `supabase/schema.sql` only if the project database has not been initialized yet.
-2. Run `supabase/20260901_inventory_ready_v5.sql` in Supabase SQL Editor.
+2. Run `supabase/20260901_inventory_ready_v7.sql` in Supabase SQL Editor.
 3. Redeploy the `admin-users` Edge Function from `supabase/functions/admin-users/index.ts`.
 4. Open Kitchen OS once as Admin so missing Fuxing / Yongji / central catalog rows can be seeded.
 5. Hard refresh PC/laptop/mobile so all devices load release v39.
@@ -107,3 +107,22 @@ Manager should evaluate:
 - Are terminology and labels natural for Taiwan restaurant operations?
 
 If accepted, use this release as the functional baseline for the VPS migration. The current frontend data boundary is intentionally separated so Supabase RPC/Realtime can later be replaced with VPS API + PostgreSQL + WebSocket/SSE without redesigning the operational UI.
+
+
+### 領貨 test
+1. At 復興店, choose an item with stock in 大冷凍.
+2. 領貨 4 units to the item's 使用區.
+3. Confirm 大冷凍 decreases by 4 and 已領貨 increases by 4.
+4. 使用 2 units; 已領貨 must decrease by 2.
+5. 歸位 the remaining 2 to 四門冰箱; 使用中 must return to 0 and 四門冰箱 must increase by 2.
+
+### 出貨 test
+1. Open 出貨.
+2. Select source storage.
+3. Select destination site.
+4. Confirm the destination-storage picker shows only storage locations belonging to that selected site.
+5. Select the exact destination storage and submit.
+6. Source decreases immediately and destination increases immediately.
+7. Confirm the audit records the operator, time, item, amount, source and destination.
+
+No manager approval or receive-confirmation step is used in the current staging phase.
