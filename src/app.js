@@ -546,6 +546,142 @@ function inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, all
   return `<div class="storage-tab-groups"><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.primaryStorage)}</span><div class="zone-tabs">${all}${primary.map(tab).join("")}</div></div><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.serviceStorage)}</span><div class="zone-tabs">${service.map(tab).join("")}</div></div></div>`;
 }
 
+const BRANCH_DRAFT_PREFIX = "shitu-branch-inventory-draft-v1:";
+
+function branchDraftKey(site){ return `${BRANCH_DRAFT_PREFIX}${site}`; }
+function cloneJson(value){ return JSON.parse(JSON.stringify(value)); }
+
+function loadBranchDraftRecord(site,baseRecord){
+  try{
+    const saved=JSON.parse(localStorage.getItem(branchDraftKey(site))||"null");
+    if(saved?.inventory&&saved?.workInventory)return saved;
+  }catch{}
+  const inventory=cloneJson(baseRecord?.inventory||[]);
+  const workInventory=cloneJson(baseRecord?.workInventory||[]);
+  if(site==="yongji"){
+    inventory.forEach((item)=>{ item.quantity=0; });
+    workInventory.forEach((item)=>{ item.quantity=0; });
+  }
+  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"pending-approval"};
+  localStorage.setItem(branchDraftKey(site),JSON.stringify(seeded));
+  return seeded;
+}
+
+function saveBranchDraftRecord(site,record){
+  localStorage.setItem(branchDraftKey(site),JSON.stringify({...record,updatedAt:new Date().toISOString(),status:"pending-approval"}));
+}
+
+function branchZoneByLocationCode(site,code){
+  return ZONES.find((zone)=>branchLocationCode(site,zone.id)===code)?.id||"";
+}
+
+function branchDraftOperationData(site,baseRecord){
+  const draft=loadBranchDraftRecord(site,baseRecord);
+  const locations=ZONES.map((zone)=>({
+    id:branchLocationCode(site,zone.id),
+    code:branchLocationCode(site,zone.id),
+    name_zh_tw:zone.zh,
+    name_vi:zone.vi,
+    site,
+    kind:"storage",
+  }));
+  const grouped=new Map();
+  for(const row of draft.inventory){
+    const key=row.stockKey||String(row.id||"").split("-")[0];
+    if(!grouped.has(key)){
+      grouped.set(key,{
+        id:key,
+        itemKey:branchItemKey(site,key),
+        catalogKey:String(row.label||key).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,""),
+        zh:row.label||key,
+        vi:row.labelVi||row.label||key,
+        unit:row.unit||"個",
+        locations:[],
+        total:0,
+      });
+    }
+    const item=grouped.get(key);
+    const location=locations.find((entry)=>entry.code===branchLocationCode(site,row.zone));
+    if(!location)continue;
+    const quantity=Math.max(0,Number(row.quantity)||0);
+    item.locations.push({
+      id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,
+      quantity,minimum:Math.max(0,Number(row.minimum)||0),
+    });
+    item.total+=quantity;
+  }
+  for(const item of grouped.values()){
+    for(const location of locations){
+      if(!item.locations.some((entry)=>entry.id===location.id)){
+        item.locations.push({id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,quantity:0,minimum:0});
+      }
+    }
+  }
+  return {site,items:[...grouped.values()],locations};
+}
+
+function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceLocationId,destinationLocationId,amount,targetSite,sourceSite}){
+  const draft=loadBranchDraftRecord(site,baseRecord);
+  const value=Math.max(1,Number(amount)||1);
+  const sourceZone=branchZoneByLocationCode(site,sourceLocationId);
+  const destinationZone=branchZoneByLocationCode(site,destinationLocationId);
+  let rows=draft.inventory.filter((row)=>(row.stockKey||String(row.id||""))===itemId);
+  let template=rows[0];
+  if(!template&&itemMeta?.zh){
+    rows=draft.inventory.filter((row)=>row.label===itemMeta.zh);
+    template=rows[0];
+  }
+  if(!template&&type==="receive"&&itemMeta?.zh){
+    const receivedKey=itemId||`received-${Date.now()}`;
+    template={
+      id:`${receivedKey}-${destinationZone||"large-freezer"}`,
+      stockKey:receivedKey,
+      label:itemMeta.zh,
+      labelVi:itemMeta.vi||itemMeta.zh,
+      unit:itemMeta.unit||"個",
+      workArea:"noodles",
+      storageOnly:true,
+      zone:destinationZone||"large-freezer",
+      quantity:0,
+      minimum:0,
+    };
+    draft.inventory.push(template);
+  }
+  if(!template)return {ok:false,error:new Error("ITEM_NOT_FOUND")};
+
+  function ensure(zone){
+    let row=draft.inventory.find((entry)=>(entry.stockKey||String(entry.id||""))===(template.stockKey||itemId)&&entry.zone===zone);
+    if(!row){
+      row={...template,id:`${template.stockKey||itemId}-${zone}`,zone,quantity:0,minimum:0};
+      draft.inventory.push(row);
+    }
+    return row;
+  }
+
+  if(type==="in"||type==="receive"){
+    const target=ensure(destinationZone);
+    target.quantity=Math.max(0,Number(target.quantity)||0)+value;
+  }else if(type==="out"||type==="ship"){
+    const source=ensure(sourceZone);
+    const before=Math.max(0,Number(source.quantity)||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    source.quantity=before-value;
+  }else if(type==="transfer"){
+    if(!sourceZone||!destinationZone||sourceZone===destinationZone)return {ok:false,error:new Error("SAME_LOCATION")};
+    const source=ensure(sourceZone);
+    const before=Math.max(0,Number(source.quantity)||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    source.quantity=before-value;
+    const target=ensure(destinationZone);
+    target.quantity=Math.max(0,Number(target.quantity)||0)+value;
+  }else{
+    return {ok:false,error:new Error("INVALID_OPERATION")};
+  }
+
+  saveBranchDraftRecord(site,draft);
+  return {ok:true,targetSite,sourceSite};
+}
+
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language } = context;
   const storageView = view.inventoryView === "storage";
