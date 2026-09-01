@@ -149,22 +149,27 @@ function centralPage(user) {
     history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
   };
   const cloudState = inventoryCloudState();
+  const cloudReady = cloudState === "ready";
+  if (["in","out","transfer","receive"].includes(mode) && !cloudReady) {
+    mode = "overview";
+    content.dataset.centralMode = mode;
+  }
   const cloudNotice = cloudState === "migration-needed"
-    ? '<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。</div>'
+    ? '<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。<small>Dữ liệu bên dưới đang dùng bản kho cục bộ hiện có; thao tác nhập/xuất/chuyển tạm khóa cho đến khi cloud sẵn sàng. · 下方先顯示現有本機庫存；雲端完成前暫停進出庫與轉撥操作。</small></div>'
     : "";
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, true) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, true) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, false) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
-  if (mode !== "history" && mode !== "manage") {
+  if (cloudReady && ["in","out","transfer","receive"].includes(mode)) {
     const host=content.querySelector("[data-inventory-operations]");
     void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
   }
-  void bootstrapCentralInventory(items);
-  void getSiteInventoryRows("central").then((rows) => {
+  if (cloudReady) void bootstrapCentralInventory(items);
+  if (cloudReady) void getSiteInventoryRows("central").then((rows) => {
     if (!rows?.length) return;
     const page=document.querySelector(".page-content");
     if (!page?.querySelector(".central-heading")) return;
@@ -178,7 +183,7 @@ function centralPage(user) {
     if(totalNode) totalNode.textContent=String(quantity);
     if(zoneNode) zoneNode.textContent=String(uniqueLocations.size || CENTRAL_ZONES.length);
   }).catch(()=>{});
-  if (mode === "history" && canViewHistory) {
+  if (cloudReady && mode === "history" && canViewHistory) {
     void getCloudInventoryHistory("central", 300).then((cloudLog) => {
       const current = document.querySelector(".page-content");
       if (!current || current.dataset.centralMode !== "history" || !cloudLog.length) return;
