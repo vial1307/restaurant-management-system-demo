@@ -104,8 +104,18 @@ export function canInventoryDraftCount() {
   return hasInventoryPermission("edit") && inventoryCloudState() !== "ready";
 }
 
+export function canManageCentralCatalog() {
+  const currentRole = role();
+  return hasInventoryPermission("edit")
+    && activeInventorySite() === "central"
+    && (currentRole === "admin" || currentRole === "manager");
+}
+
 export function canDirectInventoryAdjust() {
-  return canInventoryEdit() && role() === "admin";
+  if (!canInventoryEdit()) return false;
+  const currentRole = role();
+  if (currentRole === "admin") return true;
+  return currentRole === "manager" && activeInventorySite() === "central";
 }
 
 export function activeInventorySite() {
@@ -737,7 +747,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
 
 export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, [])) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (!canManageCentralCatalog()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   const catalog = buildCentralCatalog(items);
   const item = catalog.find((entry) => entry.key === itemKey);
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
