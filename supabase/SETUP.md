@@ -51,7 +51,7 @@ The frontend maps it internally to `username@staff.shitu.local` for Supabase Aut
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
 
 
-## 6. Enable cross-device inventory sync (v30)
+## 6. Enable cross-device inventory sync (v32)
 
 After the original schema is installed, run:
 
@@ -64,7 +64,21 @@ This migration adds:
 - stable cloud item keys
 - Supabase Realtime for inventory stock
 - audited in/out transactions
-- direct stocktake correction for supervisor / manager / admin only
-- management-level inventory history access
+- Admin-only direct stocktake/catalog controls
 
-After running it, reload Kitchen OS on each device. The first Admin session seeds the current inventory catalog into Supabase without overwriting an already-existing cloud quantity.
+Then run:
+
+`supabase/20260901_inventory_transfers_v3.sql`
+
+This second migration adds:
+- 永吉店 as a synchronized site
+- shared product catalog keys between sites
+- 央廚 ↔ 復興店 ↔ 永吉店 shipment records
+- atomic dispatch and receipt RPCs
+- pending receipt workflow
+- Realtime shipment status synchronization
+- inventory cloud contract version 5
+
+After both migrations are complete, redeploy the `admin-users` Edge Function because its workplace validation now also supports `yongji`.
+
+Reload Kitchen OS on PC/laptop/mobile. The first Admin session seeds missing catalog/stock rows only; it does not overwrite an existing cloud quantity.
