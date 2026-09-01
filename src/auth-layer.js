@@ -176,6 +176,138 @@ function saveStock(items) {
   }
   localStorage.setItem(CENTRAL_KEY, JSON.stringify(items));
 }
+function centralDraftOperationData() {
+  const items = loadStock();
+  const locations = CENTRAL_ZONES.map((zone) => ({
+    id: centralLocationCode(zone),
+    code: centralLocationCode(zone),
+    name_zh_tw: zone,
+    name_vi: zone === "央廚冷凍" ? "Tủ đông bếp trung tâm"
+      : zone === "央廚冷藏" ? "Tủ mát bếp trung tâm"
+      : zone === "央廚4門" ? "Tủ 4 cánh bếp trung tâm"
+      : "Tủ đông nằm bếp trung tâm",
+    site: "central",
+    kind: "storage",
+  }));
+  const grouped = new Map();
+  for (const row of items) {
+    const baseKey = centralBaseKey(row);
+    if (!grouped.has(baseKey)) {
+      grouped.set(baseKey, {
+        id: baseKey,
+        itemKey: row.itemKey || baseKey,
+        zh: row.zh,
+        vi: row.vi,
+        unit: row.unit,
+        locations: [],
+        total: 0,
+      });
+    }
+    const item = grouped.get(baseKey);
+    const location = locations.find((entry) => entry.code === centralLocationCode(row.zone));
+    if (!location) continue;
+    const quantity = Math.max(0, Number(row.qty) || 0);
+    item.locations.push({
+      id: location.id,
+      code: location.code,
+      zh: location.name_zh_tw,
+      vi: location.name_vi,
+      quantity,
+      minimum: Math.max(0, Number(row.minimum) || 0),
+    });
+    item.total += quantity;
+  }
+  for (const item of grouped.values()) {
+    for (const location of locations) {
+      if (!item.locations.some((entry) => entry.id === location.id)) {
+        item.locations.push({
+          id: location.id,
+          code: location.code,
+          zh: location.name_zh_tw,
+          vi: location.name_vi,
+          quantity: 0,
+          minimum: 0,
+        });
+      }
+    }
+  }
+  return { site: "central", items: [...grouped.values()], locations };
+}
+
+function applyCentralDraftOperation(user,{ type, itemId, sourceLocationId, destinationLocationId, amount }) {
+  const items = loadStock();
+  const productRows = items.filter((row) => centralBaseKey(row) === itemId);
+  const template = productRows[0];
+  if (!template) return { ok:false, error:new Error("ITEM_NOT_FOUND") };
+
+  const codeToZone = Object.fromEntries(CENTRAL_ZONES.map((zone) => [centralLocationCode(zone), zone]));
+  const sourceZone = codeToZone[sourceLocationId] || "";
+  const destinationZone = codeToZone[destinationLocationId] || "";
+  const value = Math.max(1, Number(amount) || 1);
+
+  function ensureRow(zone) {
+    let row = items.find((entry) => centralBaseKey(entry) === itemId && entry.zone === zone);
+    if (!row) {
+      row = {
+        ...template,
+        id: \`\${itemId}@\${centralLocationCode(zone)}\`,
+        baseId: itemId,
+        itemKey: template.itemKey || itemId,
+        zone,
+        qty: 0,
+        minimum: 0,
+        draft: true,
+      };
+      items.push(row);
+    }
+    return row;
+  }
+
+  let before = 0;
+  let after = 0;
+  if (type === "in") {
+    const target = ensureRow(destinationZone);
+    before = Number(target.qty || 0);
+    target.qty = before + value;
+    after = target.qty;
+  } else if (type === "out") {
+    const source = ensureRow(sourceZone);
+    before = Number(source.qty || 0);
+    if (before < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
+    source.qty = before - value;
+    after = source.qty;
+  } else if (type === "transfer") {
+    if (!sourceZone || !destinationZone || sourceZone === destinationZone) return { ok:false, error:new Error("SAME_LOCATION") };
+    const source = ensureRow(sourceZone);
+    const target = ensureRow(destinationZone);
+    const sourceBefore = Number(source.qty || 0);
+    if (sourceBefore < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
+    source.qty = sourceBefore - value;
+    target.qty = Number(target.qty || 0) + value;
+    before = sourceBefore;
+    after = source.qty;
+  } else {
+    return { ok:false, error:new Error("INVALID_OPERATION") };
+  }
+
+  saveStock(items);
+  pushHistory({
+    user:user.name,
+    userId:user.id,
+    direction:"draft",
+    status:"pending-approval",
+    product:template.zh,
+    productId:itemId,
+    zone:type === "transfer" ? \`\${sourceZone} → \${destinationZone}\` : (type === "in" ? destinationZone : sourceZone),
+    unit:template.unit,
+    amount:value,
+    before,
+    after,
+    note:type === "in" ? "暫存入庫" : type === "out" ? "暫存出庫" : "暫存轉撥",
+  });
+  return { ok:true };
+}
+
 function history() {
   try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
 }
