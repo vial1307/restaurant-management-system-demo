@@ -1,6 +1,7 @@
 import {
   getSupabase,
   getMyProfile,
+  invalidateMyProfileCache,
   isSupabaseConfigured,
   mirrorSupabaseSessionToLegacy,
 } from "./supabase-client.js";
@@ -8,12 +9,16 @@ import {
 const APP_KEY = "shitu-kitchen-os-v1";
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
-const SYNC_INTERVAL = 20000;
+const SYNC_INTERVAL = 60000;
+const MIN_SYNC_GAP = 10000;
+const ADMIN_ACCOUNTS_INTERVAL = 300000;
 
 let timer = 0;
 let running = false;
 let channel = null;
 let currentUserId = "";
+let lastSyncAt = 0;
+let lastAdminAccountsAt = 0;
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
@@ -54,8 +59,12 @@ function sessionSnapshot(profile) {
   };
 }
 
-async function syncAdminAccounts(supabase, profile) {
+async function syncAdminAccounts(supabase, profile, { force = false } = {}) {
   if (profile.role !== "admin") return false;
+  const now = Date.now();
+  if (!force && lastAdminAccountsAt && now - lastAdminAccountsAt < ADMIN_ACCOUNTS_INTERVAL) return false;
+  lastAdminAccountsAt = now;
+
   const { data, error } = await supabase
     .from("profiles")
     .select("id,username,display_name,role,location,active,permissions,preferred_language")
@@ -82,7 +91,7 @@ async function syncAdminAccounts(supabase, profile) {
 }
 
 async function ensureBroadcastChannel(supabase, userId) {
-  if (!userId || currentUserId === userId && channel) return;
+  if (!userId || (currentUserId === userId && channel)) return;
   if (channel) {
     try { await supabase.removeChannel(channel); } catch {}
   }
@@ -94,14 +103,19 @@ async function ensureBroadcastChannel(supabase, userId) {
       if (changed) location.reload();
     })
     .on("broadcast", { event: "profile" }, () => {
-      void syncNow();
+      invalidateMyProfileCache();
+      void syncNow({ force: true, forceAccounts: true });
     })
     .subscribe();
 }
 
-async function syncNow({ reload = true } = {}) {
+async function syncNow({ force = false, forceAccounts = false } = {}) {
   if (!isSupabaseConfigured() || running) return;
+  const now = Date.now();
+  if (!force && lastSyncAt && now - lastSyncAt < MIN_SYNC_GAP) return;
   running = true;
+  lastSyncAt = now;
+
   try {
     const supabase = await getSupabase();
     if (!supabase) return;
@@ -109,7 +123,7 @@ async function syncNow({ reload = true } = {}) {
     if (!sessionData.session) return;
 
     let profile;
-    try { profile = await getMyProfile(); } catch { return; }
+    try { profile = await getMyProfile({ force }); } catch { return; }
     if (!profile?.id) return;
     if (profile.active === false) {
       try { await supabase.auth.signOut(); } catch {}
@@ -122,7 +136,7 @@ async function syncNow({ reload = true } = {}) {
 
     const previousSession = readJson(AUTH_KEY);
     const nextSession = sessionSnapshot(profile);
-    const securityChanged = previousSession && (
+    const securityChanged = Boolean(previousSession) && (
       previousSession.accountRole !== nextSession.accountRole ||
       previousSession.location !== nextSession.location ||
       previousSession.name !== nextSession.name ||
@@ -135,11 +149,10 @@ async function syncNow({ reload = true } = {}) {
     }
 
     const languageChanged = applyLanguageToLocalState(profile.preferred_language);
-    await syncAdminAccounts(supabase, profile);
+    await syncAdminAccounts(supabase, profile, { force: forceAccounts });
 
-    if (reload && (languageChanged || securityChanged)) {
-      location.reload();
-    }
+    if (securityChanged) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+    if (languageChanged) location.reload();
   } finally {
     running = false;
   }
@@ -155,6 +168,7 @@ async function persistLanguage(appLang) {
   });
   if (error) return;
 
+  invalidateMyProfileCache();
   const userId = data?.user?.id;
   if (userId) {
     await ensureBroadcastChannel(supabase, userId);
@@ -185,10 +199,10 @@ window.addEventListener("focus", () => { void syncNow(); });
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void syncNow();
 });
-window.addEventListener("online", () => { void syncNow(); });
+window.addEventListener("online", () => { void syncNow({ force: true }); });
 
 timer = window.setInterval(() => {
   if (document.visibilityState === "visible") void syncNow();
 }, SYNC_INTERVAL);
 
-void syncNow();
+void syncNow({ force: true });
