@@ -897,3 +897,7 @@ a { color: inherit; text-decoration: none; }
 .inventory-sql-ready strong{color:#18705a}
 .inventory-readonly-notice strong,.inventory-readonly-notice small{display:block}
 .inventory-readonly-notice small{margin-top:3px}
+
+.sql-pending-action{opacity:.72;border-style:dashed!important}
+.inventory-action-button.sql-pending-action{background:#fff8ec!important;border-color:#e5cda3!important;color:#8b6728!important}
+.primary-button.sql-pending-action{background:#8a7350!important;border-color:#8a7350!important;color:#fff!important}
