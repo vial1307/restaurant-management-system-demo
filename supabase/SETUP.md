@@ -55,7 +55,7 @@ Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphen
 
 For the current staging/demo database, run the canonical migration once:
 
-`supabase/20260901_inventory_ready_v5.sql`
+`supabase/20260901_inventory_ready_v6.sql`
 
 in **Supabase → SQL Editor** after `supabase/schema.sql`.
 
@@ -69,10 +69,12 @@ This single migration includes:
 - atomic internal stock transfer
 - 央廚 ↔ 復興店 and 央廚 ↔ 永吉店 shipment dispatch/receipt
 - pending receipt workflow
-- Supabase Realtime for stock and shipment status
-- inventory cloud contract version 5
+- Supabase Realtime for stock and transfer status
+- immediate cross-site transfer: source decreases and destination increases in one atomic RPC
+- actor/user audit for every inventory transaction; no manager confirmation in staging
+- inventory cloud contract version 6
 
-The older split/full files remain in the repository as migration history. For the current staging database, use only the canonical `20260901_inventory_ready_v5.sql` file above.
+The older split/full files remain in the repository as migration history. For the current staging database, use only the canonical `20260901_inventory_ready_v6.sql` file above.
 
 After the SQL succeeds:
 1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
