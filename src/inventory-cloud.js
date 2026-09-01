@@ -1209,6 +1209,43 @@ export function centralItemKey(id) {
 
 export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
   if (!(await verifyMigration()) || role() !== "admin") return [];
+
+  if (isVpsApiConfigured()) {
+    try {
+      const [historyResult, rows] = await Promise.all([
+        vpsInventoryHistory(site, limit),
+        fetchSite(site),
+      ]);
+      const itemMap = new Map(rows.map((row) => [row.item.id, row.item]));
+      const locationMap = new Map(rows.map((row) => [row.location.id, row.location]));
+      const tx = historyResult?.transactions || [];
+
+      return tx.map((entry) => {
+        const locationId = entry.destination_location_id || entry.source_location_id || "";
+        const meta = entry.metadata || {};
+        const before = meta.before_quantity ?? meta.source_before ?? meta.destination_before ?? "";
+        const after = meta.after_quantity ?? meta.source_after ?? meta.destination_after ?? "";
+        return {
+          ...entry,
+          location_id: locationId,
+          direction: entry.action || "",
+          before_quantity: before,
+          after_quantity: after,
+          actor_id: entry.actor_user_id,
+          item: itemMap.get(entry.item_id),
+          location: locationMap.get(locationId),
+          actor: entry.actor_username ? {
+            id: entry.actor_user_id,
+            username: entry.actor_username,
+            display_name: entry.actor_username,
+          } : null,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
   const supabase = await getSupabase();
   const { data: locations, error: locError } = await supabase
     .from("inventory_locations")
@@ -1249,11 +1286,17 @@ export async function getCloudInventoryHistory(site = currentSite(), limit = 200
 
 async function subscribeRealtime(site) {
   if (!(await verifyMigration()) || !site) return;
+  lastSite = site;
+
+  if (isVpsApiConfigured()) {
+    realtime = null;
+    return;
+  }
+
   const supabase = await getSupabase();
   if (realtime) {
     try { await supabase.removeChannel(realtime); } catch {}
   }
-  lastSite = site;
   realtime = supabase
     .channel(`kitchen-os-inventory-${site}-${session()?.id || "user"}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "inventory_stock" }, () => {
@@ -1265,12 +1308,12 @@ async function subscribeRealtime(site) {
 
 async function boot() {
   const s = session();
-  if (!isSupabaseConfigured() || !s) return;
+  if (!isInventoryBackendConfigured() || !s) return;
   if (bootedUserId === s.id && polling) return;
   if (!(await verifyMigration())) return;
   bootedUserId = s.id || "";
 
-  if (role() === "admin") {
+  if (role() === "admin" && !isVpsApiConfigured()) {
     await bootstrapFuxingInventory();
     await bootstrapYongjiInventory();
     const central = readJson(CENTRAL_KEY, []);
@@ -1303,7 +1346,9 @@ window.addEventListener("hashchange", () => {
   setTimeout(() => { void syncInventoryNow(site); }, 80);
 });
 window.addEventListener("shitu:central-stock-ready", (event) => {
-  if (role() === "admin") void bootstrapCentralInventory(event.detail?.items || readJson(CENTRAL_KEY, []));
+  if (role() === "admin" && !isVpsApiConfigured()) {
+    void bootstrapCentralInventory(event.detail?.items || readJson(CENTRAL_KEY, []));
+  }
 });
 
 void boot();
