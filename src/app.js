@@ -474,7 +474,8 @@ async function runCloudTransferPlan(steps, note, legacyFallback) {
 function quantityControl(item, kind = "item") {
   const action = kind === "workItem" ? "adjust-work-item" : "adjust-item";
   const editable = canInventoryEdit() || canInventoryDraftCount();
-  const direct = (canInventoryEdit() && canDirectInventoryAdjust()) || canInventoryDraftCount();
+  const draftDirect = canInventoryDraftCount() && accountSession()?.role === "admin";
+  const direct = canDirectInventoryAdjust() || draftDirect;
   const value = direct
     ? numberInput(item.quantity, `data-field="${kind}" data-key="quantity" data-id="${escapeHtml(item.id)}"`, "quantity-input")
     : `<strong class="quantity-readonly" aria-label="Current quantity">${escapeHtml(item.quantity)}</strong>`;
@@ -622,6 +623,9 @@ function addToCentralDraftFromBranch(itemMeta,destinationLocationId,amount){
     rows.push(row);
   }
   row.qty=Math.max(0,Number(row.qty)||0)+Math.max(1,Number(amount)||1);
+  row.locationFixed=true;
+  row.fixedAt=new Date().toISOString();
+  row.fixedReason="ship";
   const now=new Date().toISOString();
   rows=rows.map((entry)=>{
     const baseId=entry.baseId||entry.itemKey||String(entry.id||"").split("@")[0];
@@ -716,6 +720,9 @@ function addToBranchDraftFromBranch(targetSite,itemMeta,destinationLocationId,am
     draft.inventory.push(row);
   }
   row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);
+  row.locationFixed=true;
+  row.fixedAt=new Date().toISOString();
+  row.fixedReason="ship";
   saveBranchDraftRecord(targetSite,draft);
   return true;
 }
@@ -883,6 +890,7 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
     unit:template.unit||itemMeta?.unit||"",
     source:sourceLabel,
     destination:destinationLabel,
+    locationFixed:type==="ship",
   });
   return {ok:true,targetSite,sourceSite};
 }
@@ -1241,6 +1249,7 @@ root.addEventListener("click", (event) => {
   if (action === "adjust-item") {
     const site=activeInventorySite();
     if (canInventoryDraftCount()) {
+      if (accountSession()?.role !== "admin") return;
       if(adjustBranchDraftQuantity(site,state.records[state.selectedDate],target.dataset.id,"item",Number(target.dataset.delta))) render();
       return;
     }
@@ -1270,6 +1279,7 @@ root.addEventListener("click", (event) => {
   if (action === "adjust-work-item") {
     const site=activeInventorySite();
     if (canInventoryDraftCount()) {
+      if (accountSession()?.role !== "admin") return;
       if(adjustBranchDraftQuantity(site,state.records[state.selectedDate],target.dataset.id,"workItem",Number(target.dataset.delta))) render();
       return;
     }
@@ -1363,6 +1373,7 @@ root.addEventListener("change", (event) => {
   if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
   if (field === "item") {
     if (canInventoryDraftCount() && key === "quantity") {
+      if (accountSession()?.role !== "admin") { render(); return; }
       setBranchDraftQuantity(activeInventorySite(),state.records[state.selectedDate],id,"item",element.value);
       render();
       return;
@@ -1416,6 +1427,7 @@ root.addEventListener("change", (event) => {
   }
   if (field === "workItem") {
     if (canInventoryDraftCount() && key === "quantity") {
+      if (accountSession()?.role !== "admin") { render(); return; }
       setBranchDraftQuantity(activeInventorySite(),state.records[state.selectedDate],id,"workItem",element.value);
       render();
       return;
