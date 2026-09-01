@@ -1,4 +1,6 @@
+import { mountInventoryOperations, operationTabLabels } from "./inventory-operations.js";
 import {
+  activeInventorySite,
   bootstrapCentralInventory,
   canDirectInventoryAdjust,
   canInventoryEdit,
@@ -8,6 +10,7 @@ import {
   cloudSetQuantity,
   getCloudInventoryHistory,
   inventoryCloudState,
+  setActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
 
@@ -108,13 +111,13 @@ function addLogout(user) {
   if (!top || top.querySelector(".auth-user-chip")) return;
   const chip = document.createElement("div");
   chip.className = "auth-user-chip";
-  chip.innerHTML = `<span><strong>${esc(user.name)}</strong><small>${user.location === "central" ? "央廚" : user.location === "fuxing" ? "復興店" : "Admin"}</small></span><button type="button">登出</button>`;
+  chip.innerHTML = `<span><strong>${esc(user.name)}</strong><small>${user.location === "central" ? "央廚" : user.location === "fuxing" ? "復興店" : user.location === "yongji" ? "永吉店" : "Admin"}</small></span><button type="button">登出</button>`;
   top.prepend(chip);
 }
 
-function branchSwitcher(user, active = "fuxing") {
+function branchSwitcher(user, active = activeInventorySite() || "fuxing") {
   if (user.role !== "admin") return "";
-  return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
+  return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="yongji" class="${active === "yongji" ? "active" : ""}">永吉店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
 }
 
 function centralPage(user) {
@@ -123,7 +126,7 @@ function centralPage(user) {
   const items = loadStock();
   const canEdit = user.role === "admin" || Boolean(user.permissions?.inventory?.edit);
   let mode = content.dataset.centralMode || "overview";
-  if ((mode === "in" || mode === "out") && !canEdit) {
+  if (["in","out","transfer","receive"].includes(mode) && !canEdit) {
     mode = "overview";
     content.dataset.centralMode = mode;
   }
@@ -141,10 +144,14 @@ function centralPage(user) {
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">出庫</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">進貨入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">領料／出庫</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">庫存轉撥</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">待收貨</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
+    ${mode === "history" && canViewHistory ? historyView(log) : ["in","out","transfer","receive"].includes(mode) ? `<section class="inventory-operations-host" data-inventory-operations></section>` : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
   `;
   bindCentral(user);
+  if (["in","out","transfer","receive"].includes(mode)) {
+    const host=content.querySelector("[data-inventory-operations]");
+    void mountInventoryOperations(host,{site:"central",mode,language:document.documentElement.lang==="vi"?"vi":"zh",onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
+  }
   void bootstrapCentralInventory(items);
   if (mode === "history" && canViewHistory) {
     void getCloudInventoryHistory("central", 300).then((cloudLog) => {
@@ -264,7 +271,12 @@ function bindCentral(user) {
     alert("盤點調整失敗，請重新整理後再試。");
   });
   content.querySelectorAll("[data-warehouse]").forEach(b => b.onclick = () => {
-    if (b.dataset.warehouse === "fuxing") { content.dataset.centralView = "off"; location.hash = "#inventory"; setTimeout(() => location.reload(), 20); }
+    const site=b.dataset.warehouse;
+    if (!setActiveInventorySite(site)) return;
+    if (site === "central") { centralPage(user); return; }
+    content.dataset.centralView = "off";
+    location.hash = "#inventory";
+    setTimeout(() => location.reload(), 20);
   });
 }
 
@@ -302,10 +314,10 @@ function applyAccess() {
     }
 
     const centralOnlyRole = user.accountRole === "central" || user.role === "central";
-    const centralWorkplace = user.location === "central";
+    const selectedSite = activeInventorySite();
+    const centralWorkplace = user.location === "central" || (user.role === "admin" && selectedSite === "central");
 
-    // 央廚 is a site context, not only a job title:
-    // any account assigned to 央廚 opens the dedicated 央廚庫存 page at #inventory.
+    // 央廚 is a site context, not only a job title.
     if (centralOnlyRole) {
       document.querySelector(".sidebar-summary")?.setAttribute("hidden", "");
       if (!location.hash.startsWith("#inventory")) location.hash = "#inventory";
@@ -316,8 +328,13 @@ function applyAccess() {
     } else if (user.role === "admin" && location.hash.startsWith("#inventory")) {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
-        heading.insertAdjacentHTML("beforeend", branchSwitcher(user));
-        heading.querySelector('[data-warehouse="central"]')?.addEventListener("click", () => centralPage(user));
+        heading.insertAdjacentHTML("beforeend", branchSwitcher(user,selectedSite));
+        heading.querySelectorAll("[data-warehouse]").forEach((button)=>button.addEventListener("click",()=>{
+          const site=button.dataset.warehouse;
+          if(!setActiveInventorySite(site)) return;
+          if(site==="central") centralPage(user);
+          else location.reload();
+        }));
       }
     }
   } finally {
@@ -342,11 +359,11 @@ window.addEventListener("shitu:auth-synced", scheduleAccess);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (event.detail?.site !== "central" || !location.hash.startsWith("#inventory")) return;
   const user = session();
-  if (user?.location === "central" || user?.role === "admin") centralPage(user);
+  if (user?.location === "central" || (user?.role === "admin" && activeInventorySite()==="central")) centralPage(user);
 });
 window.addEventListener("shitu:inventory-cloud-status", () => {
   if (!location.hash.startsWith("#inventory") || !document.querySelector(".central-heading")) return;
   const user = session();
-  if (user?.location === "central" || user?.role === "admin") centralPage(user);
+  if (user?.location === "central" || (user?.role === "admin" && activeInventorySite()==="central")) centralPage(user);
 });
 scheduleAccess();
