@@ -28,6 +28,7 @@ import {
   branchWorkLocationCode,
   canDirectInventoryAdjust,
   canManageBranchCatalog,
+  canViewBranchCatalogManagement,
   canInventoryDraftCount,
   canInventoryEdit,
   cloudAdjustQuantity,
@@ -1024,19 +1025,23 @@ function inventory(context) {
     : [text.inventory, text.workstation, text.current, text.standard, text.restockSource, text.transfer];
   const editable = canInventoryEdit() || canInventoryDraftCount();
   const catalogManage = canManageBranchCatalog(site);
+  const catalogManageVisible = canViewBranchCatalogManagement(site);
   const historical = !isCurrentBranchInventoryDate();
   const cloudNotice = cloudReady
-    ? ""
-    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và hệ thống ghi lại người nhập/xuất/chuyển. Quy trình duyệt/xác nhận sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效並記錄入庫／出庫／轉撥人員；主管審核／確認流程將於 VPS 正式版再啟用。</small></div>`;
-  const opsEnabled = editable && (!cloudReady || !historical) && ["fuxing","yongji"].includes(site);
+    ? `<div class="inventory-sql-status inventory-sql-ready"><strong>SQL staging · 已連線</strong><small>Dữ liệu kho hiện đang ghi trực tiếp vào Supabase PostgreSQL. Khi phát hành chính thức sẽ chuyển backend sang VPS. · 現階段庫存直接寫入 Supabase PostgreSQL；正式版再切換至 VPS。</small></div>`
+    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL database chưa ở phiên bản mới nhất · SQL 資料庫尚未更新</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa để tránh mỗi thiết bị lưu một bản khác nhau. Hãy cập nhật SQL staging lên schema v10. · 為避免各裝置資料分岔，目前僅保留查看；請先將 staging SQL 更新至 schema v10。</small></div>`;
+  const opsEnabled = editable && cloudReady && !historical && ["fuxing","yongji"].includes(site);
   const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
-  const tabsEnabled = (opsEnabled || canViewHistory) && ["fuxing","yongji"].includes(site);
+  const tabsEnabled = (opsEnabled || canViewHistory || catalogManageVisible) && ["fuxing","yongji"].includes(site);
   if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
   if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
   if (view.inventoryOpsMode === "history" && !canViewHistory) view.inventoryOpsMode = "overview";
+  if (view.inventoryOpsMode === "manage" && !catalogManageVisible) view.inventoryOpsMode = "overview";
   const opsMode = view.inventoryOpsMode === "history" && canViewHistory
     ? "history"
-    : opsEnabled ? view.inventoryOpsMode : "overview";
+    : view.inventoryOpsMode === "manage" && catalogManageVisible
+      ? "manage"
+      : opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
     in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
@@ -1069,7 +1074,7 @@ function inventory(context) {
       ? "查看此據點的庫存操作人員、時間、數量與前後變化；資料與雲端庫存紀錄連動。"
       : "Xem người thao tác, thời gian, số lượng và thay đổi tồn tại cơ sở này; dữ liệu liên kết với lịch sử kho trên cloud.",
   };
-  const opsTabs = tabsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button>${opsEnabled ? `<button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>${catalogManage ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}` : ""}${canViewHistory ? `<button data-action="select-inventory-ops" data-mode="history" class="${opsMode==="history"?"active":""}">${escapeHtml(opLabel.history)}</button>` : ""}</div>` : "";
+  const opsTabs = tabsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button>${opsEnabled ? `<button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>` : ""}${catalogManageVisible ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}${canViewHistory ? `<button data-action="select-inventory-ops" data-mode="history" class="${opsMode==="history"?"active":""}">${escapeHtml(opLabel.history)}</button>` : ""}</div>` : "";
   const opsGuide = tabsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
   if (opsMode === "manage") {
     const manageEntries = effectiveRecord.inventory;
@@ -1086,7 +1091,13 @@ function inventory(context) {
     const editHint = language === "zh"
       ? "點選鉛筆可使用與新增食材相同的表單修改品項。"
       : "Nhấn biểu tượng bút chì để chỉnh bằng đúng biểu mẫu giống khi thêm nguyên liệu.";
-    return `${heading(text.inventory, manageSubtitle, `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>`)}${cloudNotice}${opsTabs}${opsGuide}
+    const manageAction = catalogManage
+      ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>`
+      : "";
+    const manageDbNotice = catalogManage
+      ? ""
+      : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"等待 SQL staging 更新":"Đang chờ cập nhật SQL staging"}</strong><small>${language==="zh"?"庫存管理頁已開放顯示，但在 SQL schema v10 完成前不允許寫入，避免資料只留在單一手機。":"Mục quản lý đã hiện, nhưng chưa cho ghi cho đến khi SQL schema v10 hoàn tất, để tránh dữ liệu chỉ nằm trên một điện thoại."}</small></div>`;
+    return `${heading(text.inventory, manageSubtitle, manageAction)}${cloudNotice}${opsTabs}${opsGuide}${manageDbNotice}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
       <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
