@@ -7,7 +7,10 @@ const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const RECEIVE_DEFAULT_KEY = "shitu-inventory-receive-defaults-v1";
 const SYNC_DELAY = 180;
-const POLL_MS = 15000;
+const POLL_MS = 60000;
+const REQUIRED_SCHEMA_VERSION = 11;
+const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
+const MIGRATION_RETRY_MS = 5000;
 
 const FUXING_STORAGE_CODES = {
   "large-freezer": "fuxing-large-freezer",
@@ -40,6 +43,7 @@ const CENTRAL_CODE_TO_ZONE = Object.fromEntries(
 );
 
 let migrationAvailable = null;
+let migrationCheckedAt = 0;
 let realtime = null;
 let syncTimer = 0;
 let polling = 0;
@@ -90,7 +94,11 @@ export function isCurrentBranchInventoryDate() {
 }
 
 export function inventoryCloudState() {
-  return localStorage.getItem(CLOUD_FLAG_KEY) || "checking";
+  const state = localStorage.getItem(CLOUD_FLAG_KEY) || "checking";
+  if (state === "ready" && Number(localStorage.getItem(CLOUD_SCHEMA_VERSION_KEY) || 0) < REQUIRED_SCHEMA_VERSION) {
+    return "checking";
+  }
+  return state;
 }
 
 export function canInventoryEdit() {
@@ -375,17 +383,24 @@ async function rpc(name, args = {}) {
   return supabase.rpc(name, args);
 }
 
-async function verifyMigration() {
-  if (migrationAvailable !== null) return migrationAvailable;
+async function verifyMigration({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && migrationAvailable === true) return true;
+  if (!force && migrationAvailable === false && now - migrationCheckedAt < MIGRATION_RETRY_MS) return false;
+
   if (!isSupabaseConfigured()) {
     migrationAvailable = false;
+    migrationCheckedAt = now;
     return false;
   }
 
-  const prior = localStorage.getItem(CLOUD_FLAG_KEY);
-  if (globalThis.navigator?.onLine === false && prior === "ready") {
-    // Once cloud mode has been enabled, never downgrade to local-authoritative writes just because the device is offline.
+  const priorState = localStorage.getItem(CLOUD_FLAG_KEY);
+  const priorVersion = Number(localStorage.getItem(CLOUD_SCHEMA_VERSION_KEY) || 0);
+  const priorReady = priorState === "ready" && priorVersion >= REQUIRED_SCHEMA_VERSION;
+
+  if (globalThis.navigator?.onLine === false && priorReady) {
     migrationAvailable = true;
+    migrationCheckedAt = now;
     dispatchStatus("offline");
     return true;
   }
@@ -393,20 +408,24 @@ async function verifyMigration() {
   try {
     const supabase = await getSupabase();
     const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
-    if (!error && Number(version) >= 11) {
+    migrationCheckedAt = Date.now();
+
+    if (!error && Number(version) >= REQUIRED_SCHEMA_VERSION) {
       migrationAvailable = true;
       localStorage.setItem(CLOUD_FLAG_KEY, "ready");
-      dispatchStatus("ready");
+      localStorage.setItem(CLOUD_SCHEMA_VERSION_KEY, String(Number(version)));
+      dispatchStatus("ready", { version: Number(version) });
       return true;
     }
-    // A previously validated cloud database remains authoritative during temporary API/network failures.
-    if (prior === "ready" && error) {
+
+    if (priorReady && error) {
       migrationAvailable = true;
       dispatchStatus("unreachable", { error: error.message });
       return true;
     }
   } catch (error) {
-    if (prior === "ready") {
+    migrationCheckedAt = Date.now();
+    if (priorReady) {
       migrationAvailable = true;
       dispatchStatus("unreachable", { error: error?.message || String(error) });
       return true;
@@ -415,8 +434,15 @@ async function verifyMigration() {
 
   migrationAvailable = false;
   localStorage.setItem(CLOUD_FLAG_KEY, "migration-needed");
-  dispatchStatus("migration-needed");
+  localStorage.removeItem(CLOUD_SCHEMA_VERSION_KEY);
+  dispatchStatus("migration-needed", { requiredVersion: REQUIRED_SCHEMA_VERSION });
   return false;
+}
+
+export async function refreshInventoryCloudState() {
+  migrationAvailable = null;
+  migrationCheckedAt = 0;
+  return verifyMigration({ force: true });
 }
 
 export async function bootstrapFuxingInventory() {
@@ -625,7 +651,7 @@ function applyBranch(rows, site) {
   return true;
 }
 
-export async function syncInventoryNow(site = currentSite(), { reloadBranch = true } = {}) {
+export async function syncInventoryNow(site = currentSite(), { reloadBranch = false } = {}) {
   if (!site || syncing || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
   if (["fuxing","yongji"].includes(site) && !isCurrentBranchInventoryDate()) {
     dispatchStatus("historical-readonly", { site });
@@ -635,9 +661,7 @@ export async function syncInventoryNow(site = currentSite(), { reloadBranch = tr
   try {
     const rows = await fetchSite(site);
     const changed = site === "central" ? applyCentral(rows) : applyBranch(rows, site);
-    if (changed && ["fuxing","yongji"].includes(site) && reloadBranch) {
-      setTimeout(() => location.reload(), 40);
-    }
+    void reloadBranch;
     dispatchStatus("synced", { site, count: rows.length });
     return changed;
   } catch (error) {
@@ -691,6 +715,7 @@ export async function cloudSetQuantity({
   locationCode,
   quantity,
   note = "盤點調整 / Điều chỉnh kiểm kê",
+  sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
@@ -706,7 +731,7 @@ export async function cloudSetQuantity({
     dispatchStatus("error", { error: error.message, stage: "set-quantity" });
     return { ok: false, fallback: false, error };
   }
-  await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
+  if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
 }
 
@@ -714,6 +739,7 @@ export async function cloudSetMinimum({
   itemKey,
   locationCode,
   minimum,
+  sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
@@ -728,7 +754,7 @@ export async function cloudSetMinimum({
     dispatchStatus("error", { error: error.message, stage: "set-minimum" });
     return { ok: false, fallback: false, error };
   }
-  await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
+  if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
 }
 
@@ -836,14 +862,15 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
     return { ok: false, fallback: false, error };
   }
 
-  await fetchSite(site);
+  const currentRows = await fetchSite(site);
+  const currentByCode = new Map(
+    currentRows
+      .filter((row) => row.item.item_key === item.key)
+      .map((row) => [row.location.code, row])
+  );
+
   for (const location of item.locations || []) {
-    const ids = await resolveIds(item.key, location.code);
-    if (!ids.item || !ids.location) continue;
-    const currentRows = await fetchSite(site);
-    const current = currentRows.find((row) =>
-      row.item.id === ids.item.id && row.location.id === ids.location.id
-    );
+    const current = currentByCode.get(location.code);
     const wanted = Math.max(0, Number(location.quantity) || 0);
     const actual = Math.max(0, Number(current?.quantity) || 0);
     if (wanted !== actual) {
@@ -852,6 +879,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
         locationCode: location.code,
         quantity: wanted,
         note: "品項資料調整／盤點 / Chỉnh mặt hàng và kiểm kê",
+        sync: false,
       });
       if (!result.ok) return result;
     }
@@ -874,14 +902,15 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
     return { ok: false, fallback: false, error };
   }
 
-  await fetchSite("central");
+  const currentRows = await fetchSite("central");
+  const currentByCode = new Map(
+    currentRows
+      .filter((row) => row.item.item_key === item.key)
+      .map((row) => [row.location.code, row])
+  );
+
   for (const location of item.locations || []) {
-    const ids = await resolveIds(item.key, location.code);
-    if (!ids.item || !ids.location) continue;
-    const currentRows = await fetchSite("central");
-    const current = currentRows.find((row) =>
-      row.item.id === ids.item.id && row.location.id === ids.location.id
-    );
+    const current = currentByCode.get(location.code);
     const wanted = Math.max(0, Number(location.quantity) || 0);
     const actual = Math.max(0, Number(current?.quantity) || 0);
     if (wanted !== actual) {
@@ -890,6 +919,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
         locationCode: location.code,
         quantity: wanted,
         note: "央廚品項資料調整／盤點 / Chỉnh mặt hàng và kiểm kê bếp trung tâm",
+        sync: false,
       });
       if (!result.ok) return result;
     }
@@ -900,6 +930,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
         itemKey: item.key,
         locationCode: location.code,
         minimum: wantedMinimum,
+        sync: false,
       });
       if (!result.ok) return result;
     }
@@ -1053,7 +1084,7 @@ async function boot() {
 
   const site = currentSite();
   if (site) {
-    await syncInventoryNow(site, { reloadBranch: ["fuxing","yongji"].includes(site) });
+    await syncInventoryNow(site, { reloadBranch: false });
     await subscribeRealtime(site);
   }
 
