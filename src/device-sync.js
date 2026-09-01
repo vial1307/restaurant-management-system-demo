@@ -5,6 +5,7 @@ import {
   isSupabaseConfigured,
   mirrorSupabaseSessionToLegacy,
 } from "./supabase-client.js";
+import { isVpsApiConfigured } from "./vps-api.js";
 
 const APP_KEY = "shitu-kitchen-os-v1";
 const AUTH_KEY = "shitu-kitchen-auth-v1";
@@ -110,7 +111,7 @@ async function ensureBroadcastChannel(supabase, userId) {
 }
 
 async function syncNow({ force = false, forceAccounts = false } = {}) {
-  if (!isSupabaseConfigured() || running) return;
+  if (isVpsApiConfigured() || !isSupabaseConfigured() || running) return;
   const now = Date.now();
   if (!force && lastSyncAt && now - lastSyncAt < MIN_SYNC_GAP) return;
   running = true;
@@ -159,7 +160,7 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
 }
 
 async function persistLanguage(appLang) {
-  if (!isSupabaseConfigured()) return;
+  if (isVpsApiConfigured() || !isSupabaseConfigured()) return;
   const supabase = await getSupabase();
   if (!supabase) return;
   const preferred_language = supabaseLanguage(appLang);
