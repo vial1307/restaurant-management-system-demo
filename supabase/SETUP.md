@@ -51,19 +51,22 @@ The frontend maps it internally to `username@staff.shitu.local` for Supabase Aut
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
 
 
-## 6. Enable cross-device inventory sync (v9)
+## 6. Enable cross-device inventory sync (v10)
 
 For a fresh staging/demo database, run:
 
 1. `supabase/20260901_inventory_ready_v7.sql`
 2. `supabase/20260901_inventory_manager_catalog_v8.sql`
 3. `supabase/20260901_inventory_receive_defaults_v9.sql`
+4. `supabase/20260901_branch_manager_inventory_v10.sql`
 
 in **Supabase → SQL Editor** after `supabase/schema.sql`.
 
-If the database is already on v8, run only `supabase/20260901_inventory_receive_defaults_v9.sql`.
+If the database is already on v9, run only `supabase/20260901_branch_manager_inventory_v10.sql`.
 
-The v9 patch adds optional `固定收貨儲位` data for frequently used products. If no fixed receiving location is configured, staff still choose the destination for each 出貨 and that one-time choice is never saved as a default automatically.
+The v9 patch adds optional `固定收貨儲位` data. The v10 patch grants 復興店 / 永吉店 manager accounts inventory edit permission for their own branch, including add/edit catalog, storage locations, current quantity and minimums. Delete/archive remains admin-only.
+
+For 出貨, if the receiving branch already has the product, the factory UI uses the branch's configured receiving location automatically. Manual destination selection is reserved for products that do not yet exist at the receiving branch. If an existing product has multiple storage locations but no fixed receiving location, shipment is blocked until the branch manager sets one.
 
 This single migration includes:
 - 復興店 storage/work locations
@@ -81,7 +84,7 @@ This single migration includes:
 - actor/user audit for every inventory transaction; no manager confirmation in staging
 - inventory cloud contract version 7
 
-The older split/full files remain in the repository as migration history. Treat `20260901_inventory_ready_v7.sql` as the canonical base, `20260901_inventory_manager_catalog_v8.sql` as the manager-permission patch, and `20260901_inventory_receive_defaults_v9.sql` as the optional receiving-location sync patch.
+The older split/full files remain in the repository as migration history. Treat `20260901_inventory_ready_v7.sql` as the canonical base, followed by v8 (central manager permissions), v9 (receiving-location sync), and v10 (branch manager inventory editing).
 
 After the SQL succeeds:
 1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
@@ -91,7 +94,7 @@ After the SQL succeeds:
 
 
 
-### Inventory workflow v9
+### Inventory workflow v10
 
 - 領貨 / Lấy hàng: move stock from a storage location into the site's in-use/work location.
 - 使用 / Sử dụng: subtract the actually consumed amount from the in-use quantity.
