@@ -4,6 +4,7 @@ import {
   cloudTransferInventory,
   getSiteInventoryRows,
   getSiteLocations,
+  inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
 import {
@@ -158,6 +159,7 @@ async function doRender(host,state){
         listShipments(site,{direction:"incoming",status:"dispatched",limit:100}),
         getSiteLocations(site,"storage"),
       ]);
+      if (inventoryCloudState()==="migration-needed") throw new Error("SCHEMA_MIGRATION_REQUIRED");
       state.locations=locations;
       state.shipments=shipments;
       host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${shipments.length}</span></div><div class="inventory-ops-list" data-op-list>${shipments.length?shipments.map((entry)=>receiveCard(entry,locations,site,language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noPending)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
@@ -166,6 +168,7 @@ async function doRender(host,state){
     }
 
     const data=await loadSiteOperationData(site);
+    if (inventoryCloudState()==="migration-needed") throw new Error("SCHEMA_MIGRATION_REQUIRED");
     state.data=data;
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
@@ -280,7 +283,7 @@ function bind(host,state){
   });
 }
 
-const mounted=new WeakMap();
+let activeMount=null;
 
 export async function mountInventoryOperations(host,{
   site,
@@ -289,12 +292,16 @@ export async function mountInventoryOperations(host,{
   onUpdated,
 }={}){
   if(!host||!site)return;
-  const previous=mounted.get(host);
-  if(previous?.stopWatch) await previous.stopWatch();
-  const state={site,mode,language,onUpdated,stopWatch:null};
-  mounted.set(host,state);
+  if(activeMount?.stopWatch){
+    try{await activeMount.stopWatch();}catch{}
+  }
+  const state={host,site,mode,language,onUpdated,stopWatch:null};
+  activeMount=state;
   await doRender(host,state);
-  state.stopWatch=await watchInventoryTransfers(site,()=>{ void doRender(host,state); });
+  if(activeMount!==state || !host.isConnected) return;
+  state.stopWatch=await watchInventoryTransfers(site,()=>{
+    if(activeMount===state && host.isConnected) void doRender(host,state);
+  });
 }
 
 export function operationTabLabels(language="vi"){
