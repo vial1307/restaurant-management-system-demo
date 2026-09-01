@@ -1,4 +1,4 @@
-import { mountInventoryOperations, operationTabLabels } from "./inventory-operations.js";
+import { mountDraftInventoryOperations, mountInventoryOperations, operationTabLabels } from "./inventory-operations.js";
 import {
   activeInventorySite,
   bootstrapCentralInventory,
@@ -83,8 +83,11 @@ function readCentralDrafts() {
     return Array.isArray(saved) ? saved : [];
   } catch { return []; }
 }
+function centralBaseKey(item) {
+  return item.itemKey || item.baseId || String(item.id || "").split("@")[0];
+}
 function centralDraftKey(item) {
-  return item.itemKey || item.baseId || item.id;
+  return `${centralBaseKey(item)}|${item.zone || ""}`;
 }
 function loadBaseStock() {
   try {
@@ -102,21 +105,68 @@ function loadStock() {
     announceCentralStock(base);
     return base;
   }
-  const drafts = new Map(readCentralDrafts().map((entry) => [entry.key, entry]));
+
+  const draftRows = readCentralDrafts();
+  const exactDrafts = new Map(draftRows.map((entry) => [entry.key, entry]));
+  const legacyDrafts = new Map(draftRows.map((entry) => [String(entry.key || "").split("|")[0], entry]));
+  const represented = new Set();
   const merged = base.map((item) => {
-    const draft = drafts.get(centralDraftKey(item));
-    return draft ? { ...item, qty: Math.max(0, Number(draft.qty) || 0), draft: true } : item;
+    const exactKey = centralDraftKey(item);
+    const baseKey = centralBaseKey(item);
+    const draft = exactDrafts.get(exactKey) || legacyDrafts.get(baseKey);
+    represented.add(exactKey);
+    return draft ? {
+      ...item,
+      ...draft,
+      id: draft.id || item.id,
+      baseId: draft.baseId || item.baseId,
+      itemKey: draft.itemKey || item.itemKey,
+      zh: draft.zh || item.zh,
+      vi: draft.vi || item.vi,
+      unit: draft.unit || item.unit,
+      zone: draft.zone || item.zone,
+      qty: Math.max(0, Number(draft.qty) || 0),
+      draft: true,
+    } : item;
   });
+
+  for (const draft of draftRows) {
+    if (!draft?.key || represented.has(draft.key) || !draft.zone || !draft.zh) continue;
+    merged.push({
+      id: draft.id || `${centralBaseKey(draft)}@${centralLocationCode(draft.zone)}`,
+      baseId: draft.baseId || centralBaseKey(draft),
+      itemKey: draft.itemKey || centralBaseKey(draft),
+      catalogKey: draft.catalogKey || "",
+      zh: draft.zh,
+      vi: draft.vi || draft.zh,
+      unit: draft.unit || "個",
+      zone: draft.zone,
+      qty: Math.max(0, Number(draft.qty) || 0),
+      minimum: Math.max(0, Number(draft.minimum) || 0),
+      draft: true,
+    });
+  }
+
   announceCentralStock(merged);
   return merged;
 }
 function saveStock(items) {
   if (inventoryCloudState() !== "ready") {
     const actor = session();
+    const now = new Date().toISOString();
     const drafts = items.map((item) => ({
       key: centralDraftKey(item),
+      id: item.id,
+      baseId: item.baseId || centralBaseKey(item),
+      itemKey: item.itemKey || centralBaseKey(item),
+      catalogKey: item.catalogKey || "",
+      zh: item.zh,
+      vi: item.vi,
+      unit: item.unit,
+      zone: item.zone,
       qty: Math.max(0, Number(item.qty) || 0),
-      updatedAt: new Date().toISOString(),
+      minimum: Math.max(0, Number(item.minimum) || 0),
+      updatedAt: now,
       updatedBy: actor?.id || null,
       updatedByName: actor?.name || "",
       status: "pending-approval",
