@@ -39,10 +39,14 @@ const TEXT = {
     returnTo:"Cất vào · 歸位儲位",
     returnedTo:"Đã cất lại vào · 已歸位至",
     shipSite:"Chi nhánh nhận · 收貨據點",
-    fixedDestination:"Sản phẩm thường dùng đã có vị trí nhận cố định; nhân viên không cần chọn lại. · 常用品已設定固定收貨儲位，不需再次選擇。",
-    flexibleDestination:"Chưa đặt vị trí nhận cố định; lần xuất này hãy chọn nơi cất thực tế. Lựa chọn này không tự lưu thành cố định. · 尚未設定固定收貨儲位，本次請選擇實際存放位置；本次選擇不會自動固定。",
-    fixedBadge:"Vị trí cố định · 固定收貨儲位",
-    flexibleBadge:"Chọn theo lần này · 本次選擇",
+    fixedDestination:"Sản phẩm đã có tại chi nhánh; nơi cất được lấy tự động theo cài đặt của chi nhánh. · 分店已有此品項，收貨儲位依分店設定自動帶入。",
+    singleDestination:"Chi nhánh chỉ cấu hình một nơi cất cho sản phẩm này nên hệ thống tự chọn. · 分店此品項只有一個存放儲位，系統已自動選擇。",
+    flexibleDestination:"Chi nhánh chưa có sản phẩm này; hãy chọn nơi cất cho lần xuất hiện tại. · 分店尚無此品項，本次請選擇實際存放位置。",
+    needsManagerDestination:"Chi nhánh đã có sản phẩm nhưng có nhiều nơi cất và chưa đặt kho nhận cố định. Quản lý chi nhánh cần chỉnh trước khi xưởng xuất hàng. · 分店已有此品項但有多個儲位，尚未設定固定收貨儲位；請分店主管先完成設定。",
+    fixedBadge:"Theo chi nhánh · 依分店設定",
+    singleBadge:"Tự động · 自動帶入",
+    flexibleBadge:"Sản phẩm mới · 分店未建品項",
+    needsManagerBadge:"Cần quản lý cài đặt · 需主管設定",
     shipFixed:"Đã 出貨 và cập nhật đúng kho nhận. · 已出貨並更新至正確收貨儲位。",
     noItems:"Không có mặt hàng phù hợp · 沒有符合條件的品項",
     loading:"Đang tải dữ liệu kho… · 正在載入庫存…",
@@ -59,7 +63,7 @@ const TEXT = {
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
     workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
-    fixedDestination:"常用品已設定固定收貨儲位，不需再次選擇。",flexibleDestination:"尚未設定固定收貨儲位，本次請選擇實際存放位置；本次選擇不會自動固定。",fixedBadge:"固定收貨儲位",flexibleBadge:"本次選擇",shipFixed:"已出貨並更新至正確收貨儲位。",
+    fixedDestination:"分店已有此品項，收貨儲位依分店設定自動帶入。",singleDestination:"分店此品項只有一個存放儲位，系統已自動選擇。",flexibleDestination:"分店尚無此品項，本次請選擇實際存放位置。",needsManagerDestination:"分店已有此品項但有多個儲位，尚未設定固定收貨儲位；請分店主管先完成設定。",fixedBadge:"依分店設定",singleBadge:"自動帶入",flexibleBadge:"分店未建品項",needsManagerBadge:"需主管設定",shipFixed:"已出貨並更新至正確收貨儲位。",
     noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
     cloudRequired:"請先啟用 Supabase 庫存同步。",editRequired:"此帳號僅能查看庫存。",
@@ -237,29 +241,62 @@ function receiveDefaultFor(state,item,targetSite){
     entry.site===targetSite && entry.catalogKey===catalogKey && entry.locationCode
   ) || null;
 }
+function destinationCatalogFor(state,item,targetSite){
+  const catalogKey=item?.catalogKey||item?.catalog_key||"";
+  if(!catalogKey||!targetSite)return null;
+  return (state.data?.destinationCatalog||[]).find((entry)=>
+    entry.site===targetSite && entry.catalogKey===catalogKey
+  ) || null;
+}
 
 function syncCrossSiteDestination(host,state,itemId,targetSite){
   const card=host.querySelector(`[data-op-item="${CSS.escape(itemId)}"]`);
   const wrap=card?.querySelector(`[data-op-target-location-wrap="${CSS.escape(itemId)}"]`);
   const select=card?.querySelector(`[data-op-target-location="${CSS.escape(itemId)}"]`);
   const hint=card?.querySelector(`[data-op-ship-destination-hint="${CSS.escape(itemId)}"]`);
+  const shipButton=card?.querySelector('[data-op-submit="ship"]');
   const item=state.data?.items.find((entry)=>entry.id===itemId);
   if(!wrap||!select||!item)return;
+
   const locations=(state.data?.allLocations||[]).filter((location)=>location.site===targetSite);
   const fixed=receiveDefaultFor(state,item,targetSite);
+  const destinationItem=destinationCatalogFor(state,item,targetSite);
+  const destinationLocations=(destinationItem?.locations||[])
+    .map((stored)=>locations.find((location)=>location.code===stored.code))
+    .filter(Boolean);
   const fixedLocation=fixed ? locations.find((location)=>location.code===fixed.locationCode) : null;
+  const singleExistingLocation=!fixedLocation && destinationItem && destinationLocations.length===1
+    ? destinationLocations[0]
+    : null;
+  const requiresManager=Boolean(destinationItem && !fixedLocation && destinationLocations.length!==1);
+  const lockedLocation=fixedLocation||singleExistingLocation||null;
+  const hasSource=item.locations.some((location)=>Number(location.quantity)>0);
+
   wrap.hidden=!targetSite;
   select.innerHTML=locations.map((location)=>
-    `<option value="${esc(location.id)}" ${fixedLocation?.id===location.id?"selected":""}>${esc(locationLabel(location,state.language))}</option>`
+    `<option value="${esc(location.id)}" ${lockedLocation?.id===location.id?"selected":""}>${esc(locationLabel(location,state.language))}</option>`
   ).join("");
-  select.disabled=Boolean(fixedLocation);
-  wrap.classList.toggle("is-fixed-receive",Boolean(fixedLocation));
+  select.disabled=Boolean(lockedLocation||requiresManager);
+  wrap.classList.toggle("is-fixed-receive",Boolean(lockedLocation));
+  wrap.classList.toggle("is-receive-blocked",requiresManager);
+  if(shipButton) shipButton.disabled=!hasSource||requiresManager||!locations.length;
+  card.dataset.receiveMode=requiresManager?"manager-required":lockedLocation?"branch-auto":"manual-new";
+
   if(hint){
     const t=langText(state.language);
-    hint.className=`ship-fixed-hint ${fixedLocation?"is-fixed":"is-flexible"}`;
-    hint.innerHTML=fixedLocation
-      ? `<strong>${esc(t.fixedBadge)}</strong><span>${esc(t.fixedDestination)} · ${esc(locationLabel(fixedLocation,state.language))}</span>`
-      : `<strong>${esc(t.flexibleBadge)}</strong><span>${esc(t.flexibleDestination)}</span>`;
+    if(requiresManager){
+      hint.className="ship-fixed-hint is-blocked";
+      hint.innerHTML=`<strong>${esc(t.needsManagerBadge)}</strong><span>${esc(t.needsManagerDestination)}</span>`;
+    }else if(fixedLocation){
+      hint.className="ship-fixed-hint is-fixed";
+      hint.innerHTML=`<strong>${esc(t.fixedBadge)}</strong><span>${esc(t.fixedDestination)} · ${esc(locationLabel(fixedLocation,state.language))}</span>`;
+    }else if(singleExistingLocation){
+      hint.className="ship-fixed-hint is-fixed";
+      hint.innerHTML=`<strong>${esc(t.singleBadge)}</strong><span>${esc(t.singleDestination)} · ${esc(locationLabel(singleExistingLocation,state.language))}</span>`;
+    }else{
+      hint.className="ship-fixed-hint is-flexible";
+      hint.innerHTML=`<strong>${esc(t.flexibleBadge)}</strong><span>${esc(t.flexibleDestination)}</span>`;
+    }
   }
 }
 
@@ -369,6 +406,7 @@ function bind(host,state){
           note:"領貨 / Lấy hàng để sử dụng",
         });
       }else if(type==="ship"){
+        if(card.dataset.receiveMode==="manager-required"){setMessage(host,t.needsManagerDestination,"error");button.disabled=false;return;}
         const sourceId=card.querySelector("[data-op-source]")?.value;
         const source=item.locations.find((entry)=>entry.id===sourceId);
         const destinationLocationId=card.querySelector("[data-op-target-location]")?.value;
@@ -549,6 +587,10 @@ function bindDraft(host,state){
       const targetLocationId=card.querySelector("[data-op-target-location]")?.value || "";
       const source=item.locations.find((entry)=>entry.id===sourceId);
 
+      if(type==="ship" && card.dataset.receiveMode==="manager-required"){
+        setMessage(host,t.needsManagerDestination,"error");
+        return;
+      }
       if((type==="pick"||type==="ship"||type==="transfer") && amount>Number(source?.quantity||0)){
         setMessage(host,t.insufficient,"error");
         return;
