@@ -553,6 +553,30 @@ function centralPage(user) {
     manage: language === "vi" ? "Quản trị kho · 庫存管理" : "庫存管理",
     history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
   };
+  const guide = {
+    overview: language === "zh"
+      ? "查看央廚各儲位的實際庫存；需要操作庫存時請切換到對應功能。"
+      : "Xem tồn thực tế của từng khu trong xưởng; khi cần thao tác hãy chuyển sang đúng chức năng.",
+    in: language === "zh"
+      ? "新到原物料入庫：選擇要存放的央廚儲位並輸入實際到貨數量。"
+      : "Nhập nguyên vật liệu mới: chọn đúng vị trí trong xưởng và nhập số lượng thực nhận.",
+    pick: language === "zh"
+      ? "從央廚儲位領到使用中；已使用的扣除，剩餘物料可選擇儲位歸位。"
+      : "Lấy từ kho xưởng vào 使用中; phần dùng rồi được trừ, phần thừa chọn đúng vị trí để cất lại.",
+    transfer: language === "zh"
+      ? "只用於央廚內部換儲位；來源扣除、目的儲位增加。"
+      : "Chỉ dùng để chuyển vị trí trong xưởng; nơi nguồn bị trừ và nơi đích được cộng.",
+    ship: language === "zh"
+      ? "從央廚出貨至分店時，請選擇分店及分店實際收貨儲位，資料會同步更新。"
+      : "Khi xuất từ xưởng sang chi nhánh, chọn chi nhánh và vị trí nhận thực tế; dữ liệu hai bên cập nhật đồng thời.",
+    manage: language === "zh"
+      ? "新增或編輯原物料、單位、工作區、存放位置與標準量；日常進出貨請勿在此頁操作。"
+      : "Thêm/sửa nguyên vật liệu, đơn vị, khu sử dụng, vị trí lưu và định mức; không dùng mục này cho nhập/xuất hằng ngày.",
+    history: language === "zh"
+      ? "查看庫存操作人員、時間、數量及前後變化；目前僅系統管理員可查看。"
+      : "Xem người thao tác, thời gian, số lượng và thay đổi trước/sau; hiện chỉ Admin được xem.",
+  };
+  const guideHtml = `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${esc(guide[mode] || "")}</span></div>`;
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
   const cloudNotice = cloudReady
@@ -562,6 +586,7 @@ function centralPage(user) {
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
     <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${canManageCatalog ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    ${guideHtml}
     ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canManageCatalog ? centralManageView(items, selectedZone, query, language, canViewHistory) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftDirectAdjust) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
     ${mode === "manage" && canManageCatalog ? centralEditorModal(items, editorKey, language) : ""}
   `;
@@ -703,8 +728,8 @@ function centralEditorModal(items, editorKey, language) {
       <form data-central-editor-form data-editor-key="${esc(editorKey)}">
         <label>中文<input required name="central-label" value="${esc(item.zh || "")}" placeholder="牛肉"/></label>
         <label>Tiếng Việt<input required name="central-label-vi" value="${esc(item.vi || "")}" placeholder="Thịt bò"/></label>
-        <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${CENTRAL_WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea || "noodles") === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select></label>
-        <fieldset class="modal-locations"><legend>${language === "zh" ? "選擇食材存放位置" : "Chọn nơi cất nguyên liệu · 選擇食材存放位置"}</legend>${locationRows}</fieldset>
+        <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${CENTRAL_WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea || "noodles") === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "設定此原物料主要提供給哪個工作區使用。" : "Chọn khu làm việc chính sử dụng nguyên vật liệu này."}</small></label>
+        <fieldset class="modal-locations"><legend>${language === "zh" ? "選擇食材存放位置" : "Chọn nơi cất nguyên liệu · 選擇食材存放位置"}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的位置；「現有」為目前實際庫存，「標準量」為補貨／低庫存判斷基準。" : "Chọn vị trí thực tế có cất hàng; 現有 là tồn thực tế, 標準量 là mức chuẩn để cảnh báo/bổ hàng."}</p>${locationRows}</fieldset>
         <div class="modal-grid modal-meta-grid"><label>${language === "zh" ? "數量單位" : "Đơn vị · 數量"}<select name="central-unit">${CENTRAL_UNITS.map((unit) => `<option value="${esc(unit)}" ${item.unit === unit ? "selected" : ""}>${esc(unit)}</option>`).join("")}</select></label></div>
         <button class="primary-button modal-submit" type="submit">${editing ? "✓" : "＋"} ${esc(title)}</button>
       </form>
