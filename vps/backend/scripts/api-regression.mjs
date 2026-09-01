@@ -86,9 +86,10 @@ assert.equal(employeeSet.response.status,403);
 
 const supervisorSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:supervisor.cookie,
-  body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:10}
+  body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:9}
 });
 assert.equal(supervisorSet.response.status,200);
+assert.equal(Number(supervisorSet.data.after),9);
 
 const supervisorMinimum = await request("/api/inventory/set-minimum",{
   method:"POST",cookie:supervisor.cookie,
@@ -126,14 +127,14 @@ const inbound = await request("/api/inventory/adjust",{
   body:{itemId:beefFx.id,locationId:fxFreezer.id,direction:"in",amount:2,note:"regression inbound"}
 });
 assert.equal(inbound.response.status,200);
-assert.equal(Number(inbound.data.after),12);
+assert.equal(Number(inbound.data.after),11);
 
 const outbound = await request("/api/inventory/adjust",{
   method:"POST",cookie:employee.cookie,
   body:{itemId:beefFx.id,locationId:fxFreezer.id,direction:"out",amount:1,note:"regression use"}
 });
 assert.equal(outbound.response.status,200);
-assert.equal(Number(outbound.data.after),11);
+assert.equal(Number(outbound.data.after),10);
 
 const insufficient = await request("/api/inventory/adjust",{
   method:"POST",cookie:employee.cookie,
@@ -146,7 +147,7 @@ const internal = await request("/api/inventory/transfer",{
   body:{itemId:beefFx.id,sourceLocationId:fxFreezer.id,destinationLocationId:fxFour.id,amount:2,note:"regression transfer"}
 });
 assert.equal(internal.response.status,200);
-assert.equal(Number(internal.data.sourceAfter),9);
+assert.equal(Number(internal.data.sourceAfter),8);
 assert.equal(Number(internal.data.destinationAfter),3);
 
 const crossWrongApi = await request("/api/inventory/transfer",{

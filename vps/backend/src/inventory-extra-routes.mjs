@@ -169,7 +169,7 @@ export async function registerInventoryExtraRoutes(app) {
                actor_user_id,actor_username,metadata
              ) values(
                $1,$2,$3,'adjust',$4,$5,$6,$7,
-               jsonb_build_object('before_quantity',$8,'after_quantity',$9)
+               jsonb_build_object('before_quantity',$8::numeric,'after_quantity',$9::numeric)
              )`,
             [
               itemId,
@@ -484,10 +484,10 @@ export async function registerInventoryExtraRoutes(app) {
            ) values(
              $1,$2,$3,'ship',$4,$5,$6,$7,
              jsonb_build_object(
-               'destination_item_id',$8,
-               'source_before',$9,'source_after',$10,
-               'destination_before',$11,'destination_after',$12,
-               'from_site',$13,'to_site',$14
+               'destination_item_id',$8::uuid,
+               'source_before',$9::numeric,'source_after',$10::numeric,
+               'destination_before',$11::numeric,'destination_after',$12::numeric,
+               'from_site',$13::text,'to_site',$14::text
              )
            )
            returning id,created_at`,

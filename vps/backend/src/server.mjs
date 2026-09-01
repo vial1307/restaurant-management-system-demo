@@ -256,7 +256,7 @@ app.post("/api/inventory/adjust", async (request, reply) => {
            actor_user_id,actor_username,metadata
          ) values(
            $1,$2,$3,$4,$5,$6,$7,$8,
-           jsonb_build_object('before_quantity',$9,'after_quantity',$10)
+           jsonb_build_object('before_quantity',$9::numeric,'after_quantity',$10::numeric)
          )
          returning *`,
         [
