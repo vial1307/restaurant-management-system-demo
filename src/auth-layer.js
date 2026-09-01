@@ -531,7 +531,7 @@ function centralPage(user) {
   const cloudReady = cloudState === "ready";
   const cloudNotice = cloudReady
     ? ""
-    : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và chỉ ghi lại người nhập/xuất/chuyển. Không cần xác nhận quản lý ở giai đoạn hiện tại; quy trình duyệt sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效，目前只記錄入庫／出庫／轉撥人員；現階段不需主管確認，審核流程將於 VPS 正式版再啟用。</small></div>'
+    : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: nhập kho, 領貨, sử dụng, cất lại, điều chuyển và 出貨 đều có hiệu lực ngay; hệ thống ghi người thực hiện. Không cần xác nhận quản lý ở giai đoạn hiện tại; quy trình duyệt sẽ triển khai sau trên VPS. · 測試環境：入庫、領貨、使用、歸位、轉撥與出貨皆立即生效並記錄操作人員；現階段不需主管確認，審核流程將於 VPS 正式版再啟用。</small></div>'
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
