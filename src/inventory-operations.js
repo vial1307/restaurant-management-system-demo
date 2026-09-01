@@ -42,7 +42,7 @@ const TEXT = {
     cloudRequired:"Cần bật đồng bộ Supabase kho trước khi thao tác. · 請先啟用 Supabase 庫存同步。",
     editRequired:"Tài khoản này chỉ có quyền xem kho. · 此帳號僅能查看庫存。",
     success:"Đã cập nhật kho · 庫存已更新",
-    insufficient:"Số lượng xuất lớn hơn tồn hiện tại. · 出庫數量超過現有庫存。",
+    insufficient:"Số lượng thao tác lớn hơn số hiện có. · 操作數量超過現有數量。",
     sameLocation:"Kho nguồn và kho đích phải khác nhau. · 來源與目的儲位不可相同。",
     failed:"Không thể cập nhật dữ liệu cloud. · 雲端庫存更新失敗。",
     transferNo:"Phiếu · 單號",
@@ -55,7 +55,7 @@ const TEXT = {
     noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
     cloudRequired:"請先啟用 Supabase 庫存同步。",editRequired:"此帳號僅能查看庫存。",
-    success:"庫存已更新",insufficient:"出庫數量超過現有庫存。",sameLocation:"來源與目的儲位不可相同。",
+    success:"庫存已更新",insufficient:"操作數量超過現有數量。",sameLocation:"來源與目的儲位不可相同。",
     failed:"雲端庫存更新失敗。",transferNo:"單號",
   },
 };
@@ -115,13 +115,18 @@ function workSourceOptions(item,language){
 }
 
 function overviewCard(item,language,t){
-  const locations=item.locations
+  const storageLocations=item.locations
     .filter((loc)=>Number(loc.quantity)!==0 || Number(loc.minimum)!==0)
     .map((loc)=>`<span class="op-location-pill"><small>${esc(language==="zh"?loc.zh:`${loc.vi||loc.zh} · ${loc.zh}`)}</small><strong>${Number(loc.quantity||0)} ${esc(item.unit)}</strong></span>`)
     .join("");
+  const activeLocations=(item.workLocations||[])
+    .filter((loc)=>Number(loc.quantity)>0)
+    .map((loc)=>`<span class="op-location-pill op-location-pill-use"><small>${esc(language==="zh"?loc.zh:`${loc.vi||loc.zh} · ${loc.zh}`)}</small><strong>${Number(loc.quantity||0)} ${esc(item.unit)}</strong></span>`)
+    .join("");
+  const physicalTotal=Number(item.total||0)+Number(item.workTotal||0);
   return `<article class="inventory-op-card inventory-overview-card" data-op-item="${esc(item.id)}">
-    <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi||"")}</small></div><span><small>${esc(t.current)}</small><strong>${Number(item.total||0)} ${esc(item.unit)}</strong></span></div>
-    <div class="op-location-list">${locations||'<span class="op-location-pill"><small>—</small><strong>0</strong></span>'}</div>
+    <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi||"")}</small></div><span><small>${esc(t.current)}</small><strong>${physicalTotal} ${esc(item.unit)}</strong></span></div>
+    <div class="op-location-list">${storageLocations+activeLocations||'<span class="op-location-pill"><small>—</small><strong>0</strong></span>'}</div>
   </article>`;
 }
 
