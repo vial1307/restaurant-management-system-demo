@@ -36,6 +36,7 @@ const TEXT = {
     useAction:"Sử dụng · 使用",
     returnAction:"Cất lại · 歸位",
     returnTo:"Cất vào · 歸位儲位",
+    returnedTo:"Đã cất lại vào · 已歸位至",
     shipSite:"Chi nhánh nhận · 收貨據點",
     fixedDestination:"Sau khi 出貨, số lượng được cố định tại đúng kho đích đã chọn. · 出貨後數量固定在所選目的儲位。",
     shipFixed:"Đã 出貨 và cập nhật cố định vào kho đích. · 已出貨並固定更新至目的儲位。",
@@ -53,7 +54,7 @@ const TEXT = {
     in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
-    workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",shipSite:"收貨據點",
+    workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
     fixedDestination:"出貨後數量固定在所選目的儲位。",shipFixed:"已出貨並固定更新至目的儲位。",
     noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
@@ -137,6 +138,12 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const positiveSource=item.locations.find((loc)=>Number(loc.quantity)>0);
   const firstSource=positiveSource || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
+  const currentLocationId=["pick","transfer","ship"].includes(mode)
+    ? firstSource?.id
+    : mode==="in"
+      ? (item.locations[0]?.id || locations[0]?.id)
+      : "";
+  const currentQuantity=currentLocationId ? Number(stockAt(item,currentLocationId)||0) : Number(item.total||0);
   const workLocation=workLocationForItem(item,workLocations);
   const workQuantity=workLocation ? Number(workStockAt(item,workLocation.id)||0) : Number(item.workTotal||0);
   const otherSites=INVENTORY_SITES.filter((entry)=>entry.id!==site);
@@ -180,7 +187,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
     ? `<div class="op-transfer-balance" data-op-transfer-balance="${esc(item.id)}"><span>${esc(locationLabel({name_zh_tw:firstSource.zh,name_vi:firstSource.vi},language))} <strong>${Number(firstSource.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(firstDestination,language))} <strong>${Number(stockAt(item,firstDestination.id))||0}</strong></span></div>`
     : "";
   return `<article class="inventory-op-card" data-op-item="${esc(item.id)}">
-    <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small></div><span><small>${esc(t.current)}</small><strong data-op-current="${esc(item.id)}">${Number(item.total||0)} ${esc(item.unit)}</strong></span></div>
+    <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small></div><span><small>${esc(t.current)}</small><strong data-op-current="${esc(item.id)}">${currentQuantity} ${esc(item.unit)}</strong></span></div>
     <div class="op-select-grid">${controls}</div>
     ${transferBalance}
     <div class="op-action-row">${qtyControl(item.id)}${action}</div>
@@ -199,6 +206,7 @@ async function doRender(host,state){
       ? data.items.map((item)=>overviewCard(item,language,t))
       : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[]));
     host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+    restoreOperationSelections(host,state);
     bind(host,state);
   }catch(error){
     host.innerHTML=`<div class="inventory-cloud-notice">${esc(t.cloudRequired)}<small>${esc(error?.message||"")}</small></div>`;
@@ -236,6 +244,31 @@ function setMessage(host,text,kind=""){
   node.textContent=text||"";
   node.className=`op-message ${kind}`;
 }
+function operationSelections(state){
+  if(!state.selections) state.selections={sources:{},returns:{}};
+  return state.selections;
+}
+function restoreOperationSelections(host,state){
+  const selections=operationSelections(state);
+  host.querySelectorAll("[data-op-item]").forEach((card)=>{
+    const itemId=card.dataset.opItem;
+    const item=state.data?.items.find((entry)=>entry.id===itemId);
+    const source=card.querySelector("[data-op-source]");
+    const rememberedSource=selections.sources[itemId];
+    if(source&&rememberedSource&&[...source.options].some((option)=>option.value===rememberedSource)){
+      source.value=rememberedSource;
+    }
+    if(source&&item){
+      const current=card.querySelector(`[data-op-current="${CSS.escape(itemId)}"]`);
+      if(current) current.textContent=`${stockAt(item,source.value)} ${item.unit}`;
+    }
+    const returnDestination=card.querySelector("[data-op-return-destination]");
+    const rememberedReturn=selections.returns[itemId];
+    if(returnDestination&&rememberedReturn&&[...returnDestination.options].some((option)=>option.value===rememberedReturn)){
+      returnDestination.value=rememberedReturn;
+    }
+  });
+}
 function bindQuantity(host){
   host.querySelectorAll("[data-op-minus]").forEach((button)=>{
     button.onclick=()=>{
@@ -258,6 +291,7 @@ function bind(host,state){
 
   host.querySelectorAll("[data-op-source]").forEach((select)=>{
     select.onchange=()=>{
+      operationSelections(state).sources[select.dataset.opSource]=select.value;
       const item=state.data?.items.find((entry)=>entry.id===select.dataset.opSource);
       const current=host.querySelector(`[data-op-current="${CSS.escape(select.dataset.opSource)}"]`);
       if(current&&item) current.textContent=`${stockAt(item,select.value)} ${item.unit}`;
@@ -269,6 +303,9 @@ function bind(host,state){
       const itemId=select.dataset.opDestination;
       refreshTransferBalance(host,state,itemId);
     };
+  });
+  host.querySelectorAll("[data-op-return-destination]").forEach((select)=>{
+    select.onchange=()=>{ operationSelections(state).returns[select.dataset.opReturnDestination]=select.value; };
   });
   host.querySelectorAll("[data-op-target]").forEach((select)=>{
     select.onchange=()=>syncCrossSiteDestination(host,state,select.dataset.opTarget,select.value);
@@ -387,6 +424,8 @@ function bind(host,state){
       const work=state.data?.workLocations?.find((entry)=>entry.id===workId);
       const destinationId=card?.querySelector("[data-op-return-destination]")?.value;
       const destination=state.data?.locations.find((entry)=>entry.id===destinationId);
+      if(!destination){setMessage(host,t.failed,"error");return;}
+      operationSelections(state).returns[item.id]=destinationId;
       const input=card?.querySelector(`[data-op-amount="${CSS.escape(item.id+"-return")}"]`);
       const amount=Math.max(1,Number(input?.value)||1);
       const current=Number(workStockAt(item,workId)||0);
@@ -402,7 +441,7 @@ function bind(host,state){
       if(result?.ok){
         await syncInventoryNow(site,{reloadBranch:false});
         await doRender(host,state);
-        setMessage(host,t.success,"ok");
+        setMessage(host,`${t.returnedTo} ${locationLabel(destination,language)}`,"ok");
         state.onUpdated?.();
       }else{
         setMessage(host,errorText(result?.error,t),"error");
@@ -452,6 +491,7 @@ function bindDraft(host,state){
 
   host.querySelectorAll("[data-op-source]").forEach((select)=>{
     select.onchange=()=>{
+      operationSelections(state).sources[select.dataset.opSource]=select.value;
       const item=state.data?.items.find((entry)=>entry.id===select.dataset.opSource);
       const current=host.querySelector(`[data-op-current="${CSS.escape(select.dataset.opSource)}"]`);
       if(current&&item) current.textContent=`${stockAt(item,select.value)} ${item.unit}`;
@@ -460,6 +500,9 @@ function bindDraft(host,state){
   });
   host.querySelectorAll("[data-op-destination]").forEach((select)=>{
     select.onchange=()=>refreshTransferBalance(host,state,select.dataset.opDestination);
+  });
+  host.querySelectorAll("[data-op-return-destination]").forEach((select)=>{
+    select.onchange=()=>{ operationSelections(state).returns[select.dataset.opReturnDestination]=select.value; };
   });
   host.querySelectorAll("[data-op-target]").forEach((select)=>{
     select.onchange=()=>syncCrossSiteDestination(host,state,select.dataset.opTarget,select.value);
@@ -555,6 +598,9 @@ function bindDraft(host,state){
       const card=button.closest("[data-op-item]");
       const workId=card?.querySelector("[data-op-work-destination]")?.value || workLocationForItem(item,state.data?.workLocations||[])?.id || "";
       const destinationId=card?.querySelector("[data-op-return-destination]")?.value || "";
+      const destination=state.data?.locations.find((entry)=>entry.id===destinationId);
+      if(!destination){setMessage(host,t.failed,"error");return;}
+      operationSelections(state).returns[item.id]=destinationId;
       const input=card?.querySelector(`[data-op-amount="${CSS.escape(item.id+"-return")}"]`);
       const amount=Math.max(1,Number(input?.value)||1);
       const current=Number(workStockAt(item,workId)||0);
@@ -571,7 +617,7 @@ function bindDraft(host,state){
       if(result?.ok){
         state.data=await state.reload();
         await renderDraft(host,state);
-        setMessage(host,language==="zh"?"庫存已更新。":"Đã cập nhật tồn kho. · 庫存已更新。","ok");
+        setMessage(host,`${t.returnedTo} ${locationLabel(destination,language)}`,"ok");
       }else{
         setMessage(host,errorText(result?.error,t),"error");
         button.disabled=false;
@@ -588,6 +634,7 @@ async function renderDraft(host,state){
   state.data=data;
   const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations,data.workLocations||[]));
   host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Môi trường thử nghiệm: thao tác có hiệu lực ngay và ghi người thực hiện · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+  restoreOperationSelections(host,state);
   bindDraft(host,state);
 }
 
