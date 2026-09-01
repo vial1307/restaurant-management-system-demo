@@ -255,6 +255,9 @@ function addToBranchDraftFromCentral(site,itemMeta,destinationLocationId,amount)
     row=target;
   }
   row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);
+  row.locationFixed=true;
+  row.fixedAt=new Date().toISOString();
+  row.fixedReason="ship";
   draft.status="staging";
   draft.updatedAt=new Date().toISOString();
   localStorage.setItem(`${BRANCH_DRAFT_PREFIX}${site}`,JSON.stringify(draft));
@@ -441,7 +444,8 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
   saveCentralWork(workMap);
   appendOperationLog({
     site:"central",user:user.name,userId:user.id,action:type,item:template.zh,amount:value,unit:template.unit,
-    source:sourceLabel,destination:destinationLabel
+    source:sourceLabel,destination:destinationLabel,
+    locationFixed:type==="ship"
   });
   pushHistory({
     user:user.name,
@@ -503,6 +507,7 @@ function centralPage(user) {
   const items = loadStock();
   const canEdit = user.role === "admin" || Boolean(user.permissions?.inventory?.edit);
   const draftCountAllowed = canInventoryDraftCount();
+  const draftDirectAdjust = draftCountAllowed && user.role === "admin";
   let mode = content.dataset.centralMode || "overview";
   if (mode === "receive") { mode = "overview"; content.dataset.centralMode = "overview"; }
   if (mode === "out") { mode = "pick"; content.dataset.centralMode = "pick"; }
@@ -537,7 +542,7 @@ function centralPage(user) {
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
     <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftCountAllowed) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftCountAllowed) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
+    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftDirectAdjust) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftDirectAdjust) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
   if (["in","pick","transfer","ship"].includes(mode)) {
@@ -678,7 +683,7 @@ function bindCentral(user) {
   });
 
   content.querySelectorAll("[data-central-set]").forEach(b => b.onclick = async () => {
-    if (!canDirectInventoryAdjust() && !canInventoryDraftCount()) return;
+    if (!canDirectInventoryAdjust() && !(canInventoryDraftCount() && user.role === "admin")) return;
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralSet);
     if (!item) return;
