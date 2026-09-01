@@ -94,7 +94,8 @@ export function inventoryCloudState() {
 
 export function canInventoryEdit() {
   if (!hasInventoryPermission("edit")) return false;
-  if (inventoryCloudState() === "ready" && globalThis.navigator?.onLine === false) return false;
+  if (inventoryCloudState() !== "ready") return false;
+  if (globalThis.navigator?.onLine === false) return false;
   const site = currentSite();
   return !["fuxing","yongji"].includes(site) || isCurrentBranchInventoryDate();
 }
