@@ -402,7 +402,7 @@ function centralPage(user) {
   const cloudReady = cloudState === "ready";
   const cloudNotice = cloudReady
     ? ""
-    : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Số lượng hiện là bản tạm để chỉnh sửa và chờ cấp trên duyệt. Danh mục và tên hàng được giữ nguyên; chưa ghi vào dữ liệu cloud chính thức. · 目前數量為可編輯的待審草稿；品項分類與名稱維持不變，尚未寫入正式雲端庫存。</small></div>'
+    : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Đã mở toàn bộ thao tác kho ở chế độ tạm: chỉnh số lượng, nhập kho, xuất kho, điều chuyển, xuất/nhận giữa chi nhánh. Tất cả thay đổi chờ cấp trên duyệt và chưa ghi vào cloud chính thức. · 已開放完整暫存操作：數量調整、入庫、出庫、轉撥及分店出／收貨；所有變更待主管確認，尚未寫入正式雲端庫存。</small></div>'
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
