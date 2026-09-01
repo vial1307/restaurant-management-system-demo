@@ -1,37 +1,38 @@
 const CACHE_PREFIX = "shitu-kitchen-os-";
-const CACHE_NAME = `${CACHE_PREFIX}v54`;
-const VERSION = "54";
+const CACHE_NAME = `${CACHE_PREFIX}v55`;
+const VERSION = "55";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=54",
-  "./src/app.js?v=54",
-  "./src/supabase-config.js?v=54",
-  "./src/supabase-client.js?v=54",
-  "./src/supabase-auth-bridge.js?v=54",
-  "./src/inventory-cloud.js?v=54",
-  "./src/inventory-transfer-service.js?v=54",
-  "./src/inventory-operations.js?v=54",
-  "./src/device-sync.js?v=54",
-  "./src/store.js?v=54",
-  "./src/rules.js?v=54",
-  "./src/i18n.js?v=54",
-  "./src/locales.js?v=54",
-  "./src/operations.js?v=54",
-  "./src/management.js?v=54",
-  "./src/skills.js?v=54",
-  "./src/qr.js?v=54",
-  "./src/styles.css?v=54",
-  "./src/auth-layer.css?v=54",
-  "./src/account-admin.css?v=54",
-  "./src/ui-refresh.css?v=54",
-  "./src/mobile-browser-compat.css?v=54",
-  "./src/auth-layer.js?v=54",
-  "./src/search-i18n-layer.js?v=54",
-  "./src/account-admin.js?v=54",
-  "./src/ui-refresh.js?v=54",
-  "./src/browser-compat.js?v=54",
-  "./src/icon.svg?v=54",
+  "./manifest.webmanifest?v=55",
+  "./src/inventory-permission-refresh.js?v=55",
+  "./src/app.js?v=55",
+  "./src/supabase-config.js?v=55",
+  "./src/supabase-client.js?v=55",
+  "./src/supabase-auth-bridge.js?v=55",
+  "./src/inventory-cloud.js?v=55",
+  "./src/inventory-transfer-service.js?v=55",
+  "./src/inventory-operations.js?v=55",
+  "./src/device-sync.js?v=55",
+  "./src/store.js?v=55",
+  "./src/rules.js?v=55",
+  "./src/i18n.js?v=55",
+  "./src/locales.js?v=55",
+  "./src/operations.js?v=55",
+  "./src/management.js?v=55",
+  "./src/skills.js?v=55",
+  "./src/qr.js?v=55",
+  "./src/styles.css?v=55",
+  "./src/auth-layer.css?v=55",
+  "./src/account-admin.css?v=55",
+  "./src/ui-refresh.css?v=55",
+  "./src/mobile-browser-compat.css?v=55",
+  "./src/auth-layer.js?v=55",
+  "./src/search-i18n-layer.js?v=55",
+  "./src/account-admin.js?v=55",
+  "./src/ui-refresh.js?v=55",
+  "./src/browser-compat.js?v=55",
+  "./src/icon.svg?v=55",
 ];
 
 self.addEventListener("install", (event) => {
@@ -90,13 +91,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // JS/CSS/manifest must check network first so new releases appear immediately.
   if (/\.(?:js|css|webmanifest)$/i.test(url.pathname)) {
     event.respondWith(networkFirst(event.request));
     return;
   }
 
-  // Static images/icons can remain fast while refreshing in background.
   event.respondWith(staleWhileRevalidate(event.request));
 });
 
