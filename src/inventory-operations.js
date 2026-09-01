@@ -9,6 +9,7 @@ import {
 } from "./inventory-cloud.js";
 import {
   INVENTORY_SITES,
+  directBranchTransfer,
   dispatchBranchShipment,
   listShipments,
   loadSiteOperationData,
@@ -160,13 +161,15 @@ function overviewCard(item,language,t){
   </article>`;
 }
 
-function itemCard(item,mode,locations,site,language,t){
+function itemCard(item,mode,locations,site,language,t,allLocations=locations){
   const firstSource=item.locations.find((loc)=>Number(loc.quantity)>0) || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
   const otherSites=INVENTORY_SITES.filter((entry)=>site==="central" ? ["fuxing","yongji"].includes(entry.id) : entry.id==="central");
   const sourceSelect = `<label><span>${esc(t.from)}</span><select data-op-source="${esc(item.id)}">${sourceOptions(item,language)}</select></label>`;
   const destinationSelect = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,firstDestination?.id)}</select></label>`;
   const outboundDestination = `<label><span>${esc(t.to)}</span><select data-op-target="${esc(item.id)}"><option value="usage">${esc(t.usage)}</option>${otherSites.map((entry)=>`<option value="${entry.id}">${esc(siteLabel(entry.id,language))}</option>`).join("")}</select></label>`;
+  const crossSiteLocations=(allLocations||[]).filter((location)=>location.site&&location.site!==site);
+  const targetLocationSelect=`<label class="op-target-location" data-op-target-location-wrap="${esc(item.id)}" hidden><span>${esc(t.destination)}</span><select data-op-target-location="${esc(item.id)}">${crossSiteLocations.map((location)=>`<option value="${esc(location.id)}" data-site="${esc(location.site)}">${esc(siteLabel(location.site,language))} · ${esc(locationLabel(location,language))}</option>`).join("")}</select></label>`;
   const inboundDestination = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,item.locations[0]?.id || locations[0]?.id)}</select></label>`;
 
   let controls="";
@@ -175,7 +178,7 @@ function itemCard(item,mode,locations,site,language,t){
     controls=inboundDestination;
     action=`<button class="op-primary" data-op-submit="in" data-item-id="${esc(item.id)}">${esc(t.inbound)}</button>`;
   }else if(mode==="out"){
-    controls=sourceSelect+outboundDestination;
+    controls=sourceSelect+outboundDestination+targetLocationSelect;
     action=`<button class="op-primary op-out" data-op-submit="out" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.outbound)}</button>`;
   }else{
     controls=sourceSelect+destinationSelect;
@@ -229,7 +232,7 @@ async function doRender(host,state){
     state.data=data;
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
-      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t));
+      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations));
     host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
     bind(host,state);
   }catch(error){
@@ -248,6 +251,26 @@ function refreshTransferBalance(host,state,itemId){
   const destination=state.data?.locations.find((entry)=>entry.id===destinationId);
   if(!source||!destination)return;
   balance.innerHTML=`<span>${esc(locationLabel({name_zh_tw:source.zh,name_vi:source.vi},state.language))} <strong>${Number(source.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(destination,state.language))} <strong>${Number(stockAt(item,destinationId))||0}</strong></span>`;
+}
+
+function syncCrossSiteDestination(host,itemId,targetSite){
+  const card=host.querySelector(`[data-op-item="${CSS.escape(itemId)}"]`);
+  const wrap=card?.querySelector(`[data-op-target-location-wrap="${CSS.escape(itemId)}"]`);
+  const select=card?.querySelector(`[data-op-target-location="${CSS.escape(itemId)}"]`);
+  if(!wrap||!select)return;
+  if(!targetSite||targetSite==="usage"){
+    wrap.hidden=true;
+    return;
+  }
+  wrap.hidden=false;
+  let first="";
+  [...select.options].forEach((option)=>{
+    const active=option.dataset.site===targetSite;
+    option.disabled=!active;
+    option.hidden=!active;
+    if(active&&!first)first=option.value;
+  });
+  if(first)select.value=first;
 }
 
 function setMessage(host,text,kind=""){
@@ -290,6 +313,11 @@ function bind(host,state){
       refreshTransferBalance(host,state,itemId);
     };
   });
+  host.querySelectorAll("[data-op-target]").forEach((select)=>{
+    select.onchange=()=>syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
+    syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
+  });
+
 
   host.querySelectorAll("[data-op-submit]").forEach((button)=>{
     button.onclick=async()=>{
@@ -312,11 +340,19 @@ function bind(host,state){
         const sourceId=card.querySelector("[data-op-source]")?.value;
         const source=item.locations.find((entry)=>entry.id===sourceId);
         const target=card.querySelector("[data-op-target]")?.value || "usage";
+      const targetLocationId=card.querySelector("[data-op-target-location]")?.value || "";
         if(amount>Number(source?.quantity||0)){setMessage(host,t.insufficient,"error");button.disabled=false;return;}
         if(target==="usage"){
           result=await cloudAdjustQuantity({itemKey:item.itemKey,locationCode:source?.code,direction:"out",amount,note:"領料／耗用 / Xuất dùng"});
         }else{
-          result=await dispatchBranchShipment({itemId:item.id,sourceLocationId:sourceId,toSite:target,quantity:amount,note:"分店出貨 / Xuất hàng chi nhánh"});
+          const destinationLocationId=card.querySelector("[data-op-target-location]")?.value;
+          result=await directBranchTransfer({
+            itemId:item.id,
+            sourceLocationId:sourceId,
+            destinationLocationId,
+            quantity:amount,
+            note:"分店直接轉撥 / Điều chuyển trực tiếp giữa cơ sở",
+          });
         }
       }else if(type==="transfer"){
         const sourceId=card.querySelector("[data-op-source]")?.value;
@@ -420,6 +456,11 @@ function bindDraft(host,state){
   host.querySelectorAll("[data-op-destination]").forEach((select)=>{
     select.onchange=()=>refreshTransferBalance(host,state,select.dataset.opDestination);
   });
+  host.querySelectorAll("[data-op-target]").forEach((select)=>{
+    select.onchange=()=>syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
+    syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
+  });
+
 
   host.querySelectorAll("[data-op-submit]").forEach((button)=>{
     button.onclick=async()=>{
@@ -448,18 +489,15 @@ function bindDraft(host,state){
         itemId:item.id,
         itemMeta:{zh:item.zh,vi:item.vi,unit:item.unit,catalogKey:item.catalogKey||item.catalog_key||""},
         sourceLocationId:sourceId,
-        destinationLocationId:destinationId,
+        destinationLocationId:type==="out"&&target!=="usage"?targetLocationId:destinationId,
         targetSite:target,
         amount,
       });
-      if(result?.ok && type==="out" && target!=="usage"){
-        createDraftTransfer({fromSite:state.site,toSite:target,item,sourceLocationId:sourceId,quantity:amount});
-      }
 
       if(result?.ok){
         state.data=await state.reload();
         await renderDraft(host,state);
-        setMessage(host,language==="zh"?"已完成暫存操作，庫存位置已更新。":"Đã chuyển dữ liệu và cập nhật vị trí kho tạm. · 已完成暫存操作，庫存位置已更新。","ok");
+        setMessage(host,language==="zh"?"庫存已更新。":"Đã cập nhật tồn kho. · 庫存已更新。","ok");
       }else{
         setMessage(host,errorText(result?.error,t),"error");
         button.disabled=false;
@@ -507,7 +545,7 @@ async function renderDraft(host,state){
     bindDraft(host,state);
     return;
   }
-  const cards=data.items.map((item)=>draftItemCard(item,state.mode,data.locations,state.site,state.language,t));
+  const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations));
   host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"暫存操作：數量變更待主管確認":"Thao tác tạm: thay đổi số lượng chờ cấp trên duyệt · 暫存操作：數量變更待主管確認"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
   bindDraft(host,state);
 }
