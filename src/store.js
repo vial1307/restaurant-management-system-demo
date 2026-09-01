@@ -530,6 +530,7 @@ export function createStore(storage = globalThis.localStorage) {
           stockKey,
           label: item.label || base.label,
           labelVi: item.labelVi || base.labelVi,
+          catalogKey: item.catalogKey || base.catalogKey || "",
           unit: item.unit || base.unit,
           workArea: item.workArea || base.workArea,
         };
