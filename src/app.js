@@ -473,8 +473,8 @@ async function runCloudTransferPlan(steps, note, legacyFallback) {
 
 function quantityControl(item, kind = "item") {
   const action = kind === "workItem" ? "adjust-work-item" : "adjust-item";
-  const editable = canInventoryEdit();
-  const direct = editable && canDirectInventoryAdjust();
+  const editable = canInventoryEdit() || canInventoryDraftCount();
+  const direct = (canInventoryEdit() && canDirectInventoryAdjust()) || canInventoryDraftCount();
   const value = direct
     ? numberInput(item.quantity, `data-field="${kind}" data-key="quantity" data-id="${escapeHtml(item.id)}"`, "quantity-input")
     : `<strong class="quantity-readonly" aria-label="Current quantity">${escapeHtml(item.quantity)}</strong>`;
@@ -491,7 +491,7 @@ function inventoryStatusBadge(item, text) {
 
 function storageInventoryRow(item, context) {
   const { language, text, record } = context;
-  const editable = canInventoryEdit();
+  const editable = canInventoryEdit() || canInventoryDraftCount();
   const catalogManage = canDirectInventoryAdjust();
   const status = inventoryStatus(item);
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
@@ -505,7 +505,7 @@ function storageInventoryRow(item, context) {
 
 function workInventoryRow(item, context) {
   const { language, text, record } = context;
-  const editable = canInventoryEdit();
+  const editable = canInventoryEdit() || canInventoryDraftCount();
   const catalogManage = canDirectInventoryAdjust();
   const status = inventoryStatus(item);
   const sources = storageSources(item, record);
@@ -682,6 +682,62 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
   return {ok:true,targetSite,sourceSite};
 }
 
+
+function findBranchDraftItem(record,id,kind="item"){
+  const list=kind==="workItem"?record.workInventory:record.inventory;
+  return list.find((entry)=>entry.id===id);
+}
+function setBranchDraftQuantity(site,baseRecord,id,kind,next){
+  const draft=loadBranchDraftRecord(site,baseRecord);
+  const item=findBranchDraftItem(draft,id,kind);
+  if(!item)return false;
+  item.quantity=Math.max(0,Number(next)||0);
+  saveBranchDraftRecord(site,draft);
+  return true;
+}
+function adjustBranchDraftQuantity(site,baseRecord,id,kind,delta){
+  const draft=loadBranchDraftRecord(site,baseRecord);
+  const item=findBranchDraftItem(draft,id,kind);
+  if(!item)return false;
+  item.quantity=Math.max(0,Number(item.quantity||0)+Number(delta||0));
+  saveBranchDraftRecord(site,draft);
+  return true;
+}
+function restockBranchDraftWork(site,baseRecord,id){
+  const draft=loadBranchDraftRecord(site,baseRecord);
+  const item=draft.workInventory.find((entry)=>entry.id===id);
+  if(!item)return false;
+  let need=Math.max(0,Number(item.minimum||0)-Number(item.quantity||0));
+  if(need<=0)return true;
+  const sources=draft.inventory.filter((entry)=>entry.stockKey===item.stockKey&&Number(entry.quantity)>0);
+  for(const source of sources){
+    if(need<=0)break;
+    const moved=Math.min(need,Number(source.quantity)||0);
+    source.quantity-=moved;
+    item.quantity=Number(item.quantity||0)+moved;
+    need-=moved;
+  }
+  saveBranchDraftRecord(site,draft);
+  return true;
+}
+function restockBranchDraftStorage(site,baseRecord,id){
+  const draft=loadBranchDraftRecord(site,baseRecord);
+  const item=draft.inventory.find((entry)=>entry.id===id);
+  if(!item)return false;
+  let need=Math.max(0,Number(item.minimum||0)-Number(item.quantity||0));
+  if(need<=0)return true;
+  const sources=draft.inventory.filter((entry)=>entry.stockKey===item.stockKey&&entry.id!==item.id&&Number(entry.quantity)>0);
+  for(const source of sources){
+    if(need<=0)break;
+    const moved=Math.min(need,Number(source.quantity)||0);
+    source.quantity-=moved;
+    item.quantity=Number(item.quantity||0)+moved;
+    need-=moved;
+  }
+  saveBranchDraftRecord(site,draft);
+  return true;
+}
+
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language } = context;
   const site = activeInventorySite() || "fuxing";
@@ -714,7 +770,7 @@ function inventory(context) {
   const cloudNotice = cloudReady
     ? ""
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Đang mở toàn bộ thao tác kho ở chế độ tạm để kiểm thử; thay đổi chờ cấp trên duyệt và chưa ghi vào cloud chính thức. · 目前已開放完整暫存操作供測試；變更待主管確認，尚未寫入正式雲端庫存。</small></div>`;
-  const opsEnabled = editable && !historical && ["fuxing","yongji"].includes(site);
+  const opsEnabled = editable && (!cloudReady || !historical) && ["fuxing","yongji"].includes(site);
   const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
@@ -974,6 +1030,11 @@ root.addEventListener("click", (event) => {
   if (action === "select-task-filter") { view.taskFilter = target.dataset.filter; render(); }
   if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
+    const site=activeInventorySite();
+    if (canInventoryDraftCount()) {
+      if(adjustBranchDraftQuantity(site,state.records[state.selectedDate],target.dataset.id,"item",Number(target.dataset.delta))) render();
+      return;
+    }
     if (!canDirectInventoryAdjust()) return;
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
@@ -998,6 +1059,11 @@ root.addEventListener("click", (event) => {
     }
   }
   if (action === "adjust-work-item") {
+    const site=activeInventorySite();
+    if (canInventoryDraftCount()) {
+      if(adjustBranchDraftQuantity(site,state.records[state.selectedDate],target.dataset.id,"workItem",Number(target.dataset.delta))) render();
+      return;
+    }
     if (!canDirectInventoryAdjust()) return;
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
@@ -1022,6 +1088,10 @@ root.addEventListener("click", (event) => {
     }
   }
   if (action === "restock-work-item" && !target.disabled) {
+    if (canInventoryDraftCount()) {
+      if(restockBranchDraftWork(activeInventorySite(),state.records[state.selectedDate],target.dataset.id)) render();
+      return;
+    }
     if (!canInventoryEdit()) return;
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
@@ -1030,6 +1100,10 @@ root.addEventListener("click", (event) => {
     }
   }
   if (action === "restock-storage-item" && !target.disabled) {
+    if (canInventoryDraftCount()) {
+      if(restockBranchDraftStorage(activeInventorySite(),state.records[state.selectedDate],target.dataset.id)) render();
+      return;
+    }
     if (!canInventoryEdit()) return;
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
@@ -1079,6 +1153,11 @@ root.addEventListener("change", (event) => {
   if (field === "procurement") store.updateProcurementLine(id, key, element.value);
   if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
   if (field === "item") {
+    if (canInventoryDraftCount() && key === "quantity") {
+      setBranchDraftQuantity(activeInventorySite(),state.records[state.selectedDate],id,"item",element.value);
+      render();
+      return;
+    }
     if (!canDirectInventoryAdjust()) { render(); return; }
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === id);
     if (!item) return;
@@ -1127,6 +1206,11 @@ root.addEventListener("change", (event) => {
     });
   }
   if (field === "workItem") {
+    if (canInventoryDraftCount() && key === "quantity") {
+      setBranchDraftQuantity(activeInventorySite(),state.records[state.selectedDate],id,"workItem",element.value);
+      render();
+      return;
+    }
     if (!canDirectInventoryAdjust()) { render(); return; }
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === id);
     if (!item) return;
