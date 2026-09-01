@@ -1,6 +1,10 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_CONFIGURED } from "./supabase-config.js";
 
 let clientPromise = null;
+let profilePromise = null;
+let profileCache = null;
+let profileCacheAt = 0;
+const PROFILE_CACHE_MS = 5000;
 
 export function isSupabaseConfigured() {
   return SUPABASE_CONFIGURED;
@@ -30,24 +34,48 @@ export function loginEmailForUsername(username) {
   return `${normalized}@staff.shitu.local`;
 }
 
-export async function getMyProfile() {
-  const supabase = await getSupabase();
-  if (!supabase) return null;
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData?.user) return null;
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id,username,display_name,role,location,active,permissions,preferred_language")
-    .eq("id", authData.user.id)
-    .single();
-  if (error) throw error;
-  return {
-    ...data,
-    preferred_language:
-      authData.user.user_metadata?.preferred_language ||
-      data.preferred_language ||
-      "vi",
-  };
+export function invalidateMyProfileCache() {
+  profileCache = null;
+  profileCacheAt = 0;
+  profilePromise = null;
+}
+
+export async function getMyProfile({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && profileCache && now - profileCacheAt < PROFILE_CACHE_MS) return profileCache;
+  if (!force && profilePromise) return profilePromise;
+
+  profilePromise = (async () => {
+    const supabase = await getSupabase();
+    if (!supabase) return null;
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const authUser = sessionData?.session?.user;
+    if (sessionError || !authUser) return null;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id,username,display_name,role,location,active,permissions,preferred_language")
+      .eq("id", authUser.id)
+      .single();
+    if (error) throw error;
+
+    const profile = {
+      ...data,
+      preferred_language:
+        authUser.user_metadata?.preferred_language ||
+        data.preferred_language ||
+        "vi",
+    };
+    profileCache = profile;
+    profileCacheAt = Date.now();
+    return profile;
+  })();
+
+  try {
+    return await profilePromise;
+  } finally {
+    profilePromise = null;
+  }
 }
 
 export async function mirrorSupabaseSessionToLegacy(profile) {
