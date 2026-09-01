@@ -15,10 +15,13 @@ import {
   vpsMe,
   vpsSaveUser,
 } from "./vps-api.js";
+import {
+  ACCOUNT_MODULES,
+  normalizeAccountPermissions,
+} from "./account-permissions.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
-const MODULES = ["dashboard","inventory","procurement","reservations","preparation","menu","sop","skills","attendance","schedule","reports","remote","settings"];
 
 function esc(v) {
   return String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -37,7 +40,7 @@ function showLoginError(message) {
 
 function permissionsFromForm(data) {
   const permissions = {};
-  for (const key of MODULES) {
+  for (const key of ACCOUNT_MODULES) {
     const view = data.has(`perm:${key}:view`);
     const edit = data.has(`perm:${key}:edit`);
     permissions[key] = { view, edit: view && edit };
@@ -60,8 +63,8 @@ function normalizeVpsUser(user) {
     name: user.displayName || user.display_name || user.username,
     role: authRole,
     accountRole,
-    location: user.location || "fuxing",
-    permissions: user.permissions || {},
+    location: accountRole === "admin" ? "all" : (user.location || "fuxing"),
+    permissions: normalizeAccountPermissions(accountRole, user.permissions),
     preferredLanguage: user.preferredLanguage || user.preferred_language || "vi",
     provider: "vps",
   };
@@ -108,7 +111,7 @@ function initialRoute(profile) {
   const permissions = profile?.permissions || {};
   if (profile?.location === "central" && permissions.inventory?.view !== false) return "#inventory";
   if (permissions.dashboard?.view !== false) return "#dashboard";
-  const first = MODULES.find((key) => permissions[key]?.view);
+  const first = ACCOUNT_MODULES.find((key) => permissions[key]?.view);
   return first ? `#${first}` : "#inventory";
 }
 

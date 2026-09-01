@@ -2,6 +2,7 @@ import { assessShiftCapacity, attendanceTotals, calculateAttendance, currentStaf
 import { qrSvg } from "./qr.js";
 import { WORK_AREAS, ZONES } from "./store.js";
 import { assessEmployeeSkills, CUSTOM_SKILL_GROUP, flatSkillCatalog, latestSkillRatings, SKILL_GROUPS, skillProfileSummary } from "./skills.js";
+import { signedInAdmin } from "./account-permissions.js";
 
 function isoClock(value, language = "vi") {
   if (!value) return "—";
@@ -36,7 +37,7 @@ function clone(value) {
 
 export function createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render }) {
   function permitted(state, permission) {
-    return roleCan(currentStaff(state)?.role, permission);
+    return signedInAdmin() || roleCan(currentStaff(state)?.role, permission);
   }
 
   function employeeLabel(state, id) {

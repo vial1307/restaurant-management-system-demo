@@ -1,0 +1,173 @@
+import assert from "node:assert/strict";
+import { chromium } from "playwright";
+import { ACCOUNT_MODULES } from "../src/account-permissions.js";
+
+const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
+const PASSWORD = "KitchenTest!123";
+
+async function login(page, username) {
+  await page.goto(BASE + "/", { waitUntil:"domcontentloaded" });
+  await page.locator('#auth-login-form input[name="username"]').fill(username);
+  await page.locator('#auth-login-form input[name="password"]').fill(PASSWORD);
+  await Promise.all([
+    page.waitForLoadState("domcontentloaded"),
+    page.locator('#auth-login-form button[type="submit"]').click(),
+  ]);
+  await page.waitForSelector(".app-shell",{timeout:10000});
+}
+
+async function assertNoPageErrors(page, errors, label) {
+  await page.waitForTimeout(80);
+  assert.deepEqual(errors,[],`${label} page errors: ${errors.join(" | ")}`);
+}
+
+async function setSite(page, site) {
+  await page.evaluate((value)=>localStorage.setItem("shitu-admin-active-site-v1",value),site);
+  await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
+  await page.waitForSelector(".page-content");
+  await page.waitForFunction(() => document.querySelectorAll(".inventory-row,.central-row,.central-manage-row").length > 0,{timeout:10000});
+}
+
+async function inventorySearchRoundTrip(page) {
+  const input = page.locator('[data-field="inventorySearch"]');
+  await input.waitFor({state:"visible"});
+  const before = await page.locator(".inventory-row:not([hidden])").count();
+  assert(before > 0,"inventory should have visible rows");
+  await input.fill("niu rou");
+  assert.equal(await input.inputValue(),"niu rou");
+  await page.waitForTimeout(50);
+  const filtered = await page.locator(".inventory-row:not([hidden])").count();
+  assert(filtered > 0 && filtered <= before,"inventory search did not filter");
+  await input.fill("");
+  await page.waitForTimeout(50);
+  assert.equal(await input.inputValue(),"");
+  const restored = await page.locator(".inventory-row:not([hidden])").count();
+  assert.equal(restored,before,"clearing inventory search did not restore all rows");
+}
+
+async function adminDesktop(browser) {
+  const context = await browser.newContext({ viewport:{width:1440,height:900} });
+  const page = await context.newPage();
+  const errors=[];
+  page.on("pageerror",(error)=>errors.push(error.message));
+  await login(page,"yangchuadmin");
+
+  const session = await page.evaluate(()=>JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null"));
+  assert.equal(session.accountRole,"admin");
+  assert.equal(session.location,"all");
+  for(const key of ACCOUNT_MODULES){
+    assert.equal(session.permissions[key]?.view,true,`admin missing view ${key}`);
+    assert.equal(session.permissions[key]?.edit,true,`admin missing edit ${key}`);
+  }
+
+  for(const route of ACCOUNT_MODULES){
+    await page.goto(BASE + "/#" + route,{waitUntil:"domcontentloaded"});
+    await page.waitForSelector(".page-content");
+    assert.equal(await page.locator(".access-empty-state").count(),0,`admin blocked from ${route}`);
+  }
+
+  await setSite(page,"fuxing");
+  await inventorySearchRoundTrip(page);
+
+  for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
+    const button=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
+    await button.waitFor({state:"visible"});
+    await button.click();
+    if(["in","pick","transfer","ship"].includes(mode)){
+      await page.locator("[data-op-search]").waitFor({state:"visible"});
+      await page.locator("[data-op-search]").fill("niu rou");
+      assert.equal(await page.locator("[data-op-search]").inputValue(),"niu rou");
+      await page.locator("[data-op-search]").fill("");
+    }
+  }
+
+  await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
+  const add=page.locator('[data-action="open-add-item"]').first();
+  await add.waitFor({state:"visible"});
+  await add.click();
+  await page.locator('form[data-form="add-item"]').waitFor({state:"visible"});
+  await page.locator('[data-action="close-modal"]').first().click();
+
+  await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
+  await page.locator("[data-account-add]").waitFor({state:"visible"});
+
+  await setSite(page,"central");
+  const centralSearch=page.locator("[data-central-search]").first();
+  await centralSearch.waitFor({state:"visible"});
+  await centralSearch.fill("niu rou");
+  assert.equal(await centralSearch.inputValue(),"niu rou");
+  await centralSearch.fill("");
+
+  await assertNoPageErrors(page,errors,"admin desktop");
+  await context.close();
+}
+
+async function roleDesktop(browser, username, checks) {
+  const context=await browser.newContext({viewport:{width:1280,height:800}});
+  const page=await context.newPage();
+  const errors=[];
+  page.on("pageerror",(error)=>errors.push(error.message));
+  await login(page,username);
+  if(checks.central){
+    await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
+    await page.locator("[data-central-search]").first().waitFor({state:"visible"});
+    assert.equal(await page.locator(".warehouse-switch").count(),0);
+  } else {
+    await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
+    await page.waitForSelector(".page-content");
+    if(checks.manage === false){
+      assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').count(),0);
+    }
+    if(checks.operations === false){
+      assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count(),0);
+    }
+    if(checks.operations === true){
+      assert((await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count()) > 0);
+    }
+    if(checks.stocktake === true){
+      assert((await page.locator('input.minimum-input').count()) > 0,"stocktake control missing");
+    }
+  }
+  await assertNoPageErrors(page,errors,username);
+  await context.close();
+}
+
+async function responsiveAdmin(browser, viewport) {
+  const context=await browser.newContext({viewport});
+  const page=await context.newPage();
+  const errors=[];
+  page.on("pageerror",(error)=>errors.push(error.message));
+  await login(page,"yangchuadmin");
+  await setSite(page,"fuxing");
+  await inventorySearchRoundTrip(page);
+
+  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+  assert(overflow <= 3,`document horizontal overflow ${overflow}px at ${viewport.width}x${viewport.height}`);
+
+  const visibleTargets=page.locator('button:visible,a.nav-item:visible,input:visible,select:visible');
+  const count=Math.min(await visibleTargets.count(),40);
+  for(let i=0;i<count;i++){
+    const box=await visibleTargets.nth(i).boundingBox();
+    if(!box) continue;
+    assert(box.height >= 28,`tap target too short: ${box.height}px at ${viewport.width}x${viewport.height}`);
+  }
+
+  await assertNoPageErrors(page,errors,`responsive ${viewport.width}x${viewport.height}`);
+  await context.close();
+}
+
+const browser=await chromium.launch({headless:true});
+try{
+  await adminDesktop(browser);
+  await roleDesktop(browser,"managerfx",{manage:true,operations:true});
+  await roleDesktop(browser,"supervisorfx",{manage:false,operations:true,stocktake:true});
+  await roleDesktop(browser,"employeefx",{manage:false,operations:true});
+  await roleDesktop(browser,"parttimefx",{manage:false,operations:false});
+  await roleDesktop(browser,"centralreg",{central:true});
+  await responsiveAdmin(browser,{width:359,height:740});
+  await responsiveAdmin(browser,{width:390,height:844});
+  await responsiveAdmin(browser,{width:844,height:390});
+  console.log("BROWSER_REGRESSION_OK");
+} finally {
+  await browser.close();
+}

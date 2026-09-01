@@ -1,6 +1,7 @@
 import { clampNumber, formatDateKey, inventorySources } from "./rules.js";
 import { createOperationalState, currentStaff, hydrateOperations, normalizeJob, normalizeSchedule, normalizeSop, roleCan, TRAINING_STATUSES } from "./operations.js";
 import { assessEmployeeSkills, flatSkillCatalog, normalizeCustomSkill, normalizeSkillAssessment, SKILL_ASSIGNMENT_STATUSES } from "./skills.js";
+import { signedInAdmin } from "./account-permissions.js";
 
 export const STORAGE_KEY = "shitu-kitchen-os-v1";
 
@@ -340,7 +341,7 @@ export function createStore(storage = globalThis.localStorage) {
   }
 
   function permitted(draft, permission) {
-    return roleCan(currentStaff(draft)?.role, permission);
+    return signedInAdmin(storage) || roleCan(currentStaff(draft)?.role, permission);
   }
 
   function audit(draft, kind, label, details = "") {

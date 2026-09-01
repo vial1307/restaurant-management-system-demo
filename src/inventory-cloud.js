@@ -166,7 +166,7 @@ export function canDirectInventoryAdjust() {
   const s=session();
   const site=activeInventorySite();
   if (currentRole === "admin") return true;
-  return currentRole === "manager" && (s?.location === site || s?.location === "all");
+  return ["manager","supervisor"].includes(currentRole) && (s?.location === site || s?.location === "all");
 }
 
 export function activeInventorySite() {

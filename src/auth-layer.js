@@ -19,6 +19,7 @@ import {
   syncInventoryNow,
 } from "./inventory-cloud.js";
 import { searchMatches } from "./search-utils.js";
+import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
@@ -1021,8 +1022,10 @@ function applyAccess() {
     document.querySelector("#auth-layer")?.remove();
     addLogout(user);
 
-    const permissions = user.permissions || {};
-    if (Object.keys(permissions).length) {
+    const accountRole = user.accountRole || user.role || "employee";
+    const adminAccount = isAdminAccount(user);
+    const permissions = normalizeAccountPermissions(accountRole, user.permissions);
+    if (!adminAccount && Object.keys(permissions).length) {
       document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item").forEach(a => {
         const moduleKey = (a.getAttribute("href") || "").replace(/^#/, "").split("?")[0];
         if (permissions[moduleKey]) a.style.display = permissions[moduleKey].view ? "" : "none";
@@ -1030,7 +1033,7 @@ function applyAccess() {
     }
 
     const currentModule = (location.hash || "#dashboard").replace(/^#/, "").split("?")[0];
-    if (permissions[currentModule]?.view === false) {
+    if (!adminAccount && permissions[currentModule]?.view === false) {
       const firstAllowed = Object.keys(permissions).find((key) => permissions[key]?.view);
       if (firstAllowed) {
         location.hash = `#${firstAllowed}`;

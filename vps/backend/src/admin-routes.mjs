@@ -1,6 +1,7 @@
 import { pool, withTransaction } from "./db.mjs";
 import { hashPassword } from "./password.mjs";
 import { requireUser } from "./auth.mjs";
+import { normalizeLocationForRole, normalizePermissionsForRole } from "./permissions.mjs";
 
 const VALID_ROLES = new Set(["admin","manager","supervisor","employee","parttime","central"]);
 const VALID_LOCATIONS = new Set(["all","central","fuxing","yongji"]);
@@ -9,11 +10,6 @@ function requireAdmin(user, reply) {
   if (user?.role === "admin") return true;
   reply.code(403).send({ error: "ADMIN_REQUIRED" });
   return false;
-}
-
-function normalizePermissions(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
-  return input;
 }
 
 function normalizePreferredLanguage(value) {
@@ -32,7 +28,13 @@ export async function registerAdminRoutes(app) {
        from public.app_users
        order by created_at,id`
     );
-    return { users: rows };
+    return {
+      users: rows.map((row) => ({
+        ...row,
+        location: normalizeLocationForRole(row.role, row.location),
+        permissions: normalizePermissionsForRole(row.role, row.permissions),
+      })),
+    };
   });
 
   app.post("/api/admin/users", async (request, reply) => {
@@ -45,7 +47,8 @@ export async function registerAdminRoutes(app) {
     const displayName = String(request.body?.display_name || request.body?.displayName || "").trim();
     const role = String(request.body?.role || "employee");
     const location = String(request.body?.location || "fuxing");
-    const permissions = normalizePermissions(request.body?.permissions);
+    const permissions = normalizePermissionsForRole(role, request.body?.permissions);
+    const effectiveLocation = normalizeLocationForRole(role, location);
     const preferredLanguage = normalizePreferredLanguage(request.body?.preferred_language);
     const active = request.body?.active !== false;
     const password = String(request.body?.password || "");
@@ -68,7 +71,7 @@ export async function registerAdminRoutes(app) {
            ) values($1,$2,$3,now(),$4,$5,$6::jsonb,$7,$8)
            returning id,username,display_name,role,location,permissions,
                      preferred_language,active,created_at,updated_at`,
-          [username,displayName,passwordHash,role,location,JSON.stringify(permissions),preferredLanguage,active]
+          [username,displayName,passwordHash,role,effectiveLocation,JSON.stringify(permissions),preferredLanguage,active]
         );
         return { user: result.rows[0] };
       }
@@ -96,7 +99,7 @@ export async function registerAdminRoutes(app) {
            where id=$1
            returning id,username,display_name,role,location,permissions,
                      preferred_language,active,created_at,updated_at`,
-          [id,username,displayName,role,location,JSON.stringify(permissions),preferredLanguage,active,passwordHash]
+          [id,username,displayName,role,effectiveLocation,JSON.stringify(permissions),preferredLanguage,active,passwordHash]
         );
         if (!updated.rowCount) {
           throw Object.assign(new Error("USER_NOT_FOUND"), { statusCode: 404 });

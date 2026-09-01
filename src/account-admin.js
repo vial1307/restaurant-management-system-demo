@@ -1,27 +1,15 @@
 import { tr, currentLocale } from './locales.js';
 import { getSupabase, isSupabaseConfigured } from './supabase-client.js';
 import { isVpsApiConfigured, vpsListUsers } from './vps-api.js';
+import {
+  ACCOUNT_MODULES,
+  ACCOUNT_ROLE_DEFAULTS,
+  isAdminAccount,
+  normalizeAccountPermissions,
+} from './account-permissions.js';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';
-
-const MODULES = ['dashboard','inventory','procurement','reservations','preparation','menu','sop','skills','attendance','schedule','reports','remote','settings'];
-const ROLE_DEFAULTS = {
-  admin: Object.fromEntries(MODULES.map(k => [k, { view: true, edit: true }])),
-  manager: Object.fromEntries(MODULES.map(k => [k, { view: true, edit: !['settings'].includes(k) }])),
-  supervisor: {
-    dashboard:{view:true,edit:false}, inventory:{view:true,edit:true}, procurement:{view:true,edit:true}, reservations:{view:true,edit:true}, preparation:{view:true,edit:true}, menu:{view:true,edit:false}, sop:{view:true,edit:false}, skills:{view:true,edit:true}, attendance:{view:true,edit:false}, schedule:{view:true,edit:false}, reports:{view:true,edit:false}, remote:{view:false,edit:false}, settings:{view:false,edit:false}
-  },
-  employee: {
-    dashboard:{view:true,edit:false}, inventory:{view:true,edit:true}, procurement:{view:false,edit:false}, reservations:{view:true,edit:false}, preparation:{view:true,edit:true}, menu:{view:true,edit:false}, sop:{view:true,edit:false}, skills:{view:true,edit:false}, attendance:{view:true,edit:true}, schedule:{view:true,edit:false}, reports:{view:false,edit:false}, remote:{view:false,edit:false}, settings:{view:false,edit:false}
-  },
-  parttime: {
-    dashboard:{view:true,edit:false}, inventory:{view:true,edit:false}, procurement:{view:false,edit:false}, reservations:{view:false,edit:false}, preparation:{view:true,edit:true}, menu:{view:true,edit:false}, sop:{view:true,edit:false}, skills:{view:true,edit:false}, attendance:{view:true,edit:true}, schedule:{view:true,edit:false}, reports:{view:false,edit:false}, remote:{view:false,edit:false}, settings:{view:false,edit:false}
-  },
-  central: {
-    dashboard:{view:false,edit:false}, inventory:{view:true,edit:true}, procurement:{view:false,edit:false}, reservations:{view:false,edit:false}, preparation:{view:false,edit:false}, menu:{view:false,edit:false}, sop:{view:false,edit:false}, skills:{view:false,edit:false}, attendance:{view:false,edit:false}, schedule:{view:false,edit:false}, reports:{view:false,edit:false}, remote:{view:false,edit:false}, settings:{view:false,edit:false}
-  }
-};
 
 const DEFAULT_ACCOUNTS = []
 
@@ -106,12 +94,7 @@ function locationLabel(location){ return label(location === 'central' ? 'central
 function moduleLabel(k){ return label(k); }
 
 function normalizePermissions(role, input){
-  const base = clone(ROLE_DEFAULTS[role] || ROLE_DEFAULTS.employee);
-  if (!input) return base;
-  for (const key of MODULES) {
-    if (input[key]) base[key] = { view:Boolean(input[key].view), edit:Boolean(input[key].edit) && Boolean(input[key].view) };
-  }
-  return base;
+  return normalizeAccountPermissions(role, input);
 }
 
 function applyRoleAccess(){
@@ -119,7 +102,12 @@ function applyRoleAccess(){
   if (!s?.id) return;
   const account = loadAccounts().find(a=>a.id===s.id);
   if (account && account.active===false) return;
+  const effective = account || s;
   const permissions = normalizePermissions(s.accountRole || account?.role || 'employee', s.permissions || account?.permissions);
+  if (isAdminAccount(effective) || isAdminAccount(s)) {
+    document.querySelectorAll('.desktop-nav .nav-item, .mobile-nav .nav-item').forEach(a=>{ a.style.display=''; });
+    return;
+  }
   document.querySelectorAll('.desktop-nav .nav-item, .mobile-nav .nav-item').forEach(a=>{
     const href=(a.getAttribute('href')||'').replace(/^#/,'').split('?')[0];
     if (!href) return;
@@ -187,12 +175,12 @@ function renderSettingsAccounts(){
 
 function permissionGrid(account){
   const p=normalizePermissions(account.role, account.permissions);
-  return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${MODULES.map(k=>`<div class="permission-row"><span>${esc(moduleLabel(k))}</span><label class="permission-toggle" title="${esc(label('view'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label><label class="permission-toggle" title="${esc(label('edit'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label></div>`).join('')}</div>`;
+  return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${ACCOUNT_MODULES.map(k=>`<div class="permission-row"><span>${esc(moduleLabel(k))}</span><label class="permission-toggle" title="${esc(label('view'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label><label class="permission-toggle" title="${esc(label('edit'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label></div>`).join('')}</div>`;
 }
 
 async function openEditor(id=''){
   const list=await refreshAccountsFromCloud();
-  const account=id?list.find(a=>a.id===id):{id:'',username:'',password:'',name:'',role:'employee',location:'fuxing',active:true,permissions:clone(ROLE_DEFAULTS.employee)};
+  const account=id?list.find(a=>a.id===id):{id:'',username:'',password:'',name:'',role:'employee',location:'fuxing',active:true,permissions:clone(ACCOUNT_ROLE_DEFAULTS.employee)};
   if(!account) return;
   const editing=Boolean(id);
   const host=document.createElement('div'); host.className='account-modal-backdrop'; host.dataset.accountModal='';
@@ -217,7 +205,7 @@ function bindModal(host){
   });
   const roleSelect=host.querySelector('select[name="role"]');
   roleSelect?.addEventListener('change',()=>{
-    const fake={role:roleSelect.value,permissions:clone(ROLE_DEFAULTS[roleSelect.value]||ROLE_DEFAULTS.employee)};
+    const fake={role:roleSelect.value,permissions:clone(ACCOUNT_ROLE_DEFAULTS[roleSelect.value]||ACCOUNT_ROLE_DEFAULTS.employee)};
     host.querySelector('.permission-grid').outerHTML=permissionGrid(fake);
   });
   host.querySelector('[data-account-delete]')?.addEventListener('click',e=>{
@@ -239,7 +227,7 @@ function bindModal(host){
     if(!existing && password.length<10){ message.textContent=label('passwordLength'); return; }
     const role=String(data.get('role'));
     const permissions={};
-    for(const k of MODULES){ const view=data.has(`perm:${k}:view`), edit=data.has(`perm:${k}:edit`); permissions[k]={view,edit:view&&edit}; }
+    for(const k of ACCOUNT_MODULES){ const view=data.has(`perm:${k}:view`), edit=data.has(`perm:${k}:edit`); permissions[k]={view,edit:view&&edit}; }
     const next={ id:existing?.id||`acct-${Date.now()}`, username, password:password||existing?.password||'', name:String(data.get('name')||'').trim(), role, location:String(data.get('location')), active:data.has('active'), permissions };
     if(existing) list[list.findIndex(a=>a.id===existing.id)]=next; else list.push(next);
     saveAccounts(list); host.remove(); refreshSettings();

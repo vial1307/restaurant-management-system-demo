@@ -168,8 +168,8 @@ app.get("/api/inventory/:site/transactions", async (request, reply) => {
   if (!["central", "fuxing", "yongji"].includes(site)) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
-  if (!siteAllowed(user, site) || !hasPermission(user, "inventory", "view")) {
-    return reply.code(403).send({ error: "INVENTORY_VIEW_NOT_ALLOWED" });
+  if (user.role !== "admin") {
+    return reply.code(403).send({ error: "ADMIN_REQUIRED" });
   }
 
   const limit = Math.min(Math.max(Number(request.query?.limit || 100), 1), 500);

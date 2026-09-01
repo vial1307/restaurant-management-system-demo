@@ -10,6 +10,22 @@ function requireInventory(user, site, action, reply) {
   return false;
 }
 
+function requireStocktakeRole(user, site, reply) {
+  if (!requireInventory(user, site, "edit", reply)) return false;
+  if (user.role === "admin") return true;
+  if (["manager","supervisor"].includes(user.role) && siteAllowed(user, site)) return true;
+  reply.code(403).send({ error: "STOCKTAKE_ROLE_REQUIRED" });
+  return false;
+}
+
+function requireCatalogManager(user, site, reply) {
+  if (!requireInventory(user, site, "edit", reply)) return false;
+  if (user.role === "admin") return true;
+  if (user.role === "manager" && siteAllowed(user, site)) return true;
+  reply.code(403).send({ error: "CATALOG_MANAGER_REQUIRED" });
+  return false;
+}
+
 export async function registerInventoryExtraRoutes(app) {
   app.get("/api/inventory/schema-version", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -68,7 +84,7 @@ export async function registerInventoryExtraRoutes(app) {
     if (!SITES.has(site) || !catalogKey) {
       return reply.code(400).send({ error: "INVALID_RECEIVE_DEFAULT" });
     }
-    if (!requireInventory(user, site, "edit", reply)) return;
+    if (!requireCatalogManager(user, site, reply)) return;
 
     if (!locationCode) {
       await pool.query(
@@ -125,8 +141,8 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireInventory(user, row.site, "edit", reply)) {
-          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        if (!requireStocktakeRole(user, row.site, reply)) {
+          throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
         }
 
         await client.query(
@@ -196,7 +212,7 @@ export async function registerInventoryExtraRoutes(app) {
     );
     const row = ctx.rows[0];
     if (!row) return reply.code(404).send({ error: "ITEM_LOCATION_NOT_FOUND" });
-    if (!requireInventory(user,row.site,"edit",reply)) return;
+    if (!requireStocktakeRole(user,row.site,reply)) return;
 
     await pool.query(
       `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
@@ -218,7 +234,7 @@ export async function registerInventoryExtraRoutes(app) {
     if (!item || !SITES.has(site)) {
       return reply.code(400).send({ error: "INVALID_CATALOG_ITEM" });
     }
-    if (!requireInventory(user,site,"edit",reply)) return;
+    if (!requireCatalogManager(user,site,reply)) return;
 
     try {
       const saved = await withTransaction(async (client) => {
@@ -374,6 +390,10 @@ export async function registerInventoryExtraRoutes(app) {
             [destinationItem.id,sourceItem.to_site]
           );
           const configuredIds = configured.rows.map((row)=>row.location_id);
+
+          if (configuredIds.length === 0) {
+            throw Object.assign(new Error("DESTINATION_STORAGE_CONFIGURATION_REQUIRED"), { statusCode:409 });
+          }
 
           if (configuredIds.length === 1 && configuredIds[0] !== destinationLocationId) {
             throw Object.assign(new Error("DESTINATION_LOCATION_MUST_USE_CONFIGURED_SINGLE"), { statusCode:409 });

@@ -10,6 +10,7 @@ on:
       - "manifest.webmanifest"
       - "sw.js"
       - "src/**"
+      - "tests/**"
       - "vps/**"
       - ".github/workflows/deploy-vps.yml"
 
@@ -28,36 +29,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Validate frontend JavaScript
         run: |
           set -euo pipefail
-          for file in src/*.js; do
+          for file in src/*.js tests/*.mjs; do
             node --check "$file"
           done
 
-      - name: Search regression checks
-        run: |
-          node --input-type=module <<'NODE'
-          import assert from "node:assert/strict";
-          import { searchMatches } from "./src/search-utils.js";
-
-          assert.equal(searchMatches("大冷凍", ""), true);
-          assert.equal(searchMatches("大冷凍", "da leng dong"), true);
-          assert.equal(searchMatches("牛肉", "niu rou"), true);
-          assert.equal(searchMatches("牛肉", "ㄋㄧㄡㄖㄡ"), true);
-          assert.equal(searchMatches("Thịt bò", "thit bo"), true);
-          assert.equal(searchMatches("永吉店", "yongji"), true);
-          assert.equal(searchMatches("麻辣湯", "malatang"), true);
-          assert.equal(searchMatches("復興店 牛肉", ""), true);
-          NODE
-
-          # Search inputs must be filtered in-place; typing must not rebuild the
-          # full app/central page because that breaks IME and caret position.
-          ! grep -A35 'function applyInventorySearchDom' src/app.js | grep -q 'render();'
-          ! grep -A25 'const search = content.querySelector("\[data-central-search\]")' src/auth-layer.js | grep -q 'centralPage(user);'
-          grep -q 'data-op-search' src/inventory-operations.js
-          grep -q 'oncompositionend' src/auth-layer.js
-          grep -q 'compositionend' src/app.js
+      - name: Full static regression
+        run: node tests/static-regression.mjs
 
       - name: Validate backend JavaScript
         run: |
@@ -77,9 +62,101 @@ jobs:
           test -f vps/scripts/deploy-api.sh
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
+          test -f vps/scripts/verify-vps-data.sh
+          test -f vps/database/migrations/004_restore_primary_admin.sql
+
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_PORT: "8080"
+      TEST_WEB_PORT: "3000"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      TEST_WEB_BASE: "http://127.0.0.1:3000"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend and browser test dependencies
+        run: |
+          npm install --prefix vps/backend
+          npm install --prefix tests
+          ./tests/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Prepare isolated regression database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-api.log 2>&1 &
+          echo $! >/tmp/kitchen-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kitchen-api.log
+          exit 1
+
+      - name: API role and inventory regression
+        run: node vps/backend/scripts/api-regression.mjs
+
+      - name: Start frontend test server
+        run: |
+          node tests/web-server.mjs >/tmp/kitchen-web.log 2>&1 &
+          echo $! >/tmp/kitchen-web.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/kitchen-web.log
+          exit 1
+
+      - name: Desktop and mobile browser regression
+        run: node tests/browser-regression.mjs
+
+      - name: Dump regression logs on failure
+        if: failure()
+        run: |
+          echo "=== API LOG ==="
+          cat /tmp/kitchen-api.log 2>/dev/null || true
+          echo "=== WEB LOG ==="
+          cat /tmp/kitchen-web.log 2>/dev/null || true
 
   deploy:
-    needs: preflight
+    needs:
+      - preflight
+      - regression
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production

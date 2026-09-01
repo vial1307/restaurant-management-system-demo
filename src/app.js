@@ -1,6 +1,7 @@
 import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import { searchMatches } from "./search-utils.js";
+import { accountCan as accountCanPermission, currentAccountSession, signedInAdmin } from "./account-permissions.js";
 import {
   buildGeneratedTasks,
   buildInventoryAlerts,
@@ -180,15 +181,11 @@ const FORM_EDIT_MODULE = {
 };
 
 function accountSession() {
-  try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); }
-  catch { return null; }
+  return currentAccountSession();
 }
 
 function accountCan(moduleKey, action = "view") {
-  const user = accountSession();
-  if (!user) return false;
-  if (user.role === "admin" || user.accountRole === "admin") return true;
-  return Boolean(user.permissions?.[moduleKey]?.[action]);
+  return accountCanPermission(accountSession(), moduleKey, action);
 }
 
 function applyAccountEditState() {
@@ -1254,7 +1251,7 @@ function preparationPage(context) {
     return view.taskFilter === "all" || (view.taskFilter === "open" && !done) || (view.taskFilter === "done" && done);
   });
   const filters = [{ id: "all", label: text.allTasks, count: progress.total }, { id: "open", label: text.openTasks, count: progress.pending }, { id: "done", label: text.doneTasks, count: progress.done }];
-  const canAssign = roleCan(currentStaff(state).role, "tasks:assign");
+  const canAssign = signedInAdmin() || roleCan(currentStaff(state).role, "tasks:assign");
   const assignmentFields = canAssign ? `<div class="task-assignment-grid"><label><span>${language === "zh" ? "數量" : "Số lượng"}</span><input name="quantity" type="number" min="0" value="1" /></label><label><span>${language === "zh" ? "工作區" : "Khu vực"}</span><select name="area"><option value="">—</option>${WORK_AREAS.map((area) => `<option value="${area.id}">${escapeHtml(area[language])}</option>`).join("")}</select></label><label><span>${language === "zh" ? "指派給" : "Phân cho"}</span><select name="assigneeId"><option value="">${language === "zh" ? "整個區域" : "Cả khu vực"}</option>${state.operations.staff.filter((member) => member.active).map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.name)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "完成期限" : "Hạn hoàn thành"}</span><input name="dueAt" type="datetime-local" value="${state.selectedDate}T17:00" /></label></div>` : "";
   return `${heading(text.preparation, text.preparationSubtitle)}<section class="preparation-layout"><article class="card task-progress-card"><div><span>${escapeHtml(text.completed)}</span><strong>${progress.done}/${progress.total}</strong><small>${progress.percentage}%</small></div><div class="wide-progress"><span style="width:${progress.percentage}%"></span></div></article>
     <article class="card tasks-card"><div class="task-filters">${filters.map((filter) => `<button class="filter-tab ${view.taskFilter === filter.id ? "selected" : ""}" data-action="select-task-filter" data-filter="${filter.id}">${escapeHtml(filter.label)} <span>${filter.count}</span></button>`).join("")}</div>${filtered.length ? filtered.map((task) => taskRow(task, context)).join("") : `<p class="empty-state">${escapeHtml(text.noTasks)}</p>`}<form class="add-task-form expanded-task-form" data-form="add-task"><input required name="title" placeholder="${escapeHtml(text.taskPlaceholder)}" />${assignmentFields}<button class="primary-button" type="submit">${icon("plus")}<span>${escapeHtml(text.addTask)}</span></button></form></article></section>`;

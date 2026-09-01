@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { pool } from "./db.mjs";
+import { normalizeLocationForRole, normalizePermissionsForRole } from "./permissions.mjs";
 
 export const SESSION_COOKIE = "kitchen_session";
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 14);
@@ -89,8 +90,8 @@ export function publicUser(user) {
     username: user.username,
     displayName: user.display_name,
     role: user.role,
-    location: user.location,
-    permissions: user.permissions || {},
+    location: normalizeLocationForRole(user.role, user.location),
+    permissions: normalizePermissionsForRole(user.role, user.permissions),
     preferredLanguage: user.preferred_language || "vi",
     active: user.active,
   };
