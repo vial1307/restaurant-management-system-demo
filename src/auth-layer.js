@@ -214,7 +214,7 @@ function bindCentral(user) {
 
     b.disabled = true;
     const result = await cloudAdjustQuantity({
-      itemKey: centralItemKey(item.id),
+      itemKey: item.itemKey || centralItemKey(item.baseId || item.id),
       locationCode: centralLocationCode(item.zone),
       direction,
       amount,
@@ -249,7 +249,7 @@ function bindCentral(user) {
 
     b.disabled = true;
     const result = await cloudSetQuantity({
-      itemKey: centralItemKey(item.id),
+      itemKey: item.itemKey || centralItemKey(item.baseId || item.id),
       locationCode: centralLocationCode(item.zone),
       quantity: next,
       note: "央廚盤點調整 / Điều chỉnh kiểm kê bếp trung tâm",
