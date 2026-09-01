@@ -1125,7 +1125,7 @@ if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:")
   });
 
   globalThis.navigator.serviceWorker
-    .register("./sw.js?v=34", { updateViaCache: "none" })
+    .register("./sw.js?v=35", { updateViaCache: "none" })
     .then(async (registration) => {
       await registration.update().catch(() => {});
       if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
