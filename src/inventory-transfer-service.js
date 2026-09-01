@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from "./supabase-client.js";
+import { isVpsApiConfigured, vpsDirectTransfer } from "./vps-api.js";
 import {
   getInventoryReceiveDefaults,
   getSiteInventoryRows,
@@ -133,6 +134,24 @@ export async function directBranchTransfer({
   quantity,
   note = "",
 }) {
+  if (isVpsApiConfigured()) {
+    try {
+      const data = await vpsDirectTransfer({
+        itemId,
+        sourceLocationId,
+        destinationLocationId,
+        quantity: Math.max(1,Number(quantity)||1),
+        note,
+      });
+      if (data?.from_site) await syncInventoryNow(data.from_site,{reloadBranch:false});
+      if (data?.to_site) await syncInventoryNow(data.to_site,{reloadBranch:false});
+      window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated",{detail:{transfer:data}}));
+      return { ok:true,data };
+    } catch (error) {
+      return { ok:false,error };
+    }
+  }
+
   if (!isSupabaseConfigured()) return { ok:false, error:new Error("SUPABASE_REQUIRED") };
   const supabase = await getSupabase();
   const { data, error } = await supabase.rpc("direct_branch_transfer", {
@@ -269,6 +288,7 @@ export async function countPendingIncoming(site) {
 }
 
 export async function watchInventoryTransfers(site, onChange) {
+  if (isVpsApiConfigured()) return () => {};
   if (!isSupabaseConfigured()) return () => {};
   const supabase = await getSupabase();
   const channel = supabase
