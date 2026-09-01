@@ -113,11 +113,12 @@ Fields:
 - quantity
 
 Destination-storage rule:
-- Frequently used products may have an optional 固定收貨儲位 / fixed receiving storage configured at the receiving site.
-- If a fixed receiving storage exists, 出貨 selects it automatically and staff cannot change it during that shipment.
-- If no fixed receiving storage exists, staff choose the actual destination storage for that shipment.
-- A manual shipment choice never becomes a fixed default automatically.
-- Fixed receiving storage is configuration data, not inferred from the item's last shipment or current stock location.
+- 復興店 / 永吉店 managers own the product storage configuration for their branch.
+- If the receiving branch already has the product and it has exactly one configured storage location, 出貨 selects that location automatically.
+- If the receiving branch has the product in multiple storage locations, the branch manager must set 央廚出貨收貨儲位 / receiving location for factory shipments. Factory staff cannot choose arbitrarily.
+- If an existing branch product has multiple locations and no receiving location is configured, 出貨 is blocked until the branch manager completes the setting.
+- Only when the receiving branch does not yet have that product may factory staff choose the destination storage for that shipment.
+- A factory staff shipment choice never automatically becomes the branch's permanent receiving-location setting.
 
 Example:
 - 復興店 → 永吉店
