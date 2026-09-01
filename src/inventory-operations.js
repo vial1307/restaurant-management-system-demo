@@ -18,8 +18,9 @@ import {
 const TEXT = {
   vi: {
     in:"Nhập kho · 進貨入庫",
-    out:"Xuất kho · 領料／出庫",
+    pick:"Lấy hàng · 領貨",
     transfer:"Điều chuyển · 庫存轉撥",
+    ship:"Xuất hàng · 出貨",
     search:"Tìm / 中文 / Tiếng Việt / Pinyin / 注音…",
     from:"Từ kho · 來源儲位",
     to:"Đến · 目的地",
@@ -27,10 +28,15 @@ const TEXT = {
     current:"Hiện có · 現有庫存",
     quantity:"Số lượng · 數量",
     inbound:"Nhập · 入庫",
-    outbound:"Xuất · 出庫",
+    pickAction:"Lấy hàng · 領貨",
     move:"Chuyển · 轉撥",
-    ship:"Xuất chi nhánh · 分店出貨",
-    usage:"Sử dụng / tiêu hao · 使用／耗用",
+    shipAction:"Xuất hàng · 出貨",
+    workDestination:"Khu sử dụng · 使用區",
+    picked:"Đã lấy · 已領貨",
+    useAction:"Sử dụng · 使用",
+    returnAction:"Cất lại · 歸位",
+    returnTo:"Cất vào · 歸位儲位",
+    shipSite:"Chi nhánh nhận · 收貨據點",
     noItems:"Không có mặt hàng phù hợp · 沒有符合條件的品項",
     loading:"Đang tải dữ liệu kho… · 正在載入庫存…",
     cloudRequired:"Cần bật đồng bộ Supabase kho trước khi thao tác. · 請先啟用 Supabase 庫存同步。",
@@ -42,10 +48,11 @@ const TEXT = {
     transferNo:"Phiếu · 單號",
   },
   zh: {
-    in:"進貨入庫",out:"領料／出庫",transfer:"庫存轉撥",
+    in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
-    current:"現有庫存",quantity:"數量",inbound:"入庫",outbound:"出庫",move:"轉撥",ship:"分店出貨",
-    usage:"使用／耗用",noItems:"沒有符合條件的品項",
+    current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
+    workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",shipSite:"收貨據點",
+    noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
     cloudRequired:"請先啟用 Supabase 庫存同步。",editRequired:"此帳號僅能查看庫存。",
     success:"庫存已更新",insufficient:"出庫數量超過現有庫存。",sameLocation:"來源與目的儲位不可相同。",
@@ -89,6 +96,24 @@ function sourceOptions(item,language){
     .join("");
 }
 
+function workLocationForItem(item,workLocations=[]){
+  const preferredSuffix=`-work-${item.workArea||"noodles"}`;
+  return workLocations.find((loc)=>String(loc.code||"").endsWith(preferredSuffix))
+    || workLocations.find((loc)=>loc.code==="central-work-use")
+    || workLocations[0]
+    || item.workLocations?.[0]
+    || null;
+}
+function workStockAt(item,locationId){
+  return item.workLocations?.find((loc)=>loc.id===locationId)?.quantity ?? 0;
+}
+function workSourceOptions(item,language){
+  return (item.workLocations||[])
+    .filter((loc)=>Number(loc.quantity)>0)
+    .map((loc)=>`<option value="${esc(loc.id)}" data-code="${esc(loc.code)}">${esc(locationLabel({name_zh_tw:loc.zh,name_vi:loc.vi},language))} · ${loc.quantity} ${esc(item.unit)}</option>`)
+    .join("");
+}
+
 function overviewCard(item,language,t){
   const locations=item.locations
     .filter((loc)=>Number(loc.quantity)!==0 || Number(loc.minimum)!==0)
@@ -100,25 +125,42 @@ function overviewCard(item,language,t){
   </article>`;
 }
 
-function itemCard(item,mode,locations,site,language,t,allLocations=locations){
+function itemCard(item,mode,locations,site,language,t,allLocations=locations,workLocations=[]){
   const firstSource=item.locations.find((loc)=>Number(loc.quantity)>0) || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
-  const otherSites=INVENTORY_SITES.filter((entry)=>site==="central" ? ["fuxing","yongji"].includes(entry.id) : entry.id==="central");
+  const workLocation=workLocationForItem(item,workLocations);
+  const workQuantity=workLocation ? Number(workStockAt(item,workLocation.id)||0) : Number(item.workTotal||0);
+  const otherSites=INVENTORY_SITES.filter((entry)=>entry.id!==site);
   const sourceSelect = `<label><span>${esc(t.from)}</span><select data-op-source="${esc(item.id)}">${sourceOptions(item,language)}</select></label>`;
   const destinationSelect = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,firstDestination?.id)}</select></label>`;
-  const outboundDestination = `<label><span>${esc(t.to)}</span><select data-op-target="${esc(item.id)}"><option value="usage">${esc(t.usage)}</option>${otherSites.map((entry)=>`<option value="${entry.id}">${esc(siteLabel(entry.id,language))}</option>`).join("")}</select></label>`;
-  const crossSiteLocations=(allLocations||[]).filter((location)=>location.site&&location.site!==site);
-  const targetLocationSelect=`<label class="op-target-location" data-op-target-location-wrap="${esc(item.id)}" hidden><span>${esc(t.destination)}</span><select data-op-target-location="${esc(item.id)}">${crossSiteLocations.map((location)=>`<option value="${esc(location.id)}" data-site="${esc(location.site)}">${esc(siteLabel(location.site,language))} · ${esc(locationLabel(location,language))}</option>`).join("")}</select></label>`;
   const inboundDestination = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,item.locations[0]?.id || locations[0]?.id)}</select></label>`;
+  const workDestination = workLocation
+    ? `<label><span>${esc(t.workDestination)}</span><select data-op-work-destination="${esc(item.id)}"><option value="${esc(workLocation.id)}" data-code="${esc(workLocation.code)}">${esc(locationLabel(workLocation,language))}</option></select></label>`
+    : `<label><span>${esc(t.workDestination)}</span><span class="inventory-readonly-field">—</span></label>`;
+  const shipSiteSelect = `<label><span>${esc(t.shipSite)}</span><select data-op-target="${esc(item.id)}">${otherSites.map((entry)=>`<option value="${entry.id}">${esc(siteLabel(entry.id,language))}</option>`).join("")}</select></label>`;
+  const crossSiteLocations=(allLocations||[]).filter((location)=>location.site&&location.site!==site);
+  const targetLocationSelect=`<label class="op-target-location" data-op-target-location-wrap="${esc(item.id)}"><span>${esc(t.destination)}</span><select data-op-target-location="${esc(item.id)}">${crossSiteLocations.map((location)=>`<option value="${esc(location.id)}" data-site="${esc(location.site)}">${esc(siteLabel(location.site,language))} · ${esc(locationLabel(location,language))}</option>`).join("")}</select></label>`;
 
   let controls="";
   let action="";
+  let followup="";
   if(mode==="in"){
     controls=inboundDestination;
     action=`<button class="op-primary" data-op-submit="in" data-item-id="${esc(item.id)}">${esc(t.inbound)}</button>`;
-  }else if(mode==="out"){
-    controls=sourceSelect+outboundDestination+targetLocationSelect;
-    action=`<button class="op-primary op-out" data-op-submit="out" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.outbound)}</button>`;
+  }else if(mode==="pick"){
+    controls=sourceSelect+workDestination;
+    action=`<button class="op-primary" data-op-submit="pick" data-item-id="${esc(item.id)}" ${firstSource&&workLocation?"":"disabled"}>${esc(t.pickAction)}</button>`;
+    if(workLocation){
+      const returnDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
+      followup=`<div class="pick-followup" data-pick-followup="${esc(item.id)}">
+        <div class="pick-status"><span>${esc(t.picked)}</span><strong>${workQuantity} ${esc(item.unit)}</strong><small>${esc(locationLabel(workLocation,language))}</small></div>
+        <div class="pick-use-row">${qtyControl(`${item.id}-use`)}<button class="op-secondary op-use" data-op-use="${esc(item.id)}" ${workQuantity>0?"":"disabled"}>${esc(t.useAction)}</button></div>
+        <div class="pick-return-row"><label><span>${esc(t.returnTo)}</span><select data-op-return-destination="${esc(item.id)}">${locationOptions(locations,language,returnDestination?.id)}</select></label>${qtyControl(`${item.id}-return`)}<button class="op-secondary" data-op-return="${esc(item.id)}" ${workQuantity>0?"":"disabled"}>${esc(t.returnAction)}</button></div>
+      </div>`;
+    }
+  }else if(mode==="ship"){
+    controls=sourceSelect+shipSiteSelect+targetLocationSelect;
+    action=`<button class="op-primary op-out" data-op-submit="ship" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.shipAction)}</button>`;
   }else{
     controls=sourceSelect+destinationSelect;
     action=`<button class="op-primary" data-op-submit="transfer" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.move)}</button>`;
@@ -132,9 +174,9 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations){
     <div class="op-select-grid">${controls}</div>
     ${transferBalance}
     <div class="op-action-row">${qtyControl(item.id)}${action}</div>
+    ${followup}
   </article>`;
 }
-
 async function doRender(host,state){
   const {site,mode,language}=state;
   const t=langText(language);
@@ -145,7 +187,7 @@ async function doRender(host,state){
     state.data=data;
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
-      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations));
+      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[]));
     host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
     bind(host,state);
   }catch(error){
@@ -315,7 +357,7 @@ export async function mountInventoryOperations(host,{
 
 export function operationTabLabels(language="vi"){
   const t=langText(language);
-  return {in:t.in,out:t.out,transfer:t.transfer};
+  return {in:t.in,pick:t.pick,transfer:t.transfer,ship:t.ship};
 }
 
 
@@ -396,7 +438,7 @@ async function renderDraft(host,state){
   const t=langText(state.language);
   const data=await state.reload();
   state.data=data;
-  const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations));
+  const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations,data.workLocations||[]));
   host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Môi trường thử nghiệm: thao tác có hiệu lực ngay và ghi người thực hiện · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
   bindDraft(host,state);
 }
