@@ -609,6 +609,21 @@ function addToCentralDraftFromBranch(itemMeta,destinationLocationId,amount){
     rows.push(row);
   }
   row.qty=Math.max(0,Number(row.qty)||0)+Math.max(1,Number(amount)||1);
+  const now=new Date().toISOString();
+  rows=rows.map((entry)=>{
+    const baseId=entry.baseId||entry.itemKey||String(entry.id||"").split("@")[0];
+    const itemKey=entry.itemKey||baseId;
+    return {
+      ...entry,
+      key:`${itemKey}|${entry.zone||""}`,
+      baseId,
+      itemKey,
+      qty:Math.max(0,Number(entry.qty)||0),
+      minimum:Math.max(0,Number(entry.minimum)||0),
+      updatedAt:now,
+      status:"staging",
+    };
+  });
   localStorage.setItem(CENTRAL_DRAFT_KEY,JSON.stringify(rows));
   return true;
 }
