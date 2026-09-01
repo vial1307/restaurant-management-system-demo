@@ -1,3 +1,4 @@
+import { mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import {
   buildGeneratedTasks,
@@ -19,7 +20,12 @@ import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
 import {
+  activeInventorySite,
   bootstrapFuxingInventory,
+  bootstrapYongjiInventory,
+  branchItemKey,
+  branchLocationCode,
+  branchWorkLocationCode,
   canDirectInventoryAdjust,
   canInventoryEdit,
   cloudAdjustQuantity,
@@ -28,9 +34,6 @@ import {
   cloudSetQuantity,
   cloudSyncFuxingCatalogItem,
   cloudTransferInventory,
-  fuxingItemKey,
-  fuxingLocationCode,
-  fuxingWorkLocationCode,
   inventoryCloudState,
   isCurrentBranchInventoryDate,
   syncInventoryNow,
@@ -40,6 +43,7 @@ const store = createStore();
 const root = document.querySelector("#app");
 const view = {
   inventoryView: "storage",
+  inventoryOpsMode: "overview",
   workArea: "all",
   zone: "all",
   search: "",
@@ -412,15 +416,15 @@ function storageSources(item, record, destination = "work") {
 
 function workRestockTransferPlan(item, record) {
   let remaining = Math.max(0, Number(item.minimum || 0) - Number(item.quantity || 0));
-  const destinationLocationCode = fuxingWorkLocationCode(item.workArea);
+  const destinationLocationCode = branchWorkLocationCode(activeInventorySite(), item.workArea);
   const steps = [];
   for (const source of storageSources(item, record)) {
     if (remaining <= 0) break;
     const amount = Math.min(remaining, Math.max(0, Number(source.quantity || 0)));
     if (amount > 0) {
       steps.push({
-        itemKey: fuxingItemKey(item.stockKey),
-        sourceLocationCode: fuxingLocationCode(source.zone),
+        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+        sourceLocationCode: branchLocationCode(activeInventorySite(), source.zone),
         destinationLocationCode,
         amount,
       });
@@ -432,15 +436,15 @@ function workRestockTransferPlan(item, record) {
 
 function storageRestockTransferPlan(item, record) {
   let remaining = Math.max(0, Number(item.minimum || 0) - Number(item.quantity || 0));
-  const destinationLocationCode = fuxingLocationCode(item.zone);
+  const destinationLocationCode = branchLocationCode(activeInventorySite(), item.zone);
   const steps = [];
   for (const source of storageSources(item, record, item.zone)) {
     if (remaining <= 0) break;
     const amount = Math.min(remaining, Math.max(0, Number(source.quantity || 0)));
     if (amount > 0) {
       steps.push({
-        itemKey: fuxingItemKey(item.stockKey),
-        sourceLocationCode: fuxingLocationCode(source.zone),
+        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+        sourceLocationCode: branchLocationCode(activeInventorySite(), source.zone),
         destinationLocationCode,
         amount,
       });
@@ -459,11 +463,11 @@ async function runCloudTransferPlan(steps, note, legacyFallback) {
       return;
     }
     if (!result.ok) {
-      await syncInventoryNow("fuxing", { reloadBranch: true });
+      await syncInventoryNow(activeInventorySite(), { reloadBranch: true });
       return;
     }
   }
-  await syncInventoryNow("fuxing", { reloadBranch: true });
+  await syncInventoryNow(activeInventorySite(), { reloadBranch: true });
 }
 
 function quantityControl(item, kind = "item") {
@@ -473,8 +477,8 @@ function quantityControl(item, kind = "item") {
   const value = direct
     ? numberInput(item.quantity, `data-field="${kind}" data-key="quantity" data-id="${escapeHtml(item.id)}"`, "quantity-input")
     : `<strong class="quantity-readonly" aria-label="Current quantity">${escapeHtml(item.quantity)}</strong>`;
-  const decrease = editable ? `<button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="-1" aria-label="Decrease">${icon("minus")}</button>` : "";
-  const increase = editable ? `<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="1" aria-label="Increase">${icon("plus")}</button>` : "";
+  const decrease = direct ? `<button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="-1" aria-label="Decrease">${icon("minus")}</button>` : "";
+  const increase = direct ? `<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="1" aria-label="Increase">${icon("plus")}</button>` : "";
   return `<div class="quantity-control">${decrease}${value}${increase}<small>${escapeHtml(item.unit)}</small></div>`;
 }
 
@@ -569,7 +573,14 @@ function inventory(context) {
   const cloudNotice = cloudState === "migration-needed"
     ? `<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。</div>`
     : "";
-  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice">Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看，請切回今天後再調整庫存。</div>` : ""}
+  const site = activeInventorySite() || "fuxing";
+  const opsEnabled = editable && !historical && ["fuxing","yongji"].includes(site);
+  const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
+  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">Tổng quan · 庫存總覽</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">Nhập kho · 進貨入庫</button><button data-action="select-inventory-ops" data-mode="out" class="${opsMode==="out"?"active":""}">Xuất kho · 領料／出庫</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">Điều chuyển · 庫存轉撥</button><button data-action="select-inventory-ops" data-mode="receive" class="${opsMode==="receive"?"active":""}">Nhận hàng · 待收貨</button></div>` : "";
+  if (opsMode !== "overview") {
+    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
+  }
+  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice">Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看，請切回今天後再調整庫存。</div>` : ""}${opsTabs}
     <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${entries.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
@@ -742,6 +753,15 @@ function render() {
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
   root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
   applyAccountEditState();
+  const opsHost=root.querySelector("[data-branch-inventory-operations]");
+  if (opsHost) {
+    void mountInventoryOperations(opsHost,{
+      site:opsHost.dataset.site,
+      mode:opsHost.dataset.mode,
+      language:context.language,
+      onUpdated:()=>{ void syncInventoryNow(opsHost.dataset.site,{reloadBranch:false}); },
+    });
+  }
 }
 
 const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render });
@@ -790,12 +810,13 @@ root.addEventListener("click", (event) => {
   if (action === "toggle-language") store.updateSetting("language", state.settings.language === "vi" ? "zh" : "vi");
   if (action === "set-language") store.updateSetting("language", target.dataset.language);
   if (action === "select-inventory-view") { view.inventoryView = target.dataset.view; view.search = ""; render(); }
+  if (action === "select-inventory-ops") { view.inventoryOpsMode = target.dataset.mode || "overview"; render(); }
   if (action === "select-work-area") { view.workArea = target.dataset.area; render(); }
   if (action === "select-zone") { view.zone = target.dataset.zone; render(); }
   if (action === "select-task-filter") { view.taskFilter = target.dataset.filter; render(); }
   if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
-    if (!canInventoryEdit()) return;
+    if (!canDirectInventoryAdjust()) return;
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const delta = Number(target.dataset.delta);
@@ -804,22 +825,22 @@ root.addEventListener("click", (event) => {
       if (actualDelta) {
         store.updateItem(item.id, "quantity", next);
         void cloudAdjustQuantity({
-          itemKey: fuxingItemKey(item.stockKey),
-          locationCode: fuxingLocationCode(item.zone),
+          itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+          locationCode: branchLocationCode(activeInventorySite(), item.zone),
           direction: actualDelta > 0 ? "in" : "out",
           amount: Math.abs(actualDelta),
           note: "庫存快速調整 / Điều chỉnh nhanh tồn kho",
         }).then((result) => {
           if (!result.ok && !result.fallback) {
             store.updateItem(item.id, "quantity", Number(item.quantity || 0) - actualDelta);
-            void syncInventoryNow("fuxing", { reloadBranch: true });
+            void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
           }
         });
       }
     }
   }
   if (action === "adjust-work-item") {
-    if (!canInventoryEdit()) return;
+    if (!canDirectInventoryAdjust()) return;
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const delta = Number(target.dataset.delta);
@@ -828,15 +849,15 @@ root.addEventListener("click", (event) => {
       if (actualDelta) {
         store.updateWorkItem(item.id, "quantity", next);
         void cloudAdjustQuantity({
-          itemKey: fuxingItemKey(item.stockKey),
-          locationCode: fuxingWorkLocationCode(item.workArea),
+          itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+          locationCode: branchWorkLocationCode(activeInventorySite(), item.workArea),
           direction: actualDelta > 0 ? "in" : "out",
           amount: Math.abs(actualDelta),
           note: "工作區數量調整 / Điều chỉnh số lượng khu làm việc",
         }).then((result) => {
           if (!result.ok && !result.fallback) {
             store.updateWorkItem(item.id, "quantity", Number(item.quantity || 0) - actualDelta);
-            void syncInventoryNow("fuxing", { reloadBranch: true });
+            void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
           }
         });
       }
@@ -877,7 +898,7 @@ root.addEventListener("click", (event) => {
         ? "Không thể xóa mặt hàng khi vẫn còn tồn kho. Hãy điều chỉnh về 0 trước. · 品項仍有庫存，請先盤點調整為 0。"
         : "Không thể xóa mặt hàng khỏi dữ liệu cloud. · 無法從雲端刪除品項。";
       window.alert(message);
-      void syncInventoryNow("fuxing", { reloadBranch: true });
+      void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
     });
   }
   if (action === "close-modal" && (target === event.target || target.closest(".icon-button"))) { view.modal = null; view.editingStockKey = null; render(); }
@@ -909,14 +930,14 @@ root.addEventListener("change", (event) => {
       const next = Math.max(0, Number(element.value) || 0);
       store.updateItem(id, key, next);
       void cloudSetQuantity({
-        itemKey: fuxingItemKey(item.stockKey),
-        locationCode: fuxingLocationCode(item.zone),
+        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+        locationCode: branchLocationCode(activeInventorySite(), item.zone),
         quantity: next,
         note: "盤點調整 / Điều chỉnh kiểm kê",
       }).then((result) => {
         if (!result.ok && !result.fallback) {
           store.updateItem(id, key, previous);
-          void syncInventoryNow("fuxing", { reloadBranch: true });
+          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
         }
       });
       return;
@@ -927,13 +948,13 @@ root.addEventListener("change", (event) => {
       const next = Math.max(0, Number(element.value) || 0);
       store.updateItem(id, key, next);
       void cloudSetMinimum({
-        itemKey: fuxingItemKey(item.stockKey),
-        locationCode: fuxingLocationCode(item.zone),
+        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+        locationCode: branchLocationCode(activeInventorySite(), item.zone),
         minimum: next,
       }).then((result) => {
         if (!result.ok && !result.fallback) {
           store.updateItem(id, key, previous);
-          void syncInventoryNow("fuxing", { reloadBranch: true });
+          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
         }
       });
       return;
@@ -943,7 +964,7 @@ root.addEventListener("change", (event) => {
     void cloudSyncFuxingCatalogItem(item.stockKey).then((result) => {
       if (!result.ok && !result.fallback) {
         store.updateItem(id, key, previous);
-        void syncInventoryNow("fuxing", { reloadBranch: true });
+        void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
       }
     });
   }
@@ -957,14 +978,14 @@ root.addEventListener("change", (event) => {
       const next = Math.max(0, Number(element.value) || 0);
       store.updateWorkItem(id, key, next);
       void cloudSetQuantity({
-        itemKey: fuxingItemKey(item.stockKey),
-        locationCode: fuxingWorkLocationCode(item.workArea),
+        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+        locationCode: branchWorkLocationCode(activeInventorySite(), item.workArea),
         quantity: next,
         note: "工作區盤點調整 / Điều chỉnh kiểm kê khu làm việc",
       }).then((result) => {
         if (!result.ok && !result.fallback) {
           store.updateWorkItem(id, key, previous);
-          void syncInventoryNow("fuxing", { reloadBranch: true });
+          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
         }
       });
       return;
@@ -975,13 +996,13 @@ root.addEventListener("change", (event) => {
       const next = Math.max(0, Number(element.value) || 0);
       store.updateWorkItem(id, key, next);
       void cloudSetMinimum({
-        itemKey: fuxingItemKey(item.stockKey),
-        locationCode: fuxingWorkLocationCode(item.workArea),
+        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
+        locationCode: branchWorkLocationCode(activeInventorySite(), item.workArea),
         minimum: next,
       }).then((result) => {
         if (!result.ok && !result.fallback) {
           store.updateWorkItem(id, key, previous);
-          void syncInventoryNow("fuxing", { reloadBranch: true });
+          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
         }
       });
       return;
@@ -991,7 +1012,7 @@ root.addEventListener("change", (event) => {
     void cloudSyncFuxingCatalogItem(item.stockKey).then((result) => {
       if (!result.ok && !result.fallback) {
         store.updateWorkItem(id, key, previous);
-        void syncInventoryNow("fuxing", { reloadBranch: true });
+        void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
       }
     });
   }
@@ -1054,13 +1075,13 @@ root.addEventListener("submit", (event) => {
               ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
               : "Không thể đồng bộ chỉnh sửa mặt hàng. · 品項修改無法同步至雲端。";
             window.alert(message);
-            void syncInventoryNow("fuxing", { reloadBranch: true });
+            void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
           }
         });
       }, 0);
     } else {
       store.addItem(item);
-      setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
+      setTimeout(() => { void (activeInventorySite()==="yongji" ? bootstrapYongjiInventory() : bootstrapFuxingInventory()); }, 0);
     }
   }
 });
