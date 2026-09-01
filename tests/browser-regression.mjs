@@ -108,7 +108,7 @@ async function adminDesktop(browser) {
   await page.locator("[data-account-add]").waitFor({state:"visible"});
 
   await setSite(page,"central");
-  const centralSearch=page.locator("[data-central-search]").first();
+  const centralSearch=page.locator('input[data-central-search]').first();
   await centralSearch.waitFor({state:"visible"});
   await centralSearch.fill("niu rou");
   assert.equal(await centralSearch.inputValue(),"niu rou");
@@ -126,7 +126,7 @@ async function roleDesktop(browser, username, checks) {
   await login(page,username);
   if(checks.central){
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
-    await page.locator("[data-central-search]").first().waitFor({state:"visible"});
+    await page.locator('input[data-central-search]').first().waitFor({state:"visible"});
     assert.equal(await page.locator(".warehouse-switch").count(),0);
   } else {
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
