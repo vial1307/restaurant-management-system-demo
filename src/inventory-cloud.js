@@ -713,12 +713,13 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   return { ok: true, changed: changes.length };
 }
 
-export async function cloudSyncFuxingCatalogItem(stockKey) {
+export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
-  const catalog = buildFuxingCatalog();
-  const item = catalog.find((entry) => entry.key === fuxingItemKey(stockKey));
+  const catalog = buildBranchCatalog(site);
+  const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
   const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
@@ -727,12 +728,11 @@ export async function cloudSyncFuxingCatalogItem(stockKey) {
     return { ok: false, fallback: false, error };
   }
 
-  // Quantities are intentionally updated through audited stocktake RPCs.
-  await fetchSite("fuxing");
+  await fetchSite(site);
   for (const location of item.locations || []) {
     const ids = await resolveIds(item.key, location.code);
     if (!ids.item || !ids.location) continue;
-    const currentRows = await fetchSite("fuxing");
+    const currentRows = await fetchSite(site);
     const current = currentRows.find((row) =>
       row.item.id === ids.item.id && row.location.id === ids.location.id
     );
@@ -749,23 +749,31 @@ export async function cloudSyncFuxingCatalogItem(stockKey) {
     }
   }
 
-  await syncInventoryNow("fuxing", { reloadBranch: false });
+  await syncInventoryNow(site, { reloadBranch: false });
   return { ok: true };
 }
 
-export async function cloudArchiveFuxingItem(stockKey) {
+export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const { data, error } = await rpc("archive_inventory_item", {
-    p_item_key: fuxingItemKey(stockKey),
+    p_item_key: branchItemKey(site,stockKey),
   });
   if (error) {
     dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
     return { ok: false, fallback: false, error };
   }
-  // false means the item was already absent/inactive in cloud, which is also safe locally.
   return { ok: data === true || data === false, fallback: false };
+}
+
+export function cloudSyncFuxingCatalogItem(stockKey) {
+  return cloudSyncBranchCatalogItem(stockKey,"fuxing");
+}
+
+export function cloudArchiveFuxingItem(stockKey) {
+  return cloudArchiveBranchItem(stockKey,"fuxing");
 }
 
 export function branchLocationCode(site, zone) {
