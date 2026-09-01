@@ -18,65 +18,11 @@ import {
   watchInventoryTransfers,
 } from "./inventory-transfer-service.js";
 
-const DRAFT_TRANSFER_KEY = "shitu-inventory-draft-transfers-v1";
-
-function readDraftTransfers(){
-  try{
-    const saved=JSON.parse(localStorage.getItem(DRAFT_TRANSFER_KEY)||"[]");
-    return Array.isArray(saved)?saved:[];
-  }catch{return [];}
-}
-function saveDraftTransfers(list){
-  localStorage.setItem(DRAFT_TRANSFER_KEY,JSON.stringify(list.slice(0,500)));
-}
-function createDraftTransfer({fromSite,toSite,item,sourceLocationId,quantity}){
-  const id=crypto.randomUUID?.()||`draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const transfer={
-    id,
-    transfer_no:`DRAFT-${String(Date.now()).slice(-8)}`,
-    from_site:fromSite,
-    to_site:toSite,
-    status:"dispatched",
-    draft:true,
-    created_at:new Date().toISOString(),
-    lines:[{
-      quantity:Math.max(1,Number(quantity)||1),
-      unit:item.unit,
-      source_location_id:sourceLocationId,
-      sourceItem:{
-        id:item.id,
-        catalog_key:item.catalogKey||item.catalog_key||"",
-        name_zh_tw:item.zh,
-        name_vi:item.vi,
-        unit:item.unit,
-      },
-    }],
-  };
-  const list=readDraftTransfers();
-  list.unshift(transfer);
-  saveDraftTransfers(list);
-  return transfer;
-}
-function pendingDraftTransfers(site){
-  return readDraftTransfers().filter((entry)=>entry.to_site===site&&entry.status==="dispatched");
-}
-function markDraftTransferReceived(id,destinationLocationId){
-  const list=readDraftTransfers();
-  const target=list.find((entry)=>entry.id===id);
-  if(!target)return false;
-  target.status="received";
-  target.received_at=new Date().toISOString();
-  target.destination_location_id=destinationLocationId;
-  saveDraftTransfers(list);
-  return true;
-}
-
 const TEXT = {
   vi: {
     in:"Nhập kho · 進貨入庫",
     out:"Xuất kho · 領料／出庫",
     transfer:"Điều chuyển · 庫存轉撥",
-    receive:"Nhận hàng · 待收貨",
     search:"Tìm / 中文 / Tiếng Việt / Pinyin / 注音…",
     from:"Từ kho · 來源儲位",
     to:"Đến · 目的地",
@@ -87,12 +33,8 @@ const TEXT = {
     outbound:"Xuất · 出庫",
     move:"Chuyển · 轉撥",
     ship:"Xuất chi nhánh · 分店出貨",
-    receiveAction:"Xác nhận nhận · 確認收貨",
     usage:"Sử dụng / tiêu hao · 使用／耗用",
     noItems:"Không có mặt hàng phù hợp · 沒有符合條件的品項",
-    noPending:"Không có hàng đang chờ nhận · 目前沒有待收貨",
-    dispatched:"Đang vận chuyển · 已出貨",
-    received:"Đã nhận · 已收貨",
     loading:"Đang tải dữ liệu kho… · 正在載入庫存…",
     cloudRequired:"Cần bật đồng bộ Supabase kho trước khi thao tác. · 請先啟用 Supabase 庫存同步。",
     editRequired:"Tài khoản này chỉ có quyền xem kho. · 此帳號僅能查看庫存。",
@@ -103,11 +45,11 @@ const TEXT = {
     transferNo:"Phiếu · 單號",
   },
   zh: {
-    in:"進貨入庫",out:"領料／出庫",transfer:"庫存轉撥",receive:"待收貨",
+    in:"進貨入庫",out:"領料／出庫",transfer:"庫存轉撥",
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",outbound:"出庫",move:"轉撥",ship:"分店出貨",
-    receiveAction:"確認收貨",usage:"使用／耗用",noItems:"沒有符合條件的品項",noPending:"目前沒有待收貨",
-    dispatched:"已出貨",received:"已收貨",loading:"正在載入庫存…",
+    usage:"使用／耗用",noItems:"沒有符合條件的品項",
+    loading:"正在載入庫存…",
     cloudRequired:"請先啟用 Supabase 庫存同步。",editRequired:"此帳號僅能查看庫存。",
     success:"庫存已更新",insufficient:"出庫數量超過現有庫存。",sameLocation:"來源與目的儲位不可相同。",
     failed:"雲端庫存更新失敗。",transferNo:"單號",
@@ -196,37 +138,11 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations){
   </article>`;
 }
 
-function receiveCard(transfer,locations,site,language,t){
-  const line=transfer.lines?.[0];
-  const item=line?.sourceItem;
-  if(!line||!item) return "";
-  return `<article class="inventory-op-card shipment-card" data-transfer-id="${esc(transfer.id)}">
-    <div class="op-item-head"><div><strong>${esc(item.name_zh_tw)}</strong><small>${esc(item.name_vi||"")}</small></div><span class="shipment-status">${esc(t.dispatched)}</span></div>
-    <div class="shipment-route"><span>${esc(siteLabel(transfer.from_site,language))}</span><b>→</b><span>${esc(siteLabel(site,language))}</span></div>
-    <div class="shipment-meta"><span>${esc(t.transferNo)} <strong>${esc(transfer.transfer_no)}</strong></span><span>${line.quantity} ${esc(line.unit)}</span></div>
-    <div class="op-select-grid"><label><span>${esc(t.destination)}</span><select data-receive-destination="${esc(transfer.id)}">${locationOptions(locations,language,locations[0]?.id)}</select></label></div>
-    <div class="op-action-row receive-row"><button class="op-primary" data-op-receive="${esc(transfer.id)}">${esc(t.receiveAction)}</button></div>
-  </article>`;
-}
-
 async function doRender(host,state){
   const {site,mode,language}=state;
   const t=langText(language);
   host.innerHTML=`<div class="inventory-ops-loading">${esc(t.loading)}</div>`;
   try{
-    if(mode==="receive"){
-      const [shipments,locations]=await Promise.all([
-        listShipments(site,{direction:"incoming",status:"dispatched",limit:100}),
-        getSiteLocations(site,"storage"),
-      ]);
-      if (inventoryCloudState()==="migration-needed") throw new Error("SCHEMA_MIGRATION_REQUIRED");
-      state.locations=locations;
-      state.shipments=shipments;
-      host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${shipments.length}</span></div><div class="inventory-ops-list" data-op-list>${shipments.length?shipments.map((entry)=>receiveCard(entry,locations,site,language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noPending)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
-      bind(host,state);
-      return;
-    }
-
     const data=await loadSiteOperationData(site);
     if (inventoryCloudState()==="migration-needed") throw new Error("SCHEMA_MIGRATION_REQUIRED");
     state.data=data;
@@ -376,24 +292,7 @@ function bind(host,state){
     };
   });
 
-  host.querySelectorAll("[data-op-receive]").forEach((button)=>{
-    button.onclick=async()=>{
-      if(!canInventoryEdit()){setMessage(host,t.editRequired,"error");return;}
-      const transferId=button.dataset.opReceive;
-      const destinationLocationId=host.querySelector(`[data-receive-destination="${CSS.escape(transferId)}"]`)?.value;
-      button.disabled=true;
-      const result=await receiveBranchShipment({transferId,destinationLocationId,site});
-      if(result.ok){
-        setMessage(host,t.success,"ok");
-        await syncInventoryNow(site,{reloadBranch:false});
-        await doRender(host,state);
-        state.onUpdated?.();
-      }else{
-        setMessage(host,errorText(result.error,t),"error");
-        button.disabled=false;
-      }
-    };
-  });
+
 }
 
 let activeMount=null;
@@ -419,25 +318,12 @@ export async function mountInventoryOperations(host,{
 
 export function operationTabLabels(language="vi"){
   const t=langText(language);
-  return {in:t.in,out:t.out,transfer:t.transfer,receive:t.receive};
+  return {in:t.in,out:t.out,transfer:t.transfer};
 }
 
 
 function draftItemCard(item,mode,locations,site,language,t){
   return itemCard(item,mode,locations,site,language,t);
-}
-
-function draftReceiveCard(transfer,locations,site,language,t){
-  const line=transfer.lines?.[0];
-  const item=line?.sourceItem;
-  if(!line||!item)return "";
-  return `<article class="inventory-op-card shipment-card is-draft-shipment" data-transfer-id="${esc(transfer.id)}">
-    <div class="op-item-head"><div><strong>${esc(item.name_zh_tw)}</strong><small>${esc(item.name_vi||"")}</small></div><span class="shipment-status">${language==="zh"?"待審出貨":"Xuất tạm · 待審出貨"}</span></div>
-    <div class="shipment-route"><span>${esc(siteLabel(transfer.from_site,language))}</span><b>→</b><span>${esc(siteLabel(site,language))}</span></div>
-    <div class="shipment-meta"><span>${esc(t.transferNo)} <strong>${esc(transfer.transfer_no)}</strong></span><span>${line.quantity} ${esc(line.unit)}</span></div>
-    <div class="op-select-grid"><label><span>${esc(t.destination)}</span><select data-draft-receive-destination="${esc(transfer.id)}">${locationOptions(locations,language,locations[0]?.id)}</select></label></div>
-    <div class="op-action-row receive-row"><button class="op-primary" data-draft-receive="${esc(transfer.id)}">${esc(t.receiveAction)}</button></div>
-  </article>`;
 }
 
 function bindDraft(host,state){
@@ -505,34 +391,7 @@ function bindDraft(host,state){
       }
     };
   });
-  host.querySelectorAll("[data-draft-receive]").forEach((button)=>{
-    button.onclick=async()=>{
-      const transferId=button.dataset.draftReceive;
-      const transfer=pendingDraftTransfers(state.site).find((entry)=>entry.id===transferId);
-      const line=transfer?.lines?.[0];
-      const destinationLocationId=host.querySelector(`[data-draft-receive-destination="${CSS.escape(transferId)}"]`)?.value||"";
-      if(!transfer||!line||!destinationLocationId)return;
-      button.disabled=true;
-      const item=line.sourceItem||{};
-      const result=await state.onApply?.({
-        type:"receive",
-        itemId:item.id||"",
-        itemMeta:{zh:item.name_zh_tw||"",vi:item.name_vi||"",unit:item.unit||line.unit||"個",catalogKey:item.catalog_key||""},
-        destinationLocationId,
-        amount:Math.max(1,Number(line.quantity)||1),
-        transferId,
-        sourceSite:transfer.from_site,
-      });
-      if(result?.ok){
-        markDraftTransferReceived(transferId,destinationLocationId);
-        await renderDraft(host,state);
-        setMessage(host,state.language==="zh"?"庫存已更新。":"Đã nhận hàng tạm và cập nhật tồn kho. · 庫存已更新。","ok");
-      }else{
-        setMessage(host,errorText(result?.error,t),"error");
-        button.disabled=false;
-      }
-    };
-  });
+
 
 }
 
@@ -540,14 +399,8 @@ async function renderDraft(host,state){
   const t=langText(state.language);
   const data=await state.reload();
   state.data=data;
-  if(state.mode==="receive"){
-    const pending=pendingDraftTransfers(state.site);
-    host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：跨店轉撥立即生效":"Nhận hàng tạm: chờ cấp trên duyệt · 測試模式：跨店轉撥立即生效"}</div><div class="inventory-ops-list">${pending.length?pending.map((entry)=>draftReceiveCard(entry,data.locations,state.site,state.language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noPending)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
-    bindDraft(host,state);
-    return;
-  }
   const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations));
-  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Thao tác tạm: thay đổi số lượng chờ cấp trên duyệt · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Thao tác tạm: thay đổi số lượng có hiệu lực ngay · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
   bindDraft(host,state);
 }
 
