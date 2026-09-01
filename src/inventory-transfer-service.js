@@ -18,13 +18,15 @@ export function siteLabel(site, language = "vi") {
   return language === "zh" ? found.zh : `${found.vi} · ${found.zh}`;
 }
 
-export async function loadSiteOperationData(site) {
-  const [rows, locations, workLocations, ...allSiteLocations] = await Promise.all([
+export async function loadSiteOperationData(site,{includeDestinations=false}={}) {
+  const [rows, locations, workLocations] = await Promise.all([
     getSiteInventoryRows(site),
     getSiteLocations(site, "storage"),
     getSiteLocations(site, "work"),
-    ...INVENTORY_SITES.map((entry)=>getSiteLocations(entry.id,"storage")),
   ]);
+  const allSiteLocations=includeDestinations
+    ? await Promise.all(INVENTORY_SITES.map((entry)=>getSiteLocations(entry.id,"storage")))
+    : [];
 
   const byItem = new Map();
   for (const row of rows) {
@@ -66,10 +68,10 @@ export async function loadSiteOperationData(site) {
   const catalogKeys=[...new Set(items.map((item)=>item.catalogKey).filter(Boolean))];
 
   const destinationCatalog=[];
-  const allRowsBySite=await Promise.all(
-    INVENTORY_SITES.map((entry)=>getSiteInventoryRows(entry.id).catch(()=>[]))
-  );
-  for(let index=0;index<INVENTORY_SITES.length;index+=1){
+  const allRowsBySite=includeDestinations
+    ? await Promise.all(INVENTORY_SITES.map((entry)=>getSiteInventoryRows(entry.id).catch(()=>[])))
+    : [];
+  for(let index=0;includeDestinations && index<INVENTORY_SITES.length;index+=1){
     const destinationSite=INVENTORY_SITES[index].id;
     const grouped=new Map();
     for(const row of allRowsBySite[index]||[]){
@@ -102,12 +104,14 @@ export async function loadSiteOperationData(site) {
     destinationCatalog.push(...grouped.values());
   }
   let receiveDefaults=[];
-  try{
-    receiveDefaults=await getInventoryReceiveDefaults({
-      sites:INVENTORY_SITES.map((entry)=>entry.id).filter((target)=>target!==site),
-      catalogKeys,
-    });
-  }catch{}
+  if(includeDestinations){
+    try{
+      receiveDefaults=await getInventoryReceiveDefaults({
+        sites:INVENTORY_SITES.map((entry)=>entry.id).filter((target)=>target!==site),
+        catalogKeys,
+      });
+    }catch{}
+  }
 
   return {
     site,
@@ -116,7 +120,9 @@ export async function loadSiteOperationData(site) {
     workLocations,
     receiveDefaults,
     destinationCatalog,
-    allLocations: INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id}))),
+    allLocations: includeDestinations
+      ? INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id})))
+      : locations.map((location)=>({...location,site})),
   };
 }
 
