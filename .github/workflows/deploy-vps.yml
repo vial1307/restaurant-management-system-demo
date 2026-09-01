@@ -48,7 +48,16 @@ jobs:
           assert.equal(searchMatches("Thịt bò", "thit bo"), true);
           assert.equal(searchMatches("永吉店", "yongji"), true);
           assert.equal(searchMatches("麻辣湯", "malatang"), true);
+          assert.equal(searchMatches("復興店 牛肉", ""), true);
           NODE
+
+          # Search inputs must be filtered in-place; typing must not rebuild the
+          # full app/central page because that breaks IME and caret position.
+          ! grep -A35 'function applyInventorySearchDom' src/app.js | grep -q 'render();'
+          ! grep -A25 'const search = content.querySelector("\[data-central-search\]")' src/auth-layer.js | grep -q 'centralPage(user);'
+          grep -q 'data-op-search' src/inventory-operations.js
+          grep -q 'oncompositionend' src/auth-layer.js
+          grep -q 'compositionend' src/app.js
 
       - name: Validate backend JavaScript
         run: |

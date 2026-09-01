@@ -8,6 +8,7 @@ import {
   inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
+import { searchMatches } from "./search-utils.js";
 import {
   INVENTORY_SITES,
   directBranchTransfer,
@@ -202,6 +203,41 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
     ${followup}
   </article>`;
 }
+function applyOperationSearch(host,state) {
+  const input = host.querySelector("[data-op-search]");
+  if (!input) return;
+
+  const query = input.value || "";
+  state.search = query;
+  let visible = 0;
+  host.querySelectorAll("[data-op-item]").forEach((card) => {
+    const show = searchMatches(card.textContent || "", query);
+    card.hidden = !show;
+    if (show) visible += 1;
+  });
+
+  const count = host.querySelector(".op-count");
+  if (count) count.textContent = String(visible);
+
+  const empty = host.querySelector("[data-op-search-empty]");
+  if (empty) empty.hidden = !query || visible > 0;
+}
+
+function bindOperationSearch(host,state) {
+  const input = host.querySelector("[data-op-search]");
+  if (!input) return;
+
+  const apply = (event) => {
+    if (event?.isComposing) return;
+    applyOperationSearch(host,state);
+  };
+
+  input.oninput = apply;
+  input.onsearch = apply;
+  input.oncompositionend = apply;
+  applyOperationSearch(host,state);
+}
+
 async function doRender(host,state){
   const {site,mode,language}=state;
   const t=langText(language);
@@ -213,9 +249,10 @@ async function doRender(host,state){
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
       : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[]));
-    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
     restoreOperationSelections(host,state);
     bind(host,state);
+    bindOperationSearch(host,state);
   }catch(error){
     host.innerHTML=`<div class="inventory-cloud-notice">${esc(t.cloudRequired)}<small>${esc(error?.message||"")}</small></div>`;
   }
@@ -528,7 +565,7 @@ export async function mountInventoryOperations(host,{
   if(activeMount?.stopWatch){
     try{await activeMount.stopWatch();}catch{}
   }
-  const state={host,site,mode,language,onUpdated,stopWatch:null};
+  const state={host,site,mode,language,onUpdated,stopWatch:null,search:""};
   activeMount=state;
   await doRender(host,state);
   if(activeMount!==state || !host.isConnected) return;
@@ -709,9 +746,10 @@ async function renderDraft(host,state){
   }
   state.data=data;
   const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations,data.workLocations||[]));
-  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Môi trường thử nghiệm: thao tác có hiệu lực ngay và ghi người thực hiện · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Môi trường thử nghiệm: thao tác có hiệu lực ngay và ghi người thực hiện · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
   restoreOperationSelections(host,state);
   bindDraft(host,state);
+  bindOperationSearch(host,state);
 }
 
 export async function mountDraftInventoryOperations(host,{
@@ -722,6 +760,6 @@ export async function mountDraftInventoryOperations(host,{
   onApply,
 }={}){
   if(!host||!site||typeof reload!=="function")return;
-  const state={site,mode,language,reload,onApply,data:null};
+  const state={site,mode,language,reload,onApply,data:null,search:""};
   await renderDraft(host,state);
 }

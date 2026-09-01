@@ -124,9 +124,10 @@ function installSearchEnhancer() {
   const apply = (input) => {
     const isMain = input.dataset.field === "inventorySearch";
     const isCentral = input.hasAttribute("data-central-search");
-    // Main and central inventory searches are handled natively so clearing the
-    // field restores data state instead of only changing DOM visibility.
-    if (isMain || isCentral) return;
+    const isOperation = input.hasAttribute("data-op-search");
+    // Inventory searches own their state and DOM filtering. Do not let the
+    // generic layer process them a second time.
+    if (isMain || isCentral || isOperation) return;
 
     const placeholder = input.getAttribute("placeholder") || "";
     const isGenericSearch = input.type === "search" || /tìm|search|搜尋|pinyin|注音/i.test(placeholder);
@@ -144,12 +145,13 @@ function installSearchEnhancer() {
 
   const handleSearchEvent = (event) => {
     const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
+    if (!(input instanceof HTMLInputElement) || event.isComposing) return;
     apply(input);
   };
 
   document.addEventListener("input", handleSearchEvent, true);
   document.addEventListener("search", handleSearchEvent, true);
+  document.addEventListener("compositionend", handleSearchEvent, true);
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
@@ -157,7 +159,8 @@ function installSearchEnhancer() {
     if (!(input instanceof HTMLInputElement)) return;
     const placeholder = input.getAttribute("placeholder") || "";
     const searchable = input.type === "search" || input.dataset.field === "inventorySearch" ||
-      input.hasAttribute("data-central-search") || /tìm|search|搜尋|pinyin|注音/i.test(placeholder);
+      input.hasAttribute("data-central-search") || input.hasAttribute("data-op-search") ||
+      /tìm|search|搜尋|pinyin|注音/i.test(placeholder);
     if (!searchable || !input.value) return;
     input.value = "";
     input.dispatchEvent(new Event("input", { bubbles: true }));

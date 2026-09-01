@@ -537,11 +537,7 @@ function centralPage(user) {
   const selectedZone = content.dataset.centralZone || "all";
   const query = content.dataset.centralSearch || "";
   const editorKey = content.dataset.centralEditor || "";
-  const filtered = items.filter((item) => {
-    const matchesZone = selectedZone === "all" || item.zone === selectedZone;
-    const searchable = `${item.zh || ""} ${item.vi || ""} ${item.zone || ""} ${item.workArea || ""} ${item.unit || ""}`;
-    return matchesZone && searchMatches(searchable, query);
-  });
+  const filtered = items.filter((item) => selectedZone === "all" || item.zone === selectedZone);
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
   const productCount = new Set(items.map((item) => centralBaseKey(item))).size;
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
@@ -596,6 +592,8 @@ function centralPage(user) {
     ${mode === "manage" && canManageCatalog ? centralEditorModal(items, editorKey, language) : ""}
   `;
   bindCentral(user);
+  const centralSearchInput = content.querySelector("[data-central-search]");
+  if (centralSearchInput) applyCentralSearchDom(content, centralSearchInput.value || "");
   if (["in","pick","transfer","ship"].includes(mode)) {
     const host=content.querySelector("[data-inventory-operations]");
     if (cloudReady) {
@@ -648,10 +646,10 @@ function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const draft = direct && inventoryCloudState() !== "ready";
   const directQuantityLabel = draft ? "Số lượng · 數量" : "盤點數量";
   const directActionLabel = draft ? "Cập nhật · 更新" : "盤點調整";
-  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input type="search" autocomplete="off" data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
+  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
     ${draft ? '<div class="central-draft-banner">Dữ liệu thử nghiệm · thao tác có hiệu lực ngay · 測試資料即時生效</div>' : ""}
     <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? `<span>${directQuantityLabel}</span><span>${draft ? "暫存" : "調整"}</span>` : ""}</div>
-    <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 測試" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
+    <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 測試" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}<p class="central-empty" data-central-search-empty hidden>沒有符合條件的品項。</p></div></section>`;
 }
 
 
@@ -685,11 +683,9 @@ function centralWorkAreaLabel(area, language) {
 }
 
 function centralManageView(items, selectedZone, query, language, allowDelete = false) {
-  const groups = centralProductGroups(items).filter(({ item, rows }) => {
-    const matchesZone = selectedZone === "all" || rows.some((row) => row.zone === selectedZone);
-    const searchable = `${item.zh || ""} ${item.vi || ""} ${rows.map((row) => row.zone).join(" ")} ${item.workArea || ""} ${item.unit || ""}`;
-    return matchesZone && searchMatches(searchable, query);
-  });
+  const groups = centralProductGroups(items).filter(({ rows }) =>
+    selectedZone === "all" || rows.some((row) => row.zone === selectedZone)
+  );
   const addLabel = language === "zh" ? "新增食材" : "Thêm nguyên liệu · 新增食材";
   const editLabel = language === "zh" ? "編輯" : "Sửa · 編輯";
   const deleteLabel = language === "zh" ? "刪除" : "Xóa · 刪除";
@@ -697,7 +693,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
     <div class="central-toolbar central-manage-toolbar">
       <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(zone)}</button>`).join("")}</div>
       <button class="primary-button" type="button" data-central-editor-open="new">＋ ${esc(addLabel)}</button>
-      <input type="search" autocomplete="off" data-central-search placeholder="${language === "zh" ? "搜尋品項..." : "Tìm nguyên liệu..."}" value="${esc(query)}" />
+      <input type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" data-central-search placeholder="${language === "zh" ? "搜尋品項..." : "Tìm nguyên liệu..."}" value="${esc(query)}" />
     </div>
     <div class="central-manage-list">${groups.map(({ key, item, rows }) => {
       const locations = rows.map((row) => `<span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><strong>${Number(row.qty || 0)} ${esc(row.unit || item.unit || "")}</strong><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>`).join("");
@@ -706,7 +702,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
         <div class="op-location-list">${locations}</div>
         <div class="central-manage-actions"><button type="button" class="inventory-action-button" data-central-editor-open="${esc(key)}" aria-label="${esc(editLabel)}">✎</button>${allowDelete ? `<button type="button" class="inventory-action-button delete-action" data-central-product-delete="${esc(key)}" aria-label="${esc(deleteLabel)}">🗑</button>` : ""}</div>
       </article>`;
-    }).join("") || `<p class="central-empty">${language === "zh" ? "沒有符合條件的品項。" : "Không có nguyên liệu phù hợp."}</p>`}</div>
+    }).join("") || `<p class="central-empty">${language === "zh" ? "沒有符合條件的品項。" : "Không có nguyên liệu phù hợp."}</p>`}<p class="central-empty" data-central-search-empty hidden>${language === "zh" ? "沒有符合條件的品項。" : "Không có nguyên liệu phù hợp."}</p></div>
   </section>`;
 }
 
@@ -768,7 +764,18 @@ function cloudHistoryView(log) {
   }).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
 }
 
-let searchTimer = null;
+function applyCentralSearchDom(content, query) {
+  const rows = [...content.querySelectorAll(".central-row, .central-manage-row")];
+  let visible = 0;
+  rows.forEach((row) => {
+    const show = searchMatches(row.textContent || "", query);
+    row.hidden = !show;
+    if (show) visible += 1;
+  });
+  const empty = content.querySelector("[data-central-search-empty]");
+  if (empty) empty.hidden = !query || visible > 0;
+}
+
 function bindCentral(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
@@ -776,22 +783,15 @@ function bindCentral(user) {
   content.querySelectorAll("[data-central-zone]").forEach(b => b.onclick = () => { content.dataset.centralZone = b.dataset.centralZone; centralPage(user); });
   const search = content.querySelector("[data-central-search]");
   if (search) {
-    const applySearch = () => {
+    const applySearch = (event) => {
+      if (event?.isComposing) return;
       const value = search.value;
       content.dataset.centralSearch = value;
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => {
-        centralPage(user);
-        const next = document.querySelector(".page-content [data-central-search]");
-        if (!next) return;
-        try {
-          next.focus({ preventScroll: true });
-          next.setSelectionRange(value.length, value.length);
-        } catch {}
-      }, value ? 80 : 0);
+      applyCentralSearchDom(content, value);
     };
     search.oninput = applySearch;
     search.onsearch = applySearch;
+    search.oncompositionend = applySearch;
   }
 
   content.querySelectorAll("[data-central-editor-open]").forEach((button) => {

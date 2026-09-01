@@ -1010,13 +1010,10 @@ function inventory(context) {
   const activeAlerts = draftAlerts
     ? draftAlerts.filter((item)=>storageView ? item.kind !== "work" : item.kind === "work")
     : storageView ? reserveAlerts : workAlerts;
-  const filtered = entries.filter((item) => {
-    const matchesGroup = storageView
-      ? view.zone === "all" || item.zone === view.zone
-      : view.workArea === "all" || item.workArea === view.workArea;
-    const searchable = `${item.label || ""} ${item.labelVi || ""} ${item.zone || ""} ${item.workArea || ""} ${item.unit || ""}`;
-    return matchesGroup && searchMatches(searchable, view.search);
-  });
+  const filtered = entries.filter((item) => storageView
+    ? view.zone === "all" || item.zone === view.zone
+    : view.workArea === "all" || item.workArea === view.workArea
+  );
   const groups = storageView ? ZONES : WORK_AREAS;
   const groupKey = storageView ? "zone" : "workArea";
   const activeGroup = storageView ? view.zone : view.workArea;
@@ -1090,11 +1087,7 @@ function inventory(context) {
   const opsGuide = tabsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
   if (opsMode === "manage") {
     const manageEntries = effectiveRecord.inventory;
-    const manageFiltered = manageEntries.filter((item) => {
-      const matchesZone = view.zone === "all" || item.zone === view.zone;
-      const searchable = `${item.label || ""} ${item.labelVi || ""} ${item.zone || ""} ${item.workArea || ""} ${item.unit || ""}`;
-      return matchesZone && searchMatches(searchable, view.search);
-    });
+    const manageFiltered = manageEntries.filter((item) => view.zone === "all" || item.zone === view.zone);
     const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage };
     const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", manageRowContext, storageInventoryRow);
     const manageColumns = [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock];
@@ -1122,8 +1115,8 @@ function inventory(context) {
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
       <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
-        <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" /></label></div>
-      <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}</section>`;
+        <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label></div>
+      <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
   }
   if (opsMode === "history") {
     const localRows=branchInventoryLocalHistory(site);
@@ -1137,8 +1130,8 @@ function inventory(context) {
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
     <div class="filters-row"><p class="inventory-view-description">${escapeHtml(storageView ? text.storageReport : text.workReport)}</p>
-      <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" /></label></div>
-    <section class="inventory-table ${storageView ? "storage-table" : "work-table"}"><div class="inventory-table-head">${columns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${filtered.length ? groupRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}</section>`;
+      <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label></div>
+    <section class="inventory-table ${storageView ? "storage-table" : "work-table"}"><div class="inventory-table-head">${columns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${filtered.length ? groupRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
 }
 
 function reservationsPage(context) {
@@ -1322,6 +1315,8 @@ function render() {
   root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
+  const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
+  if (inventorySearchInput) applyInventorySearchDom(inventorySearchInput);
   const opsHost=root.querySelector("[data-branch-inventory-operations]");
   const historyHost=root.querySelector("[data-branch-inventory-history]");
   if (historyHost && inventoryCloudState()==="ready") {
@@ -1663,37 +1658,52 @@ root.addEventListener("change", (event) => {
   if (field === "task") store.toggleTask(id);
 });
 
-let inventorySearchTimer = 0;
+function applyInventorySearchDom(input) {
+  if (!input?.isConnected) return;
+  const query = input.value || "";
+  view.search = query;
 
-function applyInventorySearch(input) {
-  const value = input.value;
-  const caret = input.selectionStart ?? value.length;
-  view.search = value;
-  clearTimeout(inventorySearchTimer);
+  const page = input.closest(".page-content") || root;
+  const table = page.querySelector(".inventory-table");
+  if (!table) return;
 
-  const update = () => {
-    render();
-    const replacement = root.querySelector('[data-field="inventorySearch"]');
-    if (!replacement) return;
-    try {
-      replacement.focus({ preventScroll: true });
-      replacement.setSelectionRange(caret, caret);
-    } catch {}
-  };
+  let visibleTotal = 0;
+  table.querySelectorAll(".inventory-group").forEach((group) => {
+    let visibleInGroup = 0;
+    group.querySelectorAll(".inventory-row").forEach((row) => {
+      const visible = searchMatches(row.textContent || "", query);
+      row.hidden = !visible;
+      if (visible) visibleInGroup += 1;
+    });
+    group.hidden = visibleInGroup === 0;
+    visibleTotal += visibleInGroup;
 
-  // Clearing the field must restore the complete list immediately.
-  if (!value) update();
-  else inventorySearchTimer = window.setTimeout(update, 80);
+    const count = group.querySelector(".inventory-group-heading span");
+    if (count) count.textContent = `${visibleInGroup} ${currentContext().text.items}`;
+  });
+
+  const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
+  looseRows.forEach((row) => {
+    const visible = searchMatches(row.textContent || "", query);
+    row.hidden = !visible;
+    if (visible) visibleTotal += 1;
+  });
+
+  const empty = table.querySelector("[data-inventory-search-empty]");
+  if (empty) empty.hidden = !query || visibleTotal > 0;
 }
 
-root.addEventListener("input", (event) => {
-  if (event.target.dataset.field !== "inventorySearch") return;
-  applyInventorySearch(event.target);
-});
+function handleInventorySearchEvent(event) {
+  const input = event.target;
+  if (input?.dataset?.field !== "inventorySearch") return;
+  if (event.isComposing) return;
+  applyInventorySearchDom(input);
+}
 
-root.addEventListener("search", (event) => {
-  if (event.target.dataset.field !== "inventorySearch") return;
-  applyInventorySearch(event.target);
+root.addEventListener("input", handleInventorySearchEvent);
+root.addEventListener("search", handleInventorySearchEvent);
+root.addEventListener("compositionend", (event) => {
+  if (event.target?.dataset?.field === "inventorySearch") applyInventorySearchDom(event.target);
 });
 
 root.addEventListener("submit", (event) => {

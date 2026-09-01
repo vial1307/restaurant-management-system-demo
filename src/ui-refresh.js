@@ -125,7 +125,11 @@ function patchSearchPlaceholders(root=document.body){
       input.placeholder="Tìm / 中文 / Tiếng Việt / Pinyin / 注音…";
     }
     input.setAttribute("autocomplete","off");
+    input.setAttribute("autocorrect","off");
+    input.setAttribute("autocapitalize","none");
+    input.setAttribute("spellcheck","false");
     input.setAttribute("inputmode","search");
+    input.setAttribute("enterkeyhint","search");
     input.setAttribute("aria-label",input.placeholder);
   });
 }
