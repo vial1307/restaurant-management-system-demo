@@ -126,7 +126,8 @@ function overviewCard(item,language,t){
 }
 
 function itemCard(item,mode,locations,site,language,t,allLocations=locations,workLocations=[]){
-  const firstSource=item.locations.find((loc)=>Number(loc.quantity)>0) || item.locations[0];
+  const positiveSource=item.locations.find((loc)=>Number(loc.quantity)>0);
+  const firstSource=positiveSource || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
   const workLocation=workLocationForItem(item,workLocations);
   const workQuantity=workLocation ? Number(workStockAt(item,workLocation.id)||0) : Number(item.workTotal||0);
@@ -149,7 +150,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
     action=`<button class="op-primary" data-op-submit="in" data-item-id="${esc(item.id)}">${esc(t.inbound)}</button>`;
   }else if(mode==="pick"){
     controls=sourceSelect+workDestination;
-    action=`<button class="op-primary" data-op-submit="pick" data-item-id="${esc(item.id)}" ${firstSource&&workLocation?"":"disabled"}>${esc(t.pickAction)}</button>`;
+    action=`<button class="op-primary" data-op-submit="pick" data-item-id="${esc(item.id)}" ${positiveSource&&workLocation?"":"disabled"}>${esc(t.pickAction)}</button>`;
     if(workLocation){
       const returnDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
       followup=`<div class="pick-followup" data-pick-followup="${esc(item.id)}">
@@ -160,7 +161,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
     }
   }else if(mode==="ship"){
     controls=sourceSelect+shipSiteSelect+targetLocationSelect;
-    action=`<button class="op-primary op-out" data-op-submit="ship" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.shipAction)}</button>`;
+    action=`<button class="op-primary op-out" data-op-submit="ship" data-item-id="${esc(item.id)}" ${positiveSource?"":"disabled"}>${esc(t.shipAction)}</button>`;
   }else{
     controls=sourceSelect+destinationSelect;
     action=`<button class="op-primary" data-op-submit="transfer" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.move)}</button>`;
