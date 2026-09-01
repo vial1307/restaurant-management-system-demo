@@ -498,6 +498,17 @@ function pushHistory(entry) {
 }
 function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
 
+function centralSearchField(query = "", language = "vi") {
+  const placeholder = language === "zh"
+    ? "搜尋品項 / Pinyin / 注音…"
+    : "Tìm nguyên liệu / 中文 / Pinyin / 注音…";
+  return `<label class="central-search-box">
+    <svg class="central-search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <input type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" inputmode="search" data-central-search placeholder="${esc(placeholder)}" value="${esc(query)}" />
+    <button type="button" class="central-search-clear" data-central-search-clear aria-label="${language === "zh" ? "清除搜尋" : "Xóa tìm kiếm"}" hidden>×</button>
+  </label>`;
+}
+
 function loginScreen(error = "") {
   document.body.classList.add("auth-locked");
   let host = document.querySelector("#auth-layer");
@@ -646,7 +657,8 @@ function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const draft = direct && inventoryCloudState() !== "ready";
   const directQuantityLabel = draft ? "Số lượng · 數量" : "盤點數量";
   const directActionLabel = draft ? "Cập nhật · 更新" : "盤點調整";
-  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
+  const language = document.documentElement.lang === "vi" ? "vi" : "zh";
+  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div>${centralSearchField(query, language)}</div>
     ${draft ? '<div class="central-draft-banner">Dữ liệu thử nghiệm · thao tác có hiệu lực ngay · 測試資料即時生效</div>' : ""}
     <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? `<span>${directQuantityLabel}</span><span>${draft ? "暫存" : "調整"}</span>` : ""}</div>
     <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 測試" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}<p class="central-empty" data-central-search-empty hidden>沒有符合條件的品項。</p></div></section>`;
@@ -693,7 +705,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
     <div class="central-toolbar central-manage-toolbar">
       <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(zone)}</button>`).join("")}</div>
       <button class="primary-button" type="button" data-central-editor-open="new">＋ ${esc(addLabel)}</button>
-      <input type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" data-central-search placeholder="${language === "zh" ? "搜尋品項..." : "Tìm nguyên liệu..."}" value="${esc(query)}" />
+      ${centralSearchField(query, language)}
     </div>
     <div class="central-manage-list">${groups.map(({ key, item, rows }) => {
       const locations = rows.map((row) => `<span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><strong>${Number(row.qty || 0)} ${esc(row.unit || item.unit || "")}</strong><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>`).join("");
@@ -783,15 +795,31 @@ function bindCentral(user) {
   content.querySelectorAll("[data-central-zone]").forEach(b => b.onclick = () => { content.dataset.centralZone = b.dataset.centralZone; centralPage(user); });
   const search = content.querySelector("[data-central-search]");
   if (search) {
+    const clear = content.querySelector("[data-central-search-clear]");
+    const syncClear = () => {
+      if (clear) clear.hidden = !search.value;
+    };
     const applySearch = (event) => {
       if (event?.isComposing) return;
       const value = search.value;
       content.dataset.centralSearch = value;
       applyCentralSearchDom(content, value);
+      syncClear();
     };
     search.oninput = applySearch;
     search.onsearch = applySearch;
     search.oncompositionend = applySearch;
+    syncClear();
+
+    if (clear) {
+      clear.onclick = () => {
+        search.value = "";
+        content.dataset.centralSearch = "";
+        applyCentralSearchDom(content, "");
+        syncClear();
+        try { search.focus({ preventScroll: true }); } catch { search.focus(); }
+      };
+    }
   }
 
   content.querySelectorAll("[data-central-editor-open]").forEach((button) => {
