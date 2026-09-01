@@ -19,6 +19,7 @@ import {
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
 const CENTRAL_DRAFT_KEY = "shitu-central-kitchen-draft-stock-v1";
+const CENTRAL_WORK_KEY = "shitu-central-kitchen-work-v1";
 const BRANCH_DRAFT_PREFIX = "shitu-branch-inventory-draft-v1:";
 const OPERATION_LOG_KEY = "shitu-inventory-operation-log-v1";
 const HISTORY_KEY = "shitu-central-kitchen-history-v1";
@@ -259,8 +260,23 @@ function addToBranchDraftFromCentral(site,itemMeta,destinationLocationId,amount)
   localStorage.setItem(`${BRANCH_DRAFT_PREFIX}${site}`,JSON.stringify(draft));
   return true;
 }
+function readCentralWork(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(CENTRAL_WORK_KEY)||"{}");
+    return saved && typeof saved==="object" && !Array.isArray(saved) ? saved : {};
+  }catch{return {};}
+}
+function saveCentralWork(value){
+  localStorage.setItem(CENTRAL_WORK_KEY,JSON.stringify(value||{}));
+}
+function centralWorkLocation(){
+  return {id:"central-work-use",code:"central-work-use",name_zh_tw:"使用中",name_vi:"Đang sử dụng",site:"central",kind:"work"};
+}
+
 function centralDraftOperationData() {
   const items = loadStock();
+  const workMap = readCentralWork();
+  const workLocation = centralWorkLocation();
   const locations = CENTRAL_ZONES.map((zone) => ({
     id: centralLocationCode(zone),
     code: centralLocationCode(zone),
@@ -276,14 +292,19 @@ function centralDraftOperationData() {
   for (const row of items) {
     const baseKey = centralBaseKey(row);
     if (!grouped.has(baseKey)) {
+      const workQty=Math.max(0,Number(workMap[baseKey])||0);
       grouped.set(baseKey, {
         id: baseKey,
         itemKey: row.itemKey || baseKey,
+        catalogKey: row.catalogKey || "",
         zh: row.zh,
         vi: row.vi,
         unit: row.unit,
+        workArea: "use",
         locations: [],
+        workLocations: [{id:workLocation.id,code:workLocation.code,zh:workLocation.name_zh_tw,vi:workLocation.name_vi,quantity:workQty,minimum:0}],
         total: 0,
+        workTotal: workQty,
       });
     }
     const item = grouped.get(baseKey);
@@ -314,11 +335,18 @@ function centralDraftOperationData() {
       }
     }
   }
-  return { site:"central", items:[...grouped.values()], locations, allLocations:["central","fuxing","yongji"].flatMap((site)=>stagingLocationsForSite(site)) };
+  return {
+    site:"central",
+    items:[...grouped.values()],
+    locations,
+    workLocations:[workLocation],
+    allLocations:["central","fuxing","yongji"].flatMap((site)=>stagingLocationsForSite(site)),
+  };
 }
 
 function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocationId, destinationLocationId, amount, targetSite, sourceSite }) {
   const items = loadStock();
+  const workMap = readCentralWork();
   let productRows = items.filter((row) => centralBaseKey(row) === itemId);
   let template = productRows[0];
   if (!template && itemMeta?.zh) {
@@ -326,36 +354,21 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
     template = productRows[0];
   }
   const codeToZone = Object.fromEntries(CENTRAL_ZONES.map((zone) => [centralLocationCode(zone), zone]));
-  if (!template && type === "receive" && itemMeta?.zh) {
-    const receivedId=itemId || `central-received-${Date.now()}`;
-    template = {
-      id:receivedId,
-      baseId:receivedId,
-      itemKey:receivedId,
-      catalogKey:itemMeta.catalogKey || "",
-      zh:itemMeta.zh,
-      vi:itemMeta.vi || itemMeta.zh,
-      unit:itemMeta.unit || "個",
-      zone:codeToZone[destinationLocationId] || CENTRAL_ZONES[0],
-      qty:0,
-      minimum:0,
-      draft:true,
-    };
-    items.push(template);
-  }
   if (!template) return { ok:false, error:new Error("ITEM_NOT_FOUND") };
+
+  const baseKey=centralBaseKey(template);
   const sourceZone = codeToZone[sourceLocationId] || "";
   const destinationZone = codeToZone[destinationLocationId] || "";
   const value = Math.max(1, Number(amount) || 1);
 
   function ensureRow(zone) {
-    let row = items.find((entry) => centralBaseKey(entry) === itemId && entry.zone === zone);
+    let row = items.find((entry) => centralBaseKey(entry) === baseKey && entry.zone === zone);
     if (!row) {
       row = {
         ...template,
-        id: `${itemId}@${centralLocationCode(zone)}`,
-        baseId: itemId,
-        itemKey: template.itemKey || itemId,
+        id: `${baseKey}@${centralLocationCode(zone)}`,
+        baseId: baseKey,
+        itemKey: template.itemKey || baseKey,
         zone,
         qty: 0,
         minimum: 0,
@@ -368,26 +381,47 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
 
   let before = 0;
   let after = 0;
+  let sourceLabel=sourceZone||sourceSite||"";
+  let destinationLabel=destinationZone||targetSite||"";
+
   if (type === "in") {
     const target = ensureRow(destinationZone);
     before = Number(target.qty || 0);
     target.qty = before + value;
     after = target.qty;
-  } else if (type === "out" || type === "ship") {
+  } else if (type === "pick") {
+    const source=ensureRow(sourceZone);
+    before=Number(source.qty||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    source.qty=before-value;
+    workMap[baseKey]=Math.max(0,Number(workMap[baseKey])||0)+value;
+    after=source.qty;
+    destinationLabel="使用中";
+  } else if (type === "use") {
+    before=Math.max(0,Number(workMap[baseKey])||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    workMap[baseKey]=before-value;
+    after=workMap[baseKey];
+    sourceLabel="使用中";
+    destinationLabel="使用";
+  } else if (type === "return") {
+    before=Math.max(0,Number(workMap[baseKey])||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    workMap[baseKey]=before-value;
+    const target=ensureRow(destinationZone);
+    target.qty=Number(target.qty||0)+value;
+    after=workMap[baseKey];
+    sourceLabel="使用中";
+  } else if (type === "ship") {
     const source = ensureRow(sourceZone);
     before = Number(source.qty || 0);
     if (before < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
     source.qty = before - value;
     after = source.qty;
-    if (type === "ship") {
-      const ok = addToBranchDraftFromCentral(targetSite,itemMeta || { zh:template.zh, vi:template.vi, unit:template.unit, catalogKey:template.catalogKey || "" },destinationLocationId,value);
-      if (!ok) { source.qty = before; return { ok:false, error:new Error("INVALID_DESTINATION_LOCATION") }; }
-    }
-  } else if (type === "receive") {
-    const target = ensureRow(destinationZone);
-    before = Number(target.qty || 0);
-    target.qty = before + value;
-    after = target.qty;
+    const ok = addToBranchDraftFromCentral(targetSite,itemMeta || {
+      zh:template.zh,vi:template.vi,unit:template.unit,catalogKey:template.catalogKey || ""
+    },destinationLocationId,value);
+    if (!ok) { source.qty = before; return { ok:false, error:new Error("INVALID_DESTINATION_LOCATION") }; }
   } else if (type === "transfer") {
     if (!sourceZone || !destinationZone || sourceZone === destinationZone) return { ok:false, error:new Error("SAME_LOCATION") };
     const source = ensureRow(sourceZone);
@@ -403,9 +437,10 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
   }
 
   saveStock(items);
+  saveCentralWork(workMap);
   appendOperationLog({
     site:"central",user:user.name,userId:user.id,action:type,item:template.zh,amount:value,unit:template.unit,
-    source:sourceZone || sourceSite || "",destination:destinationZone || targetSite || ""
+    source:sourceLabel,destination:destinationLabel
   });
   pushHistory({
     user:user.name,
@@ -413,16 +448,17 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
     direction:type,
     status:"staging",
     product:template.zh,
-    productId:itemId,
-    zone:type === "transfer" ? `${sourceZone} → ${destinationZone}` : type === "in" || type === "receive" ? destinationZone : sourceZone,
+    productId:baseKey,
+    zone:`${sourceLabel}${destinationLabel ? " → "+destinationLabel : ""}`,
     unit:template.unit,
     amount:value,
     before,
     after,
     note:type === "in" ? "進貨入庫"
-      : type === "out" ? "領料／出庫"
-      : type === "ship" ? `分店直接轉撥 → ${targetSite || ""}`
-      : type === "receive" ? `直接收貨 ← ${sourceSite || ""}`
+      : type === "pick" ? "領貨"
+      : type === "use" ? "使用"
+      : type === "return" ? "歸位"
+      : type === "ship" ? `出貨 → ${targetSite || ""}`
       : "庫存轉撥",
   });
   return { ok:true };
@@ -468,7 +504,8 @@ function centralPage(user) {
   const draftCountAllowed = canInventoryDraftCount();
   let mode = content.dataset.centralMode || "overview";
   if (mode === "receive") { mode = "overview"; content.dataset.centralMode = "overview"; }
-  if (["in","out","transfer"].includes(mode) && !canEdit) {
+  if (mode === "out") { mode = "pick"; content.dataset.centralMode = "pick"; }
+  if (["in","pick","transfer","ship"].includes(mode) && !canEdit) {
     mode = "overview";
     content.dataset.centralMode = mode;
   }
@@ -484,8 +521,9 @@ function centralPage(user) {
   const label = {
     overview: language === "vi" ? "Tổng quan · 庫存總覽" : "庫存總覽",
     inbound: language === "vi" ? "Nhập kho · 進貨入庫" : "進貨入庫",
-    outbound: language === "vi" ? "Xuất kho · 領料／出庫" : "領料／出庫",
+    pick: language === "vi" ? "Lấy hàng · 領貨" : "領貨",
     transfer: language === "vi" ? "Điều chuyển · 庫存轉撥" : "庫存轉撥",
+    ship: language === "vi" ? "Xuất hàng · 出貨" : "出貨",
     manage: language === "vi" ? "Quản trị kho · 庫存管理" : "庫存管理",
     history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
   };
@@ -497,11 +535,11 @@ function centralPage(user) {
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftCountAllowed) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftCountAllowed) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
-  if (["in","out","transfer"].includes(mode)) {
+  if (["in","pick","transfer","ship"].includes(mode)) {
     const host=content.querySelector("[data-inventory-operations]");
     if (cloudReady) {
       void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
