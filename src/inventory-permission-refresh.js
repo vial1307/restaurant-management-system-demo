@@ -32,7 +32,7 @@ async function refreshInventoryPermissionSession({ reloadOnChange = false } = {}
     const profile = await getMyProfile();
     if (!profile?.id || !profile.active) return false;
 
-    // v10 grants inventory view/edit to managers at central/fuxing/yongji.
+    // v11 grants inventory view/edit to site managers and all-site managers.
     // Normalize the mirrored browser session immediately after a migration or
     // account update so the UI does not keep an older permission snapshot.
     const normalized = {
@@ -40,7 +40,7 @@ async function refreshInventoryPermissionSession({ reloadOnChange = false } = {}
       permissions: {
         ...(profile.permissions || {}),
         inventory:
-          profile.role === "manager" && ["central", "fuxing", "yongji"].includes(profile.location)
+          profile.role === "manager" && ["central", "fuxing", "yongji", "all"].includes(profile.location)
             ? { view: true, edit: true }
             : (profile.permissions?.inventory || {}),
       },
