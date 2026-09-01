@@ -5,6 +5,7 @@ const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
 const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
+const RECEIVE_DEFAULT_KEY = "shitu-inventory-receive-defaults-v1";
 const SYNC_DELAY = 180;
 const POLL_MS = 15000;
 
@@ -174,6 +175,90 @@ function currentBranchRecord() {
 
 function catalogKey(label) {
   return String(label || "").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,"");
+}
+
+export function inventoryCatalogKey(label) {
+  return catalogKey(label);
+}
+
+function localReceiveDefaults() {
+  const rows=readJson(RECEIVE_DEFAULT_KEY,[]);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function saveLocalReceiveDefault(site,catalogKeyValue,locationCode="") {
+  const key=String(catalogKeyValue||"").trim();
+  if(!["central","fuxing","yongji"].includes(site) || !key) return;
+  const rows=localReceiveDefaults().filter((entry)=>!(entry.site===site&&entry.catalogKey===key));
+  if(locationCode) rows.push({site,catalogKey:key,locationCode:String(locationCode),updatedAt:new Date().toISOString()});
+  localStorage.setItem(RECEIVE_DEFAULT_KEY,JSON.stringify(rows.slice(-2000)));
+}
+
+async function fetchCloudReceiveDefaults(sites=[],catalogKeys=[]) {
+  if(!isSupabaseConfigured()) return [];
+  const supabase=await getSupabase();
+  let query=supabase
+    .from("inventory_receive_defaults")
+    .select("site,catalog_key,location_id,updated_at,inventory_locations!inner(code,name_zh_tw,name_vi,site,kind,active)")
+    .eq("inventory_locations.active",true)
+    .eq("inventory_locations.kind","storage");
+  if(sites.length) query=query.in("site",sites);
+  if(catalogKeys.length) query=query.in("catalog_key",catalogKeys);
+  const {data,error}=await query;
+  if(error) throw error;
+  return (data||[]).map((row)=>({
+    site:row.site,
+    catalogKey:row.catalog_key,
+    locationId:row.location_id,
+    locationCode:row.inventory_locations?.code||"",
+    location:row.inventory_locations||null,
+    updatedAt:row.updated_at,
+  }));
+}
+
+export async function getInventoryReceiveDefaults({sites=[],catalogKeys=[]}={}) {
+  const wantedSites=(sites||[]).filter((site)=>["central","fuxing","yongji"].includes(site));
+  const wantedKeys=(catalogKeys||[]).map(String).filter(Boolean);
+  if(inventoryCloudState()==="ready" && globalThis.navigator?.onLine!==false){
+    try{
+      const cloud=await fetchCloudReceiveDefaults(wantedSites,wantedKeys);
+      if(cloud.length){
+        for(const row of cloud) saveLocalReceiveDefault(row.site,row.catalogKey,row.locationCode);
+      }
+      const cloudKeys=new Set(cloud.map((row)=>`${row.site}|${row.catalogKey}`));
+      const local=localReceiveDefaults().filter((row)=>
+        (!wantedSites.length||wantedSites.includes(row.site))
+        && (!wantedKeys.length||wantedKeys.includes(row.catalogKey))
+        && !cloudKeys.has(`${row.site}|${row.catalogKey}`)
+      );
+      return [...cloud,...local];
+    }catch{}
+  }
+  return localReceiveDefaults().filter((row)=>
+    (!wantedSites.length||wantedSites.includes(row.site))
+    && (!wantedKeys.length||wantedKeys.includes(row.catalogKey))
+  );
+}
+
+export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,locationCode=""}) {
+  const key=String(catalogKeyValue||"").trim();
+  const code=String(locationCode||"").trim();
+  if(!["central","fuxing","yongji"].includes(site)||!key) return {ok:false,error:new Error("INVALID_RECEIVE_DEFAULT")};
+  saveLocalReceiveDefault(site,key,code);
+  if(!(await verifyMigration()) || globalThis.navigator?.onLine===false) return {ok:true,fallback:true};
+  if(!hasInventoryPermission("edit")) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
+  const {error}=await rpc("set_inventory_receive_default",{
+    p_site:site,
+    p_catalog_key:key,
+    p_location_code:code||null,
+  });
+  if(error){
+    // v8 databases do not have this RPC yet; keep the local fallback until v9 is applied.
+    if(/set_inventory_receive_default|schema cache|function/i.test(String(error.message||""))) return {ok:true,fallback:true};
+    dispatchStatus("error",{error:error.message,stage:"receive-default"});
+    return {ok:false,fallback:false,error};
+  }
+  return {ok:true,fallback:false};
 }
 
 function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
@@ -381,6 +466,12 @@ async function fetchSite(site) {
     .eq("active", true);
   if (itemError) throw itemError;
 
+  const catalogKeys=[...new Set((items||[]).map((item)=>item.catalog_key).filter(Boolean))];
+  let receiveDefaults=[];
+  try{ receiveDefaults=await getInventoryReceiveDefaults({sites:[site],catalogKeys}); }catch{}
+  const defaultByCatalog=new Map(receiveDefaults.map((entry)=>[entry.catalogKey,entry.locationCode]));
+  for(const item of items||[]) item.receive_default_location_code=defaultByCatalog.get(item.catalog_key)||"";
+
   const itemMap = new Map((items || []).map((item) => [item.id, item]));
   cache.itemsByKey.clear();
   for (const item of items || []) if (item.item_key) cache.itemsByKey.set(item.item_key, item);
@@ -471,6 +562,7 @@ function applyBranch(rows, site) {
         label:row.item.name_zh_tw,
         labelVi:row.item.name_vi,
         catalogKey:row.item.catalog_key || "",
+        receiveZone:codeToZone?.[row.item.receive_default_location_code] || "",
         unit:row.item.unit,
         workArea:row.item.work_area||"noodles",
         storageOnly:Boolean(row.item.storage_only),
@@ -488,6 +580,7 @@ function applyBranch(rows, site) {
         label:row.item.name_zh_tw,
         labelVi:row.item.name_vi,
         catalogKey:row.item.catalog_key || "",
+        receiveZone:codeToZone?.[row.item.receive_default_location_code] || "",
         unit:row.item.unit,
         workArea:area||row.item.work_area||"noodles",
         quantity:Number(row.quantity)||0,
