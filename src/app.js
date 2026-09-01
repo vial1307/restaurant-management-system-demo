@@ -1262,7 +1262,7 @@ function addItemModal(context) {
     return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? 1}" /></label></div>`;
   }).join("");
   const receiveZone=item.receiveZone||"";
-  const receiveOptions=[`<option value="">${language==="zh"?"不固定（每次出貨選擇）":"Không cố định · 每次出貨選擇"}</option>`]
+  const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／尚未指定":"Tự động nếu chỉ có 1 vị trí · 尚未指定"}</option>`]
     .concat(ZONES.map((zone)=>`<option value="${zone.id}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
     .join("");
 
