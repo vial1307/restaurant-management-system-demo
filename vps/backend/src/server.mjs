@@ -369,8 +369,8 @@ app.post("/api/inventory/transfer", async (request, reply) => {
         ) values(
           $1,$2,$3,'transfer',$4,$5,$6,$7,
           jsonb_build_object(
-            'source_before',$8,'source_after',$9,
-            'destination_before',$10,'destination_after',$11
+            'source_before',$8::numeric,'source_after',$9::numeric,
+            'destination_before',$10::numeric,'destination_after',$11::numeric
           )
         ) returning *`,
         [
