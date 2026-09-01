@@ -834,3 +834,75 @@ html[lang="vi"] .central-row small{line-height:1.35}
 @media(max-width:760px){
   .inventory-cloud-notice{padding:8px 9px;font-size:11px}
 }
+
+
+/* v32 — staff-first inventory operations: inbound / outbound / transfer / receiving */
+.inventory-operations-host{min-height:180px}
+.inventory-ops-shell{display:grid;gap:10px}
+.inventory-ops-toolbar{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.op-search{flex:1;display:flex}
+.op-search input{width:100%;height:42px;border:1px solid #cfdbd6;border-radius:9px;padding:0 11px;background:#fff;font-size:14px}
+.op-search input:focus{outline:none;border-color:#7ab5a3;box-shadow:0 0 0 3px rgb(8 123 98 / 8%)}
+.op-count{min-width:36px;height:32px;display:grid;place-items:center;border-radius:999px;background:#e9f3ef;color:#17624f;font-size:12px;font-weight:800}
+.inventory-ops-list{display:grid;gap:8px}
+.inventory-op-card{display:grid;grid-template-columns:minmax(240px,1.6fr) minmax(320px,1.8fr) auto;align-items:end;gap:10px;padding:11px;border:1px solid #dce5e1;border-radius:11px;background:#fff;box-shadow:0 2px 9px rgb(25 53 45 / 4%)}
+.op-item-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.op-item-head>div{min-width:0;display:grid;gap:2px}
+.op-item-head>div>strong{font-size:14.5px;line-height:1.3;color:var(--ink)}
+.op-item-head>div>small{font-size:11.5px;color:#7b8b85}
+.op-item-head>span{display:grid;justify-items:end;gap:1px;white-space:nowrap}
+.op-item-head>span>small{font-size:9.5px;color:#87968f}
+.op-item-head>span>strong{font-size:16px;font-variant-numeric:tabular-nums}
+.op-select-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.op-select-grid label{display:grid;gap:4px;min-width:0}
+.op-select-grid label>span{font-size:10.5px;font-weight:700;color:#687a73}
+.op-select-grid select{width:100%;height:39px;border:1px solid #d2ddd8;border-radius:8px;padding:0 8px;background:#fff;font-size:12px}
+.op-action-row{display:flex;align-items:center;gap:7px;justify-content:flex-end}
+.op-quantity{display:grid;grid-template-columns:36px 58px 36px;align-items:center;border:1px solid #cfdbd6;border-radius:9px;overflow:hidden;background:#fff}
+.op-quantity button{height:38px;border:0;background:#f5f8f7;font-size:18px;font-weight:800;color:#28594c}
+.op-quantity input{width:100%;height:38px;border:0;border-inline:1px solid #dde5e2;text-align:center;padding:0;font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+.op-primary{height:40px;border:0;border-radius:9px;padding:0 12px;background:#116852;color:#fff;font-size:12px;font-weight:800;white-space:nowrap}
+.op-primary.op-out{background:#8a5520}
+.op-primary:disabled{opacity:.48;cursor:not-allowed}
+.op-message{min-height:19px;margin:0;font-size:11.5px;font-weight:700}
+.op-message.ok{color:#087259}.op-message.error{color:#ad4038}
+.inventory-ops-empty,.inventory-ops-loading{padding:20px;text-align:center;color:#71827b;font-size:13px}
+.shipment-card{grid-template-columns:minmax(240px,1.3fr) minmax(250px,1fr) auto}
+.shipment-status{padding:5px 8px;border-radius:999px;background:#fff1d8;color:#945d12;font-size:10.5px;font-weight:800}
+.shipment-route{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#4d615a}
+.shipment-meta{display:grid;gap:2px;font-size:10.5px;color:#75857f}
+.receive-row{justify-content:flex-end}
+.branch-ops-tabs{margin-top:-2px}
+.warehouse-switch{display:flex;gap:4px;flex-wrap:wrap}
+.warehouse-switch button{min-height:34px;padding:0 9px;border:1px solid #d5e0dc;border-radius:8px;background:#fff;font-size:11.5px;font-weight:700;color:#61726c}
+.warehouse-switch button.active{background:#123e35;color:#fff;border-color:#123e35}
+
+@media(max-width:920px){
+  .inventory-op-card,.shipment-card{grid-template-columns:1fr 1fr}
+  .op-action-row{grid-column:1/-1;justify-content:flex-end}
+}
+@media(max-width:760px){
+  .inventory-ops-shell{gap:8px}
+  .inventory-ops-toolbar{gap:6px}
+  .op-search input{height:42px;font-size:16px}
+  .inventory-op-card,.shipment-card{grid-template-columns:1fr;gap:8px;padding:10px}
+  .op-item-head>div>strong{font-size:14.5px}
+  .op-item-head>div>small{font-size:11px}
+  .op-item-head>span>strong{font-size:17px}
+  .op-select-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .op-select-grid select{height:42px;font-size:12px}
+  .op-action-row{grid-column:auto;justify-content:stretch}
+  .op-quantity{grid-template-columns:42px minmax(58px,1fr) 42px;flex:1}
+  .op-quantity button,.op-quantity input{height:42px}
+  .op-primary{height:42px;min-width:108px;font-size:12px}
+  .shipment-route{font-size:11.5px}
+  .receive-row .op-primary{width:100%}
+  .branch-ops-tabs{margin-bottom:8px}
+}
+@media(max-width:389px){
+  .op-select-grid{grid-template-columns:1fr}
+  .op-action-row{gap:5px}
+  .op-quantity{grid-template-columns:38px minmax(50px,1fr) 38px}
+  .op-primary{min-width:94px;padding-inline:8px;font-size:11px}
+  .warehouse-switch button{font-size:10.5px;padding-inline:7px}
+}
