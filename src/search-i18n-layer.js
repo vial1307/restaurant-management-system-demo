@@ -68,6 +68,7 @@ const BILINGUAL = {
   "央廚員工": "Nhân viên bếp trung tâm · 央廚員工",
   "復興店員工": "Nhân viên Fuxing · 復興店員工",
   "復興店": "Chi nhánh Fuxing · 復興店",
+  "永吉店": "Chi nhánh Yongji · 永吉店",
   "央廚": "Bếp trung tâm · 央廚",
 
   // Central kitchen - use terminology common in Taiwan warehouse / restaurant operations
@@ -111,7 +112,7 @@ const PHONETIC = {
   豆:["dou","ㄉㄡ"],腐:["fu","ㄈㄨ"],乾:["gan","ㄍㄢ"],干:["gan","ㄍㄢ"],皮:["pi","ㄆㄧ"],芋:["yu","ㄩ"],頭:["tou","ㄊㄡ"],丸:["wan","ㄨㄢ"],蛋:["dan","ㄉㄢ"],餃:["jiao","ㄐㄧㄠ"],
   尾:["wei","ㄨㄟ"],肚:["du","ㄉㄨ"],舌:["she","ㄕㄜ"],翅:["chi","ㄔ"],腸:["chang","ㄔㄤ"],腳:["jiao","ㄐㄧㄠ"],血:["xue","ㄒㄩㄝ"],排:["pai","ㄆㄞ"],酥:["su","ㄙㄨ"],
   花:["hua","ㄏㄨㄚ"],枝:["zhi","ㄓ"],漿:["jiang","ㄐㄧㄤ"],昆:["kun","ㄎㄨㄣ"],布:["bu","ㄅㄨ"],重:["zhong","ㄓㄨㄥ"],輕:["qing","ㄑㄧㄥ"],川:["chuan","ㄔㄨㄢ"],秘:["mi","ㄇㄧ"],蒜:["suan","ㄙㄨㄢ"],
-  大:["da","ㄉㄚ"],小:["xiao","ㄒㄧㄠ"],白:["bai","ㄅㄞ"],黃:["huang","ㄏㄨㄤ"],紅:["hong","ㄏㄨㄥ"],黑:["hei","ㄏㄟ"],清:["qing","ㄑㄧㄥ"],香:["xiang","ㄒㄧㄤ"],
+  大:["da","ㄉㄚ"],小:["xiao","ㄒㄧㄠ"],白:["bai","ㄅㄞ"],黃:["huang","ㄏㄨㄤ"],紅:["hong","ㄏㄨㄥ"],黑:["hei","ㄏㄟ"],清:["qing","ㄑㄧㄥ"],香:["xiang","ㄒㄧㄤ"],復:["fu","ㄈㄨ"],興:["xing","ㄒㄧㄥ"],永:["yong","ㄩㄥ"],吉:["ji","ㄐㄧ"],店:["dian","ㄉㄧㄢ"],
   地:["di","ㄉㄧ"],獄:["yu","ㄩ"],濃:["nong","ㄋㄨㄥ"],縮:["suo","ㄙㄨㄛ"],肩:["jian","ㄐㄧㄢ"],胸:["xiong","ㄒㄩㄥ"],筋:["jin","ㄐㄧㄣ"],喉:["hou","ㄏㄡ"],蛙:["wa","ㄨㄚ"],
   法:["fa","ㄈㄚ"],國:["guo","ㄍㄨㄛ"],可:["ke","ㄎㄜ"],頌:["song","ㄙㄨㄥ"],虎:["hu","ㄏㄨ"],三:["san","ㄙㄢ"],記:["ji","ㄐㄧ"],追:["zhui","ㄓㄨㄟ"],
 };
@@ -136,6 +137,8 @@ const PHRASE_ALIASES = {
   "炸芋頭": ["zhayutou", "zha yu tou", "ㄓㄚㄩㄊㄡ"],
   "排骨酥": ["paigusu", "pai gu su", "ㄆㄞㄍㄨㄙㄨ"],
   "麻辣湯": ["malatang", "ma la tang", "ㄇㄚㄌㄚㄊㄤ"],
+  "復興店": ["fuxing", "fu xing", "fuxingdian", "ㄈㄨㄒㄧㄥ"],
+  "永吉店": ["yongji", "yong ji", "yongjidian", "ㄩㄥㄐㄧ"],
 };
 
 function norm(value) {
