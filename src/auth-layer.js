@@ -163,6 +163,7 @@ function centralPage(user) {
   if (!content) return;
   const items = loadStock();
   const canEdit = user.role === "admin" || Boolean(user.permissions?.inventory?.edit);
+  const draftCountAllowed = canInventoryDraftCount();
   let mode = content.dataset.centralMode || "overview";
   if (["in","out","transfer","receive"].includes(mode) && !canEdit) {
     mode = "overview";
@@ -198,7 +199,7 @@ function centralPage(user) {
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
     <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftCountAllowed) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, false) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
+    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftCountAllowed) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftCountAllowed) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
   if (cloudReady && ["in","out","transfer","receive"].includes(mode)) {
@@ -233,9 +234,13 @@ function centralPage(user) {
 function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const editing = mode === "in" || mode === "out";
   const direct = mode === "overview" && directAdjust;
-  return `<section class="central-card"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
-    <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? "<span>盤點數量</span><span>調整</span>" : ""}</div>
-    <div class="central-list">${items.map(i => `<article class="central-row"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust" data-central-set="${esc(i.id)}">盤點調整</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
+  const draft = direct && inventoryCloudState() !== "ready";
+  const directQuantityLabel = draft ? "Số lượng tạm · 待審數量" : "盤點數量";
+  const directActionLabel = draft ? "Lưu tạm · 暫存" : "盤點調整";
+  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
+    ${draft ? '<div class="central-draft-banner">Số lượng tạm đang chờ cấp trên duyệt · 待主管確認數量</div>' : ""}
+    <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? `<span>${directQuantityLabel}</span><span>${draft ? "暫存" : "調整"}</span>` : ""}</div>
+    <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 待審" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
 }
 
 function historyView(log) {
@@ -330,7 +335,7 @@ function bindCentral(user) {
     if (result.fallback) {
       item.qty = next;
       saveStock(items);
-      pushHistory({ user: user.name, userId: user.id, direction: "adjust", product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount: Math.abs(next - before), before, after: next });
+      pushHistory({ user: user.name, userId: user.id, direction: inventoryCloudState() === "ready" ? "adjust" : "draft", status: inventoryCloudState() === "ready" ? "approved" : "pending-approval", product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount: Math.abs(next - before), before, after: next });
       centralPage(user);
       return;
     }
