@@ -114,7 +114,7 @@ export function canManageCentralCatalog() {
   const s=session();
   return hasInventoryPermission("edit")
     && activeInventorySite() === "central"
-    && (currentRole === "admin" || (currentRole === "manager" && s?.location === "central"));
+    && (currentRole === "admin" || (currentRole === "manager" && ["central","all"].includes(s?.location)));
 }
 
 export function canViewBranchCatalogManagement(site = activeInventorySite()) {
@@ -122,7 +122,7 @@ export function canViewBranchCatalogManagement(site = activeInventorySite()) {
   const s=session();
   if (!hasInventoryPermission("edit") || !["fuxing","yongji"].includes(site)) return false;
   if (currentRole === "admin") return true;
-  return currentRole === "manager" && s?.location === site;
+  return currentRole === "manager" && (s?.location === site || s?.location === "all");
 }
 
 export function canManageBranchCatalog(site = activeInventorySite()) {
@@ -135,7 +135,7 @@ export function canDirectInventoryAdjust() {
   const s=session();
   const site=activeInventorySite();
   if (currentRole === "admin") return true;
-  return currentRole === "manager" && s?.location === site;
+  return currentRole === "manager" && (s?.location === site || s?.location === "all");
 }
 
 export function activeInventorySite() {
