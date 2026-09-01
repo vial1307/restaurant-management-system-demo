@@ -1013,3 +1013,48 @@ html[lang="vi"] .central-row small{line-height:1.35}
     font-size:10.5px;
   }
 }
+
+
+/* v38 — explicit transfer movement feedback for manager review */
+.op-transfer-balance{
+  grid-column:1/-1;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  padding:7px 9px;
+  border-radius:8px;
+  background:#f5f8f7;
+  color:#566a62;
+  font-size:11px;
+}
+.op-transfer-balance span{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.op-transfer-balance span:last-child{text-align:right}
+.op-transfer-balance strong{
+  margin-left:4px;
+  color:#153f35;
+  font-size:13px;
+  font-variant-numeric:tabular-nums;
+}
+.op-transfer-balance b{
+  color:#0d765d;
+  font-size:16px;
+}
+.draft-operations-shell .op-message.ok{
+  position:sticky;
+  bottom:76px;
+  z-index:5;
+  padding:8px 10px;
+  border:1px solid #b8d9cd;
+  border-radius:8px;
+  background:#eff8f4;
+}
+@media(max-width:760px){
+  .op-transfer-balance{font-size:10.5px;padding:6px 8px}
+  .op-transfer-balance strong{font-size:12px}
+}
