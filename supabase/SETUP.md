@@ -51,7 +51,7 @@ The frontend maps it internally to `username@staff.shitu.local` for Supabase Aut
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
 
 
-## 6. Enable cross-device inventory sync (v32)
+## 6. Enable cross-device inventory sync (v33)
 
 For the current staging/demo database, run the canonical migration once:
 
@@ -67,12 +67,12 @@ This single migration includes:
 - audited inventory in/out/transfer transactions
 - Admin-only stocktake/catalog controls
 - atomic internal stock transfer
-- 央廚 ↔ 復興店 ↔ 永吉店 shipment dispatch/receipt
+- 央廚 ↔ 復興店 and 央廚 ↔ 永吉店 shipment dispatch/receipt
 - pending receipt workflow
 - Supabase Realtime for stock and shipment status
 - inventory cloud contract version 5
 
-The older `20260901_inventory_cloud_v2.sql` and `20260901_inventory_transfers_v3.sql` remain in the repository as migration history, but for a fresh/staging setup use the canonical v5 file above.
+The older split/full files remain in the repository as migration history. For the current staging database, use only the canonical `20260901_inventory_ready_v5.sql` file above.
 
 After the SQL succeeds:
 1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
