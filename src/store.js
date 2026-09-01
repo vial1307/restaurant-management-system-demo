@@ -482,13 +482,15 @@ export function createStore(storage = globalThis.localStorage) {
       });
     },
     addItem(item) {
-      return update((draft) => {
+      let createdStockKey = "";
+      update((draft) => {
         const record = draft.records[draft.selectedDate];
         const identifier = globalThis.crypto?.randomUUID?.() ?? `item-${Date.now()}`;
         const locations = normalizeStorageLocations(item);
         if (!locations.length) return;
 
         const stockKey = `stock-${identifier}`;
+        createdStockKey = stockKey;
         const shared = {
           stockKey,
           label: item.label,
@@ -519,6 +521,7 @@ export function createStore(storage = globalThis.localStorage) {
           unit: storageItem.unit,
         });
       });
+      return createdStockKey;
     },
     updateIngredient(stockKey, item) {
       return update((draft) => {
