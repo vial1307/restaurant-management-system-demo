@@ -547,8 +547,71 @@ function inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, all
 }
 
 const BRANCH_DRAFT_PREFIX = "shitu-branch-inventory-draft-v1:";
+const CENTRAL_DRAFT_KEY = "shitu-central-kitchen-draft-stock-v1";
+const CENTRAL_BASE_KEY = "shitu-central-kitchen-stock-v1";
+const OPERATION_LOG_KEY = "shitu-inventory-operation-log-v1";
 
 function branchDraftKey(site){ return `${BRANCH_DRAFT_PREFIX}${site}`; }
+function appendBranchOperationLog(entry){
+  let rows=[];
+  try{
+    const saved=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");
+    if(Array.isArray(saved))rows=saved;
+  }catch{}
+  let actor=null;
+  try{actor=JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null");}catch{}
+  rows.unshift({...entry,user:actor?.name||actor?.username||"",userId:actor?.id||null,createdAt:new Date().toISOString()});
+  localStorage.setItem(OPERATION_LOG_KEY,JSON.stringify(rows.slice(0,1000)));
+}
+function appStagingLocations(site){
+  if(site==="central"){
+    return [
+      ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm"],
+      ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm"],
+      ["central-four-door","央廚4門","Tủ 4 cánh bếp trung tâm"],
+      ["central-chest","央廚臥櫃","Tủ đông nằm bếp trung tâm"],
+    ].map(([id,zh,vi])=>({id,code:id,name_zh_tw:zh,name_vi:vi,site,kind:"storage"}));
+  }
+  return ZONES.map((zone)=>({id:branchLocationCode(site,zone.id),code:branchLocationCode(site,zone.id),name_zh_tw:zone.zh,name_vi:zone.vi,site,kind:"storage"}));
+}
+function addToCentralDraftFromBranch(itemMeta,destinationLocationId,amount){
+  const zoneMap={
+    "central-freezer":"央廚冷凍",
+    "central-fridge":"央廚冷藏",
+    "central-four-door":"央廚4門",
+    "central-chest":"央廚臥櫃",
+  };
+  const zone=zoneMap[destinationLocationId];
+  if(!zone)return false;
+  let rows=[];
+  try{
+    const draft=JSON.parse(localStorage.getItem(CENTRAL_DRAFT_KEY)||"null");
+    if(Array.isArray(draft)&&draft.length)rows=draft;
+  }catch{}
+  if(!rows.length){
+    try{
+      const base=JSON.parse(localStorage.getItem(CENTRAL_BASE_KEY)||"[]");
+      if(Array.isArray(base))rows=JSON.parse(JSON.stringify(base));
+    }catch{}
+  }
+  let row=rows.find((entry)=>(itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey)||entry.zh===itemMeta?.zh);
+  if(row){
+    const baseId=row.baseId||row.itemKey||String(row.id||"").split("@")[0];
+    let target=rows.find((entry)=>(entry.baseId||entry.itemKey||String(entry.id||"").split("@")[0])===baseId&&entry.zone===zone);
+    if(!target){
+      target={...row,id:`${baseId}@${destinationLocationId}`,baseId,itemKey:row.itemKey||baseId,zone,qty:0,minimum:0};
+      rows.push(target);
+    }
+    row=target;
+  }else{
+    const baseId=`central-received-${Date.now()}`;
+    row={id:`${baseId}@${destinationLocationId}`,baseId,itemKey:baseId,catalogKey:itemMeta?.catalogKey||"",zh:itemMeta?.zh||baseId,vi:itemMeta?.vi||itemMeta?.zh||baseId,unit:itemMeta?.unit||"個",zone,qty:0,minimum:0};
+    rows.push(row);
+  }
+  row.qty=Math.max(0,Number(row.qty)||0)+Math.max(1,Number(amount)||1);
+  localStorage.setItem(CENTRAL_DRAFT_KEY,JSON.stringify(rows));
+  return true;
+}
 function cloneJson(value){ return JSON.parse(JSON.stringify(value)); }
 
 function loadBranchDraftRecord(site,baseRecord){
@@ -562,13 +625,13 @@ function loadBranchDraftRecord(site,baseRecord){
     inventory.forEach((item)=>{ item.quantity=0; });
     workInventory.forEach((item)=>{ item.quantity=0; });
   }
-  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"pending-approval"};
+  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};
   localStorage.setItem(branchDraftKey(site),JSON.stringify(seeded));
   return seeded;
 }
 
 function saveBranchDraftRecord(site,record){
-  localStorage.setItem(branchDraftKey(site),JSON.stringify({...record,updatedAt:new Date().toISOString(),status:"pending-approval"}));
+  localStorage.setItem(branchDraftKey(site),JSON.stringify({...record,updatedAt:new Date().toISOString(),status:"staging"}));
 }
 
 function branchZoneByLocationCode(site,code){
