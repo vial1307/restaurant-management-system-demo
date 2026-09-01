@@ -3,6 +3,8 @@ import cookie from "@fastify/cookie";
 import crypto from "node:crypto";
 import { pool, withTransaction } from "./db.mjs";
 import { hashPassword, verifyPassword } from "./password.mjs";
+import { registerAdminRoutes } from "./admin-routes.mjs";
+import { registerInventoryExtraRoutes } from "./inventory-extra-routes.mjs";
 import {
   createSession,
   destroySession,
@@ -21,6 +23,8 @@ const app = Fastify({
 });
 
 await app.register(cookie);
+await registerAdminRoutes(app);
+await registerInventoryExtraRoutes(app);
 
 app.get("/api/health", async () => {
   const db = await pool.query("select now() as now");
