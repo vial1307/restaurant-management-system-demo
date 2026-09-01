@@ -64,6 +64,43 @@ export async function loadSiteOperationData(site) {
 
   const items=[...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant"));
   const catalogKeys=[...new Set(items.map((item)=>item.catalogKey).filter(Boolean))];
+
+  const destinationCatalog=[];
+  const allRowsBySite=await Promise.all(
+    INVENTORY_SITES.map((entry)=>getSiteInventoryRows(entry.id).catch(()=>[]))
+  );
+  for(let index=0;index<INVENTORY_SITES.length;index+=1){
+    const destinationSite=INVENTORY_SITES[index].id;
+    const grouped=new Map();
+    for(const row of allRowsBySite[index]||[]){
+      if(row.location?.kind!=="storage" || !row.item?.catalog_key) continue;
+      const key=row.item.catalog_key;
+      if(!grouped.has(key)){
+        grouped.set(key,{
+          site:destinationSite,
+          catalogKey:key,
+          itemId:row.item.id,
+          itemKey:row.item.item_key,
+          zh:row.item.name_zh_tw,
+          vi:row.item.name_vi,
+          locations:[],
+        });
+      }
+      const target=grouped.get(key);
+      if(!target.locations.some((location)=>location.id===row.location.id)){
+        target.locations.push({
+          id:row.location.id,
+          code:row.location.code,
+          name_zh_tw:row.location.name_zh_tw,
+          name_vi:row.location.name_vi,
+          quantity:Number(row.quantity)||0,
+          minimum:Number(row.minimum_quantity)||0,
+          site:destinationSite,
+        });
+      }
+    }
+    destinationCatalog.push(...grouped.values());
+  }
   let receiveDefaults=[];
   try{
     receiveDefaults=await getInventoryReceiveDefaults({
@@ -78,6 +115,7 @@ export async function loadSiteOperationData(site) {
     locations,
     workLocations,
     receiveDefaults,
+    destinationCatalog,
     allLocations: INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id}))),
   };
 }
