@@ -19,6 +19,8 @@ import {
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
 const CENTRAL_DRAFT_KEY = "shitu-central-kitchen-draft-stock-v1";
+const BRANCH_DRAFT_PREFIX = "shitu-branch-inventory-draft-v1:";
+const OPERATION_LOG_KEY = "shitu-inventory-operation-log-v1";
 const HISTORY_KEY = "shitu-central-kitchen-history-v1";
 
 
