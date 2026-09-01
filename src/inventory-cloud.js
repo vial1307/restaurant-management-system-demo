@@ -107,16 +107,27 @@ export function canInventoryDraftCount() {
 
 export function canManageCentralCatalog() {
   const currentRole = role();
+  const s=session();
   return hasInventoryPermission("edit")
     && activeInventorySite() === "central"
-    && (currentRole === "admin" || currentRole === "manager");
+    && (currentRole === "admin" || (currentRole === "manager" && s?.location === "central"));
+}
+
+export function canManageBranchCatalog(site = activeInventorySite()) {
+  const currentRole = role();
+  const s=session();
+  if (!hasInventoryPermission("edit") || !["fuxing","yongji"].includes(site)) return false;
+  if (currentRole === "admin") return true;
+  return currentRole === "manager" && s?.location === site;
 }
 
 export function canDirectInventoryAdjust() {
   if (!canInventoryEdit()) return false;
   const currentRole = role();
+  const s=session();
+  const site=activeInventorySite();
   if (currentRole === "admin") return true;
-  return currentRole === "manager" && activeInventorySite() === "central";
+  return currentRole === "manager" && s?.location === site;
 }
 
 export function activeInventorySite() {
