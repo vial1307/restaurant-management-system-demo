@@ -367,14 +367,14 @@ begin
   if v_transfer.id is null then
     raise exception 'TRANSFER_NOT_FOUND';
   end if;
+  if not coalesce((select private.location_allowed(v_transfer.to_site)),false) then
+    raise exception 'LOCATION_NOT_ALLOWED';
+  end if;
   if v_transfer.status='received' then
     return jsonb_build_object('id',v_transfer.id,'transfer_no',v_transfer.transfer_no,'status','received','idempotent',true);
   end if;
   if v_transfer.status<>'dispatched' then
     raise exception 'INVALID_TRANSFER_STATUS';
-  end if;
-  if not coalesce((select private.location_allowed(v_transfer.to_site)),false) then
-    raise exception 'LOCATION_NOT_ALLOWED';
   end if;
 
   select site into v_destination_site
