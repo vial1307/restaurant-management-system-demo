@@ -4,6 +4,7 @@ import { DEFAULT_ITEMS, STORAGE_KEY, stockKeyFor } from "./store.js";
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
 const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
+const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const SYNC_DELAY = 180;
 const POLL_MS = 15000;
 
@@ -16,6 +17,17 @@ const FUXING_STORAGE_CODES = {
 const FUXING_CODE_TO_ZONE = Object.fromEntries(
   Object.entries(FUXING_STORAGE_CODES).map(([zone, code]) => [code, zone])
 );
+const YONGJI_STORAGE_CODES = {
+  "large-freezer": "yongji-large-freezer",
+  "large-fridge": "yongji-large-fridge",
+  "four-door": "yongji-four-door",
+  "kitchen": "yongji-kitchen",
+};
+const YONGJI_CODE_TO_ZONE = Object.fromEntries(
+  Object.entries(YONGJI_STORAGE_CODES).map(([zone, code]) => [code, zone])
+);
+const BRANCH_STORAGE_CODES = { fuxing: FUXING_STORAGE_CODES, yongji: YONGJI_STORAGE_CODES };
+const BRANCH_CODE_TO_ZONE = { fuxing: FUXING_CODE_TO_ZONE, yongji: YONGJI_CODE_TO_ZONE };
 const CENTRAL_ZONE_CODES = {
   "央廚冷凍": "central-freezer",
   "央廚4門": "central-four-door",
@@ -83,28 +95,41 @@ export function canInventoryEdit() {
   if (!hasInventoryPermission("edit")) return false;
   if (inventoryCloudState() === "ready" && globalThis.navigator?.onLine === false) return false;
   const site = currentSite();
-  return site !== "fuxing" || isCurrentBranchInventoryDate();
+  return !["fuxing","yongji"].includes(site) || isCurrentBranchInventoryDate();
 }
 
 export function canDirectInventoryAdjust() {
   return canInventoryEdit() && role() === "admin";
 }
 
-function currentSite() {
+export function activeInventorySite() {
   const s = session();
   if (!s) return "";
-  if (s.location === "central") return "central";
-  if (s.location === "fuxing") return "fuxing";
+  if (["central","fuxing","yongji"].includes(s.location)) return s.location;
   if (s.location === "all") {
-    return location.hash.startsWith("#inventory") && document.querySelector(".central-heading")
-      ? "central"
-      : "fuxing";
+    const saved = localStorage.getItem(ACTIVE_SITE_KEY);
+    if (["central","fuxing","yongji"].includes(saved)) return saved;
+    return document.querySelector(".central-heading") ? "central" : "fuxing";
   }
   return "";
 }
 
+export function setActiveInventorySite(site) {
+  const s = session();
+  if (s?.location !== "all" || !["central","fuxing","yongji"].includes(site)) return false;
+  localStorage.setItem(ACTIVE_SITE_KEY, site);
+  return true;
+}
+
+function currentSite() {
+  return activeInventorySite();
+}
+
 function siteFromLocationCode(code = "") {
-  return String(code).startsWith("central-") ? "central" : "fuxing";
+  const value = String(code);
+  if (value.startsWith("central-")) return "central";
+  if (value.startsWith("yongji-")) return "yongji";
+  return "fuxing";
 }
 
 function dispatchStatus(status, detail = {}) {
@@ -131,20 +156,26 @@ function currentBranchRecord() {
   return { state, record: state.records[date] || null };
 }
 
-function buildFuxingCatalog() {
+function catalogKey(label) {
+  return String(label || "").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,"");
+}
+
+function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
   const { record } = currentBranchRecord();
-  if (!record) return [];
+  if (!record || !["fuxing","yongji"].includes(site)) return [];
   const inventory = Array.isArray(record?.inventory) && record.inventory.length
     ? record.inventory
     : DEFAULT_ITEMS;
   const work = Array.isArray(record?.workInventory) ? record.workInventory : [];
   const grouped = new Map();
+  const storageCodes = BRANCH_STORAGE_CODES[site];
 
   for (const entry of inventory) {
     const stockKey = entry.stockKey || stockKeyFor(entry);
     if (!grouped.has(stockKey)) {
       grouped.set(stockKey, {
-        key: `fuxing:${stockKey}`,
+        key: `${site}:${stockKey}`,
+        catalog_key: catalogKey(entry.label || stockKey),
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
@@ -156,14 +187,15 @@ function buildFuxingCatalog() {
     const item = grouped.get(stockKey);
     item.zh = entry.label || item.zh;
     item.vi = entry.labelVi || item.vi;
+    item.catalog_key = catalogKey(item.zh);
     item.unit = entry.unit || item.unit;
     item.work_area = entry.workArea || item.work_area;
     item.storage_only = Boolean(entry.storageOnly);
-    const code = FUXING_STORAGE_CODES[entry.zone];
+    const code = storageCodes?.[entry.zone];
     if (code) {
       item.locations.push({
         code,
-        quantity: Math.max(0, Number(entry.quantity) || 0),
+        quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
         minimum: Math.max(0, Number(entry.minimum) || 0),
       });
     }
@@ -175,8 +207,8 @@ function buildFuxingCatalog() {
     if (!item) continue;
     const area = entry.workArea || item.work_area || "noodles";
     item.locations.push({
-      code: `fuxing-work-${area}`,
-      quantity: Math.max(0, Number(entry.quantity) || 0),
+      code: `${site}-work-${area}`,
+      quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
       minimum: Math.max(0, Number(entry.minimum) || 0),
     });
   }
@@ -190,6 +222,7 @@ function buildCentralCatalog(items) {
     const code = CENTRAL_ZONE_CODES[entry.zone];
     return {
       key: `central:${entry.id}`,
+      catalog_key: catalogKey(entry.zh || entry.id),
       zh: entry.zh || entry.id,
       vi: entry.vi || entry.zh || entry.id,
       unit: entry.unit || "個",
@@ -228,7 +261,7 @@ async function verifyMigration() {
   try {
     const supabase = await getSupabase();
     const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
-    if (!error && Number(version) >= 4) {
+    if (!error && Number(version) >= 5) {
       migrationAvailable = true;
       localStorage.setItem(CLOUD_FLAG_KEY, "ready");
       dispatchStatus("ready");
@@ -256,11 +289,23 @@ async function verifyMigration() {
 
 export async function bootstrapFuxingInventory() {
   if (!(await verifyMigration()) || role() !== "admin") return false;
-  const catalog = buildFuxingCatalog();
+  const catalog = buildBranchCatalog("fuxing");
   if (!catalog.length) return false;
   const { error } = await rpc("bootstrap_inventory_catalog", { p_items: catalog });
   if (error) {
     dispatchStatus("error", { error: error.message, stage: "bootstrap-fuxing" });
+    return false;
+  }
+  return true;
+}
+
+export async function bootstrapYongjiInventory() {
+  if (!(await verifyMigration()) || role() !== "admin") return false;
+  const catalog = buildBranchCatalog("yongji", { zeroQuantities: true });
+  if (!catalog.length) return false;
+  const { error } = await rpc("bootstrap_inventory_catalog", { p_items: catalog });
+  if (error) {
+    dispatchStatus("error", { error: error.message, stage: "bootstrap-yongji" });
     return false;
   }
   return true;
@@ -305,7 +350,7 @@ async function fetchSite(site) {
   const itemIds = [...new Set(stocks.map((row) => row.item_id))];
   const { data: items, error: itemError } = await supabase
     .from("inventory_items")
-    .select("id,item_key,name_zh_tw,name_vi,unit,work_area,storage_only,active")
+    .select("id,item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active")
     .in("id", itemIds)
     .eq("active", true);
   if (itemError) throw itemError;
@@ -320,6 +365,25 @@ async function fetchSite(site) {
     item: itemMap.get(stock.item_id),
     location: locMap.get(stock.location_id),
   })).filter((row) => row.item && row.location);
+}
+
+export async function getSiteInventoryRows(site = currentSite()) {
+  if (!["central","fuxing","yongji"].includes(site)) return [];
+  return fetchSite(site);
+}
+
+export async function getSiteLocations(site = currentSite(), kind = "storage") {
+  if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
+  const supabase = await getSupabase();
+  const query = supabase
+    .from("inventory_locations")
+    .select("id,code,name_zh_tw,name_vi,site,kind,sort_order")
+    .eq("site",site)
+    .eq("active",true)
+    .order("sort_order",{ascending:true});
+  const { data, error } = kind ? await query.eq("kind",kind) : await query;
+  if (error) throw error;
+  return data || [];
 }
 
 function applyCentral(rows) {
@@ -364,21 +428,22 @@ function applyCentral(rows) {
   return true;
 }
 
-function applyFuxing(rows) {
-  if (!rows.length) return false;
+function applyBranch(rows, site) {
+  if (!rows.length || !["fuxing","yongji"].includes(site)) return false;
   const state = appState();
   if (!state?.records?.[state.selectedDate] || state.selectedDate !== todayKey()) return false;
   const record = state.records[state.selectedDate];
   record.inventory ??= [];
   record.workInventory ??= [];
+  const codeToZone = BRANCH_CODE_TO_ZONE[site];
 
   let changed = false;
   for (const row of rows) {
     const key = row.item.item_key || "";
-    if (!key.startsWith("fuxing:")) continue;
-    const stockKey = key.slice("fuxing:".length);
+    if (!key.startsWith(`${site}:`)) continue;
+    const stockKey = key.slice(site.length + 1);
     if (row.location.kind === "storage") {
-      const zone = FUXING_CODE_TO_ZONE[row.location.code];
+      const zone = codeToZone?.[row.location.code];
       if (!zone) continue;
       let target = record.inventory.find((entry) => entry.stockKey === stockKey && entry.zone === zone);
       if (!target) {
@@ -412,7 +477,7 @@ function applyFuxing(rows) {
         cloudLocationId: row.location.id,
       });
     } else if (row.location.kind === "work") {
-      const area = row.location.code.replace("fuxing-work-", "");
+      const area = row.location.code.replace(`${site}-work-`, "");
       let target = record.workInventory.find((entry) => entry.stockKey === stockKey);
       if (!target) {
         target = {
@@ -447,22 +512,22 @@ function applyFuxing(rows) {
   if (!changed) return false;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", {
-    detail: { site: "fuxing" },
+    detail: { site },
   }));
   return true;
 }
 
 export async function syncInventoryNow(site = currentSite(), { reloadBranch = true } = {}) {
   if (!site || syncing || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
-  if (site === "fuxing" && !isCurrentBranchInventoryDate()) {
+  if (["fuxing","yongji"].includes(site) && !isCurrentBranchInventoryDate()) {
     dispatchStatus("historical-readonly", { site });
     return false;
   }
   syncing = true;
   try {
     const rows = await fetchSite(site);
-    const changed = site === "central" ? applyCentral(rows) : applyFuxing(rows);
-    if (changed && site === "fuxing" && reloadBranch) {
+    const changed = site === "central" ? applyCentral(rows) : applyBranch(rows, site);
+    if (changed && ["fuxing","yongji"].includes(site) && reloadBranch) {
       setTimeout(() => location.reload(), 40);
     }
     dispatchStatus("synced", { site, count: rows.length });
@@ -703,6 +768,20 @@ export async function cloudArchiveFuxingItem(stockKey) {
   return { ok: data === true || data === false, fallback: false };
 }
 
+export function branchLocationCode(site, zone) {
+  return BRANCH_STORAGE_CODES[site]?.[zone] || "";
+}
+
+export function branchWorkLocationCode(site, area) {
+  return ["fuxing","yongji"].includes(site) && ["noodles","soup","seafood","meat"].includes(area)
+    ? `${site}-work-${area}`
+    : "";
+}
+
+export function branchItemKey(site, stockKey) {
+  return ["fuxing","yongji"].includes(site) ? `${site}:${stockKey}` : "";
+}
+
 export function fuxingLocationCode(zone) {
   return FUXING_STORAGE_CODES[zone] || "";
 }
@@ -787,6 +866,7 @@ async function boot() {
 
   if (role() === "admin") {
     await bootstrapFuxingInventory();
+    await bootstrapYongjiInventory();
     const central = readJson(CENTRAL_KEY, []);
     if (central.length) await bootstrapCentralInventory(central);
   }
