@@ -842,6 +842,7 @@ function inventory(context) {
     ? ""
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và hệ thống ghi lại người nhập/xuất/chuyển. Quy trình duyệt/xác nhận sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效並記錄入庫／出庫／轉撥人員；主管審核／確認流程將於 VPS 正式版再啟用。</small></div>`;
   const opsEnabled = editable && (!cloudReady || !historical) && ["fuxing","yongji"].includes(site);
+  if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
   const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
