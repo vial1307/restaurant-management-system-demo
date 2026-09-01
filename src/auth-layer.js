@@ -467,6 +467,7 @@ function centralPage(user) {
   const canEdit = user.role === "admin" || Boolean(user.permissions?.inventory?.edit);
   const draftCountAllowed = canInventoryDraftCount();
   let mode = content.dataset.centralMode || "overview";
+  if (mode === "receive") { mode = "overview"; content.dataset.centralMode = "overview"; }
   if (["in","out","transfer"].includes(mode) && !canEdit) {
     mode = "overview";
     content.dataset.centralMode = mode;
