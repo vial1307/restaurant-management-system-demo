@@ -308,3 +308,93 @@ export function operationTabLabels(language="vi"){
   const t=langText(language);
   return {in:t.in,out:t.out,transfer:t.transfer,receive:t.receive};
 }
+
+
+function draftItemCard(item,mode,locations,site,language,t){
+  return itemCard(item,mode,locations,site,language,t);
+}
+
+function bindDraft(host,state){
+  const {mode,language}=state;
+  const t=langText(language);
+  bindQuantity(host);
+
+  host.querySelectorAll("[data-op-source]").forEach((select)=>{
+    select.onchange=()=>{
+      const item=state.data?.items.find((entry)=>entry.id===select.dataset.opSource);
+      const current=host.querySelector(`[data-op-current="${CSS.escape(select.dataset.opSource)}"]`);
+      if(current&&item) current.textContent=`${stockAt(item,select.value)} ${item.unit}`;
+    };
+  });
+
+  host.querySelectorAll("[data-op-submit]").forEach((button)=>{
+    button.onclick=async()=>{
+      const item=state.data?.items.find((entry)=>entry.id===button.dataset.itemId);
+      if(!item)return;
+      const card=button.closest("[data-op-item]");
+      const input=card.querySelector(`[data-op-amount="${CSS.escape(item.id)}"]`);
+      const amount=Math.max(1,Number(input?.value)||1);
+      const type=button.dataset.opSubmit;
+      const sourceId=card.querySelector("[data-op-source]")?.value || "";
+      const destinationId=card.querySelector("[data-op-destination]")?.value || "";
+      const target=card.querySelector("[data-op-target]")?.value || "usage";
+      const source=item.locations.find((entry)=>entry.id===sourceId);
+
+      if((type==="out"||type==="transfer") && amount>Number(source?.quantity||0)){
+        setMessage(host,t.insufficient,"error");
+        return;
+      }
+      if(type==="transfer" && sourceId===destinationId){
+        setMessage(host,t.sameLocation,"error");
+        return;
+      }
+      if(type==="out" && target!=="usage"){
+        setMessage(host,language==="zh"?"分店出貨需完成雲端同步後使用。":"Xuất hàng sang chi nhánh sẽ bật sau khi đồng bộ cloud hoàn tất. · 分店出貨需完成雲端同步後使用。","error");
+        return;
+      }
+
+      button.disabled=true;
+      const result=await state.onApply?.({
+        type,
+        itemId:item.id,
+        sourceLocationId:sourceId,
+        destinationLocationId:destinationId,
+        amount,
+      });
+
+      if(result?.ok){
+        setMessage(host,language==="zh"?"已暫存，待主管確認。":"Đã lưu tạm, chờ cấp trên duyệt. · 已暫存，待主管確認。","ok");
+        state.data=await state.reload();
+        await renderDraft(host,state);
+      }else{
+        setMessage(host,errorText(result?.error,t),"error");
+        button.disabled=false;
+      }
+    };
+  });
+}
+
+async function renderDraft(host,state){
+  const t=langText(state.language);
+  const data=await state.reload();
+  state.data=data;
+  if(state.mode==="receive"){
+    host.innerHTML=`<div class="inventory-cloud-notice inventory-fallback-notice"><strong>${state.language==="zh"?"待收貨需雲端同步":"Nhận hàng cần đồng bộ cloud · 待收貨需雲端同步"}</strong><small>${state.language==="zh"?"完成 Supabase inventory v5 後即可使用跨店收貨。":"Sau khi Supabase inventory v5 hoàn tất, phiếu nhận hàng giữa các chi nhánh sẽ được bật. · 完成 Supabase inventory v5 後即可使用跨店收貨。"}</small></div>`;
+    return;
+  }
+  const cards=data.items.map((item)=>draftItemCard(item,state.mode,data.locations,state.site,state.language,t));
+  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"暫存操作：數量變更待主管確認":"Thao tác tạm: thay đổi số lượng chờ cấp trên duyệt · 暫存操作：數量變更待主管確認"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+  bindDraft(host,state);
+}
+
+export async function mountDraftInventoryOperations(host,{
+  site,
+  mode="in",
+  language="vi",
+  reload,
+  onApply,
+}={}){
+  if(!host||!site||typeof reload!=="function")return;
+  const state={site,mode,language,reload,onApply,data:null};
+  await renderDraft(host,state);
+}
