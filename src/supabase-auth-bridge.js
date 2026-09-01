@@ -5,6 +5,16 @@ import {
   loginEmailForUsername,
   mirrorSupabaseSessionToLegacy,
 } from "./supabase-client.js";
+import {
+  isVpsApiConfigured,
+  vpsChangePassword,
+  vpsDeleteUser,
+  vpsListUsers,
+  vpsLogin,
+  vpsLogout,
+  vpsMe,
+  vpsSaveUser,
+} from "./vps-api.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
@@ -33,6 +43,35 @@ function permissionsFromForm(data) {
     permissions[key] = { view, edit: view && edit };
   }
   return permissions;
+}
+
+function legacySession() {
+  try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); }
+  catch { return null; }
+}
+
+function normalizeVpsUser(user) {
+  if (!user) return null;
+  const accountRole = user.role || "employee";
+  const authRole = accountRole === "admin" ? "admin" : accountRole === "central" ? "central" : "branch";
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.displayName || user.display_name || user.username,
+    role: authRole,
+    accountRole,
+    location: user.location || "fuxing",
+    permissions: user.permissions || {},
+    preferredLanguage: user.preferredLanguage || user.preferred_language || "vi",
+    provider: "vps",
+  };
+}
+
+function mirrorVpsSession(user) {
+  const normalized = normalizeVpsUser(user);
+  if (!normalized) return null;
+  localStorage.setItem(AUTH_KEY, JSON.stringify(normalized));
+  return normalized;
 }
 
 async function broadcastProfileChange(supabase, userId) {
@@ -74,6 +113,33 @@ function initialRoute(profile) {
 }
 
 async function syncProfiles(profile = null, supabaseClient = null) {
+  if (isVpsApiConfigured()) {
+    const current = profile || normalizeVpsUser((await vpsMe())?.user);
+    if (!current) return;
+    mirrorVpsSession(current);
+    const currentRole = current.accountRole || current.role;
+    if (currentRole !== "admin") return;
+
+    try {
+      const result = await vpsListUsers();
+      const mirrored = (result?.users || []).map((p) => ({
+        id: p.id,
+        username: p.username,
+        password: "",
+        name: p.display_name,
+        role: p.role,
+        location: p.location,
+        active: p.active,
+        permissions: p.permissions || {},
+        preferredLanguage: p.preferred_language || "vi",
+        provider: "vps",
+      }));
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(mirrored));
+      window.dispatchEvent(new CustomEvent("shitu:accounts-synced"));
+    } catch {}
+    return;
+  }
+
   const supabase = supabaseClient || await getSupabase();
   if (!supabase) return;
   const currentProfile = profile || await getMyProfile({ force: true });
@@ -101,13 +167,28 @@ async function syncProfiles(profile = null, supabaseClient = null) {
 }
 
 async function boot() {
+  const legacy = legacySession();
+
+  if (isVpsApiConfigured()) {
+    try {
+      const result = await vpsMe();
+      const user = result?.user;
+      if (!user?.active && user?.active !== undefined) {
+        localStorage.removeItem(AUTH_KEY);
+        return;
+      }
+      const profile = mirrorVpsSession(user);
+      if (!profile) return;
+      window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+      return;
+    } catch (error) {
+      if (legacy?.provider === "vps") localStorage.removeItem(AUTH_KEY);
+      return;
+    }
+  }
+
   if (!isSupabaseConfigured()) return;
 
-  const legacy = (() => {
-    try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
-  })();
-
-  // Once Supabase is configured, old hard-coded/local passwords are no longer trusted.
   if (legacy && legacy.provider !== "supabase") localStorage.removeItem(AUTH_KEY);
 
   const supabase = await getSupabase();
@@ -124,7 +205,7 @@ async function boot() {
 }
 
 document.addEventListener("submit", async (event) => {
-  if (!isSupabaseConfigured()) return;
+  if (!isVpsApiConfigured() && !isSupabaseConfigured()) return;
   const form = event.target;
   if (!(form instanceof HTMLFormElement)) return;
 
@@ -134,24 +215,35 @@ document.addEventListener("submit", async (event) => {
     const data = new FormData(form);
     const username = String(data.get("username") || "").trim().toLowerCase();
     const password = String(data.get("password") || "");
+
     try {
-      const supabase = await getSupabase();
-      const email = loginEmailForUsername(username);
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      const profile = await getMyProfile({ force: true });
-      if (!profile?.active) {
-        await supabase.auth.signOut();
-        throw new Error("ACCOUNT_DISABLED");
+      let profile;
+      if (isVpsApiConfigured()) {
+        const result = await vpsLogin(username, password);
+        profile = mirrorVpsSession(result?.user);
+        if (!profile) throw new Error("ACCOUNT_DISABLED");
+        await syncProfiles(profile);
+      } else {
+        const supabase = await getSupabase();
+        const email = loginEmailForUsername(username);
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        const cloudProfile = await getMyProfile({ force: true });
+        if (!cloudProfile?.active) {
+          await supabase.auth.signOut();
+          throw new Error("ACCOUNT_DISABLED");
+        }
+        await mirrorSupabaseSessionToLegacy(cloudProfile);
+        await syncProfiles(cloudProfile, supabase);
+        profile = cloudProfile;
       }
-      await mirrorSupabaseSessionToLegacy(profile);
-      await syncProfiles(profile, supabase);
+
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
       location.hash = initialRoute(profile);
       location.reload();
     } catch (error) {
-      const code = error instanceof Error ? error.message : "";
+      const code = error instanceof Error ? (error.code || error.message) : "";
       showLoginError(code === "USERNAME_FORMAT"
         ? "Tài khoản chỉ dùng chữ a-z, số, dấu chấm, gạch dưới hoặc gạch ngang. · 帳號僅限英數字、點、底線或連字號。"
         : code === "ACCOUNT_DISABLED"
@@ -169,26 +261,37 @@ document.addEventListener("submit", async (event) => {
     const next = String(data.get("next") || "");
     const confirmPassword = String(data.get("confirm") || "");
     const message = form.querySelector("[data-account-self-message]");
-    if (next.length < 6) {
-      if (message) message.textContent = "Mật khẩu tối thiểu 6 ký tự. · 密碼至少 6 碼。";
+
+    const minLength = isVpsApiConfigured() ? 10 : 6;
+    if (next.length < minLength) {
+      if (message) message.textContent = `Mật khẩu tối thiểu ${minLength} ký tự. · 密碼至少 ${minLength} 碼。`;
       return;
     }
     if (next !== confirmPassword) {
       if (message) message.textContent = "Mật khẩu xác nhận không khớp. · 兩次密碼不一致。";
       return;
     }
+
     try {
-      const supabase = await getSupabase();
-      const profile = await getMyProfile();
-      const email = loginEmailForUsername(profile.username);
-      const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: current });
-      if (verifyError) throw new Error("WRONG_CURRENT");
-      const { error } = await supabase.auth.updateUser({ password: next });
-      if (error) throw error;
-      if (message) message.textContent = "Đã đổi mật khẩu. · 密碼已更新。";
-      form.reset();
+      if (isVpsApiConfigured()) {
+        await vpsChangePassword(current, next);
+        localStorage.removeItem(AUTH_KEY);
+        if (message) message.textContent = "Đã đổi mật khẩu. Vui lòng đăng nhập lại. · 密碼已更新，請重新登入。";
+        setTimeout(() => location.reload(), 500);
+      } else {
+        const supabase = await getSupabase();
+        const profile = await getMyProfile();
+        const email = loginEmailForUsername(profile.username);
+        const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: current });
+        if (verifyError) throw new Error("WRONG_CURRENT");
+        const { error } = await supabase.auth.updateUser({ password: next });
+        if (error) throw error;
+        if (message) message.textContent = "Đã đổi mật khẩu. · 密碼已更新。";
+        form.reset();
+      }
     } catch (error) {
-      if (message) message.textContent = error instanceof Error && error.message === "WRONG_CURRENT"
+      const code = error instanceof Error ? (error.code || error.message) : "";
+      if (message) message.textContent = ["WRONG_CURRENT","CURRENT_PASSWORD_INVALID"].includes(code)
         ? "Mật khẩu hiện tại không đúng. · 目前密碼錯誤。"
         : "Không thể đổi mật khẩu. · 密碼更新失敗。";
     }
@@ -212,29 +315,42 @@ document.addEventListener("submit", async (event) => {
       permissions: permissionsFromForm(data),
     };
     const message = form.querySelector("[data-account-form-message]");
+
     try {
-      const supabase = await getSupabase();
-      const { data: result, error } = await supabase.functions.invoke("admin-users", { body });
-      if (error || result?.error) throw new Error(result?.error || error?.message || "ADMIN_USER_FAILED");
-      await syncProfiles();
-      if (id) await broadcastProfileChange(supabase, id);
+      if (isVpsApiConfigured()) {
+        await vpsSaveUser(body);
+        await syncProfiles();
+      } else {
+        const supabase = await getSupabase();
+        const { data: result, error } = await supabase.functions.invoke("admin-users", { body });
+        if (error || result?.error) throw new Error(result?.error || error?.message || "ADMIN_USER_FAILED");
+        await syncProfiles();
+        if (id) await broadcastProfileChange(supabase, id);
+      }
       document.querySelector("[data-account-modal]")?.remove();
       location.reload();
     } catch (error) {
-      if (message) message.textContent = `Không thể lưu tài khoản. · 帳號儲存失敗。 ${esc(error instanceof Error ? error.message : "")}`;
+      const code = error instanceof Error ? (error.code || error.message) : "";
+      if (message) message.textContent = `Không thể lưu tài khoản. · 帳號儲存失敗。 ${esc(code)}`;
     }
+    return;
   }
 }, true);
 
 document.addEventListener("click", async (event) => {
-  if (!isSupabaseConfigured()) return;
+  if (!isVpsApiConfigured() && !isSupabaseConfigured()) return;
 
   const logoutButton = event.target.closest(".auth-user-chip button");
   if (logoutButton) {
     event.preventDefault();
     event.stopImmediatePropagation();
-    const supabase = await getSupabase();
-    await supabase?.auth.signOut();
+    try {
+      if (isVpsApiConfigured()) await vpsLogout();
+      else {
+        const supabase = await getSupabase();
+        await supabase?.auth.signOut();
+      }
+    } catch {}
     localStorage.removeItem(AUTH_KEY);
     location.hash = "#dashboard";
     location.reload();
@@ -246,25 +362,35 @@ document.addEventListener("click", async (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   if (!confirm("Xóa tài khoản này? · 確定刪除此帳號？")) return;
+
   try {
-    const supabase = await getSupabase();
-    const { data, error } = await supabase.functions.invoke("admin-users", {
-      body: { action: "delete", id: deleteButton.dataset.accountDelete },
-    });
-    if (error || data?.error) throw new Error(data?.error || error?.message || "DELETE_FAILED");
-    await syncProfiles();
-    await broadcastProfileChange(supabase, deleteButton.dataset.accountDelete);
+    if (isVpsApiConfigured()) {
+      await vpsDeleteUser(deleteButton.dataset.accountDelete);
+      await syncProfiles();
+    } else {
+      const supabase = await getSupabase();
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action: "delete", id: deleteButton.dataset.accountDelete },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "DELETE_FAILED");
+      await syncProfiles();
+      await broadcastProfileChange(supabase, deleteButton.dataset.accountDelete);
+    }
     document.querySelector("[data-account-modal]")?.remove();
     location.reload();
   } catch (error) {
-    alert(`Không thể xóa tài khoản. · 帳號刪除失敗。 ${error instanceof Error ? error.message : ""}`);
+    alert(`Không thể xóa tài khoản. · 帳號刪除失敗。 ${error instanceof Error ? (error.code || error.message) : ""}`);
   }
 }, true);
 
 window.addEventListener("shitu:logout", async () => {
-  if (!isSupabaseConfigured()) return;
-  const supabase = await getSupabase();
-  await supabase?.auth.signOut();
+  try {
+    if (isVpsApiConfigured()) await vpsLogout();
+    else if (isSupabaseConfigured()) {
+      const supabase = await getSupabase();
+      await supabase?.auth.signOut();
+    }
+  } catch {}
   localStorage.removeItem(AUTH_KEY);
 });
 
