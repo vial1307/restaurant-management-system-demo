@@ -55,7 +55,7 @@ Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphen
 
 For the current staging/demo database, run the canonical migration once:
 
-`supabase/20260901_inventory_ready_v6.sql`
+`supabase/20260901_inventory_ready_v7.sql`
 
 in **Supabase → SQL Editor** after `supabase/schema.sql`.
 
@@ -72,9 +72,9 @@ This single migration includes:
 - Supabase Realtime for stock and transfer status
 - immediate cross-site transfer: source decreases and destination increases in one atomic RPC
 - actor/user audit for every inventory transaction; no manager confirmation in staging
-- inventory cloud contract version 6
+- inventory cloud contract version 7
 
-The older split/full files remain in the repository as migration history. For the current staging database, use only the canonical `20260901_inventory_ready_v6.sql` file above.
+The older split/full files remain in the repository as migration history. For the current staging database, use only the canonical `20260901_inventory_ready_v7.sql` file above.
 
 After the SQL succeeds:
 1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
@@ -82,3 +82,13 @@ After the SQL succeeds:
 3. Sign in as Admin once so missing catalog rows can be seeded without overwriting existing cloud quantities.
 4. Test one stock movement from PC and confirm it appears on mobile, then reverse the test.
 
+
+
+### Inventory workflow v7
+
+- 領貨 / Lấy hàng: move stock from a storage location into the site's in-use/work location.
+- 使用 / Sử dụng: subtract the actually consumed amount from the in-use quantity.
+- 歸位 / Cất lại: move leftovers from the in-use quantity back to a selected storage location.
+- 出貨 / Xuất hàng: choose source site/storage → destination site → destination storage; source decreases and destination increases in one atomic transaction.
+- Every mutation records the authenticated operator through inventory transaction audit fields.
+- Manager approval/receipt confirmation is intentionally deferred to the VPS production phase.
