@@ -747,7 +747,10 @@ function inventory(context) {
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
-  const activeAlerts = storageView ? reserveAlerts : workAlerts;
+  const draftAlerts = effectiveRecord === record ? null : buildInventoryAlerts(effectiveRecord);
+  const activeAlerts = draftAlerts
+    ? draftAlerts.filter((item)=>storageView ? item.kind !== "work" : item.kind === "work")
+    : storageView ? reserveAlerts : workAlerts;
   const filtered = entries.filter((item) => {
     const matchesGroup = storageView
       ? view.zone === "all" || item.zone === view.zone
