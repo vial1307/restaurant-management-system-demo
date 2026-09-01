@@ -501,7 +501,7 @@ function loginScreen(error = "") {
   document.body.classList.add("auth-locked");
   let host = document.querySelector("#auth-layer");
   if (!host) { host = document.createElement("div"); host.id = "auth-layer"; document.body.append(host); }
-  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚、復興店或永吉店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">Supabase Auth · 帳號與權限雲端同步</div></section></div>`;
+  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚、復興店或永吉店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">${location.hostname==="82.47.180.185"?"VPS Auth · 帳號與權限由 VPS 管理":"Supabase Auth · 帳號與權限雲端同步"}</div></section></div>`;
 
 }
 
@@ -755,7 +755,7 @@ function historyView(log) {
 }
 
 function cloudHistoryView(log) {
-  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>僅系統管理員可查看；資料來自 Supabase。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
+  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>僅系統管理員可查看；資料來自目前主資料庫。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
     const direction = x.direction;
     const sign = direction === "out" ? "−" : direction === "in" ? "+" : "↔";
     const tone = direction === "out" ? "history-out" : direction === "in" ? "history-in" : "history-adjust";
