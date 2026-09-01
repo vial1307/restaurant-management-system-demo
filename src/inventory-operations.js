@@ -189,16 +189,6 @@ function bind(host,state){
   const t=langText(language);
   bindQuantity(host);
 
-  const search=host.querySelector("[data-op-search]");
-  if(search){
-    search.oninput=()=>{
-      const q=search.value.trim().toLowerCase();
-      host.querySelectorAll("[data-op-item],.shipment-card").forEach((card)=>{
-        card.style.display=!q||card.textContent.toLowerCase().includes(q)?"":"none";
-      });
-    };
-  }
-
   host.querySelectorAll("[data-op-source]").forEach((select)=>{
     select.onchange=()=>{
       const item=state.data?.items.find((entry)=>entry.id===select.dataset.opSource);
