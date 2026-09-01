@@ -23,15 +23,24 @@ fi
 mkdir -p "${IMPORT_DIR}"
 chmod 700 "${IMPORT_DIR}"
 
-echo "Creating pre-import VPS backup..."
-bash "${REPO_DIR}/vps/scripts/backup.sh"
-
 echo
 echo "Open Supabase Dashboard > Connect > Session pooler."
 echo "Copy the PostgreSQL connection URI. Do NOT send it in chat."
 read -r -s -p "Paste Supabase PostgreSQL URI here: " SUPABASE_DB_URL
 echo
 [[ -n "${SUPABASE_DB_URL}" ]] || { echo "No URI supplied."; exit 1; }
+
+case "${SUPABASE_DB_URL}" in
+  postgresql://postgres.*@*.pooler.supabase.com:5432/postgres|postgres://postgres.*@*.pooler.supabase.com:5432/postgres)
+    ;;
+  *)
+    echo "Invalid Session pooler URI."
+    echo "Use the exact URI copied from Supabase Shared/Session pooler."
+    echo "It must use user postgres.<project-ref> and host *.pooler.supabase.com."
+    unset SUPABASE_DB_URL
+    exit 1
+    ;;
+esac
 
 remote_psql() {
   docker run --rm postgres:16-alpine psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 "$@"
@@ -47,6 +56,9 @@ select json_build_object(
   'receive_defaults',(select count(*) from public.inventory_receive_defaults)
 )::text;
 " | tee "${IMPORT_DIR}/source_counts.json"
+
+echo "Creating pre-import VPS backup after connection validation..."
+bash "${REPO_DIR}/vps/scripts/backup.sh"
 
 export_csv() {
   local name="$1"
