@@ -355,6 +355,7 @@ function centralPage(user) {
   const query = content.dataset.centralSearch || "";
   const filtered = items.filter(i => (selectedZone === "all" || i.zone === selectedZone) && `${i.zh} ${i.vi}`.toLowerCase().includes(query.toLowerCase()));
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
+  const productCount = new Set(items.map((item) => centralBaseKey(item))).size;
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
   const canViewHistory = accountRole === "admin";
   const log = canViewHistory && mode === "history" ? history() : [];
@@ -370,23 +371,36 @@ function centralPage(user) {
   };
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  if (["in","out","transfer","receive"].includes(mode) && !cloudReady) {
-    mode = "overview";
-    content.dataset.centralMode = mode;
-  }
   const cloudNotice = cloudReady
     ? ""
     : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Số lượng hiện là bản tạm để chỉnh sửa và chờ cấp trên duyệt. Danh mục và tên hàng được giữ nguyên; chưa ghi vào dữ liệu cloud chính thức. · 目前數量為可編輯的待審草稿；品項分類與名稱維持不變，尚未寫入正式雲端庫存。</small></div>'
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
-    ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}" ${cloudReady ? "" : "disabled"}>${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftCountAllowed) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftCountAllowed) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
-  if (cloudReady && ["in","out","transfer","receive"].includes(mode)) {
+  if (["in","out","transfer","receive"].includes(mode)) {
     const host=content.querySelector("[data-inventory-operations]");
-    void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
+    if (cloudReady) {
+      void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
+    } else {
+      void mountDraftInventoryOperations(host,{
+        site:"central",
+        mode,
+        language,
+        reload:async()=>centralDraftOperationData(),
+        onApply:async(operation)=>{
+          const result=applyCentralDraftOperation(user,operation);
+          if(result.ok){
+            const stat=document.querySelector("[data-central-stat-total]");
+            if(stat) stat.textContent=String(loadStock().reduce((sum,item)=>sum+Number(item.qty||0),0));
+          }
+          return result;
+        },
+      });
+    }
   }
   if (cloudReady) void bootstrapCentralInventory(items);
   if (cloudReady) void getSiteInventoryRows("central").then((rows) => {
