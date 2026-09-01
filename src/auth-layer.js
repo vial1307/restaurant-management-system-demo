@@ -171,7 +171,7 @@ function saveStock(items) {
       updatedAt: now,
       updatedBy: actor?.id || null,
       updatedByName: actor?.name || "",
-      status: "pending-approval",
+      status: "staging",
     }));
     localStorage.setItem(CENTRAL_DRAFT_KEY, JSON.stringify(drafts));
     return;
@@ -233,7 +233,7 @@ function stagingLocationsForSite(site){\n  if(site==="central"){\n    return CEN
       }
     }
   }
-  return { site: "central", items: [...grouped.values()], locations };
+  return { site:"central", items:[...grouped.values()], locations, allLocations:["central","fuxing","yongji"].flatMap((site)=>stagingLocationsForSite(site)) };
 }
 
 function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocationId, destinationLocationId, amount, targetSite, sourceSite }) {
@@ -298,6 +298,10 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
     if (before < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
     source.qty = before - value;
     after = source.qty;
+    if (type === "ship") {
+      const ok = addToBranchDraftFromCentral(targetSite,itemMeta || { zh:template.zh, vi:template.vi, unit:template.unit, catalogKey:template.catalogKey || "" },destinationLocationId,value);
+      if (!ok) { source.qty = before; return { ok:false, error:new Error("INVALID_DESTINATION_LOCATION") }; }
+    }
   } else if (type === "receive") {
     const target = ensureRow(destinationZone);
     before = Number(target.qty || 0);
@@ -318,11 +322,15 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
   }
 
   saveStock(items);
+  appendOperationLog({
+    site:"central",user:user.name,userId:user.id,action:type,item:template.zh,amount:value,unit:template.unit,
+    source:sourceZone || sourceSite || "",destination:destinationZone || targetSite || ""
+  });
   pushHistory({
     user:user.name,
     userId:user.id,
-    direction:"draft",
-    status:"pending-approval",
+    direction:type,
+    status:"staging",
     product:template.zh,
     productId:itemId,
     zone:type === "transfer" ? `${sourceZone} → ${destinationZone}` : type === "in" || type === "receive" ? destinationZone : sourceZone,
@@ -462,12 +470,12 @@ function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const editing = mode === "in" || mode === "out";
   const direct = mode === "overview" && directAdjust;
   const draft = direct && inventoryCloudState() !== "ready";
-  const directQuantityLabel = draft ? "Số lượng tạm · 待審數量" : "盤點數量";
-  const directActionLabel = draft ? "Lưu tạm · 暫存" : "盤點調整";
+  const directQuantityLabel = draft ? "Số lượng · 數量" : "盤點數量";
+  const directActionLabel = draft ? "Cập nhật · 更新" : "盤點調整";
   return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
-    ${draft ? '<div class="central-draft-banner">Số lượng tạm đang chờ cấp trên duyệt · 待主管確認數量</div>' : ""}
+    ${draft ? '<div class="central-draft-banner">Dữ liệu thử nghiệm · thao tác có hiệu lực ngay · 測試資料即時生效</div>' : ""}
     <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? `<span>${directQuantityLabel}</span><span>${draft ? "暫存" : "調整"}</span>` : ""}</div>
-    <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 待審" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
+    <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 測試" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
 }
 
 function historyView(log) {
