@@ -1,6 +1,6 @@
 # Kitchen OS — Inventory Transfer & Branch Shipping Specification
 
-Status: implemented in staging frontend v32; database activation requires canonical Supabase v5 migration
+Status: implemented in staging frontend v32; database activation requires canonical Supabase v6 migration
 Target sites: 央廚, 復興店, 永吉店
 Primary goal: one cloud source of truth across PC / laptop / mobile, with auditable inventory movement and Taiwan restaurant terminology.
 
@@ -563,8 +563,20 @@ Implemented in the current GitHub staging frontend:
 - Supabase Realtime/data-service boundary prepared for later VPS replacement
 
 Database activation requires:
-- `supabase/20260901_inventory_ready_v5.sql`
+- `supabase/20260901_inventory_ready_v6.sql`
 - redeploying the updated `admin-users` Edge Function
 
 Manager acceptance procedure is documented in:
 - `docs/MANAGER_REVIEW_V32.md`
+
+
+## 22. Staging rule — no approval/receipt confirmation
+
+For the current manager-review stage:
+- inbound, outbound and internal transfer apply immediately
+- cross-site transfer applies immediately to both source and destination
+- no manager approval step
+- no separate receiving confirmation step
+- the system records operator/user, timestamp, item, quantity, source and destination
+
+The formal approval / confirmation workflow is intentionally deferred to the VPS production phase.
