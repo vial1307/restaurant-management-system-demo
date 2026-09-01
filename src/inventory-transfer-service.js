@@ -1,5 +1,6 @@
 import { getSupabase, isSupabaseConfigured } from "./supabase-client.js";
 import {
+  getInventoryReceiveDefaults,
   getSiteInventoryRows,
   getSiteLocations,
   syncInventoryNow,
@@ -61,11 +62,22 @@ export async function loadSiteOperationData(site) {
     byItem.set(item.id, current);
   }
 
+  const items=[...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant"));
+  const catalogKeys=[...new Set(items.map((item)=>item.catalogKey).filter(Boolean))];
+  let receiveDefaults=[];
+  try{
+    receiveDefaults=await getInventoryReceiveDefaults({
+      sites:INVENTORY_SITES.map((entry)=>entry.id).filter((target)=>target!==site),
+      catalogKeys,
+    });
+  }catch{}
+
   return {
     site,
-    items: [...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant")),
+    items,
     locations,
     workLocations,
+    receiveDefaults,
     allLocations: INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id}))),
   };
 }
