@@ -168,6 +168,8 @@ function installSearchEnhancer() {
     ".training-progress-row",
     ".skill-catalog-row",
     ".history-item",
+    ".inventory-op-card",
+    ".shipment-card",
     ".report-table tbody tr"
   ].join(",");
 
