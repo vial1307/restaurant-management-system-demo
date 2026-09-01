@@ -1156,3 +1156,16 @@ html[lang="vi"] .central-row small{line-height:1.35}
     width:100%;
   }
 }
+
+
+/* v42 — in-use stock visibility */
+.op-location-pill-use{
+  border-color:#d9c28f;
+  background:#fff8e9;
+}
+.op-location-pill-use small{
+  color:#795a1d;
+}
+.op-location-pill-use strong{
+  color:#6f4b0c;
+}
