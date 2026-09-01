@@ -861,6 +861,7 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
       ? addToCentralDraftFromBranch(meta,destinationLocationId,value)
       : addToBranchDraftFromBranch(targetSite,meta,destinationLocationId,value);
     if(!ok){source.quantity=before;return {ok:false,error:new Error("INVALID_DESTINATION_LOCATION")};}
+    destinationLabel=`${targetSite}:${destinationLocationId}`;
   }else if(type==="transfer"){
     if(!sourceZone||!destinationZone||sourceZone===destinationZone)return {ok:false,error:new Error("SAME_LOCATION")};
     const source=ensureStorage(sourceZone);
