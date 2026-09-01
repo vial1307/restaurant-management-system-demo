@@ -35,6 +35,7 @@ import {
   cloudSetQuantity,
   cloudSyncBranchCatalogItem,
   cloudTransferInventory,
+  getCloudInventoryHistory,
   inventoryCloudState,
   isCurrentBranchInventoryDate,
   syncInventoryNow,
@@ -951,6 +952,44 @@ function restockBranchDraftStorage(site,baseRecord,id){
   return true;
 }
 
+function branchInventoryLocalHistory(site) {
+  try {
+    const rows=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");
+    return Array.isArray(rows) ? rows.filter((entry)=>entry.site===site).slice(0,300) : [];
+  } catch { return []; }
+}
+
+function branchInventoryHistoryView(rows, language="vi", cloud=false) {
+  const title=language==="zh" ? "庫存操作紀錄" : "Lịch sử thao tác kho · 庫存操作紀錄";
+  const subtitle=language==="zh"
+    ? "查看操作人員、時間、數量、來源與目的儲位。"
+    : "Xem người thao tác, thời gian, số lượng, kho nguồn và kho đích.";
+  const actionLabel={
+    in:"進貨入庫", pick:"領貨", use:"使用", return:"歸位", ship:"出貨", transfer:"庫存轉撥", adjust:"盤點調整",
+    out:"出庫",
+  };
+  const body=(rows||[]).map((entry)=>{
+    if(cloud){
+      const direction=entry.direction||"";
+      const sign=direction==="out"?"−":direction==="in"?"+":"↔";
+      const tone=direction==="out"?"history-out":direction==="in"?"history-in":"history-adjust";
+      const actor=entry.actor?.display_name||entry.actor?.username||"—";
+      const item=entry.item?.name_zh_tw||"—";
+      const unit=entry.item?.unit||"";
+      const location=entry.location?.name_zh_tw||"";
+      return `<article><div><strong>${escapeHtml(item)}</strong><small>${escapeHtml(new Date(entry.created_at).toLocaleString("zh-TW"))} · ${escapeHtml(actor)} · ${escapeHtml(entry.note||actionLabel[direction]||direction)}</small></div><span>${escapeHtml(location)}</span><strong class="${tone}">${sign}${escapeHtml(entry.amount)} ${escapeHtml(unit)}</strong><small>${escapeHtml(entry.before_quantity)} → ${escapeHtml(entry.after_quantity)}</small></article>`;
+    }
+    const action=entry.action||"";
+    const source=entry.source||"";
+    const destination=entry.destination||"";
+    const route=[source,destination].filter(Boolean).join(" → ");
+    const sign=action==="in"?"+":action==="use"||action==="ship"?"−":"↔";
+    const tone=action==="in"?"history-in":action==="use"||action==="ship"?"history-out":"history-adjust";
+    return `<article><div><strong>${escapeHtml(entry.item||"—")}</strong><small>${escapeHtml(new Date(entry.createdAt||Date.now()).toLocaleString("zh-TW"))} · ${escapeHtml(entry.user||"—")} · ${escapeHtml(actionLabel[action]||action)}</small></div><span>${escapeHtml(route)}</span><strong class="${tone}">${sign}${escapeHtml(entry.amount||0)} ${escapeHtml(entry.unit||"")}</strong><small>${entry.locationFixed ? "已同步目的儲位" : ""}</small></article>`;
+  }).join("");
+  return `<section class="central-card branch-history-card"><div class="history-title"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div><span>${rows?.length||0} ${language==="zh"?"筆":"mục"}</span></div><div class="central-history">${body||`<p class="central-empty">${language==="zh"?"目前尚無操作紀錄。":"Chưa có lịch sử thao tác."}</p>`}</div></section>`;
+}
+
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language } = context;
   const site = activeInventorySite() || "fuxing";
@@ -987,9 +1026,14 @@ function inventory(context) {
     ? ""
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và hệ thống ghi lại người nhập/xuất/chuyển. Quy trình duyệt/xác nhận sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效並記錄入庫／出庫／轉撥人員；主管審核／確認流程將於 VPS 正式版再啟用。</small></div>`;
   const opsEnabled = editable && (!cloudReady || !historical) && ["fuxing","yongji"].includes(site);
+  const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
+  const tabsEnabled = (opsEnabled || canViewHistory) && ["fuxing","yongji"].includes(site);
   if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
   if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
-  const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
+  if (view.inventoryOpsMode === "history" && !canViewHistory) view.inventoryOpsMode = "overview";
+  const opsMode = view.inventoryOpsMode === "history" && canViewHistory
+    ? "history"
+    : opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
     in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
@@ -997,6 +1041,7 @@ function inventory(context) {
     transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
     ship: language === "zh" ? "出貨" : "Xuất hàng · 出貨",
     manage: language === "zh" ? "庫存管理" : "Quản lý kho · 庫存管理",
+    history: language === "zh" ? "操作紀錄" : "Lịch sử · 操作紀錄",
   };
   const opGuide = {
     overview: language === "zh"
@@ -1017,9 +1062,12 @@ function inventory(context) {
     manage: language === "zh"
       ? "用於新增、編輯食材與設定儲位、標準量及單位；日常領貨、轉撥或出貨請使用前面的操作頁。"
       : "Dùng để thêm/sửa nguyên liệu, vị trí lưu, định mức và đơn vị; thao tác lấy/chuyển/xuất hàng hằng ngày dùng các mục phía trước.",
+    history: language === "zh"
+      ? "查看此據點的庫存操作人員、時間、數量與前後變化；資料與雲端庫存紀錄連動。"
+      : "Xem người thao tác, thời gian, số lượng và thay đổi tồn tại cơ sở này; dữ liệu liên kết với lịch sử kho trên cloud.",
   };
-  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>${catalogManage ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}</div>` : "";
-  const opsGuide = opsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
+  const opsTabs = tabsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button>${opsEnabled ? `<button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>${catalogManage ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}` : ""}${canViewHistory ? `<button data-action="select-inventory-ops" data-mode="history" class="${opsMode==="history"?"active":""}">${escapeHtml(opLabel.history)}</button>` : ""}</div>` : "";
+  const opsGuide = tabsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
   if (opsMode === "manage") {
     const manageEntries = effectiveRecord.inventory;
     const manageFiltered = manageEntries.filter((item) => {
@@ -1041,6 +1089,10 @@ function inventory(context) {
       <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
         <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" /></label></div>
       <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}</section>`;
+  }
+  if (opsMode === "history") {
+    const localRows=branchInventoryLocalHistory(site);
+    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section data-branch-inventory-history data-site="${escapeHtml(site)}">${branchInventoryHistoryView(localRows,language,false)}</section>`;
   }
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
@@ -1219,6 +1271,14 @@ function render() {
   root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
   applyAccountEditState();
   const opsHost=root.querySelector("[data-branch-inventory-operations]");
+  const historyHost=root.querySelector("[data-branch-inventory-history]");
+  if (historyHost && inventoryCloudState()==="ready") {
+    const site=historyHost.dataset.site;
+    void getCloudInventoryHistory(site,300).then((rows)=>{
+      if (!historyHost.isConnected) return;
+      historyHost.innerHTML=branchInventoryHistoryView(rows,context.language,true);
+    }).catch(()=>{});
+  }
   if (opsHost) {
     const site=opsHost.dataset.site;
     if(inventoryCloudState()==="ready"){
