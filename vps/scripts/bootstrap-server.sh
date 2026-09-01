@@ -41,8 +41,13 @@ mkdir -p "${APP_DIR}" "${APP_DIR}/backups"
 if [[ ! -d "${APP_DIR}/repo/.git" ]]; then
   git clone "${REPO_URL}" "${APP_DIR}/repo"
 else
-  git -C "${APP_DIR}/repo" fetch origin
-  git -C "${APP_DIR}/repo" reset --hard origin/main
+  if id deploy >/dev/null 2>&1; then
+    sudo -u deploy git -C "${APP_DIR}/repo" fetch origin
+    sudo -u deploy git -C "${APP_DIR}/repo" reset --hard origin/main
+  else
+    git -C "${APP_DIR}/repo" fetch origin
+    git -C "${APP_DIR}/repo" reset --hard origin/main
+  fi
 fi
 
 if [[ ! -f "${APP_DIR}/.env" ]]; then
