@@ -207,7 +207,7 @@ async function doRender(host,state){
   const t=langText(language);
   host.innerHTML=`<div class="inventory-ops-loading">${esc(t.loading)}</div>`;
   try{
-    const data=await loadSiteOperationData(site);
+    const data=await loadSiteOperationData(site,{includeDestinations:mode==="ship"});
     if (inventoryCloudState()==="migration-needed") throw new Error("SCHEMA_MIGRATION_REQUIRED");
     state.data=data;
     const cards = mode==="overview"
