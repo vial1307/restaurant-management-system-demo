@@ -9,11 +9,17 @@ async function login(page, username) {
   await page.goto(BASE + "/", { waitUntil:"domcontentloaded" });
   await page.locator('#auth-login-form input[name="username"]').fill(username);
   await page.locator('#auth-login-form input[name="password"]').fill(PASSWORD);
-  await Promise.all([
-    page.waitForLoadState("domcontentloaded"),
-    page.locator('#auth-login-form button[type="submit"]').click(),
-  ]);
+  await page.locator('#auth-login-form button[type="submit"]').click();
+  await page.waitForFunction(() => {
+    try {
+      const session = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null");
+      return Boolean(session?.id);
+    } catch {
+      return false;
+    }
+  }, null, { timeout:10000 });
   await page.waitForSelector(".app-shell",{timeout:10000});
+  await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:10000 });
 }
 
 async function assertNoPageErrors(page, errors, label) {
