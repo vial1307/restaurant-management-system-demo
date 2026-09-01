@@ -240,6 +240,24 @@ function saveLocalReceiveDefault(site,catalogKeyValue,locationCode="") {
 }
 
 async function fetchCloudReceiveDefaults(sites=[],catalogKeys=[]) {
+  if(isVpsApiConfigured()){
+    const result=await vpsReceiveDefaults({sites,catalogKeys});
+    return (result?.defaults||[]).map((row)=>({
+      site:row.site,
+      catalogKey:row.catalog_key,
+      locationId:row.location_id,
+      locationCode:row.location_code||"",
+      location:{
+        code:row.location_code||"",
+        name_zh_tw:row.name_zh_tw||"",
+        name_vi:row.name_vi||"",
+        site:row.site,
+        kind:row.kind||"storage",
+        active:row.active!==false,
+      },
+      updatedAt:row.updated_at,
+    }));
+  }
   if(!isSupabaseConfigured()) return [];
   const supabase=await getSupabase();
   let query=supabase
@@ -294,13 +312,21 @@ export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,lo
   saveLocalReceiveDefault(site,key,code);
   if(!(await verifyMigration()) || globalThis.navigator?.onLine===false) return {ok:true,fallback:true};
   if(!hasInventoryPermission("edit")) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
+  if(isVpsApiConfigured()){
+    try{
+      await vpsSetReceiveDefault({site,catalogKey:key,locationCode:code});
+      return {ok:true,fallback:false};
+    }catch(error){
+      dispatchStatus("error",{error:error.message,stage:"receive-default"});
+      return {ok:false,fallback:false,error};
+    }
+  }
   const {error}=await rpc("set_inventory_receive_default",{
     p_site:site,
     p_catalog_key:key,
     p_location_code:code||null,
   });
   if(error){
-    // v8 databases do not have this RPC yet; keep the local fallback until v9 is applied.
     if(/set_inventory_receive_default|schema cache|function/i.test(String(error.message||""))) return {ok:true,fallback:true};
     dispatchStatus("error",{error:error.message,stage:"receive-default"});
     return {ok:false,fallback:false,error};
