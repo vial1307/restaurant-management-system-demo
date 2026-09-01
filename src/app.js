@@ -680,7 +680,7 @@ function branchDraftOperationData(site,baseRecord){
       }
     }
   }
-  return {site,items:[...grouped.values()],locations};
+  return {site,items:[...grouped.values()],locations,allLocations:["central","fuxing","yongji"].flatMap((entry)=>appStagingLocations(entry))};
 }
 
 function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceLocationId,destinationLocationId,amount,targetSite,sourceSite}){
@@ -729,6 +729,10 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
     const before=Math.max(0,Number(source.quantity)||0);
     if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
     source.quantity=before-value;
+    if(type==="ship"){
+      const ok=targetSite==="central" && addToCentralDraftFromBranch(itemMeta||{zh:template.label,vi:template.labelVi,unit:template.unit,catalogKey:template.catalogKey||""},destinationLocationId,value);
+      if(!ok){source.quantity=before;return {ok:false,error:new Error("INVALID_DESTINATION_LOCATION")};}
+    }
   }else if(type==="transfer"){
     if(!sourceZone||!destinationZone||sourceZone===destinationZone)return {ok:false,error:new Error("SAME_LOCATION")};
     const source=ensure(sourceZone);
@@ -742,6 +746,7 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
   }
 
   saveBranchDraftRecord(site,draft);
+  appendBranchOperationLog({site,action:type,item:template.label||itemMeta?.zh||itemId,amount:value,unit:template.unit||itemMeta?.unit||"",source:sourceZone||sourceSite||"",destination:destinationZone||targetSite||""});
   return {ok:true,targetSite,sourceSite};
 }
 
@@ -835,7 +840,7 @@ function inventory(context) {
   const historical = !isCurrentBranchInventoryDate();
   const cloudNotice = cloudReady
     ? ""
-    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Đang mở toàn bộ thao tác kho ở chế độ tạm để kiểm thử; thay đổi chờ cấp trên duyệt và chưa ghi vào cloud chính thức. · 目前已開放完整暫存操作供測試；變更待主管確認，尚未寫入正式雲端庫存。</small></div>`;
+    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và hệ thống ghi lại người nhập/xuất/chuyển. Quy trình duyệt/xác nhận sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效並記錄入庫／出庫／轉撥人員；主管審核／確認流程將於 VPS 正式版再啟用。</small></div>`;
   const opsEnabled = editable && (!cloudReady || !historical) && ["fuxing","yongji"].includes(site);
   const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
