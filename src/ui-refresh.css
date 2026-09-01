@@ -983,3 +983,33 @@ html[lang="vi"] .central-row small{line-height:1.35}
 @media(max-width:760px){
   .inventory-fallback-notice>strong{font-size:11.5px}
 }
+
+
+/* v35 — provisional central inventory count pending approval */
+.central-draft-banner{
+  margin:8px 10px 0;
+  padding:7px 9px;
+  border-radius:8px;
+  background:#fff7e8;
+  color:#805519;
+  font-size:11px;
+  font-weight:750;
+  line-height:1.4;
+}
+.central-row.is-draft{
+  background:#fffcf5;
+}
+.central-row.is-draft .central-current small{
+  color:#93611c;
+  font-weight:700;
+}
+.central-action.draft-save{
+  background:#73531f;
+}
+@media(max-width:760px){
+  .central-draft-banner{
+    margin:7px 8px 0;
+    padding:6px 8px;
+    font-size:10.5px;
+  }
+}
