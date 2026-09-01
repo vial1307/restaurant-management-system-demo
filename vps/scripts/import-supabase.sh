@@ -68,6 +68,10 @@ select json_build_object(
 )::text;
 " | tee "${IMPORT_DIR}/source_counts.json"
 
+echo
+read -r -p "Type IMPORT to continue with data migration: " CONFIRM_IMPORT
+[[ "${CONFIRM_IMPORT}" == "IMPORT" ]] || { echo "Import cancelled before any application data was written."; unset SUPA_SECRET; exit 0; }
+
 echo "Creating pre-import VPS backup after connection validation..."
 bash "${REPO_DIR}/vps/scripts/backup.sh"
 
