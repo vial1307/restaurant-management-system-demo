@@ -12,7 +12,7 @@ create table if not exists public.profiles (
   role text not null default 'employee'
     check (role in ('admin','manager','supervisor','employee','parttime','central')),
   location text not null default 'fuxing'
-    check (location in ('all','fuxing','central')),
+    check (location in ('all','fuxing','central','yongji')),
   active boolean not null default true,
   permissions jsonb not null default '{}'::jsonb,
   preferred_language text not null default 'vi'
@@ -41,7 +41,7 @@ create table if not exists public.inventory_locations (
   code text not null unique,
   name_zh_tw text not null,
   name_vi text not null,
-  site text not null check (site in ('fuxing','central')),
+  site text not null check (site in ('fuxing','central','yongji')),
   sort_order integer not null default 0,
   active boolean not null default true
 );
