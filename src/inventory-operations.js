@@ -291,24 +291,31 @@ function bind(host,state){
         const locationId=card.querySelector("[data-op-destination]")?.value;
         const location=state.data.locations.find((entry)=>entry.id===locationId);
         result=await cloudAdjustQuantity({itemKey:item.itemKey,locationCode:location?.code,direction:"in",amount,note:"進貨入庫 / Nhập kho"});
-      }else if(type==="out"){
+      }else if(type==="pick"){
+        const sourceId=card.querySelector("[data-op-source]")?.value;
+        const workId=card.querySelector("[data-op-work-destination]")?.value;
+        const source=item.locations.find((entry)=>entry.id===sourceId);
+        const work=state.data.workLocations?.find((entry)=>entry.id===workId);
+        if(amount>Number(source?.quantity||0)){setMessage(host,t.insufficient,"error");button.disabled=false;return;}
+        result=await cloudTransferInventory({
+          itemKey:item.itemKey,
+          sourceLocationCode:source?.code,
+          destinationLocationCode:work?.code,
+          amount,
+          note:"領貨 / Lấy hàng để sử dụng",
+        });
+      }else if(type==="ship"){
         const sourceId=card.querySelector("[data-op-source]")?.value;
         const source=item.locations.find((entry)=>entry.id===sourceId);
-        const target=card.querySelector("[data-op-target]")?.value || "usage";
-      const targetLocationId=card.querySelector("[data-op-target-location]")?.value || "";
+        const destinationLocationId=card.querySelector("[data-op-target-location]")?.value;
         if(amount>Number(source?.quantity||0)){setMessage(host,t.insufficient,"error");button.disabled=false;return;}
-        if(target==="usage"){
-          result=await cloudAdjustQuantity({itemKey:item.itemKey,locationCode:source?.code,direction:"out",amount,note:"領料／耗用 / Xuất dùng"});
-        }else{
-          const destinationLocationId=card.querySelector("[data-op-target-location]")?.value;
-          result=await directBranchTransfer({
-            itemId:item.id,
-            sourceLocationId:sourceId,
-            destinationLocationId,
-            quantity:amount,
-            note:"分店直接轉撥 / Điều chuyển trực tiếp giữa cơ sở",
-          });
-        }
+        result=await directBranchTransfer({
+          itemId:item.id,
+          sourceLocationId:sourceId,
+          destinationLocationId,
+          quantity:amount,
+          note:"出貨 / Xuất hàng liên cơ sở",
+        });
       }else if(type==="transfer"){
         const sourceId=card.querySelector("[data-op-source]")?.value;
         const destinationId=card.querySelector("[data-op-destination]")?.value;
@@ -316,9 +323,80 @@ function bind(host,state){
         const destination=state.data.locations.find((entry)=>entry.id===destinationId);
         if(sourceId===destinationId){setMessage(host,t.sameLocation,"error");button.disabled=false;return;}
         if(amount>Number(source?.quantity||0)){setMessage(host,t.insufficient,"error");button.disabled=false;return;}
-        result=await cloudTransferInventory({itemKey:item.itemKey,sourceLocationCode:source?.code,destinationLocationCode:destination?.code,amount,note:"庫存轉撥 / Điều chuyển kho"});
+        result=await cloudTransferInventory({
+          itemKey:item.itemKey,
+          sourceLocationCode:source?.code,
+          destinationLocationCode:destination?.code,
+          amount,
+          note:"庫存轉撥 / Điều chuyển kho",
+        });
       }
 
+      if(result?.ok){
+        await syncInventoryNow(site,{reloadBranch:false});
+        await doRender(host,state);
+        setMessage(host,t.success,"ok");
+        state.onUpdated?.();
+      }else{
+        setMessage(host,errorText(result?.error,t),"error");
+        button.disabled=false;
+      }
+    };
+  });
+
+
+  host.querySelectorAll("[data-op-use]").forEach((button)=>{
+    button.onclick=async()=>{
+      if(!canInventoryEdit()){setMessage(host,t.editRequired,"error");return;}
+      const item=state.data?.items.find((entry)=>entry.id===button.dataset.opUse);
+      const card=button.closest("[data-op-item]");
+      const workId=card?.querySelector("[data-op-work-destination]")?.value || workLocationForItem(item,state.data?.workLocations||[])?.id;
+      const work=state.data?.workLocations?.find((entry)=>entry.id===workId);
+      const input=card?.querySelector(`[data-op-amount="${CSS.escape(item.id+"-use")}"]`);
+      const amount=Math.max(1,Number(input?.value)||1);
+      const current=Number(workStockAt(item,workId)||0);
+      if(amount>current){setMessage(host,t.insufficient,"error");return;}
+      button.disabled=true;
+      const result=await cloudAdjustQuantity({
+        itemKey:item.itemKey,
+        locationCode:work?.code,
+        direction:"out",
+        amount,
+        note:"使用 / Sử dụng thực tế",
+      });
+      if(result?.ok){
+        await syncInventoryNow(site,{reloadBranch:false});
+        await doRender(host,state);
+        setMessage(host,t.success,"ok");
+        state.onUpdated?.();
+      }else{
+        setMessage(host,errorText(result?.error,t),"error");
+        button.disabled=false;
+      }
+    };
+  });
+
+  host.querySelectorAll("[data-op-return]").forEach((button)=>{
+    button.onclick=async()=>{
+      if(!canInventoryEdit()){setMessage(host,t.editRequired,"error");return;}
+      const item=state.data?.items.find((entry)=>entry.id===button.dataset.opReturn);
+      const card=button.closest("[data-op-item]");
+      const workId=card?.querySelector("[data-op-work-destination]")?.value || workLocationForItem(item,state.data?.workLocations||[])?.id;
+      const work=state.data?.workLocations?.find((entry)=>entry.id===workId);
+      const destinationId=card?.querySelector("[data-op-return-destination]")?.value;
+      const destination=state.data?.locations.find((entry)=>entry.id===destinationId);
+      const input=card?.querySelector(`[data-op-amount="${CSS.escape(item.id+"-return")}"]`);
+      const amount=Math.max(1,Number(input?.value)||1);
+      const current=Number(workStockAt(item,workId)||0);
+      if(amount>current){setMessage(host,t.insufficient,"error");return;}
+      button.disabled=true;
+      const result=await cloudTransferInventory({
+        itemKey:item.itemKey,
+        sourceLocationCode:work?.code,
+        destinationLocationCode:destination?.code,
+        amount,
+        note:"歸位 / Cất hàng thừa lại kho",
+      });
       if(result?.ok){
         await syncInventoryNow(site,{reloadBranch:false});
         await doRender(host,state);
@@ -401,7 +479,7 @@ function bindDraft(host,state){
       const targetLocationId=card.querySelector("[data-op-target-location]")?.value || "";
       const source=item.locations.find((entry)=>entry.id===sourceId);
 
-      if((type==="out"||type==="transfer") && amount>Number(source?.quantity||0)){
+      if((type==="pick"||type==="ship"||type==="transfer") && amount>Number(source?.quantity||0)){
         setMessage(host,t.insufficient,"error");
         return;
       }
@@ -410,16 +488,84 @@ function bindDraft(host,state){
         return;
       }
       button.disabled=true;
+      const workLocationId=card.querySelector("[data-op-work-destination]")?.value || "";
+      const effectiveDestination = type==="ship" ? targetLocationId
+        : type==="pick" ? workLocationId
+        : destinationId;
+      if((type==="pick"||type==="ship"||type==="transfer") && amount>Number(source?.quantity||0)){
+        setMessage(host,t.insufficient,"error");
+        button.disabled=false;
+        return;
+      }
       const result=await state.onApply?.({
-        type:type==="out"&&target!=="usage"?"ship":type,
+        type,
         itemId:item.id,
-        itemMeta:{zh:item.zh,vi:item.vi,unit:item.unit,catalogKey:item.catalogKey||item.catalog_key||""},
+        itemMeta:{zh:item.zh,vi:item.vi,unit:item.unit,catalogKey:item.catalogKey||item.catalog_key||"",workArea:item.workArea||"noodles"},
         sourceLocationId:sourceId,
-        destinationLocationId:type==="out"&&target!=="usage"?targetLocationId:destinationId,
+        destinationLocationId:effectiveDestination,
         targetSite:target,
         amount,
       });
 
+      if(result?.ok){
+        state.data=await state.reload();
+        await renderDraft(host,state);
+        setMessage(host,language==="zh"?"庫存已更新。":"Đã cập nhật tồn kho. · 庫存已更新。","ok");
+      }else{
+        setMessage(host,errorText(result?.error,t),"error");
+        button.disabled=false;
+      }
+    };
+  });
+
+
+  host.querySelectorAll("[data-op-use]").forEach((button)=>{
+    button.onclick=async()=>{
+      const item=state.data?.items.find((entry)=>entry.id===button.dataset.opUse);
+      const card=button.closest("[data-op-item]");
+      const workId=card?.querySelector("[data-op-work-destination]")?.value || workLocationForItem(item,state.data?.workLocations||[])?.id || "";
+      const input=card?.querySelector(`[data-op-amount="${CSS.escape(item.id+"-use")}"]`);
+      const amount=Math.max(1,Number(input?.value)||1);
+      const current=Number(workStockAt(item,workId)||0);
+      if(amount>current){setMessage(host,t.insufficient,"error");return;}
+      button.disabled=true;
+      const result=await state.onApply?.({
+        type:"use",
+        itemId:item.id,
+        itemMeta:{zh:item.zh,vi:item.vi,unit:item.unit,catalogKey:item.catalogKey||"",workArea:item.workArea||"noodles"},
+        sourceLocationId:workId,
+        amount,
+      });
+      if(result?.ok){
+        state.data=await state.reload();
+        await renderDraft(host,state);
+        setMessage(host,language==="zh"?"庫存已更新。":"Đã cập nhật tồn kho. · 庫存已更新。","ok");
+      }else{
+        setMessage(host,errorText(result?.error,t),"error");
+        button.disabled=false;
+      }
+    };
+  });
+
+  host.querySelectorAll("[data-op-return]").forEach((button)=>{
+    button.onclick=async()=>{
+      const item=state.data?.items.find((entry)=>entry.id===button.dataset.opReturn);
+      const card=button.closest("[data-op-item]");
+      const workId=card?.querySelector("[data-op-work-destination]")?.value || workLocationForItem(item,state.data?.workLocations||[])?.id || "";
+      const destinationId=card?.querySelector("[data-op-return-destination]")?.value || "";
+      const input=card?.querySelector(`[data-op-amount="${CSS.escape(item.id+"-return")}"]`);
+      const amount=Math.max(1,Number(input?.value)||1);
+      const current=Number(workStockAt(item,workId)||0);
+      if(amount>current){setMessage(host,t.insufficient,"error");return;}
+      button.disabled=true;
+      const result=await state.onApply?.({
+        type:"return",
+        itemId:item.id,
+        itemMeta:{zh:item.zh,vi:item.vi,unit:item.unit,catalogKey:item.catalogKey||"",workArea:item.workArea||"noodles"},
+        sourceLocationId:workId,
+        destinationLocationId:destinationId,
+        amount,
+      });
       if(result?.ok){
         state.data=await state.reload();
         await renderDraft(host,state);
