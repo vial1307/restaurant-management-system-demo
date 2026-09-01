@@ -182,9 +182,13 @@ function itemCard(item,mode,locations,site,language,t){
     action=`<button class="op-primary" data-op-submit="transfer" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.move)}</button>`;
   }
 
+  const transferBalance = mode==="transfer" && firstSource && firstDestination
+    ? `<div class="op-transfer-balance" data-op-transfer-balance="${esc(item.id)}"><span>${esc(locationLabel({name_zh_tw:firstSource.zh,name_vi:firstSource.vi},language))} <strong>${Number(firstSource.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(firstDestination,language))} <strong>${Number(stockAt(item,firstDestination.id))||0}</strong></span></div>`
+    : "";
   return `<article class="inventory-op-card" data-op-item="${esc(item.id)}">
     <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small></div><span><small>${esc(t.current)}</small><strong data-op-current="${esc(item.id)}">${Number(item.total||0)} ${esc(item.unit)}</strong></span></div>
     <div class="op-select-grid">${controls}</div>
+    ${transferBalance}
     <div class="op-action-row">${qtyControl(item.id)}${action}</div>
   </article>`;
 }
@@ -233,6 +237,19 @@ async function doRender(host,state){
   }
 }
 
+function refreshTransferBalance(host,state,itemId){
+  const item=state.data?.items.find((entry)=>entry.id===itemId);
+  const card=host.querySelector(`[data-op-item="${CSS.escape(itemId)}"]`);
+  const balance=card?.querySelector(`[data-op-transfer-balance="${CSS.escape(itemId)}"]`);
+  if(!item||!card||!balance)return;
+  const sourceId=card.querySelector("[data-op-source]")?.value;
+  const destinationId=card.querySelector("[data-op-destination]")?.value;
+  const source=item.locations.find((entry)=>entry.id===sourceId);
+  const destination=state.data?.locations.find((entry)=>entry.id===destinationId);
+  if(!source||!destination)return;
+  balance.innerHTML=`<span>${esc(locationLabel({name_zh_tw:source.zh,name_vi:source.vi},state.language))} <strong>${Number(source.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(destination,state.language))} <strong>${Number(stockAt(item,destinationId))||0}</strong></span>`;
+}
+
 function setMessage(host,text,kind=""){
   const node=host.querySelector("[data-op-message]");
   if(!node) return;
@@ -264,6 +281,13 @@ function bind(host,state){
       const item=state.data?.items.find((entry)=>entry.id===select.dataset.opSource);
       const current=host.querySelector(`[data-op-current="${CSS.escape(select.dataset.opSource)}"]`);
       if(current&&item) current.textContent=`${stockAt(item,select.value)} ${item.unit}`;
+      refreshTransferBalance(host,state,select.dataset.opSource);
+    };
+  });
+  host.querySelectorAll("[data-op-destination]").forEach((select)=>{
+    select.onchange=()=>{
+      const itemId=select.dataset.opDestination;
+      refreshTransferBalance(host,state,itemId);
     };
   });
 
@@ -305,9 +329,9 @@ function bind(host,state){
       }
 
       if(result?.ok){
-        setMessage(host,t.success,"ok");
         await syncInventoryNow(site,{reloadBranch:false});
         await doRender(host,state);
+        setMessage(host,t.success,"ok");
         state.onUpdated?.();
       }else{
         setMessage(host,errorText(result?.error,t),"error");
@@ -390,7 +414,11 @@ function bindDraft(host,state){
       const item=state.data?.items.find((entry)=>entry.id===select.dataset.opSource);
       const current=host.querySelector(`[data-op-current="${CSS.escape(select.dataset.opSource)}"]`);
       if(current&&item) current.textContent=`${stockAt(item,select.value)} ${item.unit}`;
+      refreshTransferBalance(host,state,select.dataset.opSource);
     };
+  });
+  host.querySelectorAll("[data-op-destination]").forEach((select)=>{
+    select.onchange=()=>refreshTransferBalance(host,state,select.dataset.opDestination);
   });
 
   host.querySelectorAll("[data-op-submit]").forEach((button)=>{
@@ -429,9 +457,9 @@ function bindDraft(host,state){
       }
 
       if(result?.ok){
-        setMessage(host,language==="zh"?"已暫存，待主管確認。":"Đã lưu tạm, chờ cấp trên duyệt. · 已暫存，待主管確認。","ok");
         state.data=await state.reload();
         await renderDraft(host,state);
+        setMessage(host,language==="zh"?"已完成暫存操作，庫存位置已更新。":"Đã chuyển dữ liệu và cập nhật vị trí kho tạm. · 已完成暫存操作，庫存位置已更新。","ok");
       }else{
         setMessage(host,errorText(result?.error,t),"error");
         button.disabled=false;
@@ -458,8 +486,8 @@ function bindDraft(host,state){
       });
       if(result?.ok){
         markDraftTransferReceived(transferId,destinationLocationId);
-        setMessage(host,state.language==="zh"?"已暫存收貨，待主管確認。":"Đã lưu tạm nhận hàng, chờ cấp trên duyệt. · 已暫存收貨，待主管確認。","ok");
         await renderDraft(host,state);
+        setMessage(host,state.language==="zh"?"已暫存收貨，庫存已更新。":"Đã nhận hàng tạm và cập nhật tồn kho. · 已暫存收貨，庫存已更新。","ok");
       }else{
         setMessage(host,errorText(result?.error,t),"error");
         button.disabled=false;
