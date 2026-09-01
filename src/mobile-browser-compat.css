@@ -627,3 +627,16 @@ input,textarea{
   .management-field>input,.management-field>select,
   .account-form-grid input,.account-form-grid select{min-height:38px}
 }
+
+
+/* v28 — minimum touch targets for narrow phones.
+   Native checkboxes/radios use their surrounding label as the tap target. */
+@media(max-width:760px){
+  button,
+  a.nav-item,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select{
+    min-height:32px !important;
+    box-sizing:border-box;
+  }
+}
