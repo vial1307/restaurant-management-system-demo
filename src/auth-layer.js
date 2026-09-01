@@ -422,6 +422,7 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
       zh:template.zh,vi:template.vi,unit:template.unit,catalogKey:template.catalogKey || ""
     },destinationLocationId,value);
     if (!ok) { source.qty = before; return { ok:false, error:new Error("INVALID_DESTINATION_LOCATION") }; }
+    destinationLabel=`${targetSite}:${destinationLocationId}`;
   } else if (type === "transfer") {
     if (!sourceZone || !destinationZone || sourceZone === destinationZone) return { ok:false, error:new Error("SAME_LOCATION") };
     const source = ensureRow(sourceZone);
@@ -598,7 +599,20 @@ function stockView(items, mode, selectedZone, query, directAdjust = false) {
 }
 
 function historyView(log) {
-  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出貨紀錄</h2><p>僅系統管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)}</small></div><span>${esc(x.zone)}</span><strong class="${x.direction === "out" ? "history-out" : "history-in"}">${x.direction === "out" ? "−" : "+"}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
+  const actionLabel = {
+    in:"進貨入庫",
+    pick:"領貨",
+    use:"使用",
+    return:"歸位",
+    ship:"出貨",
+    transfer:"庫存轉撥",
+    adjust:"盤點調整",
+  };
+  return `<section class="central-card"><div class="history-title"><div><h2>央廚庫存操作紀錄</h2><p>僅系統管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
+    const sign=x.direction==="in"?"+":x.direction==="use"||x.direction==="ship"?"−":"↔";
+    const tone=x.direction==="in"?"history-in":x.direction==="use"||x.direction==="ship"?"history-out":"history-adjust";
+    return `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)} · ${esc(actionLabel[x.direction]||x.direction||"")}</small></div><span>${esc(x.zone)}</span><strong class="${tone}">${sign}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`;
+  }).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
 }
 
 function cloudHistoryView(log) {
