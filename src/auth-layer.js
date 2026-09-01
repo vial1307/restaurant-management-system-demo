@@ -5,6 +5,7 @@ import {
   canDirectInventoryAdjust,
   canInventoryDraftCount,
   canInventoryEdit,
+  canManageCentralCatalog,
   centralItemKey,
   centralLocationCode,
   cloudAdjustQuantity,
@@ -539,6 +540,7 @@ function centralPage(user) {
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
   const productCount = new Set(items.map((item) => centralBaseKey(item))).size;
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
+  const canManageCatalog = canManageCentralCatalog();
   const canViewHistory = accountRole === "admin";
   const log = canViewHistory && mode === "history" ? history() : [];
   const language = document.documentElement.lang === "vi" ? "vi" : "zh";
@@ -559,9 +561,9 @@ function centralPage(user) {
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? centralManageView(items, selectedZone, query, language) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftDirectAdjust) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
-    ${mode === "manage" && canViewHistory ? centralEditorModal(items, editorKey, language) : ""}
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${canManageCatalog ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canManageCatalog ? centralManageView(items, selectedZone, query, language, canViewHistory) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftDirectAdjust) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
+    ${mode === "manage" && canManageCatalog ? centralEditorModal(items, editorKey, language) : ""}
   `;
   bindCentral(user);
   if (["in","pick","transfer","ship"].includes(mode)) {
@@ -652,7 +654,7 @@ function centralWorkAreaLabel(area, language) {
   return found ? (language === "zh" ? found.zh : `${found.vi} · ${found.zh}`) : area || "—";
 }
 
-function centralManageView(items, selectedZone, query, language) {
+function centralManageView(items, selectedZone, query, language, allowDelete = false) {
   const groups = centralProductGroups(items).filter(({ item, rows }) => {
     const matchesZone = selectedZone === "all" || rows.some((row) => row.zone === selectedZone);
     const haystack = `${item.zh || ""} ${item.vi || ""}`.toLowerCase();
@@ -672,7 +674,7 @@ function centralManageView(items, selectedZone, query, language) {
       return `<article class="central-manage-row" data-central-product="${esc(key)}">
         <div class="central-manage-product"><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small><span>${esc(centralWorkAreaLabel(item.workArea || "noodles", language))} · ${esc(item.unit || "")}</span></div>
         <div class="op-location-list">${locations}</div>
-        <div class="central-manage-actions"><button type="button" class="inventory-action-button" data-central-editor-open="${esc(key)}" aria-label="${esc(editLabel)}">✎</button><button type="button" class="inventory-action-button delete-action" data-central-product-delete="${esc(key)}" aria-label="${esc(deleteLabel)}">🗑</button></div>
+        <div class="central-manage-actions"><button type="button" class="inventory-action-button" data-central-editor-open="${esc(key)}" aria-label="${esc(editLabel)}">✎</button>${allowDelete ? `<button type="button" class="inventory-action-button delete-action" data-central-product-delete="${esc(key)}" aria-label="${esc(deleteLabel)}">🗑</button>` : ""}</div>
       </article>`;
     }).join("") || `<p class="central-empty">${language === "zh" ? "沒有符合條件的品項。" : "Không có nguyên liệu phù hợp."}</p>`}</div>
   </section>`;
@@ -771,7 +773,7 @@ function bindCentral(user) {
   const editorForm = content.querySelector("[data-central-editor-form]");
   if (editorForm) editorForm.onsubmit = async (event) => {
     event.preventDefault();
-    if (user.role !== "admin" && user.accountRole !== "admin") return;
+    if (!canManageCentralCatalog()) return;
     const data = new FormData(editorForm);
     const selectedZones = data.getAll("central-zones").map(String);
     if (!selectedZones.length) {
