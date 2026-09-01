@@ -31,6 +31,15 @@ async function setSite(page, site) {
   await page.evaluate((value)=>localStorage.setItem("shitu-admin-active-site-v1",value),site);
   await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
   await page.waitForSelector(".page-content");
+
+  const calendarToggle = page.locator('[data-action="toggle-calendar"]').first();
+  if (await calendarToggle.count()) {
+    await calendarToggle.click();
+    const today = page.locator('[data-action="calendar-shortcut"][data-shortcut="today"]').first();
+    if (await today.count()) await today.click();
+  }
+
+  await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, {timeout:10000});
   await page.waitForFunction(() => document.querySelectorAll(".inventory-row,.central-row,.central-manage-row").length > 0,{timeout:10000});
 }
 
