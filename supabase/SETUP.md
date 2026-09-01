@@ -51,54 +51,50 @@ The frontend maps it internally to `username@staff.shitu.local` for Supabase Aut
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
 
 
-## 6. Enable cross-device inventory sync (v10)
+## 6. Staging database: Supabase PostgreSQL
 
-For a fresh staging/demo database, run:
+Until the production VPS is launched, **Supabase PostgreSQL is the single source of truth for inventory data**. Browser localStorage is only a read/cache fallback and must not accept inventory writes while Supabase is configured.
 
-1. `supabase/20260901_inventory_ready_v7.sql`
-2. `supabase/20260901_inventory_manager_catalog_v8.sql`
-3. `supabase/20260901_inventory_receive_defaults_v9.sql`
-4. `supabase/20260901_branch_manager_inventory_v10.sql`
+For a fresh staging database:
 
-in **Supabase → SQL Editor** after `supabase/schema.sql`.
+1. Run `supabase/schema.sql`
+2. Run `supabase/20260901_inventory_staging_latest.sql`
 
-If the database is already on v9, run only `supabase/20260901_branch_manager_inventory_v10.sql`.
+The consolidated staging file applies the required inventory migrations in order: v7 → v8 → v9 → v10.
 
-The v9 patch adds optional `固定收貨儲位` data. The v10 patch grants 復興店 / 永吉店 manager accounts inventory edit permission for their own branch, including add/edit catalog, storage locations, current quantity and minimums. Delete/archive remains admin-only.
+For an existing staging database that already has the base schema, you can run only:
 
-For 出貨, if the receiving branch already has the product, the factory UI uses the branch's configured receiving location automatically. Manual destination selection is reserved for products that do not yet exist at the receiving branch. If an existing product has multiple storage locations but no fixed receiving location, shipment is blocked until the branch manager sets one.
+`supabase/20260901_inventory_staging_latest.sql`
 
-This single migration includes:
-- 復興店 storage/work locations
-- 永吉店 storage/work locations
-- 央廚 storage locations
-- stable cloud item keys and shared catalog keys
-- audited inventory in/out/transfer transactions
-- Admin-only stocktake/catalog controls
-- atomic internal stock transfer
-- immediate cross-site 出貨 across 央廚 / 復興店 / 永吉店 with exact destination storage
-- 領貨 workflow with 使用 and 歸位 handling
-- central 使用中 work location for staged/active use
-- Supabase Realtime for stock and transfer status
-- immediate cross-site transfer: source decreases and exact destination storage increases in one atomic RPC
-- actor/user audit for every inventory transaction; no manager confirmation in staging
-- inventory cloud contract version 7
+The current frontend requires **inventory schema v10** before enabling inventory writes.
 
-The older split/full files remain in the repository as migration history. Treat `20260901_inventory_ready_v7.sql` as the canonical base, followed by v8 (central manager permissions), v9 (receiving-location sync), and v10 (branch manager inventory editing).
+v10 includes:
+- 復興店 / 永吉店 manager inventory edit rights for their own branch
+- 央廚 manager inventory edit rights for 央廚
+- add/edit inventory catalog and storage locations
+- per-location current quantity and minimum quantity
+- optional 央廚出貨收貨儲位
+- automatic 出貨 destination routing from receiving-branch configuration
+- cross-site atomic stock movements and audit history
+- Supabase Realtime inventory synchronization
+- SQL-backed data shared across phones, tablets, and PCs
 
-After the SQL succeeds:
-1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
-2. Reload Kitchen OS on PC/laptop/mobile.
-3. Sign in as Admin once so missing catalog rows can be seeded without overwriting existing cloud quantities.
-4. Test one stock movement from PC and confirm it appears on mobile, then reverse the test.
+### 出貨 routing
 
+- If the receiving branch already has the product in exactly one storage location, the factory UI selects it automatically.
+- If the product has multiple storage locations, the branch manager sets the receiving location in 庫存管理.
+- If that setting is missing, 出貨 is blocked until the branch manager completes it.
+- Only products not yet present at the receiving branch allow factory staff to choose a destination manually.
+- A one-time factory choice never becomes a permanent branch setting automatically.
 
+### Production VPS later
 
-### Inventory workflow v10
+When the production version moves to VPS, keep the same logical inventory model and migrate PostgreSQL data from staging. Do not change the frontend back to device-local inventory storage.
 
-- 領貨 / Lấy hàng: move stock from a storage location into the site's in-use/work location.
-- 使用 / Sử dụng: subtract the actually consumed amount from the in-use quantity.
-- 歸位 / Cất lại: move leftovers from the in-use quantity back to a selected storage location.
-- 出貨 / Xuất hàng: choose source site/storage → destination site → destination storage; source decreases and destination increases in one atomic transaction.
-- Every mutation records the authenticated operator through inventory transaction audit fields.
-- Manager approval/receipt confirmation is intentionally deferred to the VPS production phase.
+After SQL succeeds:
+1. Reload Kitchen OS.
+2. Sign out and sign back in so profile permissions refresh.
+3. Confirm the SQL status banner shows `SQL staging · 已連線`.
+4. Test one edit from a branch-manager account and verify it appears on a second device.
+5. Test one 央廚 → branch 出貨 and verify the receiving storage is selected from the branch configuration.
+
