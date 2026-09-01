@@ -222,16 +222,18 @@ export async function getInventoryReceiveDefaults({sites=[],catalogKeys=[]}={}) 
   if(inventoryCloudState()==="ready" && globalThis.navigator?.onLine!==false){
     try{
       const cloud=await fetchCloudReceiveDefaults(wantedSites,wantedKeys);
-      if(cloud.length){
-        for(const row of cloud) saveLocalReceiveDefault(row.site,row.catalogKey,row.locationCode);
-      }
-      const cloudKeys=new Set(cloud.map((row)=>`${row.site}|${row.catalogKey}`));
-      const local=localReceiveDefaults().filter((row)=>
+      const matchesScope=(row)=>
         (!wantedSites.length||wantedSites.includes(row.site))
-        && (!wantedKeys.length||wantedKeys.includes(row.catalogKey))
-        && !cloudKeys.has(`${row.site}|${row.catalogKey}`)
-      );
-      return [...cloud,...local];
+        && (!wantedKeys.length||wantedKeys.includes(row.catalogKey));
+      const retained=localReceiveDefaults().filter((row)=>!matchesScope(row));
+      const next=[...retained,...cloud.map((row)=>({
+        site:row.site,
+        catalogKey:row.catalogKey,
+        locationCode:row.locationCode,
+        updatedAt:row.updatedAt||new Date().toISOString(),
+      }))];
+      localStorage.setItem(RECEIVE_DEFAULT_KEY,JSON.stringify(next.slice(-2000)));
+      return cloud;
     }catch{}
   }
   return localReceiveDefaults().filter((row)=>
