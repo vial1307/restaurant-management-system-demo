@@ -1029,11 +1029,18 @@ function inventory(context) {
   const catalogManage = canManageBranchCatalog(site);
   const catalogManageVisible = canViewBranchCatalogManagement(site);
   const historical = !isCurrentBranchInventoryDate();
-  const cloudNotice = cloudReady
-    ? `<div class="inventory-sql-status inventory-sql-ready"><strong>SQL staging · 已連線</strong><small>Dữ liệu kho hiện đang ghi trực tiếp vào Supabase PostgreSQL. Khi phát hành chính thức sẽ chuyển backend sang VPS. · 現階段庫存直接寫入 Supabase PostgreSQL；正式版再切換至 VPS。</small></div>`
-    : cloudState === "checking"
-      ? `<div class="inventory-cloud-notice"><strong>Đang xác minh SQL v11 · 正在確認 SQL v11</strong><small>Hệ thống đang kiểm tra kết nối và phiên bản database; không cần chạy lại SQL. · 系統正在確認資料庫連線與版本，無需重跑 SQL。</small></div>`
-      : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL chưa đạt schema v11 · SQL 尚未達到 v11</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa để tránh dữ liệu phân nhánh. · 目前僅保留查看，請確認 SQL schema v11。</small></div>`;
+  const vpsBackend = accountSession()?.provider === "vps";
+  const cloudNotice = vpsBackend
+    ? (cloudReady
+      ? `<div class="inventory-sql-status inventory-sql-ready"><strong>VPS PostgreSQL · 已連線</strong><small>Dữ liệu kho đang đọc/ghi trực tiếp trên VPS Singapore và được backup tự động. · 庫存資料目前直接讀寫 VPS PostgreSQL，並由伺服器自動備份。</small></div>`
+      : cloudState === "checking"
+        ? `<div class="inventory-cloud-notice"><strong>Đang kết nối VPS database · 正在連線 VPS 資料庫</strong><small>Hệ thống đang tự kiểm tra API và PostgreSQL. · 系統正在自動檢查 API 與 PostgreSQL。</small></div>`
+        : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Không kết nối được VPS database · VPS 資料庫連線失敗</strong><small>Thao tác ghi kho tạm khóa để tránh sai lệch dữ liệu. · 為避免資料分歧，暫時鎖定庫存寫入。</small></div>`)
+    : (cloudReady
+      ? `<div class="inventory-sql-status inventory-sql-ready"><strong>SQL staging · 已連線</strong><small>Dữ liệu kho hiện đang ghi trực tiếp vào Supabase PostgreSQL. · 現階段庫存直接寫入 Supabase PostgreSQL。</small></div>`
+      : cloudState === "checking"
+        ? `<div class="inventory-cloud-notice"><strong>Đang xác minh SQL v11 · 正在確認 SQL v11</strong><small>Hệ thống đang kiểm tra kết nối và phiên bản database. · 系統正在確認資料庫連線與版本。</small></div>`
+        : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL chưa đạt schema v11 · SQL 尚未達到 v11</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa. · 目前僅保留查看。</small></div>`);
   const opsEnabled = editable && cloudReady && !historical && ["fuxing","yongji"].includes(site);
   const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
   const tabsEnabled = (opsEnabled || canViewHistory || catalogManageVisible) && ["fuxing","yongji"].includes(site);
@@ -1101,9 +1108,13 @@ function inventory(context) {
       : "";
     const manageDbNotice = catalogManage
       ? ""
-      : cloudState === "checking"
-        ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在確認 SQL v11":"Đang xác minh SQL v11"}</strong><small>${language==="zh"?"請稍候，系統會自動確認資料庫版本，不需重新執行 SQL。":"Hệ thống đang tự kiểm tra database, không cần chạy lại SQL."}</small></div>`
-        : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"SQL schema v11 尚未確認":"Chưa xác nhận SQL schema v11"}</strong><small>${language==="zh"?"請確認資料庫已執行 Master v11。":"Hãy xác nhận database đã chạy Master v11."}</small></div>`;
+      : vpsBackend
+        ? (cloudState === "checking"
+          ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在連線 VPS 資料庫":"Đang kết nối VPS database"}</strong><small>${language==="zh"?"系統會自動確認 API 與資料庫。":"Hệ thống tự kiểm tra API và database."}</small></div>`
+          : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"VPS 資料庫尚未連線":"VPS database chưa kết nối"}</strong><small>${language==="zh"?"請檢查 VPS/API 狀態。":"Hãy kiểm tra trạng thái VPS/API."}</small></div>`)
+        : cloudState === "checking"
+          ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在確認 SQL v11":"Đang xác minh SQL v11"}</strong><small>${language==="zh"?"請稍候，系統會自動確認資料庫版本，不需重新執行 SQL。":"Hệ thống đang tự kiểm tra database, không cần chạy lại SQL."}</small></div>`
+          : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"SQL schema v11 尚未確認":"Chưa xác nhận SQL schema v11"}</strong><small>${language==="zh"?"請確認資料庫已執行 Master v11。":"Hãy xác nhận database đã chạy Master v11."}</small></div>`;
     return `${heading(text.inventory, manageSubtitle, manageAction)}${cloudNotice}${opsTabs}${opsGuide}${manageDbNotice}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
@@ -1483,9 +1494,10 @@ root.addEventListener("click", (event) => {
         render();
         return;
       }
+      const isVps = accountSession()?.provider === "vps";
       window.alert(state.settings.language === "zh"
-        ? "目前無法確認 SQL schema v11 連線，請檢查網路後再試。"
-        : "Chưa xác nhận được kết nối SQL schema v11. Hãy kiểm tra mạng rồi thử lại. · 目前無法確認 SQL schema v11。");
+        ? (isVps ? "目前無法連線 VPS 資料庫，請檢查 VPS/API 狀態後再試。" : "目前無法確認 SQL schema v11 連線，請檢查網路後再試。")
+        : (isVps ? "Chưa kết nối được VPS database. Hãy kiểm tra VPS/API rồi thử lại." : "Chưa xác nhận được kết nối SQL schema v11. Hãy kiểm tra mạng rồi thử lại."));
     });
     return;
   }
