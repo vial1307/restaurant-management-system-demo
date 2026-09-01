@@ -1765,30 +1765,8 @@ window.addEventListener("online", () => { if (store.getState().operations.pendin
 window.addEventListener("shitu:inventory-cloud-status", () => {
   if (route() === "inventory" && !document.querySelector(".central-heading")) render();
 });
-if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:") {
-  globalThis.navigator.serviceWorker
-    .register("./sw.js?v=59", { updateViaCache: "none" })
-    .then(async (registration) => {
-      await registration.update().catch(() => {});
-      if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
-
-      registration.addEventListener("updatefound", () => {
-        const worker = registration.installing;
-        worker?.addEventListener("statechange", () => {
-          if (worker.state === "installed" && globalThis.navigator.serviceWorker.controller) {
-            worker.postMessage({ type: "SKIP_WAITING" });
-          }
-        });
-      });
-
-      // Safari/iOS may keep a tab open for a long time. Re-check when returning to the app.
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") registration.update().catch(() => {});
-      });
-      window.addEventListener("focus", () => registration.update().catch(() => {}));
-    })
-    .catch(() => {});
-}
+// Service worker intentionally disabled for the staging web app.
+ // GitHub Pages + Supabase must always load the newest frontend during active development.
 store.subscribe(render);
 render();
 setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
