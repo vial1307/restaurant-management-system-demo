@@ -498,7 +498,8 @@ function inventoryStatusBadge(item, text) {
 function storageInventoryRow(item, context) {
   const { language, text, record } = context;
   const editable = canInventoryEdit() || canInventoryDraftCount();
-  const catalogManage = canManageBranchCatalog(activeInventorySite());
+  const catalogManage = context.catalogManageWritable ?? canManageBranchCatalog(activeInventorySite());
+  const catalogManageVisible = context.catalogManageVisible ?? catalogManage;
   const status = inventoryStatus(item);
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
   const source = item.zone === "large-freezer" ? null : storageSources(item, record, item.zone)[0];
@@ -506,7 +507,7 @@ function storageInventoryRow(item, context) {
   return `<article class="inventory-row storage-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.workstation)}">${WORK_AREAS.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(WORK_AREAS.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.storageLocation)}">${ZONES.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
-    <div class="inventory-storage">${quantityControl(item)}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}${editable && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManage ? `<button class="inventory-action-button" data-action="open-edit-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></article>`;
+    <div class="inventory-storage">${quantityControl(item)}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}${editable && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManageVisible ? `<button class="inventory-action-button ${catalogManage ? "" : "sql-pending-action"}" data-action="${catalogManage ? "open-edit-item" : "inventory-edit-sql-pending"}" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${catalogManage && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></article>`;
 }
 
 function workInventoryRow(item, context) {
@@ -1083,7 +1084,8 @@ function inventory(context) {
       const haystack = `${item.label} ${item.labelVi}`.toLowerCase();
       return matchesZone && haystack.includes(view.search.toLowerCase());
     });
-    const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", rowContext, storageInventoryRow);
+    const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage };
+    const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", manageRowContext, storageInventoryRow);
     const manageColumns = [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock];
     const manageSubtitle = language === "zh"
       ? "新增、編輯或刪除食材，並設定工作區、存放位置、現有量與標準量。"
@@ -1091,8 +1093,8 @@ function inventory(context) {
     const editHint = language === "zh"
       ? "點選鉛筆可使用與新增食材相同的表單修改品項。"
       : "Nhấn biểu tượng bút chì để chỉnh bằng đúng biểu mẫu giống khi thêm nguyên liệu.";
-    const manageAction = catalogManage
-      ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>`
+    const manageAction = catalogManageVisible
+      ? `<button class="primary-button ${catalogManage ? "" : "sql-pending-action"}" data-action="${catalogManage ? "open-add-item" : "inventory-edit-sql-pending"}">${icon("plus")}${escapeHtml(text.addItem)}</button>`
       : "";
     const manageDbNotice = catalogManage
       ? ""
@@ -1465,6 +1467,12 @@ root.addEventListener("click", (event) => {
       const steps = storageRestockTransferPlan(item, state.records[state.selectedDate]);
       void runCloudTransferPlan(steps, "儲位補貨 / Bổ sung vị trí kho", () => store.restockStorageItem(target.dataset.id));
     }
+  }
+  if (action === "inventory-edit-sql-pending") {
+    window.alert(state.settings.language === "zh"
+      ? "編輯功能已顯示，但 staging SQL 尚未更新至 schema v10，因此暫時鎖定寫入。更新 SQL 後重新登入即可直接使用。"
+      : "Nút chỉnh sửa đã được hiển thị, nhưng staging SQL chưa lên schema v10 nên tạm khóa ghi dữ liệu. Sau khi cập nhật SQL và đăng nhập lại sẽ dùng được ngay. · 編輯功能暫時等待 SQL schema v10。");
+    return;
   }
   if (action === "open-add-item") {
     if (!canManageBranchCatalog(activeInventorySite())) return;
