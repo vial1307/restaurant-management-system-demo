@@ -1,4 +1,4 @@
-# Kitchen OS v41 — Manager Review Checklist
+# Kitchen OS v42 — Manager Review Checklist
 
 ## Current staging rule
 
@@ -13,7 +13,7 @@ Purpose: staging review before moving the system toward VPS deployment.
 2. Run `supabase/20260901_inventory_ready_v7.sql` in Supabase SQL Editor.
 3. Redeploy the `admin-users` Edge Function from `supabase/functions/admin-users/index.ts`.
 4. Open Kitchen OS once as Admin so missing Fuxing / Yongji / central catalog rows can be seeded.
-5. Hard refresh PC/laptop/mobile so all devices load release v41.
+5. Hard refresh PC/laptop/mobile so all devices load release v42.
 
 ## Roles to review
 
