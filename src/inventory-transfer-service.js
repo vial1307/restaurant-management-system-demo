@@ -18,17 +18,17 @@ export function siteLabel(site, language = "vi") {
 }
 
 export async function loadSiteOperationData(site) {
-  const [rows, locations, ...allSiteLocations] = await Promise.all([
+  const [rows, locations, workLocations, ...allSiteLocations] = await Promise.all([
     getSiteInventoryRows(site),
     getSiteLocations(site, "storage"),
+    getSiteLocations(site, "work"),
     ...INVENTORY_SITES.map((entry)=>getSiteLocations(entry.id,"storage")),
   ]);
 
   const byItem = new Map();
   for (const row of rows) {
-    if (row.location?.kind !== "storage") continue;
     const item = row.item;
-    if (!item) continue;
+    if (!item || !row.location) continue;
     const current = byItem.get(item.id) || {
       id: item.id,
       itemKey: item.item_key,
@@ -36,19 +36,28 @@ export async function loadSiteOperationData(site) {
       zh: item.name_zh_tw,
       vi: item.name_vi,
       unit: item.unit,
+      workArea: item.work_area || "noodles",
       locations: [],
+      workLocations: [],
       total: 0,
+      workTotal: 0,
     };
     const quantity = Number(row.quantity) || 0;
-    current.locations.push({
+    const mapped = {
       id: row.location.id,
       code: row.location.code,
       zh: row.location.name_zh_tw,
       vi: row.location.name_vi,
       quantity,
       minimum: Number(row.minimum_quantity) || 0,
-    });
-    current.total += quantity;
+    };
+    if (row.location.kind === "work") {
+      current.workLocations.push(mapped);
+      current.workTotal += quantity;
+    } else if (row.location.kind === "storage") {
+      current.locations.push(mapped);
+      current.total += quantity;
+    }
     byItem.set(item.id, current);
   }
 
@@ -56,6 +65,7 @@ export async function loadSiteOperationData(site) {
     site,
     items: [...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant")),
     locations,
+    workLocations,
     allLocations: INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id}))),
   };
 }
