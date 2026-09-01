@@ -250,7 +250,7 @@ function applyCentralDraftOperation(user,{ type, itemId, sourceLocationId, desti
     if (!row) {
       row = {
         ...template,
-        id: \`\${itemId}@\${centralLocationCode(zone)}\`,
+        id: `${itemId}@${centralLocationCode(zone)}`,
         baseId: itemId,
         itemKey: template.itemKey || itemId,
         zone,
@@ -298,7 +298,7 @@ function applyCentralDraftOperation(user,{ type, itemId, sourceLocationId, desti
     status:"pending-approval",
     product:template.zh,
     productId:itemId,
-    zone:type === "transfer" ? \`\${sourceZone} → \${destinationZone}\` : (type === "in" ? destinationZone : sourceZone),
+    zone:type === "transfer" ? `${sourceZone} → ${destinationZone}` : (type === "in" ? destinationZone : sourceZone),
     unit:template.unit,
     amount:value,
     before,
