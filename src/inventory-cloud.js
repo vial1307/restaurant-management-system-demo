@@ -856,7 +856,7 @@ async function boot() {
 
   const site = currentSite();
   if (site) {
-    await syncInventoryNow(site, { reloadBranch: site === "fuxing" });
+    await syncInventoryNow(site, { reloadBranch: ["fuxing","yongji"].includes(site) });
     await subscribeRealtime(site);
   }
 
