@@ -996,8 +996,31 @@ function inventory(context) {
     pick: language === "zh" ? "領貨" : "Lấy hàng · 領貨",
     transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
     ship: language === "zh" ? "出貨" : "Xuất hàng · 出貨",
+    manage: language === "zh" ? "庫存管理" : "Quản lý kho · 庫存管理",
   };
-  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button></div>` : "";
+  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>${catalogManage ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}</div>` : "";
+  if (opsMode === "manage") {
+    const manageEntries = effectiveRecord.inventory;
+    const manageFiltered = manageEntries.filter((item) => {
+      const matchesZone = view.zone === "all" || item.zone === view.zone;
+      const haystack = `${item.label} ${item.labelVi}`.toLowerCase();
+      return matchesZone && haystack.includes(view.search.toLowerCase());
+    });
+    const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", rowContext, storageInventoryRow);
+    const manageColumns = [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock];
+    const manageSubtitle = language === "zh"
+      ? "新增、編輯或刪除食材，並設定工作區、存放位置、現有量與標準量。"
+      : "Thêm, sửa hoặc xóa nguyên liệu; thiết lập khu làm việc, nơi lưu, tồn hiện tại và định mức.";
+    const editHint = language === "zh"
+      ? "點選鉛筆可使用與新增食材相同的表單修改品項。"
+      : "Nhấn biểu tượng bút chì để chỉnh bằng đúng biểu mẫu giống khi thêm nguyên liệu.";
+    return `${heading(text.inventory, manageSubtitle, `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>`)}${cloudNotice}${opsTabs}
+      <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
+      ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
+      <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
+        <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" /></label></div>
+      <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}</section>`;
+  }
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
