@@ -41,6 +41,7 @@ import {
   getCloudInventoryHistory,
   inventoryCatalogKey,
   inventoryCloudState,
+  refreshInventoryCloudState,
   isCurrentBranchInventoryDate,
   syncInventoryNow,
 } from "./inventory-cloud.js";
@@ -1469,9 +1470,19 @@ root.addEventListener("click", (event) => {
     }
   }
   if (action === "inventory-edit-sql-pending") {
-    window.alert(state.settings.language === "zh"
-      ? "編輯功能已顯示，但 staging SQL 尚未更新至 schema v11，因此暫時鎖定寫入。更新 SQL 後重新登入即可直接使用。"
-      : "Nút chỉnh sửa đã được hiển thị, nhưng staging SQL chưa lên schema v11 nên tạm khóa ghi dữ liệu. Sau khi cập nhật SQL và đăng nhập lại sẽ dùng được ngay. · 編輯功能暫時等待 SQL schema v11。");
+    target.disabled = true;
+    void refreshInventoryCloudState().then((ready) => {
+      target.disabled = false;
+      if (ready && canManageBranchCatalog(activeInventorySite())) {
+        view.editingStockKey = target.dataset.stockKey || null;
+        view.modal = "add-item";
+        render();
+        return;
+      }
+      window.alert(state.settings.language === "zh"
+        ? "目前無法確認 SQL schema v11 連線，請檢查網路後再試。"
+        : "Chưa xác nhận được kết nối SQL schema v11. Hãy kiểm tra mạng rồi thử lại. · 目前無法確認 SQL schema v11。");
+    });
     return;
   }
   if (action === "open-add-item") {
@@ -1751,15 +1762,8 @@ window.addEventListener("shitu:inventory-cloud-status", () => {
   if (route() === "inventory" && !document.querySelector(".central-heading")) render();
 });
 if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:") {
-  let reloadingForWorker = false;
-  globalThis.navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (reloadingForWorker) return;
-    reloadingForWorker = true;
-    window.location.reload();
-  });
-
   globalThis.navigator.serviceWorker
-    .register("./sw.js?v=57", { updateViaCache: "none" })
+    .register("./sw.js?v=58", { updateViaCache: "none" })
     .then(async (registration) => {
       await registration.update().catch(() => {});
       if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
