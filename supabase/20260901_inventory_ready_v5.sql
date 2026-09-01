@@ -1,7 +1,7 @@
 -- Kitchen OS canonical inventory migration v5
--- Run AFTER supabase/schema.sql.
--- This combines the cloud inventory foundation and multi-site transfer schema
--- so a new/staging/VPS database can be prepared with one SQL file.
+-- Run AFTER supabase/schema.sql in Supabase SQL Editor.
+-- It combines inventory cloud hardening + multi-site Yongji + branch shipping/receiving.
+-- Safe to re-run: DDL/RPCs are idempotent where practical.
 
 -- Kitchen OS inventory cloud sync v2
 -- Run once in Supabase SQL Editor after the original schema.sql.
@@ -10,6 +10,7 @@
 
 alter table public.inventory_items
   add column if not exists item_key text,
+  add column if not exists catalog_key text,
   add column if not exists work_area text not null default 'noodles',
   add column if not exists storage_only boolean not null default false;
 
@@ -515,6 +516,7 @@ declare
   v_item_id uuid;
   v_key text;
   v_expected_site text;
+  v_catalog_key text;
   v_zh text;
   v_vi text;
   v_unit text;
@@ -543,6 +545,10 @@ begin
     else null
   end;
   v_zh:=nullif(trim(p_item->>'zh'),'');
+  v_catalog_key:=coalesce(
+    nullif(trim(p_item->>'catalog_key'),''),
+    lower(regexp_replace(coalesce(v_zh,v_key), '[[:space:][:punct:]]+', '', 'g'))
+  );
   v_vi:=nullif(trim(p_item->>'vi'),'');
   v_unit:=nullif(trim(p_item->>'unit'),'');
   v_work_area:=coalesce(nullif(trim(p_item->>'work_area'),''),'noodles');
@@ -565,14 +571,15 @@ begin
 
   if v_item_id is null then
     insert into public.inventory_items(
-      item_key,name_zh_tw,name_vi,unit,work_area,storage_only,active,updated_at
+      item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active,updated_at
     ) values(
-      v_key,v_zh,v_vi,v_unit,v_work_area,v_storage_only,true,now()
+      v_key,v_catalog_key,v_zh,v_vi,v_unit,v_work_area,v_storage_only,true,now()
     )
     returning id into v_item_id;
   else
     update public.inventory_items
-    set name_zh_tw=v_zh,
+    set catalog_key=coalesce(v_catalog_key,catalog_key),
+        name_zh_tw=v_zh,
         name_vi=v_vi,
         unit=v_unit,
         work_area=v_work_area,
@@ -711,6 +718,18 @@ $$;
 revoke all on function public.archive_inventory_item(text) from public, anon;
 grant execute on function public.archive_inventory_item(text) to authenticated;
 
+-- Frontend compatibility marker. Increment when required inventory RPC contracts change.
+create or replace function public.kitchen_inventory_schema_version()
+returns integer
+language sql
+stable
+security invoker
+set search_path = ''
+as $ select 4 $;
+
+revoke all on function public.kitchen_inventory_schema_version() from public, anon;
+grant execute on function public.kitchen_inventory_schema_version() to authenticated;
+
 -- Allow Realtime changes for inventory. Ignore duplicate-publication errors.
 do $$
 begin
@@ -725,9 +744,7 @@ begin
 end $$;
 
 
--- ---------------------------------------------------------------------------
--- Multi-site / shipment extension
--- ---------------------------------------------------------------------------
+-- ===== Multi-site / branch transfer upgrade =====
 
 -- Kitchen OS inventory transfer / multi-site sync v3
 -- Run AFTER supabase/20260901_inventory_cloud_v2.sql.
@@ -996,6 +1013,12 @@ begin
   end if;
   if v_from_site=p_to_site then
     raise exception 'SAME_SITE';
+  end if;
+  if not (
+    (v_from_site='central' and p_to_site in ('fuxing','yongji'))
+    or (v_from_site in ('fuxing','yongji') and p_to_site='central')
+  ) then
+    raise exception 'INVALID_BRANCH_ROUTE';
   end if;
   if not coalesce((select private.location_allowed(v_from_site)),false) then
     raise exception 'LOCATION_NOT_ALLOWED';
