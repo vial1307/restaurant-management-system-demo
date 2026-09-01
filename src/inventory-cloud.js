@@ -774,16 +774,31 @@ export async function cloudAdjustQuantity({
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
-  const { error } = await rpc("adjust_inventory", {
-    p_item_id: resolved.item.id,
-    p_location_id: resolved.location.id,
-    p_direction: direction,
-    p_amount: value,
-    p_note: note,
-  });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "adjust" });
-    return { ok: false, fallback: false, error };
+  if (isVpsApiConfigured()) {
+    try {
+      await vpsAdjustInventory({
+        itemId: resolved.item.id,
+        locationId: resolved.location.id,
+        direction,
+        amount: value,
+        note,
+      });
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "adjust" });
+      return { ok: false, fallback: false, error };
+    }
+  } else {
+    const { error } = await rpc("adjust_inventory", {
+      p_item_id: resolved.item.id,
+      p_location_id: resolved.location.id,
+      p_direction: direction,
+      p_amount: value,
+      p_note: note,
+    });
+    if (error) {
+      dispatchStatus("error", { error: error.message, stage: "adjust" });
+      return { ok: false, fallback: false, error };
+    }
   }
   await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
@@ -800,15 +815,29 @@ export async function cloudSetQuantity({
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
-  const { error } = await rpc("set_inventory_quantity", {
-    p_item_id: resolved.item.id,
-    p_location_id: resolved.location.id,
-    p_quantity: Math.max(0, Number(quantity) || 0),
-    p_note: note,
-  });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "set-quantity" });
-    return { ok: false, fallback: false, error };
+  if (isVpsApiConfigured()) {
+    try {
+      await vpsSetQuantity({
+        itemId: resolved.item.id,
+        locationId: resolved.location.id,
+        quantity: Math.max(0, Number(quantity) || 0),
+        note,
+      });
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "set-quantity" });
+      return { ok: false, fallback: false, error };
+    }
+  } else {
+    const { error } = await rpc("set_inventory_quantity", {
+      p_item_id: resolved.item.id,
+      p_location_id: resolved.location.id,
+      p_quantity: Math.max(0, Number(quantity) || 0),
+      p_note: note,
+    });
+    if (error) {
+      dispatchStatus("error", { error: error.message, stage: "set-quantity" });
+      return { ok: false, fallback: false, error };
+    }
   }
   if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
@@ -824,14 +853,27 @@ export async function cloudSetMinimum({
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
-  const { error } = await rpc("set_inventory_minimum", {
-    p_item_id: resolved.item.id,
-    p_location_id: resolved.location.id,
-    p_minimum: Math.max(0, Number(minimum) || 0),
-  });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "set-minimum" });
-    return { ok: false, fallback: false, error };
+  if (isVpsApiConfigured()) {
+    try {
+      await vpsSetMinimum({
+        itemId: resolved.item.id,
+        locationId: resolved.location.id,
+        minimum: Math.max(0, Number(minimum) || 0),
+      });
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "set-minimum" });
+      return { ok: false, fallback: false, error };
+    }
+  } else {
+    const { error } = await rpc("set_inventory_minimum", {
+      p_item_id: resolved.item.id,
+      p_location_id: resolved.location.id,
+      p_minimum: Math.max(0, Number(minimum) || 0),
+    });
+    if (error) {
+      dispatchStatus("error", { error: error.message, stage: "set-minimum" });
+      return { ok: false, fallback: false, error };
+    }
   }
   if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
@@ -855,16 +897,31 @@ export async function cloudTransferInventory({
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
 
-  const { error } = await rpc("transfer_inventory", {
-    p_item_id: source.item.id,
-    p_source_location_id: source.location.id,
-    p_destination_location_id: destination.location.id,
-    p_amount: value,
-    p_note: note,
-  });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "transfer" });
-    return { ok: false, fallback: false, error };
+  if (isVpsApiConfigured()) {
+    try {
+      await vpsTransferInventory({
+        itemId: source.item.id,
+        sourceLocationId: source.location.id,
+        destinationLocationId: destination.location.id,
+        amount: value,
+        note,
+      });
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "transfer" });
+      return { ok: false, fallback: false, error };
+    }
+  } else {
+    const { error } = await rpc("transfer_inventory", {
+      p_item_id: source.item.id,
+      p_source_location_id: source.location.id,
+      p_destination_location_id: destination.location.id,
+      p_amount: value,
+      p_note: note,
+    });
+    if (error) {
+      dispatchStatus("error", { error: error.message, stage: "transfer" });
+      return { ok: false, fallback: false, error };
+    }
   }
 
   await syncInventoryNow(siteFromLocationCode(sourceLocationCode), { reloadBranch: false });
