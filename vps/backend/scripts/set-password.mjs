@@ -9,8 +9,9 @@ if (!username) {
 
 let secret = "";
 for await (const chunk of process.stdin) secret += chunk;
-secret = secret.replace(/[
-]+$/, "");
+
+// stdin can include the terminal line ending; strip only CR/LF, not spaces.
+secret = secret.replace(/[\r\n]+$/g, "");
 
 if (secret.length < 10) {
   console.error("Password must be at least 10 characters.");
@@ -20,10 +21,10 @@ if (secret.length < 10) {
 try {
   const hash = await hashPassword(secret);
   const result = await pool.query(
-    `update public.app_users
+    \`update public.app_users
      set password_hash=$1,password_changed_at=now()
      where username=$2
-     returning username,role,location`,
+     returning username,role,location\`,
     [hash, username]
   );
   if (!result.rowCount) {
