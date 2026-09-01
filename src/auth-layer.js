@@ -425,6 +425,8 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
       zh:template.zh,vi:template.vi,unit:template.unit,catalogKey:template.catalogKey || ""
     },destinationLocationId,value);
     if (!ok) { source.qty = before; return { ok:false, error:new Error("INVALID_DESTINATION_LOCATION") }; }
+    const targetLocation=stagingLocationsForSite(targetSite).find((entry)=>entry.id===destinationLocationId);
+    destinationLabel=`${targetSite}:${targetLocation?.name_zh_tw||destinationLocationId}`;
     destinationLabel=`${targetSite}:${destinationLocationId}`;
   } else if (type === "transfer") {
     if (!sourceZone || !destinationZone || sourceZone === destinationZone) return { ok:false, error:new Error("SAME_LOCATION") };
