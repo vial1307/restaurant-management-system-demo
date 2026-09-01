@@ -299,6 +299,11 @@ a { color: inherit; text-decoration: none; }
 .danger-zone > p { color: var(--muted); font-size: 11px; }
 .danger-button { min-height: 34px; margin-top: 7px; padding: 0 11px; border: 1px solid #efd5d2; border-radius: 8px; background: #fff; color: var(--red); font-size: 10px; font-weight: 620; }
 .empty-state { padding: 20px 0; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
+.inventory-op-guide { display: flex; align-items: flex-start; gap: 9px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #dce9e3; border-radius: 10px; background: #f6faf8; color: #5e706a; font-size: 11px; line-height: 1.55; }
+.inventory-op-guide > strong { flex: 0 0 auto; color: var(--green); font-size: 10px; white-space: nowrap; }
+.inventory-op-guide > span { min-width: 0; }
+.ingredient-form-guide { display: block; margin-top: 4px; color: #82918c; font-size: 9px; font-weight: 450; line-height: 1.45; }
+.modal-locations > .ingredient-form-guide { margin: -2px 0 2px; }
 
 .modal-backdrop { position: fixed; z-index: 6; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 28 24 / 48%); }
 .modal-card { width: min(460px, 100%); padding: 22px; border-radius: 16px; background: #fff; box-shadow: 0 20px 70px rgb(0 0 0 / 18%); }
