@@ -1,6 +1,6 @@
 # Kitchen OS — Inventory Transfer & Branch Shipping Specification
 
-Status: implementation-ready design
+Status: implemented in staging frontend v32; database activation requires canonical Supabase v5 migration
 Target sites: 央廚, 復興店, 永吉店
 Primary goal: one cloud source of truth across PC / laptop / mobile, with auditable inventory movement and Taiwan restaurant terminology.
 
@@ -546,3 +546,25 @@ Before release:
 - search works with Vietnamese/Pinyin/Zhuyin
 - duplicate dispatch/receive requests do not double-change stock
 - offline device cannot silently overwrite cloud stock
+
+
+## 21. Implementation status — v32
+
+Implemented in the current GitHub staging frontend:
+- staff-first 進貨入庫 / 領料・出庫 / 庫存轉撥 / 待收貨 UI
+- [-] [quantity] [+] controls
+- central / Fuxing / Yongji site model
+- four storage-location selection per site
+- branch shipment dispatch and receipt workflow
+- Admin site switcher
+- Admin-only deep stock management
+- shared multilingual search integration
+- responsive desktop/laptop/mobile layouts
+- Supabase Realtime/data-service boundary prepared for later VPS replacement
+
+Database activation requires:
+- `supabase/20260901_inventory_ready_v5.sql`
+- redeploying the updated `admin-users` Edge Function
+
+Manager acceptance procedure is documented in:
+- `docs/MANAGER_REVIEW_V32.md`
