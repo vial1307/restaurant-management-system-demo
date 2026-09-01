@@ -1,5 +1,6 @@
 import { tr, currentLocale } from './locales.js';
 import { getSupabase, isSupabaseConfigured } from './supabase-client.js';
+import { isVpsApiConfigured, vpsListUsers } from './vps-api.js';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';
@@ -43,10 +44,28 @@ function saveAccounts(list){ localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(l
 let cloudAccountsLoading = null;
 async function refreshAccountsFromCloud(){
   const s=session();
-  if(!isSupabaseConfigured() || s?.role!=='admin') return loadAccounts();
+  if(s?.role!=='admin') return loadAccounts();
+  if(!isVpsApiConfigured() && !isSupabaseConfigured()) return loadAccounts();
   if(cloudAccountsLoading) return cloudAccountsLoading;
   cloudAccountsLoading=(async()=>{
     try{
+      if(isVpsApiConfigured()){
+        const result=await vpsListUsers();
+        const list=(result?.users||[]).map(p=>({
+          id:p.id,
+          username:p.username,
+          password:'',
+          name:p.display_name,
+          role:p.role,
+          location:p.location,
+          active:p.active,
+          permissions:p.permissions||{},
+          preferredLanguage:p.preferred_language||'vi',
+          provider:'vps',
+        }));
+        saveAccounts(list);
+        return list;
+      }
       const supabase=await getSupabase();
       const {data,error}=await supabase
         .from('profiles')
@@ -110,7 +129,7 @@ function applyRoleAccess(){
 }
 
 function interceptLogin(){
-  if (isSupabaseConfigured()) return;
+  if (isSupabaseConfigured() || isVpsApiConfigured()) return;
   document.addEventListener('submit', (event)=>{
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.id !== 'auth-login-form') return;
@@ -141,7 +160,7 @@ function accountCard(){
     location:s.location || 'fuxing', active:true, permissions:s.permissions || {}, password:''
   } : null);
   if(!account) return '';
-  return `<article class="card account-self-card"><div class="account-card-head"><div><h2>${esc(label('accountSettings'))}</h2><p>${esc(account.name)} · ${esc(account.username)}</p></div></div><form data-account-self-password><div class="account-form-grid"><label><span>${esc(label('currentPassword'))}</span><input type="password" name="current" required autocomplete="current-password"></label><label><span>${esc(label('newPassword'))}</span><input type="password" name="next" required minlength="6" autocomplete="new-password"></label><label><span>${esc(label('confirmPassword'))}</span><input type="password" name="confirm" required minlength="6" autocomplete="new-password"></label></div><div class="account-form-actions"><button class="primary-button" type="submit">${esc(label('changePassword'))}</button></div><p class="account-form-message" data-account-self-message></p></form></article>`;
+  return `<article class="card account-self-card"><div class="account-card-head"><div><h2>${esc(label('accountSettings'))}</h2><p>${esc(account.name)} · ${esc(account.username)}</p></div></div><form data-account-self-password><div class="account-form-grid"><label><span>${esc(label('currentPassword'))}</span><input type="password" name="current" required autocomplete="current-password"></label><label><span>${esc(label('newPassword'))}</span><input type="password" name="next" required minlength="10" autocomplete="new-password"></label><label><span>${esc(label('confirmPassword'))}</span><input type="password" name="confirm" required minlength="10" autocomplete="new-password"></label></div><div class="account-form-actions"><button class="primary-button" type="submit">${esc(label('changePassword'))}</button></div><p class="account-form-message" data-account-self-message></p></form></article>`;
 }
 
 function adminPanel(){
@@ -177,7 +196,7 @@ async function openEditor(id=''){
   if(!account) return;
   const editing=Boolean(id);
   const host=document.createElement('div'); host.className='account-modal-backdrop'; host.dataset.accountModal='';
-  host.innerHTML=`<section class="account-modal"><div class="account-card-head"><div><h2>${esc(editing?label('editAccount'):label('addAccount'))}</h2><p>${editing?esc(account.username):''}</p></div><button class="icon-button" data-account-close>×</button></div><form data-account-form data-edit-id="${esc(id)}"><div class="account-form-grid"><label><span>${esc(label('employeeName'))}</span><input name="name" required value="${esc(account.name)}"></label><label><span>${esc(label('account'))}</span><input name="username" required value="${esc(account.username)}" autocomplete="off"></label><label><span>${esc(editing?label('newPassword'):label('password'))}</span><input name="password" type="password" ${editing?'':'required minlength="6"'} autocomplete="new-password" placeholder="${editing?'••••••':''}"></label><label><span>${esc(label('role'))}</span><select name="role">${['admin','manager','supervisor','employee','parttime','central'].map(r=>`<option value="${r}" ${account.role===r?'selected':''}>${esc(roleLabel(r))}</option>`).join('')}</select></label><label><span>${esc(label('location'))}</span><select name="location"><option value="all" ${account.location==='all'?'selected':''}>${esc(label('allLocations'))}</option><option value="fuxing" ${account.location==='fuxing'?'selected':''}>${esc(label('fuxing'))}</option><option value="yongji" ${account.location==='yongji'?'selected':''}>${esc(label('yongji'))}</option><option value="central" ${account.location==='central'?'selected':''}>${esc(label('centralKitchen'))}</option></select></label><label class="account-active-toggle"><span>${esc(label('status'))}</span><span class="account-switch"><input name="active" type="checkbox" ${account.active?'checked':''}><span class="account-switch-ui" aria-hidden="true"></span><strong>${esc(label('active'))}</strong></span></label></div>${permissionGrid(account)}<p class="account-form-message" data-account-form-message></p><div class="account-form-actions">${editing&&account.id!==session()?.id?`<button type="button" class="danger-button" data-account-delete="${esc(account.id)}">${esc(label('delete'))}</button>`:''}<button type="button" class="secondary-button" data-account-close>${esc(label('cancel'))}</button><button type="submit" class="primary-button">${esc(label('save'))}</button></div></form></section>`;
+  host.innerHTML=`<section class="account-modal"><div class="account-card-head"><div><h2>${esc(editing?label('editAccount'):label('addAccount'))}</h2><p>${editing?esc(account.username):''}</p></div><button class="icon-button" data-account-close>×</button></div><form data-account-form data-edit-id="${esc(id)}"><div class="account-form-grid"><label><span>${esc(label('employeeName'))}</span><input name="name" required value="${esc(account.name)}"></label><label><span>${esc(label('account'))}</span><input name="username" required value="${esc(account.username)}" autocomplete="off"></label><label><span>${esc(editing?label('newPassword'):label('password'))}</span><input name="password" type="password" ${editing?'':'required minlength="10"'} autocomplete="new-password" placeholder="${editing?'••••••':''}"></label><label><span>${esc(label('role'))}</span><select name="role">${['admin','manager','supervisor','employee','parttime','central'].map(r=>`<option value="${r}" ${account.role===r?'selected':''}>${esc(roleLabel(r))}</option>`).join('')}</select></label><label><span>${esc(label('location'))}</span><select name="location"><option value="all" ${account.location==='all'?'selected':''}>${esc(label('allLocations'))}</option><option value="fuxing" ${account.location==='fuxing'?'selected':''}>${esc(label('fuxing'))}</option><option value="yongji" ${account.location==='yongji'?'selected':''}>${esc(label('yongji'))}</option><option value="central" ${account.location==='central'?'selected':''}>${esc(label('centralKitchen'))}</option></select></label><label class="account-active-toggle"><span>${esc(label('status'))}</span><span class="account-switch"><input name="active" type="checkbox" ${account.active?'checked':''}><span class="account-switch-ui" aria-hidden="true"></span><strong>${esc(label('active'))}</strong></span></label></div>${permissionGrid(account)}<p class="account-form-message" data-account-form-message></p><div class="account-form-actions">${editing&&account.id!==session()?.id?`<button type="button" class="danger-button" data-account-delete="${esc(account.id)}">${esc(label('delete'))}</button>`:''}<button type="button" class="secondary-button" data-account-close>${esc(label('cancel'))}</button><button type="submit" class="primary-button">${esc(label('save'))}</button></div></form></section>`;
   document.body.append(host);
   bindModal(host);
 }
@@ -217,7 +236,7 @@ function bindModal(host){
     const password=String(data.get('password')||'');
     const message=form.querySelector('[data-account-form-message]');
     if(list.some(a=>a.username===username && a.id!==editId)){ message.textContent=label('usernameExists'); return; }
-    if(!existing && password.length<6){ message.textContent=label('passwordLength'); return; }
+    if(!existing && password.length<10){ message.textContent=label('passwordLength'); return; }
     const role=String(data.get('role'));
     const permissions={};
     for(const k of MODULES){ const view=data.has(`perm:${k}:view`), edit=data.has(`perm:${k}:edit`); permissions[k]={view,edit:view&&edit}; }
@@ -241,7 +260,7 @@ function bindSettings(){
     const s=session(), list=loadAccounts(), idx=list.findIndex(a=>a.id===s?.id); if(idx<0)return;
     const current=String(data.get('current')||''), next=String(data.get('next')||''), confirmPw=String(data.get('confirm')||'');
     if(list[idx].password!==current){ msg.textContent=label('wrongCurrentPassword'); return; }
-    if(next.length<6){ msg.textContent=label('passwordLength'); return; }
+    if(next.length<10){ msg.textContent=label('passwordLength'); return; }
     if(next!==confirmPw){ msg.textContent=label('passwordMismatch'); return; }
     list[idx].password=next; saveAccounts(list); msg.textContent=label('passwordChanged'); form.reset();
   });
