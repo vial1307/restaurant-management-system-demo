@@ -234,13 +234,33 @@ function centralDraftOperationData() {
   return { site: "central", items: [...grouped.values()], locations };
 }
 
-function applyCentralDraftOperation(user,{ type, itemId, sourceLocationId, destinationLocationId, amount }) {
+function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocationId, destinationLocationId, amount, targetSite, sourceSite }) {
   const items = loadStock();
-  const productRows = items.filter((row) => centralBaseKey(row) === itemId);
-  const template = productRows[0];
-  if (!template) return { ok:false, error:new Error("ITEM_NOT_FOUND") };
-
+  let productRows = items.filter((row) => centralBaseKey(row) === itemId);
+  let template = productRows[0];
+  if (!template && itemMeta?.zh) {
+    productRows = items.filter((row) => row.zh === itemMeta.zh || (itemMeta.catalogKey && row.catalogKey === itemMeta.catalogKey));
+    template = productRows[0];
+  }
   const codeToZone = Object.fromEntries(CENTRAL_ZONES.map((zone) => [centralLocationCode(zone), zone]));
+  if (!template && type === "receive" && itemMeta?.zh) {
+    const receivedId=itemId || `central-received-${Date.now()}`;
+    template = {
+      id:receivedId,
+      baseId:receivedId,
+      itemKey:receivedId,
+      catalogKey:itemMeta.catalogKey || "",
+      zh:itemMeta.zh,
+      vi:itemMeta.vi || itemMeta.zh,
+      unit:itemMeta.unit || "個",
+      zone:codeToZone[destinationLocationId] || CENTRAL_ZONES[0],
+      qty:0,
+      minimum:0,
+      draft:true,
+    };
+    items.push(template);
+  }
+  if (!template) return { ok:false, error:new Error("ITEM_NOT_FOUND") };
   const sourceZone = codeToZone[sourceLocationId] || "";
   const destinationZone = codeToZone[destinationLocationId] || "";
   const value = Math.max(1, Number(amount) || 1);
@@ -270,12 +290,17 @@ function applyCentralDraftOperation(user,{ type, itemId, sourceLocationId, desti
     before = Number(target.qty || 0);
     target.qty = before + value;
     after = target.qty;
-  } else if (type === "out") {
+  } else if (type === "out" || type === "ship") {
     const source = ensureRow(sourceZone);
     before = Number(source.qty || 0);
     if (before < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
     source.qty = before - value;
     after = source.qty;
+  } else if (type === "receive") {
+    const target = ensureRow(destinationZone);
+    before = Number(target.qty || 0);
+    target.qty = before + value;
+    after = target.qty;
   } else if (type === "transfer") {
     if (!sourceZone || !destinationZone || sourceZone === destinationZone) return { ok:false, error:new Error("SAME_LOCATION") };
     const source = ensureRow(sourceZone);
@@ -298,12 +323,16 @@ function applyCentralDraftOperation(user,{ type, itemId, sourceLocationId, desti
     status:"pending-approval",
     product:template.zh,
     productId:itemId,
-    zone:type === "transfer" ? `${sourceZone} → ${destinationZone}` : (type === "in" ? destinationZone : sourceZone),
+    zone:type === "transfer" ? `${sourceZone} → ${destinationZone}` : type === "in" || type === "receive" ? destinationZone : sourceZone,
     unit:template.unit,
     amount:value,
     before,
     after,
-    note:type === "in" ? "暫存入庫" : type === "out" ? "暫存出庫" : "暫存轉撥",
+    note:type === "in" ? "暫存入庫"
+      : type === "out" ? "暫存出庫"
+      : type === "ship" ? `暫存分店出貨 → ${targetSite || ""}`
+      : type === "receive" ? `暫存收貨 ← ${sourceSite || ""}`
+      : "暫存轉撥",
   });
   return { ok:true };
 }
