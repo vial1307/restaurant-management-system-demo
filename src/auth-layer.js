@@ -178,7 +178,88 @@ function saveStock(items) {
   }
   localStorage.setItem(CENTRAL_KEY, JSON.stringify(items));
 }
-function stagingLocationsForSite(site){\n  if(site==="central"){\n    return CENTRAL_ZONES.map((zone)=>({\n      id:centralLocationCode(zone),\n      code:centralLocationCode(zone),\n      name_zh_tw:zone,\n      name_vi:zone==="央廚冷凍"?"Tủ đông bếp trung tâm"\n        :zone==="央廚冷藏"?"Tủ mát bếp trung tâm"\n        :zone==="央廚4門"?"Tủ 4 cánh bếp trung tâm"\n        :"Tủ đông nằm bếp trung tâm",\n      site,kind:"storage",\n    }));\n  }\n  const defs=[\n    ["large-freezer","大冷凍","Tủ đông lớn"],\n    ["large-fridge","大冷藏","Tủ mát lớn"],\n    ["four-door","四門冰箱","Tủ lạnh 4 cánh"],\n    ["kitchen","廚房冰箱","Tủ lạnh bếp"],\n  ];\n  return defs.map(([suffix,zh,vi])=>({\n    id:`${site}-${suffix}`,code:`${site}-${suffix}`,name_zh_tw:zh,name_vi:vi,site,kind:"storage",\n  }));\n}\nfunction appendOperationLog(entry){\n  let rows=[];\n  try{\n    const saved=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");\n    if(Array.isArray(saved))rows=saved;\n  }catch{}\n  rows.unshift({...entry,createdAt:new Date().toISOString()});\n  localStorage.setItem(OPERATION_LOG_KEY,JSON.stringify(rows.slice(0,1000)));\n}\nfunction loadBranchDraftForCentral(site){\n  const key=`${BRANCH_DRAFT_PREFIX}${site}`;\n  try{\n    const saved=JSON.parse(localStorage.getItem(key)||"null");\n    if(saved?.inventory&&saved?.workInventory)return saved;\n  }catch{}\n  let baseRecord={inventory:[],workInventory:[]};\n  try{\n    const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");\n    const selected=state?.selectedDate;\n    baseRecord=state?.records?.[selected]||baseRecord;\n  }catch{}\n  const inventory=JSON.parse(JSON.stringify(baseRecord.inventory||[]));\n  const workInventory=JSON.parse(JSON.stringify(baseRecord.workInventory||[]));\n  if(site==="yongji"){\n    inventory.forEach((item)=>{item.quantity=0;});\n    workInventory.forEach((item)=>{item.quantity=0;});\n  }\n  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};\n  localStorage.setItem(key,JSON.stringify(seeded));\n  return seeded;\n}\nfunction addToBranchDraftFromCentral(site,itemMeta,destinationLocationId,amount){\n  if(!["fuxing","yongji"].includes(site))return false;\n  const suffix=String(destinationLocationId||"").replace(`${site}-`,"");\n  if(!["large-freezer","large-fridge","four-door","kitchen"].includes(suffix))return false;\n  const draft=loadBranchDraftForCentral(site);\n  let row=draft.inventory.find((entry)=>\n    (itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey) || entry.label===itemMeta?.zh\n  );\n  if(!row){\n    const stockKey=`received-${String(itemMeta?.zh||"item").replace(/\s+/g,"-")}`;\n    row={id:`${stockKey}-${suffix}`,stockKey,catalogKey:itemMeta?.catalogKey||"",label:itemMeta?.zh||stockKey,labelVi:itemMeta?.vi||itemMeta?.zh||stockKey,unit:itemMeta?.unit||"個",workArea:"noodles",storageOnly:true,zone:suffix,quantity:0,minimum:0};\n    draft.inventory.push(row);\n  }else{\n    const stockKey=row.stockKey||String(row.id||"").split("-")[0];\n    let target=draft.inventory.find((entry)=>entry.stockKey===stockKey&&entry.zone===suffix);\n    if(!target){\n      target={...row,id:`${stockKey}-${suffix}`,zone:suffix,quantity:0,minimum:0};\n      draft.inventory.push(target);\n    }\n    row=target;\n  }\n  row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);\n  draft.status="staging";\n  draft.updatedAt=new Date().toISOString();\n  localStorage.setItem(`${BRANCH_DRAFT_PREFIX}${site}`,JSON.stringify(draft));\n  return true;\n}\nfunction centralDraftOperationData() {
+function stagingLocationsForSite(site){
+  if(site==="central"){
+    return CENTRAL_ZONES.map((zone)=>({
+      id:centralLocationCode(zone),
+      code:centralLocationCode(zone),
+      name_zh_tw:zone,
+      name_vi:zone==="央廚冷凍"?"Tủ đông bếp trung tâm"
+        :zone==="央廚冷藏"?"Tủ mát bếp trung tâm"
+        :zone==="央廚4門"?"Tủ 4 cánh bếp trung tâm"
+        :"Tủ đông nằm bếp trung tâm",
+      site,kind:"storage",
+    }));
+  }
+  const defs=[
+    ["large-freezer","大冷凍","Tủ đông lớn"],
+    ["large-fridge","大冷藏","Tủ mát lớn"],
+    ["four-door","四門冰箱","Tủ lạnh 4 cánh"],
+    ["kitchen","廚房冰箱","Tủ lạnh bếp"],
+  ];
+  return defs.map(([suffix,zh,vi])=>({
+    id:`${site}-${suffix}`,code:`${site}-${suffix}`,name_zh_tw:zh,name_vi:vi,site,kind:"storage",
+  }));
+}
+function appendOperationLog(entry){
+  let rows=[];
+  try{
+    const saved=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");
+    if(Array.isArray(saved))rows=saved;
+  }catch{}
+  rows.unshift({...entry,createdAt:new Date().toISOString()});
+  localStorage.setItem(OPERATION_LOG_KEY,JSON.stringify(rows.slice(0,1000)));
+}
+function loadBranchDraftForCentral(site){
+  const key=`${BRANCH_DRAFT_PREFIX}${site}`;
+  try{
+    const saved=JSON.parse(localStorage.getItem(key)||"null");
+    if(saved?.inventory&&saved?.workInventory)return saved;
+  }catch{}
+  let baseRecord={inventory:[],workInventory:[]};
+  try{
+    const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
+    const selected=state?.selectedDate;
+    baseRecord=state?.records?.[selected]||baseRecord;
+  }catch{}
+  const inventory=JSON.parse(JSON.stringify(baseRecord.inventory||[]));
+  const workInventory=JSON.parse(JSON.stringify(baseRecord.workInventory||[]));
+  if(site==="yongji"){
+    inventory.forEach((item)=>{item.quantity=0;});
+    workInventory.forEach((item)=>{item.quantity=0;});
+  }
+  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};
+  localStorage.setItem(key,JSON.stringify(seeded));
+  return seeded;
+}
+function addToBranchDraftFromCentral(site,itemMeta,destinationLocationId,amount){
+  if(!["fuxing","yongji"].includes(site))return false;
+  const suffix=String(destinationLocationId||"").replace(`${site}-`,"");
+  if(!["large-freezer","large-fridge","four-door","kitchen"].includes(suffix))return false;
+  const draft=loadBranchDraftForCentral(site);
+  let row=draft.inventory.find((entry)=>
+    (itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey) || entry.label===itemMeta?.zh
+  );
+  if(!row){
+    const stockKey=`received-${String(itemMeta?.zh||"item").replace(/\s+/g,"-")}`;
+    row={id:`${stockKey}-${suffix}`,stockKey,catalogKey:itemMeta?.catalogKey||"",label:itemMeta?.zh||stockKey,labelVi:itemMeta?.vi||itemMeta?.zh||stockKey,unit:itemMeta?.unit||"個",workArea:"noodles",storageOnly:true,zone:suffix,quantity:0,minimum:0};
+    draft.inventory.push(row);
+  }else{
+    const stockKey=row.stockKey||String(row.id||"").split("-")[0];
+    let target=draft.inventory.find((entry)=>entry.stockKey===stockKey&&entry.zone===suffix);
+    if(!target){
+      target={...row,id:`${stockKey}-${suffix}`,zone:suffix,quantity:0,minimum:0};
+      draft.inventory.push(target);
+    }
+    row=target;
+  }
+  row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);
+  draft.status="staging";
+  draft.updatedAt=new Date().toISOString();
+  localStorage.setItem(`${BRANCH_DRAFT_PREFIX}${site}`,JSON.stringify(draft));
+  return true;
+}
+function centralDraftOperationData() {
   const items = loadStock();
   const locations = CENTRAL_ZONES.map((zone) => ({
     id: centralLocationCode(zone),
