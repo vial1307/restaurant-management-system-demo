@@ -2,6 +2,7 @@ import {
   canInventoryEdit,
   cloudAdjustQuantity,
   cloudTransferInventory,
+  getInventoryReceiveDefaults,
   getSiteInventoryRows,
   getSiteLocations,
   inventoryCloudState,
@@ -38,8 +39,11 @@ const TEXT = {
     returnTo:"Cất vào · 歸位儲位",
     returnedTo:"Đã cất lại vào · 已歸位至",
     shipSite:"Chi nhánh nhận · 收貨據點",
-    fixedDestination:"Sau khi 出貨, số lượng được cố định tại đúng kho đích đã chọn. · 出貨後數量固定在所選目的儲位。",
-    shipFixed:"Đã 出貨 và cập nhật cố định vào kho đích. · 已出貨並固定更新至目的儲位。",
+    fixedDestination:"Sản phẩm thường dùng đã có vị trí nhận cố định; nhân viên không cần chọn lại. · 常用品已設定固定收貨儲位，不需再次選擇。",
+    flexibleDestination:"Chưa đặt vị trí nhận cố định; lần xuất này hãy chọn nơi cất thực tế. Lựa chọn này không tự lưu thành cố định. · 尚未設定固定收貨儲位，本次請選擇實際存放位置；本次選擇不會自動固定。",
+    fixedBadge:"Vị trí cố định · 固定收貨儲位",
+    flexibleBadge:"Chọn theo lần này · 本次選擇",
+    shipFixed:"Đã 出貨 và cập nhật đúng kho nhận. · 已出貨並更新至正確收貨儲位。",
     noItems:"Không có mặt hàng phù hợp · 沒有符合條件的品項",
     loading:"Đang tải dữ liệu kho… · 正在載入庫存…",
     cloudRequired:"Cần bật đồng bộ Supabase kho trước khi thao tác. · 請先啟用 Supabase 庫存同步。",
@@ -55,7 +59,7 @@ const TEXT = {
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
     workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
-    fixedDestination:"出貨後數量固定在所選目的儲位。",shipFixed:"已出貨並固定更新至目的儲位。",
+    fixedDestination:"常用品已設定固定收貨儲位，不需再次選擇。",flexibleDestination:"尚未設定固定收貨儲位，本次請選擇實際存放位置；本次選擇不會自動固定。",fixedBadge:"固定收貨儲位",flexibleBadge:"本次選擇",shipFixed:"已出貨並更新至正確收貨儲位。",
     noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
     cloudRequired:"請先啟用 Supabase 庫存同步。",editRequired:"此帳號僅能查看庫存。",
@@ -176,7 +180,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
       </div>`;
     }
   }else if(mode==="ship"){
-    controls=sourceSelect+shipSiteSelect+targetLocationSelect+`<div class="ship-fixed-hint">${esc(t.fixedDestination)}</div>`;
+    controls=sourceSelect+shipSiteSelect+targetLocationSelect+`<div class="ship-fixed-hint" data-op-ship-destination-hint="${esc(item.id)}"></div>`;
     action=`<button class="op-primary op-out" data-op-submit="ship" data-item-id="${esc(item.id)}" ${positiveSource?"":"disabled"}>${esc(t.shipAction)}</button>`;
   }else{
     controls=sourceSelect+destinationSelect;
@@ -226,16 +230,37 @@ function refreshTransferBalance(host,state,itemId){
   balance.innerHTML=`<span>${esc(locationLabel({name_zh_tw:source.zh,name_vi:source.vi},state.language))} <strong>${Number(source.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(destination,state.language))} <strong>${Number(stockAt(item,destinationId))||0}</strong></span>`;
 }
 
+function receiveDefaultFor(state,item,targetSite){
+  const catalogKey=item?.catalogKey||item?.catalog_key||"";
+  if(!catalogKey||!targetSite)return null;
+  return (state.data?.receiveDefaults||[]).find((entry)=>
+    entry.site===targetSite && entry.catalogKey===catalogKey && entry.locationCode
+  ) || null;
+}
+
 function syncCrossSiteDestination(host,state,itemId,targetSite){
   const card=host.querySelector(`[data-op-item="${CSS.escape(itemId)}"]`);
   const wrap=card?.querySelector(`[data-op-target-location-wrap="${CSS.escape(itemId)}"]`);
   const select=card?.querySelector(`[data-op-target-location="${CSS.escape(itemId)}"]`);
-  if(!wrap||!select)return;
+  const hint=card?.querySelector(`[data-op-ship-destination-hint="${CSS.escape(itemId)}"]`);
+  const item=state.data?.items.find((entry)=>entry.id===itemId);
+  if(!wrap||!select||!item)return;
   const locations=(state.data?.allLocations||[]).filter((location)=>location.site===targetSite);
+  const fixed=receiveDefaultFor(state,item,targetSite);
+  const fixedLocation=fixed ? locations.find((location)=>location.code===fixed.locationCode) : null;
   wrap.hidden=!targetSite;
   select.innerHTML=locations.map((location)=>
-    `<option value="${esc(location.id)}">${esc(locationLabel(location,state.language))}</option>`
+    `<option value="${esc(location.id)}" ${fixedLocation?.id===location.id?"selected":""}>${esc(locationLabel(location,state.language))}</option>`
   ).join("");
+  select.disabled=Boolean(fixedLocation);
+  wrap.classList.toggle("is-fixed-receive",Boolean(fixedLocation));
+  if(hint){
+    const t=langText(state.language);
+    hint.className=`ship-fixed-hint ${fixedLocation?"is-fixed":"is-flexible"}`;
+    hint.innerHTML=fixedLocation
+      ? `<strong>${esc(t.fixedBadge)}</strong><span>${esc(t.fixedDestination)} · ${esc(locationLabel(fixedLocation,state.language))}</span>`
+      : `<strong>${esc(t.flexibleBadge)}</strong><span>${esc(t.flexibleDestination)}</span>`;
+  }
 }
 
 function setMessage(host,text,kind=""){
@@ -631,6 +656,15 @@ function bindDraft(host,state){
 async function renderDraft(host,state){
   const t=langText(state.language);
   const data=await state.reload();
+  const catalogKeys=[...new Set((data.items||[]).map((item)=>item.catalogKey||item.catalog_key).filter(Boolean))];
+  if(!Array.isArray(data.receiveDefaults)){
+    try{
+      data.receiveDefaults=await getInventoryReceiveDefaults({
+        sites:INVENTORY_SITES.map((entry)=>entry.id).filter((site)=>site!==state.site),
+        catalogKeys,
+      });
+    }catch{ data.receiveDefaults=[]; }
+  }
   state.data=data;
   const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations,data.workLocations||[]));
   host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Môi trường thử nghiệm: thao tác có hiệu lực ngay và ghi người thực hiện · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
