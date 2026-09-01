@@ -2,7 +2,7 @@
 
 ## Current staging rule
 
-For this review phase, inventory actions apply immediately. There is no manager approval step and no separate receiving confirmation. The system records who performed each inbound, outbound and transfer action. Formal approval/confirmation will be added only in the VPS production phase.
+For this review phase, inventory actions apply immediately. There is no manager approval step and no separate receiving confirmation. The system records who performed each inbound, 領貨, 使用, 歸位, internal transfer and 出貨 action. Formal approval/confirmation will be added only in the VPS production phase.
 
 
 Purpose: staging review before moving the system toward VPS deployment.
@@ -95,12 +95,7 @@ Repeat for:
 - 復興店 → 永吉店
 - 永吉店 → 央廚
 
-### Test E — 永吉店
-Repeat Test C for:
-- 央廚 -> 永吉店
-- 永吉店 -> 央廚
-
-### Test F — bilingual and devices
+### Test E — bilingual and devices
 - VI mode: Vietnamese + Traditional Chinese.
 - 中文 mode: Traditional Chinese only.
 - Verify same language preference on PC/laptop/mobile.
@@ -119,21 +114,5 @@ Manager should evaluate:
 
 If accepted, use this release as the functional baseline for the VPS migration. The current frontend data boundary is intentionally separated so Supabase RPC/Realtime can later be replaced with VPS API + PostgreSQL + WebSocket/SSE without redesigning the operational UI.
 
-
-### 領貨 test
-1. At 復興店, choose an item with stock in 大冷凍.
-2. 領貨 4 units to the item's 使用區.
-3. Confirm 大冷凍 decreases by 4 and 已領貨 increases by 4.
-4. 使用 2 units; 已領貨 must decrease by 2.
-5. 歸位 the remaining 2 to 四門冰箱; 使用中 must return to 0 and 四門冰箱 must increase by 2.
-
-### 出貨 test
-1. Open 出貨.
-2. Select source storage.
-3. Select destination site.
-4. Confirm the destination-storage picker shows only storage locations belonging to that selected site.
-5. Select the exact destination storage and submit.
-6. Source decreases immediately and destination increases immediately.
-7. Confirm the audit records the operator, time, item, amount, source and destination.
 
 No manager approval or receive-confirmation step is used in the current staging phase.
