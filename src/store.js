@@ -495,6 +495,8 @@ export function createStore(storage = globalThis.localStorage) {
           labelVi: item.labelVi,
           unit: item.unit || "盒",
           workArea: item.workArea || "noodles",
+          catalogKey: item.catalogKey || "",
+          receiveZone: item.receiveZone || "",
         };
 
         for (const [index, location] of locations.entries()) {
@@ -531,6 +533,7 @@ export function createStore(storage = globalThis.localStorage) {
           label: item.label || base.label,
           labelVi: item.labelVi || base.labelVi,
           catalogKey: item.catalogKey || base.catalogKey || "",
+          receiveZone: item.receiveZone ?? base.receiveZone ?? "",
           unit: item.unit || base.unit,
           workArea: item.workArea || base.workArea,
         };
