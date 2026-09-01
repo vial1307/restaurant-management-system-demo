@@ -965,17 +965,33 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   if (!changes.length) return { ok: true, changed: 0 };
 
   for (const change of changes) {
-    const { error } = await rpc("adjust_inventory", {
-      p_item_id: change.itemId,
-      p_location_id: change.locationId,
-      p_direction: change.direction,
-      p_amount: change.amount,
-      p_note: note,
-    });
-    if (error) {
-      dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
-      await syncInventoryNow("fuxing", { reloadBranch: false });
-      return { ok: false, fallback: false, error };
+    if (isVpsApiConfigured()) {
+      try {
+        await vpsAdjustInventory({
+          itemId: change.itemId,
+          locationId: change.locationId,
+          direction: change.direction,
+          amount: change.amount,
+          note,
+        });
+      } catch (error) {
+        dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
+        await syncInventoryNow("fuxing", { reloadBranch: false });
+        return { ok: false, fallback: false, error };
+      }
+    } else {
+      const { error } = await rpc("adjust_inventory", {
+        p_item_id: change.itemId,
+        p_location_id: change.locationId,
+        p_direction: change.direction,
+        p_amount: change.amount,
+        p_note: note,
+      });
+      if (error) {
+        dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
+        await syncInventoryNow("fuxing", { reloadBranch: false });
+        return { ok: false, fallback: false, error };
+      }
     }
   }
 
@@ -991,6 +1007,17 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
   const catalog = buildBranchCatalog(site);
   const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  if (isVpsApiConfigured()) {
+    try {
+      await vpsSyncCatalog(item);
+      await syncInventoryNow(site, { reloadBranch: false });
+      return { ok: true };
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
+      return { ok: false, fallback: false, error };
+    }
+  }
 
   const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
   if (error) {
@@ -1031,6 +1058,17 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
   const catalog = buildCentralCatalog(items);
   const item = catalog.find((entry) => entry.key === itemKey);
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  if (isVpsApiConfigured()) {
+    try {
+      await vpsSyncCatalog(item);
+      await syncInventoryNow("central", { reloadBranch: false });
+      return { ok: true };
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "central-catalog-sync" });
+      return { ok: false, fallback: false, error };
+    }
+  }
 
   const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
   if (error) {
@@ -1080,6 +1118,16 @@ export async function cloudArchiveCentralItem(itemKey) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
+  if (isVpsApiConfigured()) {
+    try {
+      const data = await vpsArchiveCatalogItem(itemKey);
+      await syncInventoryNow("central", { reloadBranch: false });
+      return { ok: Boolean(data?.archived), fallback: false };
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "central-catalog-archive" });
+      return { ok: false, fallback: false, error };
+    }
+  }
   const { data, error } = await rpc("archive_inventory_item", { p_item_key: itemKey });
   if (error) {
     dispatchStatus("error", { error: error.message, stage: "central-catalog-archive" });
@@ -1094,8 +1142,19 @@ export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
+  const itemKey = branchItemKey(site,stockKey);
+  if (isVpsApiConfigured()) {
+    try {
+      const data = await vpsArchiveCatalogItem(itemKey);
+      await syncInventoryNow(site, { reloadBranch: false });
+      return { ok: Boolean(data?.archived), fallback: false };
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
+      return { ok: false, fallback: false, error };
+    }
+  }
   const { data, error } = await rpc("archive_inventory_item", {
-    p_item_key: branchItemKey(site,stockKey),
+    p_item_key: itemKey,
   });
   if (error) {
     dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
