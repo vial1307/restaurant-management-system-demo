@@ -998,7 +998,28 @@ function inventory(context) {
     ship: language === "zh" ? "出貨" : "Xuất hàng · 出貨",
     manage: language === "zh" ? "庫存管理" : "Quản lý kho · 庫存管理",
   };
+  const opGuide = {
+    overview: language === "zh"
+      ? "查看各儲位的實際庫存、標準量與工作區數量；此頁主要用於確認庫存狀態。"
+      : "Xem tồn thực tế theo từng vị trí, định mức và số lượng ở khu sử dụng; mục này chủ yếu để kiểm tra tình trạng kho.",
+    in: language === "zh"
+      ? "新到貨時使用：選擇要入庫的儲位、輸入數量後按「進貨入庫」，數量只會增加到所選儲位。"
+      : "Dùng khi có hàng mới: chọn đúng vị trí nhập, nhập số lượng rồi bấm 進貨入庫; hàng chỉ được cộng vào vị trí đã chọn.",
+    pick: language === "zh"
+      ? "從儲位領到「使用中」；實際用掉請按「使用」，剩餘品項請選擇「歸位儲位」後歸位。"
+      : "Lấy hàng từ kho vào 使用中; phần đã dùng bấm 使用, phần còn thừa chọn đúng 歸位儲位 rồi cất lại.",
+    transfer: language === "zh"
+      ? "同一據點內換儲位時使用；選擇來源與目的儲位後轉撥，來源扣除、目的同步增加。"
+      : "Dùng để chuyển giữa các vị trí trong cùng cơ sở; kho nguồn bị trừ và kho đích được cộng đồng thời.",
+    ship: language === "zh"
+      ? "跨據點出貨時使用：選擇來源庫存、收貨據點及對方實際存放儲位，完成後兩邊庫存同步更新。"
+      : "Dùng khi xuất sang cơ sở khác: chọn kho nguồn, nơi nhận và vị trí cất thực tế bên nhận; tồn hai bên được cập nhật đồng thời.",
+    manage: language === "zh"
+      ? "用於新增、編輯食材與設定儲位、標準量及單位；日常領貨、轉撥或出貨請使用前面的操作頁。"
+      : "Dùng để thêm/sửa nguyên liệu, vị trí lưu, định mức và đơn vị; thao tác lấy/chuyển/xuất hàng hằng ngày dùng các mục phía trước.",
+  };
   const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>${catalogManage ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}</div>` : "";
+  const opsGuide = opsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
   if (opsMode === "manage") {
     const manageEntries = effectiveRecord.inventory;
     const manageFiltered = manageEntries.filter((item) => {
@@ -1014,7 +1035,7 @@ function inventory(context) {
     const editHint = language === "zh"
       ? "點選鉛筆可使用與新增食材相同的表單修改品項。"
       : "Nhấn biểu tượng bút chì để chỉnh bằng đúng biểu mẫu giống khi thêm nguyên liệu.";
-    return `${heading(text.inventory, manageSubtitle, `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>`)}${cloudNotice}${opsTabs}
+    return `${heading(text.inventory, manageSubtitle, `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>`)}${cloudNotice}${opsTabs}${opsGuide}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
       <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
@@ -1022,9 +1043,9 @@ function inventory(context) {
       <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}</section>`;
   }
   if (opsMode !== "overview") {
-    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
+    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
-  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice">Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看，請切回今天後再調整庫存。</div>` : ""}${opsTabs}
+  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice">Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看，請切回今天後再調整庫存。</div>` : ""}${opsTabs}${opsGuide}
     <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${entries.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
@@ -1186,7 +1207,7 @@ function addItemModal(context) {
     return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? 1}" /></label></div>`;
   }).join("");
 
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><button class="icon-button" data-action="close-modal">${icon("close")}</button></div><form data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 1}" /></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><button class="primary-button modal-submit" type="submit">${icon(editing ? "check" : "plus")}${escapeHtml(editing ? text.saveChanges : text.addItem)}</button></form></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><button class="icon-button" data-action="close-modal">${icon("close")}</button></div><form data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}<small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 1}" /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><button class="primary-button modal-submit" type="submit">${icon(editing ? "check" : "plus")}${escapeHtml(editing ? text.saveChanges : text.addItem)}</button></form></section></div>`;
 }
 
 function render() {
