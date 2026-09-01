@@ -42,6 +42,7 @@ let migrationAvailable = null;
 let realtime = null;
 let syncTimer = 0;
 let polling = 0;
+let bootedUserId = "";
 let syncing = false;
 let lastSite = "";
 const cache = {
@@ -844,8 +845,11 @@ async function subscribeRealtime(site) {
 }
 
 async function boot() {
-  if (!isSupabaseConfigured() || !session()) return;
+  const s = session();
+  if (!isSupabaseConfigured() || !s) return;
+  if (bootedUserId === s.id && polling) return;
   if (!(await verifyMigration())) return;
+  bootedUserId = s.id || "";
 
   if (role() === "admin") {
     await bootstrapFuxingInventory();
@@ -869,6 +873,7 @@ async function boot() {
   }, POLL_MS);
 }
 
+window.addEventListener("shitu:auth-synced", () => { void boot(); });
 window.addEventListener("focus", () => { void syncInventoryNow(currentSite()); });
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void syncInventoryNow(currentSite());
