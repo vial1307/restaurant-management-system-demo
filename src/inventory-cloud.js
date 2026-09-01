@@ -87,7 +87,7 @@ export function canInventoryEdit() {
 }
 
 export function canDirectInventoryAdjust() {
-  return canInventoryEdit() && ["admin", "manager", "supervisor"].includes(role());
+  return canInventoryEdit() && role() === "admin";
 }
 
 function currentSite() {
@@ -726,7 +726,7 @@ export function centralItemKey(id) {
 }
 
 export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
-  if (!(await verifyMigration()) || !["admin", "manager", "supervisor"].includes(role())) return [];
+  if (!(await verifyMigration()) || role() !== "admin") return [];
   const supabase = await getSupabase();
   const { data: locations, error: locError } = await supabase
     .from("inventory_locations")
