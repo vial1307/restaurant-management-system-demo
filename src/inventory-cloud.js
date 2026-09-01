@@ -235,7 +235,7 @@ function buildCentralCatalog(items) {
         zh:entry.zh || baseId,
         vi:entry.vi || entry.zh || baseId,
         unit:entry.unit || "個",
-        work_area:"noodles",
+        work_area:entry.workArea || entry.work_area || "noodles",
         storage_only:true,
         locations:[],
       });
@@ -421,6 +421,7 @@ function applyCentral(rows) {
       zh:row.item.name_zh_tw,
       vi:row.item.name_vi,
       unit:row.item.unit,
+      workArea:row.item.work_area || "noodles",
       zone,
       qty:Number(row.quantity)||0,
       minimum:Number(row.minimum_quantity)||0,
@@ -732,6 +733,67 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
 
   await syncInventoryNow(site, { reloadBranch: false });
   return { ok: true };
+}
+
+export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, [])) {
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  const catalog = buildCentralCatalog(items);
+  const item = catalog.find((entry) => entry.key === itemKey);
+  if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
+  if (error) {
+    dispatchStatus("error", { error: error.message, stage: "central-catalog-sync" });
+    return { ok: false, fallback: false, error };
+  }
+
+  await fetchSite("central");
+  for (const location of item.locations || []) {
+    const ids = await resolveIds(item.key, location.code);
+    if (!ids.item || !ids.location) continue;
+    const currentRows = await fetchSite("central");
+    const current = currentRows.find((row) =>
+      row.item.id === ids.item.id && row.location.id === ids.location.id
+    );
+    const wanted = Math.max(0, Number(location.quantity) || 0);
+    const actual = Math.max(0, Number(current?.quantity) || 0);
+    if (wanted !== actual) {
+      const result = await cloudSetQuantity({
+        itemKey: item.key,
+        locationCode: location.code,
+        quantity: wanted,
+        note: "央廚品項資料調整／盤點 / Chỉnh mặt hàng và kiểm kê bếp trung tâm",
+      });
+      if (!result.ok) return result;
+    }
+    const currentMinimum = Math.max(0, Number(current?.minimum_quantity) || 0);
+    const wantedMinimum = Math.max(0, Number(location.minimum) || 0);
+    if (wantedMinimum !== currentMinimum) {
+      const result = await cloudSetMinimum({
+        itemKey: item.key,
+        locationCode: location.code,
+        minimum: wantedMinimum,
+      });
+      if (!result.ok) return result;
+    }
+  }
+
+  await syncInventoryNow("central", { reloadBranch: false });
+  return { ok: true };
+}
+
+export async function cloudArchiveCentralItem(itemKey) {
+  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
+  const { data, error } = await rpc("archive_inventory_item", { p_item_key: itemKey });
+  if (error) {
+    dispatchStatus("error", { error: error.message, stage: "central-catalog-archive" });
+    return { ok: false, fallback: false, error };
+  }
+  await syncInventoryNow("central", { reloadBranch: false });
+  return { ok: data === true || data === false, fallback: false };
 }
 
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
