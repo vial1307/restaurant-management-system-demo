@@ -10,8 +10,13 @@ html{
   -webkit-tap-highlight-color:transparent;
   background:var(--page,#f3f7f5);
 }
-body,#app,.app-shell,.main-shell{
+body,#app,.app-shell{
   width:100%;
+  max-width:100%;
+}
+/* main-shell must remain auto-width whenever the desktop/tablet sidebar has a
+   left margin; forcing width:100% here adds the sidebar width to the viewport. */
+.main-shell{
   max-width:100%;
 }
 body{
