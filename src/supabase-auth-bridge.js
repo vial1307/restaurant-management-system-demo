@@ -182,7 +182,10 @@ async function boot() {
       window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
       return;
     } catch (error) {
-      if (legacy?.provider === "vps") localStorage.removeItem(AUTH_KEY);
+      if (legacy?.provider === "vps") {
+        localStorage.removeItem(AUTH_KEY);
+        location.reload();
+      }
       return;
     }
   }
