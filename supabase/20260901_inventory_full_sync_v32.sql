@@ -1,4 +1,4 @@
--- Kitchen OS inventory full upgrade v32
+-- Kitchen OS inventory full upgrade v33
 -- Run this ONE file in Supabase SQL Editor on the existing Kitchen OS database.
 -- It combines inventory cloud hardening + multi-site Yongji + branch shipping/receiving.
 -- Safe to re-run: DDL/RPCs are idempotent where practical.
@@ -1013,6 +1013,12 @@ begin
   end if;
   if v_from_site=p_to_site then
     raise exception 'SAME_SITE';
+  end if;
+  if not (
+    (v_from_site='central' and p_to_site in ('fuxing','yongji'))
+    or (v_from_site in ('fuxing','yongji') and p_to_site='central')
+  ) then
+    raise exception 'INVALID_BRANCH_ROUTE';
   end if;
   if not coalesce((select private.location_allowed(v_from_site)),false) then
     raise exception 'LOCATION_NOT_ALLOWED';
