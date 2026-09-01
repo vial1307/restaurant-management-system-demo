@@ -164,7 +164,7 @@ begin
   join public.inventory_items i on i.id=p_item_id and i.active=true
   where p.id=(select auth.uid()) and p.active=true;
 
-  if v_role not in ('admin','manager','supervisor')
+  if v_role <> 'admin'
      or not coalesce(v_allowed,false)
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'DIRECT_ADJUST_NOT_ALLOWED';
@@ -240,7 +240,7 @@ begin
   join public.inventory_items i on i.id=p_item_id and i.active=true
   where p.id=(select auth.uid()) and p.active=true;
 
-  if v_role not in ('admin','manager','supervisor')
+  if v_role <> 'admin'
      or not coalesce(v_allowed,false)
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'MINIMUM_EDIT_NOT_ALLOWED';
@@ -274,7 +274,7 @@ on public.profiles for select
 to authenticated
 using (
   id = (select auth.uid())
-  or (select private.current_role()) in ('admin','manager','supervisor')
+  or (select private.current_role()) = 'admin'
 );
 
 -- Supervisors are management-level for inventory history.
@@ -283,7 +283,7 @@ create policy "inventory transactions management read"
 on public.inventory_transactions for select
 to authenticated
 using (
-  (select private.current_role()) in ('admin','manager','supervisor')
+  (select private.current_role()) = 'admin'
   and (select private.has_permission('inventory','view'))
   and exists (
     select 1 from public.inventory_locations l
@@ -521,7 +521,7 @@ begin
   from public.profiles p
   where p.id=(select auth.uid()) and p.active=true;
 
-  if v_role not in ('admin','manager','supervisor')
+  if v_role <> 'admin'
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'CATALOG_EDIT_NOT_ALLOWED';
   end if;
@@ -646,7 +646,7 @@ begin
   from public.profiles p
   where p.id=(select auth.uid()) and p.active=true;
 
-  if v_role not in ('admin','manager','supervisor')
+  if v_role <> 'admin'
      or not coalesce((select private.has_permission('inventory','edit')),false) then
     raise exception 'CATALOG_EDIT_NOT_ALLOWED';
   end if;
