@@ -906,3 +906,42 @@ html[lang="vi"] .central-row small{line-height:1.35}
   .op-primary{min-width:94px;padding-inline:8px;font-size:11px}
   .warehouse-switch button{font-size:10.5px;padding-inline:7px}
 }
+
+
+.inventory-overview-card{
+  grid-template-columns:minmax(260px,1fr) minmax(360px,2fr);
+  align-items:center;
+}
+.op-location-list{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  justify-content:flex-end;
+}
+.op-location-pill{
+  min-width:116px;
+  display:grid;
+  gap:1px;
+  padding:6px 8px;
+  border:1px solid #dbe5e0;
+  border-radius:8px;
+  background:#f7faf8;
+}
+.op-location-pill small{
+  font-size:10px;
+  color:#71827b;
+  line-height:1.25;
+}
+.op-location-pill strong{
+  font-size:13px;
+  color:#263c35;
+  font-variant-numeric:tabular-nums;
+}
+@media(max-width:760px){
+  .inventory-overview-card{grid-template-columns:1fr}
+  .op-location-list{justify-content:stretch}
+  .op-location-pill{min-width:0;flex:1 1 calc(50% - 4px)}
+}
+@media(max-width:389px){
+  .op-location-pill{flex-basis:100%}
+}
