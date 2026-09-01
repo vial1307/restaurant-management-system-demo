@@ -1,4 +1,4 @@
-import { mountInventoryOperations } from "./inventory-operations.js";
+import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import {
   buildGeneratedTasks,
@@ -27,6 +27,7 @@ import {
   branchLocationCode,
   branchWorkLocationCode,
   canDirectInventoryAdjust,
+  canInventoryDraftCount,
   canInventoryEdit,
   cloudAdjustQuantity,
   cloudArchiveBranchItem,
