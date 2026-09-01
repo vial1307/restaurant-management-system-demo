@@ -393,7 +393,7 @@ async function verifyMigration() {
   try {
     const supabase = await getSupabase();
     const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
-    if (!error && Number(version) >= 10) {
+    if (!error && Number(version) >= 11) {
       migrationAvailable = true;
       localStorage.setItem(CLOUD_FLAG_KEY, "ready");
       dispatchStatus("ready");
