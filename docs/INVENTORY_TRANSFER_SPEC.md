@@ -1,6 +1,6 @@
 # Kitchen OS — Inventory Transfer & Branch Shipping Specification
 
-Status: implemented in staging frontend v32; database activation requires canonical Supabase v6 migration
+Status: implemented in staging frontend v32; database activation requires canonical Supabase v7 migration
 Target sites: 央廚, 復興店, 永吉店
 Primary goal: one cloud source of truth across PC / laptop / mobile, with auditable inventory movement and Taiwan restaurant terminology.
 
@@ -563,7 +563,7 @@ Implemented in the current GitHub staging frontend:
 - Supabase Realtime/data-service boundary prepared for later VPS replacement
 
 Database activation requires:
-- `supabase/20260901_inventory_ready_v6.sql`
+- `supabase/20260901_inventory_ready_v7.sql`
 - redeploying the updated `admin-users` Edge Function
 
 Manager acceptance procedure is documented in:
@@ -580,3 +580,26 @@ For the current manager-review stage:
 - the system records operator/user, timestamp, item, quantity, source and destination
 
 The formal approval / confirmation workflow is intentionally deferred to the VPS production phase.
+
+
+## 23. 領貨 vs 出貨
+
+### 領貨 — take goods for use
+This is not a shipment. It moves stock from a physical storage location to the site's in-use/work quantity.
+
+Example:
+1. 復興店 大冷凍 has 牛肉 10 包.
+2. Staff 領貨 4 包.
+3. 大冷凍 becomes 6; 使用中 becomes 4.
+4. Staff actually 使用 2 包 → 使用中 becomes 2.
+5. The remaining 2 包 are 歸位 to 四門冰箱 → 使用中 becomes 0 and 四門冰箱 increases by 2.
+
+### 出貨 — ship between sites
+1. Select the source storage.
+2. Select destination site.
+3. Select the exact destination storage at that site.
+4. Submit once.
+5. Source stock decreases and destination stock increases immediately.
+6. The audit records operator, time, item, amount, source and destination.
+
+No approval or receiving-confirmation step is used during manager review. Those controls are deferred to the VPS production phase.
