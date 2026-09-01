@@ -303,6 +303,13 @@ a { color: inherit; text-decoration: none; }
 .inventory-op-guide > strong { flex: 0 0 auto; color: var(--green); font-size: 10px; white-space: nowrap; }
 .inventory-op-guide > span { min-width: 0; }
 .ingredient-form-guide { display: block; margin-top: 4px; color: #82918c; font-size: 9px; font-weight: 450; line-height: 1.45; }
+.op-target-location.is-fixed-receive select { border-color: #bdd8cc; background: #f1f8f5; color: #285f50; font-weight: 650; opacity: 1; -webkit-text-fill-color: #285f50; }
+.ship-fixed-hint { display: grid; gap: 3px; grid-column: 1 / -1; padding: 8px 10px; border-radius: 9px; font-size: 10px; line-height: 1.45; }
+.ship-fixed-hint strong { font-size: 10px; }
+.ship-fixed-hint.is-fixed { border: 1px solid #cce2d8; background: #f2f9f6; color: #43685d; }
+.ship-fixed-hint.is-fixed strong { color: #23705b; }
+.ship-fixed-hint.is-flexible { border: 1px solid #eadfc4; background: #fffaf0; color: #786742; }
+.ship-fixed-hint.is-flexible strong { color: #936a1d; }
 .modal-locations > .ingredient-form-guide { margin: -2px 0 2px; }
 
 .modal-backdrop { position: fixed; z-index: 6; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 28 24 / 48%); }
