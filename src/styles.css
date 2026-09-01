@@ -310,6 +310,9 @@ a { color: inherit; text-decoration: none; }
 .ship-fixed-hint.is-fixed strong { color: #23705b; }
 .ship-fixed-hint.is-flexible { border: 1px solid #eadfc4; background: #fffaf0; color: #786742; }
 .ship-fixed-hint.is-flexible strong { color: #936a1d; }
+.ship-fixed-hint.is-blocked { border: 1px solid #ecd7d2; background: #fff6f3; color: #79534a; }
+.ship-fixed-hint.is-blocked strong { color: #a24b39; }
+.op-target-location.is-receive-blocked select { background: #f7f7f7; color: #8a918e; opacity: 1; -webkit-text-fill-color: #8a918e; }
 .modal-locations > .ingredient-form-guide { margin: -2px 0 2px; }
 
 .modal-backdrop { position: fixed; z-index: 6; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 28 24 / 48%); }
