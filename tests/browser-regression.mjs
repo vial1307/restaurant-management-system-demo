@@ -129,8 +129,14 @@ async function roleDesktop(browser, username, checks) {
     await page.locator('input[data-central-search]').first().waitFor({state:"visible"});
     assert.equal(await page.locator(".warehouse-switch").count(),0);
   } else {
-    await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
-    await page.waitForSelector(".page-content");
+    const site = await page.evaluate(() => {
+      try {
+        return JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null")?.location || "fuxing";
+      } catch {
+        return "fuxing";
+      }
+    });
+    await setSite(page, site === "yongji" ? "yongji" : "fuxing");
     if(checks.manage === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').count(),0);
     }
