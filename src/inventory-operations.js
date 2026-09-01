@@ -473,6 +473,7 @@ function bindDraft(host,state){
       const sourceId=card.querySelector("[data-op-source]")?.value || "";
       const destinationId=card.querySelector("[data-op-destination]")?.value || "";
       const target=card.querySelector("[data-op-target]")?.value || "usage";
+      const targetLocationId=card.querySelector("[data-op-target-location]")?.value || "";
       const source=item.locations.find((entry)=>entry.id===sourceId);
 
       if((type==="out"||type==="transfer") && amount>Number(source?.quantity||0)){
@@ -525,7 +526,7 @@ function bindDraft(host,state){
       if(result?.ok){
         markDraftTransferReceived(transferId,destinationLocationId);
         await renderDraft(host,state);
-        setMessage(host,state.language==="zh"?"已暫存收貨，庫存已更新。":"Đã nhận hàng tạm và cập nhật tồn kho. · 已暫存收貨，庫存已更新。","ok");
+        setMessage(host,state.language==="zh"?"庫存已更新。":"Đã nhận hàng tạm và cập nhật tồn kho. · 庫存已更新。","ok");
       }else{
         setMessage(host,errorText(result?.error,t),"error");
         button.disabled=false;
@@ -541,12 +542,12 @@ async function renderDraft(host,state){
   state.data=data;
   if(state.mode==="receive"){
     const pending=pendingDraftTransfers(state.site);
-    host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"暫存收貨：待主管確認":"Nhận hàng tạm: chờ cấp trên duyệt · 暫存收貨：待主管確認"}</div><div class="inventory-ops-list">${pending.length?pending.map((entry)=>draftReceiveCard(entry,data.locations,state.site,state.language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noPending)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+    host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：跨店轉撥立即生效":"Nhận hàng tạm: chờ cấp trên duyệt · 測試模式：跨店轉撥立即生效"}</div><div class="inventory-ops-list">${pending.length?pending.map((entry)=>draftReceiveCard(entry,data.locations,state.site,state.language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noPending)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
     bindDraft(host,state);
     return;
   }
   const cards=data.items.map((item)=>itemCard(item,state.mode,data.locations,state.site,state.language,t,data.allLocations||data.locations));
-  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"暫存操作：數量變更待主管確認":"Thao tác tạm: thay đổi số lượng chờ cấp trên duyệt · 暫存操作：數量變更待主管確認"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+  host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"測試模式：操作立即生效並記錄人員":"Thao tác tạm: thay đổi số lượng chờ cấp trên duyệt · 測試模式：操作立即生效並記錄人員"}</div><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${cards.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
   bindDraft(host,state);
 }
 
