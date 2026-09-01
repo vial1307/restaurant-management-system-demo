@@ -37,6 +37,8 @@ const TEXT = {
     returnAction:"Cất lại · 歸位",
     returnTo:"Cất vào · 歸位儲位",
     shipSite:"Chi nhánh nhận · 收貨據點",
+    fixedDestination:"Sau khi 出貨, số lượng được cố định tại đúng kho đích đã chọn. · 出貨後數量固定在所選目的儲位。",
+    shipFixed:"Đã 出貨 và cập nhật cố định vào kho đích. · 已出貨並固定更新至目的儲位。",
     noItems:"Không có mặt hàng phù hợp · 沒有符合條件的品項",
     loading:"Đang tải dữ liệu kho… · 正在載入庫存…",
     cloudRequired:"Cần bật đồng bộ Supabase kho trước khi thao tác. · 請先啟用 Supabase 庫存同步。",
@@ -52,6 +54,7 @@ const TEXT = {
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
     workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",shipSite:"收貨據點",
+    fixedDestination:"出貨後數量固定在所選目的儲位。",shipFixed:"已出貨並固定更新至目的儲位。",
     noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
     cloudRequired:"請先啟用 Supabase 庫存同步。",editRequired:"此帳號僅能查看庫存。",
@@ -166,7 +169,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
       </div>`;
     }
   }else if(mode==="ship"){
-    controls=sourceSelect+shipSiteSelect+targetLocationSelect;
+    controls=sourceSelect+shipSiteSelect+targetLocationSelect+`<div class="ship-fixed-hint">${esc(t.fixedDestination)}</div>`;
     action=`<button class="op-primary op-out" data-op-submit="ship" data-item-id="${esc(item.id)}" ${positiveSource?"":"disabled"}>${esc(t.shipAction)}</button>`;
   }else{
     controls=sourceSelect+destinationSelect;
@@ -334,7 +337,7 @@ function bind(host,state){
       if(result?.ok){
         await syncInventoryNow(site,{reloadBranch:false});
         await doRender(host,state);
-        setMessage(host,t.success,"ok");
+        setMessage(host,type==="ship" ? t.shipFixed : t.success,"ok");
         state.onUpdated?.();
       }else{
         setMessage(host,errorText(result?.error,t),"error");
@@ -509,7 +512,7 @@ function bindDraft(host,state){
       if(result?.ok){
         state.data=await state.reload();
         await renderDraft(host,state);
-        setMessage(host,language==="zh"?"庫存已更新。":"Đã cập nhật tồn kho. · 庫存已更新。","ok");
+        setMessage(host,type==="ship" ? t.shipFixed : (language==="zh"?"庫存已更新。":"Đã cập nhật tồn kho. · 庫存已更新。"),"ok");
       }else{
         setMessage(host,errorText(result?.error,t),"error");
         button.disabled=false;
