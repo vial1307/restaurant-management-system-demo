@@ -73,16 +73,14 @@ function initialRoute(profile) {
   return first ? `#${first}` : "#inventory";
 }
 
-async function syncProfiles() {
-  const supabase = await getSupabase();
+async function syncProfiles(profile = null, supabaseClient = null) {
+  const supabase = supabaseClient || await getSupabase();
   if (!supabase) return;
-  const { data: mine } = await supabase.auth.getUser();
-  if (!mine?.user) return;
-  const profile = await getMyProfile();
-  if (!profile) return;
-  await mirrorSupabaseSessionToLegacy(profile);
+  const currentProfile = profile || await getMyProfile({ force: true });
+  if (!currentProfile) return;
+  await mirrorSupabaseSessionToLegacy(currentProfile);
 
-  if (profile.role !== "admin") return;
+  if (currentProfile.role !== "admin") return;
   const { data, error } = await supabase
     .from("profiles")
     .select("id,username,display_name,role,location,active,permissions")
@@ -119,7 +117,9 @@ async function boot() {
     if (legacy?.provider === "supabase") localStorage.removeItem(AUTH_KEY);
     return;
   }
-  await syncProfiles();
+  const profile = await getMyProfile({ force: true });
+  if (!profile?.active) return;
+  await mirrorSupabaseSessionToLegacy(profile);
   window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
 }
 
@@ -139,13 +139,13 @@ document.addEventListener("submit", async (event) => {
       const email = loginEmailForUsername(username);
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      const profile = await getMyProfile();
+      const profile = await getMyProfile({ force: true });
       if (!profile?.active) {
         await supabase.auth.signOut();
         throw new Error("ACCOUNT_DISABLED");
       }
       await mirrorSupabaseSessionToLegacy(profile);
-      await syncProfiles();
+      await syncProfiles(profile, supabase);
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
       location.hash = initialRoute(profile);
