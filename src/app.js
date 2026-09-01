@@ -1031,7 +1031,9 @@ function inventory(context) {
   const historical = !isCurrentBranchInventoryDate();
   const cloudNotice = cloudReady
     ? `<div class="inventory-sql-status inventory-sql-ready"><strong>SQL staging · 已連線</strong><small>Dữ liệu kho hiện đang ghi trực tiếp vào Supabase PostgreSQL. Khi phát hành chính thức sẽ chuyển backend sang VPS. · 現階段庫存直接寫入 Supabase PostgreSQL；正式版再切換至 VPS。</small></div>`
-    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL database chưa ở phiên bản mới nhất · SQL 資料庫尚未更新</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa để tránh mỗi thiết bị lưu một bản khác nhau. Hãy cập nhật SQL staging lên schema v11. · 為避免各裝置資料分岔，目前僅保留查看；請先將 staging SQL 更新至 schema v11。</small></div>`;
+    : cloudState === "checking"
+      ? `<div class="inventory-cloud-notice"><strong>Đang xác minh SQL v11 · 正在確認 SQL v11</strong><small>Hệ thống đang kiểm tra kết nối và phiên bản database; không cần chạy lại SQL. · 系統正在確認資料庫連線與版本，無需重跑 SQL。</small></div>`
+      : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL chưa đạt schema v11 · SQL 尚未達到 v11</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa để tránh dữ liệu phân nhánh. · 目前僅保留查看，請確認 SQL schema v11。</small></div>`;
   const opsEnabled = editable && cloudReady && !historical && ["fuxing","yongji"].includes(site);
   const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
   const tabsEnabled = (opsEnabled || canViewHistory || catalogManageVisible) && ["fuxing","yongji"].includes(site);
@@ -1099,7 +1101,9 @@ function inventory(context) {
       : "";
     const manageDbNotice = catalogManage
       ? ""
-      : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"等待 SQL staging 更新":"Đang chờ cập nhật SQL staging"}</strong><small>${language==="zh"?"庫存管理頁已開放顯示，但在 SQL schema v11 完成前不允許寫入，避免資料只留在單一手機。":"Mục quản lý đã hiện, nhưng chưa cho ghi cho đến khi SQL schema v11 hoàn tất, để tránh dữ liệu chỉ nằm trên một điện thoại."}</small></div>`;
+      : cloudState === "checking"
+        ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在確認 SQL v11":"Đang xác minh SQL v11"}</strong><small>${language==="zh"?"請稍候，系統會自動確認資料庫版本，不需重新執行 SQL。":"Hệ thống đang tự kiểm tra database, không cần chạy lại SQL."}</small></div>`
+        : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"SQL schema v11 尚未確認":"Chưa xác nhận SQL schema v11"}</strong><small>${language==="zh"?"請確認資料庫已執行 Master v11。":"Hãy xác nhận database đã chạy Master v11."}</small></div>`;
     return `${heading(text.inventory, manageSubtitle, manageAction)}${cloudNotice}${opsTabs}${opsGuide}${manageDbNotice}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
@@ -1763,7 +1767,7 @@ window.addEventListener("shitu:inventory-cloud-status", () => {
 });
 if (globalThis.navigator?.serviceWorker && window.location.protocol !== "file:") {
   globalThis.navigator.serviceWorker
-    .register("./sw.js?v=58", { updateViaCache: "none" })
+    .register("./sw.js?v=59", { updateViaCache: "none" })
     .then(async (registration) => {
       await registration.update().catch(() => {});
       if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
