@@ -112,6 +112,13 @@ Fields:
 - exact destination storage
 - quantity
 
+Destination-storage rule:
+- Frequently used products may have an optional 固定收貨儲位 / fixed receiving storage configured at the receiving site.
+- If a fixed receiving storage exists, 出貨 selects it automatically and staff cannot change it during that shipment.
+- If no fixed receiving storage exists, staff choose the actual destination storage for that shipment.
+- A manual shipment choice never becomes a fixed default automatically.
+- Fixed receiving storage is configuration data, not inferred from the item's last shipment or current stock location.
+
 Example:
 - 復興店 → 永吉店
 - source: 復興店 大冷凍
@@ -121,6 +128,7 @@ Example:
 Effect:
 - 復興店 大冷凍 decreases by 4 immediately
 - 永吉店 四門冰箱 increases by 4 immediately
+- if the destination item has a configured 固定收貨儲位, the exact destination is taken from that configuration
 - no separate 待收貨 / 確認收貨 step in the current staging phase
 - audit records operator, time, item, amount, source site/location and destination site/location
 
