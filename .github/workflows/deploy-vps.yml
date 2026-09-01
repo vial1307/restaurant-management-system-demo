@@ -2,6 +2,16 @@ name: Deploy Kitchen OS to VPS
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "manifest.webmanifest"
+      - "sw.js"
+      - "src/**"
+      - "vps/**"
+      - ".github/workflows/deploy-vps.yml"
 
 permissions:
   contents: read
@@ -16,7 +26,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate frontend JavaScript
         run: |
@@ -40,7 +50,7 @@ jobs:
           test -f sw.js
           test -f vps/docker-compose.yml
           test -f vps/Caddyfile
-          test -x vps/scripts/deploy-api.sh || test -f vps/scripts/deploy-api.sh
+          test -f vps/scripts/deploy-api.sh
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
 
@@ -71,12 +81,19 @@ jobs:
 
       - name: Deploy with server-side backup and rollback
         run: |
-          ssh             -i "$HOME/.ssh/kitchen_actions"             -o BatchMode=yes             -o ConnectTimeout=15             deploy@82.47.180.185             'sudo -n /usr/local/sbin/kitchen-os-deploy'
+          ssh \
+            -i "$HOME/.ssh/kitchen_actions" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            deploy@82.47.180.185 \
+            'sudo -n /usr/local/sbin/kitchen-os-deploy'
 
       - name: Production health check
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 5 --retry-delay 2             http://82.47.180.185/api/health
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+            http://82.47.180.185/api/health
           echo
-          curl --fail --silent --show-error --retry 5 --retry-delay 2             http://82.47.180.185/RELEASE
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
+            http://82.47.180.185/RELEASE
           echo
