@@ -53,32 +53,30 @@ Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphen
 
 ## 6. Enable cross-device inventory sync (v32)
 
-After the original schema is installed, run:
+For the current staging/demo database, run the canonical migration once:
 
-`supabase/20260901_inventory_cloud_v2.sql`
+`supabase/20260901_inventory_ready_v5.sql`
 
-in **Supabase → SQL Editor** once.
+in **Supabase → SQL Editor** after `supabase/schema.sql`.
 
-This migration adds:
-- Fuxing storage/work locations
-- stable cloud item keys
-- Supabase Realtime for inventory stock
-- audited in/out transactions
-- Admin-only direct stocktake/catalog controls
-
-Then run:
-
-`supabase/20260901_inventory_transfers_v3.sql`
-
-This second migration adds:
-- 永吉店 as a synchronized site
-- shared product catalog keys between sites
-- 央廚 ↔ 復興店 ↔ 永吉店 shipment records
-- atomic dispatch and receipt RPCs
+This single migration includes:
+- 復興店 storage/work locations
+- 永吉店 storage/work locations
+- 央廚 storage locations
+- stable cloud item keys and shared catalog keys
+- audited inventory in/out/transfer transactions
+- Admin-only stocktake/catalog controls
+- atomic internal stock transfer
+- 央廚 ↔ 復興店 ↔ 永吉店 shipment dispatch/receipt
 - pending receipt workflow
-- Realtime shipment status synchronization
+- Supabase Realtime for stock and shipment status
 - inventory cloud contract version 5
 
-After both migrations are complete, redeploy the `admin-users` Edge Function because its workplace validation now also supports `yongji`.
+The older `20260901_inventory_cloud_v2.sql` and `20260901_inventory_transfers_v3.sql` remain in the repository as migration history, but for a fresh/staging setup use the canonical v5 file above.
 
-Reload Kitchen OS on PC/laptop/mobile. The first Admin session seeds missing catalog/stock rows only; it does not overwrite an existing cloud quantity.
+After the SQL succeeds:
+1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
+2. Reload Kitchen OS on PC/laptop/mobile.
+3. Sign in as Admin once so missing catalog rows can be seeded without overwriting existing cloud quantities.
+4. Test one stock movement from PC and confirm it appears on mobile, then reverse the test.
+
