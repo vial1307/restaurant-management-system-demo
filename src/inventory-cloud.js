@@ -218,23 +218,33 @@ function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
 
 function buildCentralCatalog(items) {
   if (!Array.isArray(items)) return [];
-  return items.map((entry) => {
-    const code = CENTRAL_ZONE_CODES[entry.zone];
-    return {
-      key: `central:${entry.id}`,
-      catalog_key: catalogKey(entry.zh || entry.id),
-      zh: entry.zh || entry.id,
-      vi: entry.vi || entry.zh || entry.id,
-      unit: entry.unit || "個",
-      work_area: "noodles",
-      storage_only: true,
-      locations: code ? [{
+  const grouped=new Map();
+  for(const entry of items){
+    const baseId=entry.baseId || String(entry.id||"").split("@")[0];
+    const key=entry.itemKey || `central:${baseId}`;
+    if(!grouped.has(key)){
+      grouped.set(key,{
+        key,
+        catalog_key:catalogKey(entry.zh || baseId),
+        zh:entry.zh || baseId,
+        vi:entry.vi || entry.zh || baseId,
+        unit:entry.unit || "個",
+        work_area:"noodles",
+        storage_only:true,
+        locations:[],
+      });
+    }
+    const item=grouped.get(key);
+    const code=CENTRAL_ZONE_CODES[entry.zone];
+    if(code && !item.locations.some((location)=>location.code===code)){
+      item.locations.push({
         code,
-        quantity: Math.max(0, Number(entry.qty) || 0),
-        minimum: Math.max(0, Number(entry.minimum) || 0),
-      }] : [],
-    };
-  }).filter((entry) => entry.locations.length);
+        quantity:Math.max(0,Number(entry.qty)||0),
+        minimum:Math.max(0,Number(entry.minimum)||0),
+      });
+    }
+  }
+  return [...grouped.values()].filter((entry)=>entry.locations.length);
 }
 
 async function rpc(name, args = {}) {
@@ -389,131 +399,96 @@ export async function getSiteLocations(site = currentSite(), kind = "storage") {
 function applyCentral(rows) {
   if (!rows.length) return false;
   const previous = readJson(CENTRAL_KEY, []);
-  const byId = new Map(previous.map((item) => [item.id, { ...item }]));
+  const next=[];
 
   for (const row of rows) {
+    if (row.location.kind !== "storage") continue;
     if (!row.item.item_key?.startsWith("central:")) continue;
-    const id = row.item.item_key.slice("central:".length);
+    const baseId = row.item.item_key.slice("central:".length);
     const zone = CENTRAL_CODE_TO_ZONE[row.location.code];
     if (!zone) continue;
-    const current = byId.get(id) || {
-      id,
-      zh: row.item.name_zh_tw,
-      vi: row.item.name_vi,
-      unit: row.item.unit,
+    next.push({
+      id:`${baseId}@${row.location.code}`,
+      baseId,
+      itemKey:row.item.item_key,
+      catalogKey:row.item.catalog_key,
+      zh:row.item.name_zh_tw,
+      vi:row.item.name_vi,
+      unit:row.item.unit,
       zone,
-      qty: 0,
-    };
-    Object.assign(current, {
-      zh: row.item.name_zh_tw,
-      vi: row.item.name_vi,
-      unit: row.item.unit,
-      zone,
-      qty: Number(row.quantity) || 0,
-      minimum: Number(row.minimum_quantity) || 0,
-      cloudItemId: row.item.id,
-      cloudLocationId: row.location.id,
+      qty:Number(row.quantity)||0,
+      minimum:Number(row.minimum_quantity)||0,
+      cloudItemId:row.item.id,
+      cloudLocationId:row.location.id,
     });
-    byId.set(id, current);
   }
 
-  const next = [...byId.values()];
-  const oldJson = JSON.stringify(previous);
-  const nextJson = JSON.stringify(next);
-  if (oldJson === nextJson) return false;
-  localStorage.setItem(CENTRAL_KEY, nextJson);
-  window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", {
-    detail: { site: "central" },
-  }));
+  next.sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant") || String(a.zone).localeCompare(String(b.zone),"zh-Hant"));
+  const oldJson=JSON.stringify(previous);
+  const nextJson=JSON.stringify(next);
+  if(oldJson===nextJson) return false;
+  localStorage.setItem(CENTRAL_KEY,nextJson);
+  window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated",{detail:{site:"central"}}));
   return true;
 }
 
 function applyBranch(rows, site) {
   if (!rows.length || !["fuxing","yongji"].includes(site)) return false;
-  const state = appState();
-  if (!state?.records?.[state.selectedDate] || state.selectedDate !== todayKey()) return false;
-  const record = state.records[state.selectedDate];
-  record.inventory ??= [];
-  record.workInventory ??= [];
-  const codeToZone = BRANCH_CODE_TO_ZONE[site];
+  const state=appState();
+  if(!state?.records?.[state.selectedDate] || state.selectedDate!==todayKey()) return false;
+  const record=state.records[state.selectedDate];
+  const codeToZone=BRANCH_CODE_TO_ZONE[site];
+  const inventory=[];
+  const workMap=new Map();
 
-  let changed = false;
-  for (const row of rows) {
-    const key = row.item.item_key || "";
-    if (!key.startsWith(`${site}:`)) continue;
-    const stockKey = key.slice(site.length + 1);
-    if (row.location.kind === "storage") {
-      const zone = codeToZone?.[row.location.code];
-      if (!zone) continue;
-      let target = record.inventory.find((entry) => entry.stockKey === stockKey && entry.zone === zone);
-      if (!target) {
-        target = {
-          id: `${stockKey}-${zone}`,
-          stockKey,
-          label: row.item.name_zh_tw,
-          labelVi: row.item.name_vi,
-          unit: row.item.unit,
-          workArea: row.item.work_area || "noodles",
-          storageOnly: Boolean(row.item.storage_only),
-          zone,
-          quantity: 0,
-          minimum: 0,
-        };
-        record.inventory.push(target);
-        changed = true;
-      }
-      const quantity = Number(row.quantity) || 0;
-      const minimum = Number(row.minimum_quantity) || 0;
-      if (Number(target.quantity) !== quantity || Number(target.minimum) !== minimum) changed = true;
-      Object.assign(target, {
-        label: row.item.name_zh_tw,
-        labelVi: row.item.name_vi,
-        unit: row.item.unit,
-        workArea: row.item.work_area || target.workArea || "noodles",
-        storageOnly: Boolean(row.item.storage_only),
-        quantity,
-        minimum,
-        cloudItemId: row.item.id,
-        cloudLocationId: row.location.id,
+  for(const row of rows){
+    const key=row.item.item_key||"";
+    if(!key.startsWith(`${site}:`)) continue;
+    const stockKey=key.slice(site.length+1);
+    if(row.location.kind==="storage"){
+      const zone=codeToZone?.[row.location.code];
+      if(!zone) continue;
+      inventory.push({
+        id:`${stockKey}-${zone}`,
+        stockKey,
+        label:row.item.name_zh_tw,
+        labelVi:row.item.name_vi,
+        unit:row.item.unit,
+        workArea:row.item.work_area||"noodles",
+        storageOnly:Boolean(row.item.storage_only),
+        zone,
+        quantity:Number(row.quantity)||0,
+        minimum:Number(row.minimum_quantity)||0,
+        cloudItemId:row.item.id,
+        cloudLocationId:row.location.id,
       });
-    } else if (row.location.kind === "work") {
-      const area = row.location.code.replace(`${site}-work-`, "");
-      let target = record.workInventory.find((entry) => entry.stockKey === stockKey);
-      if (!target) {
-        target = {
-          id: `work-${stockKey}`,
-          stockKey,
-          label: row.item.name_zh_tw,
-          labelVi: row.item.name_vi,
-          unit: row.item.unit,
-          workArea: area || row.item.work_area || "noodles",
-          quantity: 0,
-          minimum: 0,
-        };
-        record.workInventory.push(target);
-        changed = true;
-      }
-      const quantity = Number(row.quantity) || 0;
-      const minimum = Number(row.minimum_quantity) || 0;
-      if (Number(target.quantity) !== quantity || Number(target.minimum) !== minimum) changed = true;
-      Object.assign(target, {
-        label: row.item.name_zh_tw,
-        labelVi: row.item.name_vi,
-        unit: row.item.unit,
-        workArea: area || row.item.work_area || target.workArea || "noodles",
-        quantity,
-        minimum,
-        cloudItemId: row.item.id,
-        cloudLocationId: row.location.id,
+    }else if(row.location.kind==="work"){
+      const area=row.location.code.replace(`${site}-work-`,"");
+      workMap.set(stockKey,{
+        id:`work-${stockKey}`,
+        stockKey,
+        label:row.item.name_zh_tw,
+        labelVi:row.item.name_vi,
+        unit:row.item.unit,
+        workArea:area||row.item.work_area||"noodles",
+        quantity:Number(row.quantity)||0,
+        minimum:Number(row.minimum_quantity)||0,
+        cloudItemId:row.item.id,
+        cloudLocationId:row.location.id,
       });
     }
   }
 
-  if (!changed) return false;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", {
-    detail: { site },
-  }));
+  inventory.sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant") || String(a.zone).localeCompare(String(b.zone)));
+  const workInventory=[...workMap.values()].sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant"));
+  const before=JSON.stringify({inventory:record.inventory||[],workInventory:record.workInventory||[]});
+  const after=JSON.stringify({inventory,workInventory});
+  if(before===after) return false;
+  record.inventory=inventory;
+  record.workInventory=workInventory;
+  record.updatedAt=new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated",{detail:{site}}));
   return true;
 }
 
