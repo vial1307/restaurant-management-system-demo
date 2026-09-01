@@ -575,7 +575,8 @@ function inventory(context) {
     : "";
   const site = activeInventorySite() || "fuxing";
   const opsEnabled = editable && !historical && ["fuxing","yongji"].includes(site);
-  const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
+  const cloudReady = cloudState === "ready";
+  const opsMode = opsEnabled && cloudReady ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
     in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
@@ -583,7 +584,7 @@ function inventory(context) {
     transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
     receive: language === "zh" ? "待收貨" : "Nhận hàng · 待收貨",
   };
-  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="out" class="${opsMode==="out"?"active":""}">${escapeHtml(opLabel.out)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="receive" class="${opsMode==="receive"?"active":""}">${escapeHtml(opLabel.receive)}</button></div>` : "";
+  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}" ${cloudReady?"":"disabled"}>${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="out" class="${opsMode==="out"?"active":""}" ${cloudReady?"":"disabled"}>${escapeHtml(opLabel.out)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}" ${cloudReady?"":"disabled"}>${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="receive" class="${opsMode==="receive"?"active":""}" ${cloudReady?"":"disabled"}>${escapeHtml(opLabel.receive)}</button></div>` : "";
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
