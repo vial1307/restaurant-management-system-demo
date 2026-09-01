@@ -101,7 +101,8 @@ async function adminDesktop(browser) {
   await add.waitFor({state:"visible"});
   await add.click();
   await page.locator('form[data-form="add-item"]').waitFor({state:"visible"});
-  await page.locator('[data-action="close-modal"]').first().click();
+  await page.locator('button[data-action="close-modal"]').first().click();
+  await page.locator(".modal-backdrop").waitFor({state:"detached"});
 
   await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
   await page.locator("[data-account-add]").waitFor({state:"visible"});
