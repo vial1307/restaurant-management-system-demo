@@ -1058,3 +1058,101 @@ html[lang="vi"] .central-row small{line-height:1.35}
   .op-transfer-balance{font-size:10.5px;padding:6px 8px}
   .op-transfer-balance strong{font-size:12px}
 }
+
+
+/* v41 — 領貨 / 出貨 split and post-pick handling */
+.pick-followup{
+  grid-column:1/-1;
+  display:grid;
+  gap:8px;
+  margin-top:2px;
+  padding:9px;
+  border:1px solid #dce7e2;
+  border-radius:10px;
+  background:#f8fbfa;
+}
+.pick-status{
+  display:grid;
+  grid-template-columns:auto auto 1fr;
+  align-items:baseline;
+  gap:6px;
+  font-size:11px;
+  color:#62756e;
+}
+.pick-status strong{
+  color:#143f35;
+  font-size:14px;
+  font-variant-numeric:tabular-nums;
+}
+.pick-status small{
+  text-align:right;
+  color:#7b8b85;
+}
+.pick-use-row,
+.pick-return-row{
+  display:grid;
+  align-items:center;
+  gap:8px;
+}
+.pick-use-row{
+  grid-template-columns:minmax(150px,1fr) auto;
+}
+.pick-return-row{
+  grid-template-columns:minmax(180px,1fr) minmax(150px,.72fr) auto;
+}
+.pick-return-row label{
+  display:grid;
+  gap:4px;
+  min-width:0;
+}
+.pick-return-row label>span{
+  font-size:10px;
+  font-weight:700;
+  color:#70827b;
+}
+.pick-return-row select{
+  width:100%;
+  min-width:0;
+}
+.op-secondary{
+  min-height:40px;
+  padding:0 14px;
+  border:1px solid #b9cbc4;
+  border-radius:9px;
+  background:#fff;
+  color:#184d40;
+  font-weight:750;
+}
+.op-secondary.op-use{
+  background:#174d40;
+  border-color:#174d40;
+  color:#fff;
+}
+.op-secondary:disabled{
+  opacity:.42;
+}
+@media(max-width:760px){
+  .pick-followup{
+    padding:8px;
+    gap:7px;
+  }
+  .pick-status{
+    grid-template-columns:auto auto;
+  }
+  .pick-status small{
+    grid-column:1/-1;
+    text-align:left;
+  }
+  .pick-use-row,
+  .pick-return-row{
+    grid-template-columns:1fr;
+  }
+  .pick-use-row .op-quantity,
+  .pick-return-row .op-quantity{
+    width:100%;
+  }
+  .op-secondary{
+    min-height:42px;
+    width:100%;
+  }
+}
