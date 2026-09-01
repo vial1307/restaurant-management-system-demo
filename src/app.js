@@ -29,10 +29,10 @@ import {
   canDirectInventoryAdjust,
   canInventoryEdit,
   cloudAdjustQuantity,
-  cloudArchiveFuxingItem,
+  cloudArchiveBranchItem,
   cloudSetMinimum,
   cloudSetQuantity,
-  cloudSyncFuxingCatalogItem,
+  cloudSyncBranchCatalogItem,
   cloudTransferInventory,
   inventoryCloudState,
   isCurrentBranchInventoryDate,
@@ -889,7 +889,7 @@ root.addEventListener("click", (event) => {
   }
   if (action === "delete-item" && canDirectInventoryAdjust() && window.confirm(translate(state.settings.language).deleteConfirm)) {
     const stockKey = target.dataset.stockKey;
-    void cloudArchiveFuxingItem(stockKey).then((result) => {
+    void cloudArchiveBranchItem(stockKey,activeInventorySite()).then((result) => {
       if (result.ok || result.fallback) {
         store.removeIngredient(stockKey);
         return;
@@ -961,7 +961,7 @@ root.addEventListener("change", (event) => {
     }
     const previous = item[key];
     store.updateItem(id, key, element.value);
-    void cloudSyncFuxingCatalogItem(item.stockKey).then((result) => {
+    void cloudSyncBranchCatalogItem(item.stockKey,activeInventorySite()).then((result) => {
       if (!result.ok && !result.fallback) {
         store.updateItem(id, key, previous);
         void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
@@ -1009,7 +1009,7 @@ root.addEventListener("change", (event) => {
     }
     const previous = item[key];
     store.updateWorkItem(id, key, element.value);
-    void cloudSyncFuxingCatalogItem(item.stockKey).then((result) => {
+    void cloudSyncBranchCatalogItem(item.stockKey,activeInventorySite()).then((result) => {
       if (!result.ok && !result.fallback) {
         store.updateWorkItem(id, key, previous);
         void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
@@ -1069,7 +1069,7 @@ root.addEventListener("submit", (event) => {
     if (form.dataset.form === "edit-item") {
       store.updateIngredient(stockKey, item);
       setTimeout(() => {
-        void cloudSyncFuxingCatalogItem(stockKey).then((result) => {
+        void cloudSyncBranchCatalogItem(stockKey,activeInventorySite()).then((result) => {
           if (!result.ok && !result.fallback) {
             const message = result.error?.message === "LOCATION_HAS_STOCK"
               ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
