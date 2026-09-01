@@ -152,7 +152,12 @@ export function canViewBranchCatalogManagement(site = activeInventorySite()) {
 }
 
 export function canManageBranchCatalog(site = activeInventorySite()) {
-  return canViewBranchCatalogManagement(site) && canInventoryEdit();
+  if (!canViewBranchCatalogManagement(site)) return false;
+  if (inventoryCloudState() !== "ready") return false;
+  if (globalThis.navigator?.onLine === false) return false;
+  // Catalog/storage management is master data. It must not be locked just because
+  // the operator is viewing a different service date.
+  return true;
 }
 
 export function canDirectInventoryAdjust() {
