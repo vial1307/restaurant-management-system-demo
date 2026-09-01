@@ -1,4 +1,9 @@
-# Kitchen OS v32 — Manager Review Checklist
+# Kitchen OS v39 — Manager Review Checklist
+
+## Current staging rule
+
+For this review phase, inventory actions apply immediately. There is no manager approval step and no separate receiving confirmation. The system records who performed each inbound, outbound and transfer action. Formal approval/confirmation will be added only in the VPS production phase.
+
 
 Purpose: staging review before moving the system toward VPS deployment.
 
@@ -8,7 +13,7 @@ Purpose: staging review before moving the system toward VPS deployment.
 2. Run `supabase/20260901_inventory_ready_v5.sql` in Supabase SQL Editor.
 3. Redeploy the `admin-users` Edge Function from `supabase/functions/admin-users/index.ts`.
 4. Open Kitchen OS once as Admin so missing Fuxing / Yongji / central catalog rows can be seeded.
-5. Hard refresh PC/laptop/mobile so all devices load release v32.
+5. Hard refresh PC/laptop/mobile so all devices load release v39.
 
 ## Roles to review
 
@@ -18,7 +23,7 @@ Inventory should be operation-first:
 - 進貨入庫 / Nhập kho
 - 領料／出庫 / Xuất kho
 - 庫存轉撥 / Điều chuyển
-- 待收貨 / Nhận hàng
+- Cross-site transfer applies immediately; no separate receiving confirmation
 
 Normal users should not see direct stocktake/catalog/safety-minimum controls.
 
