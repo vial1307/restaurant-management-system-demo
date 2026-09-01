@@ -432,7 +432,7 @@ async function verifyMigration({ force = false } = {}) {
   if (!force && migrationAvailable === true) return true;
   if (!force && migrationAvailable === false && now - migrationCheckedAt < MIGRATION_RETRY_MS) return false;
 
-  if (!isSupabaseConfigured()) {
+  if (!isInventoryBackendConfigured()) {
     migrationAvailable = false;
     migrationCheckedAt = now;
     return false;
@@ -450,15 +450,26 @@ async function verifyMigration({ force = false } = {}) {
   }
 
   try {
-    const supabase = await getSupabase();
-    const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
+    let version = 0;
+    let error = null;
+
+    if (isVpsApiConfigured()) {
+      const result = await vpsSchemaVersion();
+      version = Number(result?.version || 0);
+    } else {
+      const supabase = await getSupabase();
+      const result = await supabase.rpc("kitchen_inventory_schema_version");
+      version = Number(result?.data || 0);
+      error = result?.error || null;
+    }
+
     migrationCheckedAt = Date.now();
 
-    if (!error && Number(version) >= REQUIRED_SCHEMA_VERSION) {
+    if (!error && version >= REQUIRED_SCHEMA_VERSION) {
       migrationAvailable = true;
       localStorage.setItem(CLOUD_FLAG_KEY, "ready");
-      localStorage.setItem(CLOUD_SCHEMA_VERSION_KEY, String(Number(version)));
-      dispatchStatus("ready", { version: Number(version) });
+      localStorage.setItem(CLOUD_SCHEMA_VERSION_KEY, String(version));
+      dispatchStatus("ready", { version });
       return true;
     }
 
@@ -490,6 +501,7 @@ export async function refreshInventoryCloudState() {
 }
 
 export async function bootstrapFuxingInventory() {
+  if (isVpsApiConfigured()) return true;
   if (!(await verifyMigration()) || role() !== "admin") return false;
   const catalog = buildBranchCatalog("fuxing");
   if (!catalog.length) return false;
@@ -502,6 +514,7 @@ export async function bootstrapFuxingInventory() {
 }
 
 export async function bootstrapYongjiInventory() {
+  if (isVpsApiConfigured()) return true;
   if (!(await verifyMigration()) || role() !== "admin") return false;
   const catalog = buildBranchCatalog("yongji", { zeroQuantities: true });
   if (!catalog.length) return false;
@@ -514,6 +527,7 @@ export async function bootstrapYongjiInventory() {
 }
 
 export async function bootstrapCentralInventory(items = readJson(CENTRAL_KEY, [])) {
+  if (isVpsApiConfigured()) return true;
   if (!(await verifyMigration()) || role() !== "admin") return false;
   const catalog = buildCentralCatalog(items);
   if (!catalog.length) return false;
@@ -528,44 +542,60 @@ export async function bootstrapCentralInventory(items = readJson(CENTRAL_KEY, []
 async function fetchSite(site) {
   if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
 
-  const supabase = await getSupabase();
-  const { data: locations, error: locError } = await supabase
-    .from("inventory_locations")
-    .select("id,code,name_zh_tw,name_vi,site,kind,sort_order")
-    .eq("site", site)
-    .eq("active", true)
-    .order("sort_order", { ascending: true });
-  if (locError) throw locError;
-  if (!locations?.length) return [];
+  let locations = [];
+  let stocks = [];
+  let items = [];
+
+  if (isVpsApiConfigured()) {
+    const result = await vpsInventory(site);
+    locations = result?.locations || [];
+    stocks = result?.stock || [];
+    items = result?.items || [];
+  } else {
+    const supabase = await getSupabase();
+    const { data: cloudLocations, error: locError } = await supabase
+      .from("inventory_locations")
+      .select("id,code,name_zh_tw,name_vi,site,kind,sort_order")
+      .eq("site", site)
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
+    if (locError) throw locError;
+    locations = cloudLocations || [];
+    if (!locations.length) return [];
+
+    const locationIds = locations.map((loc) => loc.id);
+    const { data: cloudStocks, error: stockError } = await supabase
+      .from("inventory_stock")
+      .select("item_id,location_id,quantity,minimum_quantity,updated_at")
+      .in("location_id", locationIds);
+    if (stockError) throw stockError;
+    stocks = cloudStocks || [];
+    if (!stocks.length) return [];
+
+    const itemIds = [...new Set(stocks.map((row) => row.item_id))];
+    const { data: cloudItems, error: itemError } = await supabase
+      .from("inventory_items")
+      .select("id,item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active")
+      .in("id", itemIds)
+      .eq("active", true);
+    if (itemError) throw itemError;
+    items = cloudItems || [];
+  }
+
+  if (!locations.length || !stocks.length || !items.length) return [];
 
   cache.locationsByCode.clear();
   for (const loc of locations) cache.locationsByCode.set(loc.code, loc);
 
-  const locationIds = locations.map((loc) => loc.id);
-  const { data: stocks, error: stockError } = await supabase
-    .from("inventory_stock")
-    .select("item_id,location_id,quantity,minimum_quantity,updated_at")
-    .in("location_id", locationIds);
-  if (stockError) throw stockError;
-  if (!stocks?.length) return [];
-
-  const itemIds = [...new Set(stocks.map((row) => row.item_id))];
-  const { data: items, error: itemError } = await supabase
-    .from("inventory_items")
-    .select("id,item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active")
-    .in("id", itemIds)
-    .eq("active", true);
-  if (itemError) throw itemError;
-
-  const catalogKeys=[...new Set((items||[]).map((item)=>item.catalog_key).filter(Boolean))];
+  const catalogKeys=[...new Set(items.map((item)=>item.catalog_key).filter(Boolean))];
   let receiveDefaults=[];
   try{ receiveDefaults=await getInventoryReceiveDefaults({sites:[site],catalogKeys}); }catch{}
   const defaultByCatalog=new Map(receiveDefaults.map((entry)=>[entry.catalogKey,entry.locationCode]));
-  for(const item of items||[]) item.receive_default_location_code=defaultByCatalog.get(item.catalog_key)||"";
+  for(const item of items) item.receive_default_location_code=defaultByCatalog.get(item.catalog_key)||"";
 
-  const itemMap = new Map((items || []).map((item) => [item.id, item]));
+  const itemMap = new Map(items.map((item) => [item.id, item]));
   cache.itemsByKey.clear();
-  for (const item of items || []) if (item.item_key) cache.itemsByKey.set(item.item_key, item);
+  for (const item of items) if (item.item_key) cache.itemsByKey.set(item.item_key, item);
   const locMap = new Map(locations.map((loc) => [loc.id, loc]));
 
   return stocks.map((stock) => ({
@@ -582,6 +612,11 @@ export async function getSiteInventoryRows(site = currentSite()) {
 
 export async function getSiteLocations(site = currentSite(), kind = "storage") {
   if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
+  if (isVpsApiConfigured()) {
+    const result = await vpsInventory(site);
+    const locations = result?.locations || [];
+    return kind ? locations.filter((entry)=>entry.kind===kind) : locations;
+  }
   const supabase = await getSupabase();
   const query = supabase
     .from("inventory_locations")
