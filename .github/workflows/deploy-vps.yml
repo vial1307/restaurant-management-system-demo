@@ -1,0 +1,82 @@
+name: Deploy Kitchen OS to VPS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitchen-os-production
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate frontend JavaScript
+        run: |
+          set -euo pipefail
+          for file in src/*.js; do
+            node --check "$file"
+          done
+
+      - name: Validate backend JavaScript
+        run: |
+          set -euo pipefail
+          for file in vps/backend/src/*.mjs vps/backend/scripts/*.mjs; do
+            node --check "$file"
+          done
+
+      - name: Validate required production files
+        run: |
+          set -euo pipefail
+          test -f index.html
+          test -f manifest.webmanifest
+          test -f sw.js
+          test -f vps/docker-compose.yml
+          test -f vps/Caddyfile
+          test -x vps/scripts/deploy-api.sh || test -f vps/scripts/deploy-api.sh
+          test -f vps/scripts/backup.sh
+          test -f vps/scripts/migrate.sh
+
+  deploy:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          if [ -z "$VPS_SSH_KEY" ]; then
+            echo "::error::Repository secret VPS_SSH_KEY is not configured."
+            exit 1
+          fi
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Deploy with server-side backup and rollback
+        run: |
+          ssh             -i "$HOME/.ssh/kitchen_actions"             -o BatchMode=yes             -o ConnectTimeout=15             deploy@82.47.180.185             'sudo -n /usr/local/sbin/kitchen-os-deploy'
+
+      - name: Production health check
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2             http://82.47.180.185/api/health
+          echo
+          curl --fail --silent --show-error --retry 5 --retry-delay 2             http://82.47.180.185/RELEASE
+          echo
