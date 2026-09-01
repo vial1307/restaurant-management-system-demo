@@ -945,3 +945,22 @@ html[lang="vi"] .central-row small{line-height:1.35}
 @media(max-width:389px){
   .op-location-pill{flex-basis:100%}
 }
+
+
+/* v33 — cloud fallback visibility */
+.inventory-cloud-notice small{
+  display:block;
+  margin-top:5px;
+  font-size:10.5px;
+  font-weight:600;
+  line-height:1.45;
+  opacity:.9;
+}
+.central-tabs button:disabled{
+  opacity:.42;
+  cursor:not-allowed;
+  filter:saturate(.45);
+}
+@media(max-width:760px){
+  .inventory-cloud-notice small{font-size:10px}
+}
