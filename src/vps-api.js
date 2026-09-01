@@ -1,4 +1,11 @@
 const VPS_HOSTS = new Set(["82.47.180.185"]);
+const inventoryCache = new Map();
+const INVENTORY_CACHE_MS = 1200;
+
+export function invalidateVpsInventoryCache(site = "") {
+  if (site) inventoryCache.delete(site);
+  else inventoryCache.clear();
+}
 
 export function isVpsApiConfigured() {
   if (typeof window === "undefined") return false;
@@ -79,8 +86,22 @@ export function vpsSchemaVersion() {
   return apiRequest("/api/inventory/schema-version");
 }
 
-export function vpsInventory(site) {
-  return apiRequest(`/api/inventory/${encodeURIComponent(site)}`);
+export function vpsInventory(site, { force = false } = {}) {
+  const key = String(site || "");
+  const now = Date.now();
+  const cached = inventoryCache.get(key);
+  if (!force && cached && now - cached.at < INVENTORY_CACHE_MS) {
+    return cached.promise;
+  }
+
+  const promise = apiRequest(`/api/inventory/${encodeURIComponent(key)}`)
+    .catch((error) => {
+      inventoryCache.delete(key);
+      throw error;
+    });
+
+  inventoryCache.set(key, { at: now, promise });
+  return promise;
 }
 
 export function vpsInventoryHistory(site, limit = 200) {
@@ -88,24 +109,34 @@ export function vpsInventoryHistory(site, limit = 200) {
   return apiRequest(`/api/inventory/${encodeURIComponent(site)}/transactions?limit=${safeLimit}`);
 }
 
-export function vpsAdjustInventory(body) {
-  return apiRequest("/api/inventory/adjust", { method: "POST", body });
+export async function vpsAdjustInventory(body) {
+  const result = await apiRequest("/api/inventory/adjust", { method: "POST", body });
+  invalidateVpsInventoryCache(String(body?.locationCode || "").split("-")[0] || "");
+  return result;
 }
 
-export function vpsSetQuantity(body) {
-  return apiRequest("/api/inventory/set-quantity", { method: "POST", body });
+export async function vpsSetQuantity(body) {
+  const result = await apiRequest("/api/inventory/set-quantity", { method: "POST", body });
+  invalidateVpsInventoryCache("");
+  return result;
 }
 
-export function vpsSetMinimum(body) {
-  return apiRequest("/api/inventory/set-minimum", { method: "POST", body });
+export async function vpsSetMinimum(body) {
+  const result = await apiRequest("/api/inventory/set-minimum", { method: "POST", body });
+  invalidateVpsInventoryCache("");
+  return result;
 }
 
-export function vpsTransferInventory(body) {
-  return apiRequest("/api/inventory/transfer", { method: "POST", body });
+export async function vpsTransferInventory(body) {
+  const result = await apiRequest("/api/inventory/transfer", { method: "POST", body });
+  invalidateVpsInventoryCache("");
+  return result;
 }
 
-export function vpsDirectTransfer(body) {
-  return apiRequest("/api/inventory/direct-transfer", { method: "POST", body });
+export async function vpsDirectTransfer(body) {
+  const result = await apiRequest("/api/inventory/direct-transfer", { method: "POST", body });
+  invalidateVpsInventoryCache("");
+  return result;
 }
 
 export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
@@ -116,20 +147,26 @@ export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
   return apiRequest(`/api/inventory/receive-defaults${suffix}`);
 }
 
-export function vpsSetReceiveDefault(body) {
-  return apiRequest("/api/inventory/receive-default", { method: "POST", body });
+export async function vpsSetReceiveDefault(body) {
+  const result = await apiRequest("/api/inventory/receive-default", { method: "POST", body });
+  invalidateVpsInventoryCache(String(body?.site || ""));
+  return result;
 }
 
-export function vpsSyncCatalog(item) {
-  return apiRequest("/api/inventory/catalog/sync", {
+export async function vpsSyncCatalog(item) {
+  const result = await apiRequest("/api/inventory/catalog/sync", {
     method: "POST",
     body: { item },
   });
+  invalidateVpsInventoryCache(String(item?.key || "").split(":")[0] || "");
+  return result;
 }
 
-export function vpsArchiveCatalogItem(itemKey) {
-  return apiRequest("/api/inventory/catalog/archive", {
+export async function vpsArchiveCatalogItem(itemKey) {
+  const result = await apiRequest("/api/inventory/catalog/archive", {
     method: "POST",
     body: { itemKey },
   });
+  invalidateVpsInventoryCache(String(itemKey || "").split(":")[0] || "");
+  return result;
 }
