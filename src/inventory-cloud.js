@@ -100,6 +100,10 @@ export function canInventoryEdit() {
   return !["fuxing","yongji"].includes(site) || isCurrentBranchInventoryDate();
 }
 
+export function canInventoryDraftCount() {
+  return hasInventoryPermission("edit") && inventoryCloudState() !== "ready";
+}
+
 export function canDirectInventoryAdjust() {
   return canInventoryEdit() && role() === "admin";
 }
