@@ -25,6 +25,11 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
 
+# Allow the dedicated deploy account to manage application containers.
+if id deploy >/dev/null 2>&1; then
+  usermod -aG docker deploy
+fi
+
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow 22/tcp
@@ -51,10 +56,30 @@ EOF
   chmod 600 "${APP_DIR}/.env"
 fi
 
+# deploy may run docker compose later, but secrets stay unreadable to other users.
+if id deploy >/dev/null 2>&1; then
+  chown -R deploy:deploy "${APP_DIR}/repo"
+  chown deploy:deploy "${APP_DIR}/backups"
+  chown root:deploy "${APP_DIR}/.env"
+  chmod 640 "${APP_DIR}/.env"
+fi
+
 cp "${APP_DIR}/repo/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
+if id deploy >/dev/null 2>&1; then
+  chown deploy:deploy "${APP_DIR}/docker-compose.yml"
+fi
 
 cd "${APP_DIR}"
 docker compose --env-file .env up -d db
 docker compose --env-file .env ps
 
+echo
+echo "=== Firewall ==="
+ufw status
+echo
+echo "=== Docker ==="
+docker --version
+docker compose version
+echo
 echo "Bootstrap complete."
+echo "PostgreSQL port 5432 is private to Docker; SSH password login is unchanged."
