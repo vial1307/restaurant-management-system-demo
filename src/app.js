@@ -27,6 +27,7 @@ import {
   branchLocationCode,
   branchWorkLocationCode,
   canDirectInventoryAdjust,
+  canManageBranchCatalog,
   canInventoryDraftCount,
   canInventoryEdit,
   cloudAdjustQuantity,
@@ -496,7 +497,7 @@ function inventoryStatusBadge(item, text) {
 function storageInventoryRow(item, context) {
   const { language, text, record } = context;
   const editable = canInventoryEdit() || canInventoryDraftCount();
-  const catalogManage = canDirectInventoryAdjust();
+  const catalogManage = canManageBranchCatalog(activeInventorySite());
   const status = inventoryStatus(item);
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
   const source = item.zone === "large-freezer" ? null : storageSources(item, record, item.zone)[0];
@@ -504,13 +505,13 @@ function storageInventoryRow(item, context) {
   return `<article class="inventory-row storage-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.workstation)}">${WORK_AREAS.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(WORK_AREAS.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.storageLocation)}">${ZONES.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
-    <div class="inventory-storage">${quantityControl(item)}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}${editable && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManage ? `<button class="inventory-action-button" data-action="open-edit-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button><button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}</div></article>`;
+    <div class="inventory-storage">${quantityControl(item)}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}${editable && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManage ? `<button class="inventory-action-button" data-action="open-edit-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></article>`;
 }
 
 function workInventoryRow(item, context) {
   const { language, text, record } = context;
   const editable = canInventoryEdit() || canInventoryDraftCount();
-  const catalogManage = canDirectInventoryAdjust();
+  const catalogManage = canManageBranchCatalog(activeInventorySite());
   const status = inventoryStatus(item);
   const sources = storageSources(item, record);
   const source = sources[0];
@@ -1022,7 +1023,7 @@ function inventory(context) {
     ? [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock]
     : [text.inventory, text.workstation, text.current, text.standard, text.restockSource, text.transfer];
   const editable = canInventoryEdit() || canInventoryDraftCount();
-  const catalogManage = canDirectInventoryAdjust();
+  const catalogManage = canManageBranchCatalog(site);
   const historical = !isCurrentBranchInventoryDate();
   const cloudNotice = cloudReady
     ? ""
@@ -1455,14 +1456,14 @@ root.addEventListener("click", (event) => {
     }
   }
   if (action === "open-add-item") {
-    if (!canDirectInventoryAdjust()) return;
+    if (!canManageBranchCatalog(activeInventorySite())) return;
     view.editingStockKey = null; view.modal = "add-item"; render();
   }
   if (action === "open-edit-item") {
-    if (!canDirectInventoryAdjust()) return;
+    if (!canManageBranchCatalog(activeInventorySite())) return;
     view.editingStockKey = target.dataset.stockKey; view.modal = "add-item"; render();
   }
-  if (action === "delete-item" && canDirectInventoryAdjust() && window.confirm(translate(state.settings.language).deleteConfirm)) {
+  if (action === "delete-item" && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") && window.confirm(translate(state.settings.language).deleteConfirm)) {
     const stockKey = target.dataset.stockKey;
     void cloudArchiveBranchItem(stockKey,activeInventorySite()).then((result) => {
       if (result.ok || result.fallback) {
@@ -1639,7 +1640,7 @@ root.addEventListener("submit", (event) => {
     if (title) store.addTask({ title, quantity: data.get("quantity"), area: data.get("area"), assigneeId, assigneeName: assignee?.name || "", dueAt: data.get("dueAt") });
   }
   if (["add-item", "edit-item"].includes(form.dataset.form)) {
-    if (!canDirectInventoryAdjust()) { view.modal = null; render(); return; }
+    if (!canManageBranchCatalog(activeInventorySite())) { view.modal = null; render(); return; }
     const locations = data.getAll("zones").map((zone) => ({
       zone: String(zone),
       quantity: Number(data.get(`quantity:${zone}`)),
@@ -1688,15 +1689,19 @@ root.addEventListener("submit", (event) => {
         });
       }, 0);
     } else {
-      store.addItem(item);
+      const createdStockKey=store.addItem(item);
       setTimeout(() => {
         void (async()=>{
-          await (activeInventorySite()==="yongji" ? bootstrapYongjiInventory() : bootstrapFuxingInventory());
-          await cloudSetReceiveDefault({
-            site:activeInventorySite(),
-            catalogKey,
-            locationCode:receiveZone ? branchLocationCode(activeInventorySite(),receiveZone) : "",
-          });
+          const result=createdStockKey
+            ? await cloudSyncBranchCatalogItem(createdStockKey,activeInventorySite())
+            : {ok:false,fallback:false};
+          if(result.ok || result.fallback){
+            await cloudSetReceiveDefault({
+              site:activeInventorySite(),
+              catalogKey,
+              locationCode:receiveZone ? branchLocationCode(activeInventorySite(),receiveZone) : "",
+            });
+          }
           await syncInventoryNow(activeInventorySite(),{reloadBranch:false});
         })();
       }, 0);
