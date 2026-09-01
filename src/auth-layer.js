@@ -132,7 +132,7 @@ function centralPage(user) {
   const filtered = items.filter(i => (selectedZone === "all" || i.zone === selectedZone) && `${i.zh} ${i.vi}`.toLowerCase().includes(query.toLowerCase()));
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
-  const canViewHistory = ["admin", "manager", "supervisor"].includes(accountRole);
+  const canViewHistory = accountRole === "admin";
   const log = canViewHistory && mode === "history" ? history() : [];
   const cloudState = inventoryCloudState();
   const cloudNotice = cloudState === "migration-needed"
