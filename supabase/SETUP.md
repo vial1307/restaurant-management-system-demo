@@ -67,10 +67,11 @@ This single migration includes:
 - audited inventory in/out/transfer transactions
 - Admin-only stocktake/catalog controls
 - atomic internal stock transfer
-- 央廚 ↔ 復興店 and 央廚 ↔ 永吉店 shipment dispatch/receipt
-- pending receipt workflow
+- immediate cross-site 出貨 across 央廚 / 復興店 / 永吉店 with exact destination storage
+- 領貨 workflow with 使用 and 歸位 handling
+- central 使用中 work location for staged/active use
 - Supabase Realtime for stock and transfer status
-- immediate cross-site transfer: source decreases and destination increases in one atomic RPC
+- immediate cross-site transfer: source decreases and exact destination storage increases in one atomic RPC
 - actor/user audit for every inventory transaction; no manager confirmation in staging
 - inventory cloud contract version 7
 
