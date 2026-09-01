@@ -28,6 +28,7 @@ function updateViewportVars() {
   root.style.setProperty("--app-vh", `${height * 0.01}px`);
   root.style.setProperty("--visual-height", `${height}px`);
   root.style.setProperty("--visual-width", `${width}px`);
+  root.style.setProperty("--visual-offset-top", `${viewport?.offsetTop || 0}px`);
 
   // A large visual/layout viewport gap usually means the on-screen keyboard is open.
   const layoutHeight = window.innerHeight;
@@ -43,7 +44,31 @@ window.addEventListener("orientationchange", () => setTimeout(updateViewportVars
 window.visualViewport?.addEventListener("resize", updateViewportVars, { passive: true });
 window.visualViewport?.addEventListener("scroll", updateViewportVars, { passive: true });
 
+let focusedControlTimer = 0;
+
+function keepFocusedModalControlVisible(target) {
+  if (!target?.matches?.(".ingredient-modal input, .ingredient-modal select, .ingredient-modal textarea")) return;
+  clearTimeout(focusedControlTimer);
+  focusedControlTimer = window.setTimeout(() => {
+    updateViewportVars();
+    target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+  }, 280);
+}
+
 document.addEventListener("focusin", (event) => {
-  if (event.target.matches?.("input,textarea,select")) setTimeout(updateViewportVars, 50);
+  if (!event.target.matches?.("input,textarea,select")) return;
+  setTimeout(updateViewportVars, 50);
+  keepFocusedModalControlVisible(event.target);
+  // iOS Safari finishes moving the visual viewport after the keyboard animation.
+  if (document.documentElement.classList.contains("browser-ios")) {
+    setTimeout(() => keepFocusedModalControlVisible(event.target), 420);
+  }
 });
 document.addEventListener("focusout", () => setTimeout(updateViewportVars, 120));
+
+window.visualViewport?.addEventListener("resize", () => {
+  const active = document.activeElement;
+  if (document.documentElement.classList.contains("keyboard-open")) {
+    keepFocusedModalControlVisible(active);
+  }
+}, { passive: true });
