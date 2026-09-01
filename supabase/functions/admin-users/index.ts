@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const VALID_ROLES = new Set(["admin","manager","supervisor","employee","parttime","central"]);
-const VALID_LOCATIONS = new Set(["all","fuxing","central"]);
+const VALID_LOCATIONS = new Set(["all","fuxing","central","yongji"]);
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
