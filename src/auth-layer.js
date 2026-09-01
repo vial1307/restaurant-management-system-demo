@@ -9,6 +9,7 @@ import {
   cloudAdjustQuantity,
   cloudSetQuantity,
   getCloudInventoryHistory,
+  getSiteInventoryRows,
   inventoryCloudState,
   setActiveInventorySite,
   syncInventoryNow,
@@ -153,7 +154,7 @@ function centralPage(user) {
     : "";
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
-    ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
+    ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
     <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, true) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
@@ -163,6 +164,20 @@ function centralPage(user) {
     void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
   }
   void bootstrapCentralInventory(items);
+  void getSiteInventoryRows("central").then((rows) => {
+    if (!rows?.length) return;
+    const page=document.querySelector(".page-content");
+    if (!page?.querySelector(".central-heading")) return;
+    const uniqueItems=new Set(rows.map((row)=>row.item_id));
+    const uniqueLocations=new Set(rows.map((row)=>row.location_id));
+    const quantity=rows.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+    const itemNode=page.querySelector("[data-central-stat-items]");
+    const totalNode=page.querySelector("[data-central-stat-total]");
+    const zoneNode=page.querySelector("[data-central-stat-zones]");
+    if(itemNode) itemNode.textContent=String(uniqueItems.size);
+    if(totalNode) totalNode.textContent=String(quantity);
+    if(zoneNode) zoneNode.textContent=String(uniqueLocations.size || CENTRAL_ZONES.length);
+  }).catch(()=>{});
   if (mode === "history" && canViewHistory) {
     void getCloudInventoryHistory("central", 300).then((cloudLog) => {
       const current = document.querySelector(".page-content");
