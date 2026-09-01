@@ -102,7 +102,7 @@ function loginScreen(error = "") {
   document.body.classList.add("auth-locked");
   let host = document.querySelector("#auth-layer");
   if (!host) { host = document.createElement("div"); host.id = "auth-layer"; document.body.append(host); }
-  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚或復興店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">Supabase Auth · 帳號與權限雲端同步</div></section></div>`;
+  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚、復興店或永吉店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">Supabase Auth · 帳號與權限雲端同步</div></section></div>`;
 
 }
 
@@ -144,6 +144,7 @@ function centralPage(user) {
     outbound: language === "vi" ? "Xuất kho · 領料／出庫" : "領料／出庫",
     transfer: language === "vi" ? "Điều chuyển · 庫存轉撥" : "庫存轉撥",
     receive: language === "vi" ? "Nhận hàng · 待收貨" : "待收貨",
+    manage: language === "vi" ? "Quản trị kho · 庫存管理" : "庫存管理",
     history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
   };
   const cloudState = inventoryCloudState();
@@ -153,11 +154,11 @@ function centralPage(user) {
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
-    ${mode === "history" && canViewHistory ? historyView(log) : ["in","out","transfer","receive"].includes(mode) ? `<section class="inventory-operations-host" data-inventory-operations></section>` : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, true) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
-  if (["in","out","transfer","receive"].includes(mode)) {
+  if (mode !== "history" && mode !== "manage") {
     const host=content.querySelector("[data-inventory-operations]");
     void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
   }
@@ -181,11 +182,11 @@ function stockView(items, mode, selectedZone, query, directAdjust = false) {
 }
 
 function historyView(log) {
-  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出貨紀錄</h2><p>僅主管／管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)}</small></div><span>${esc(x.zone)}</span><strong class="${x.direction === "out" ? "history-out" : "history-in"}">${x.direction === "out" ? "−" : "+"}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
+  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出貨紀錄</h2><p>僅系統管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)}</small></div><span>${esc(x.zone)}</span><strong class="${x.direction === "out" ? "history-out" : "history-in"}">${x.direction === "out" ? "−" : "+"}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`).join("") || `<p class="central-empty">目前尚無操作紀錄。</p>`}</div></section>`;
 }
 
 function cloudHistoryView(log) {
-  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>主管以上可查看；資料來自 Supabase。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
+  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>僅系統管理員可查看；資料來自 Supabase。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
     const direction = x.direction;
     const sign = direction === "out" ? "−" : direction === "in" ? "+" : "↔";
     const tone = direction === "out" ? "history-out" : direction === "in" ? "history-in" : "history-adjust";
