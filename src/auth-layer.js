@@ -116,7 +116,7 @@ function addLogout(user) {
 }
 
 function branchSwitcher(user, active = activeInventorySite() || "fuxing") {
-  if (user.role !== "admin") return "";
+  if (user.location !== "all" && user.role !== "admin") return "";
   return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="yongji" class="${active === "yongji" ? "active" : ""}">永吉店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
 }
 
@@ -324,7 +324,7 @@ function applyAccess() {
 
     const centralOnlyRole = user.accountRole === "central" || user.role === "central";
     const selectedSite = activeInventorySite();
-    const centralWorkplace = user.location === "central" || (user.role === "admin" && selectedSite === "central");
+    const centralWorkplace = user.location === "central" || (user.location === "all" && selectedSite === "central");
 
     // 央廚 is a site context, not only a job title.
     if (centralOnlyRole) {
@@ -334,7 +334,7 @@ function applyAccess() {
 
     if (centralWorkplace && location.hash.startsWith("#inventory")) {
       centralPage(user);
-    } else if (user.role === "admin" && location.hash.startsWith("#inventory")) {
+    } else if ((user.role === "admin" || user.location === "all") && location.hash.startsWith("#inventory")) {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
         heading.insertAdjacentHTML("beforeend", branchSwitcher(user,selectedSite));
@@ -368,11 +368,11 @@ window.addEventListener("shitu:auth-synced", scheduleAccess);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (event.detail?.site !== "central" || !location.hash.startsWith("#inventory")) return;
   const user = session();
-  if (user?.location === "central" || (user?.role === "admin" && activeInventorySite()==="central")) centralPage(user);
+  if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
 });
 window.addEventListener("shitu:inventory-cloud-status", () => {
   if (!location.hash.startsWith("#inventory") || !document.querySelector(".central-heading")) return;
   const user = session();
-  if (user?.location === "central" || (user?.role === "admin" && activeInventorySite()==="central")) centralPage(user);
+  if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
 });
 scheduleAccess();
