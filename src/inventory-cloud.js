@@ -191,7 +191,7 @@ function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
     if (!grouped.has(stockKey)) {
       grouped.set(stockKey, {
         key: `${site}:${stockKey}`,
-        catalog_key: catalogKey(entry.label || stockKey),
+        catalog_key: entry.catalogKey || catalogKey(entry.label || stockKey),
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
@@ -203,7 +203,7 @@ function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
     const item = grouped.get(stockKey);
     item.zh = entry.label || item.zh;
     item.vi = entry.labelVi || item.vi;
-    item.catalog_key = catalogKey(item.zh);
+    item.catalog_key = entry.catalogKey || item.catalog_key || catalogKey(item.zh);
     item.unit = entry.unit || item.unit;
     item.work_area = entry.workArea || item.work_area;
     item.storage_only = Boolean(entry.storageOnly);
@@ -241,7 +241,7 @@ function buildCentralCatalog(items) {
     if(!grouped.has(key)){
       grouped.set(key,{
         key,
-        catalog_key:catalogKey(entry.zh || baseId),
+        catalog_key:entry.catalogKey || catalogKey(entry.zh || baseId),
         zh:entry.zh || baseId,
         vi:entry.vi || entry.zh || baseId,
         unit:entry.unit || "個",
@@ -470,6 +470,7 @@ function applyBranch(rows, site) {
         stockKey,
         label:row.item.name_zh_tw,
         labelVi:row.item.name_vi,
+        catalogKey:row.item.catalog_key || "",
         unit:row.item.unit,
         workArea:row.item.work_area||"noodles",
         storageOnly:Boolean(row.item.storage_only),
@@ -486,6 +487,7 @@ function applyBranch(rows, site) {
         stockKey,
         label:row.item.name_zh_tw,
         labelVi:row.item.name_vi,
+        catalogKey:row.item.catalog_key || "",
         unit:row.item.unit,
         workArea:area||row.item.work_area||"noodles",
         quantity:Number(row.quantity)||0,
