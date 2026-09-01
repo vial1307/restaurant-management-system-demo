@@ -13,7 +13,7 @@ Purpose: staging review before moving the system toward VPS deployment.
 2. Run `supabase/20260901_inventory_ready_v7.sql` in Supabase SQL Editor.
 3. Redeploy the `admin-users` Edge Function from `supabase/functions/admin-users/index.ts`.
 4. Open Kitchen OS once as Admin so missing Fuxing / Yongji / central catalog rows can be seeded.
-5. Hard refresh PC/laptop/mobile so all devices load release v39.
+5. Hard refresh PC/laptop/mobile so all devices load release v41.
 
 ## Roles to review
 
@@ -21,9 +21,10 @@ Purpose: staging review before moving the system toward VPS deployment.
 Inventory should be operation-first:
 - 庫存總覽 / Tổng quan
 - 進貨入庫 / Nhập kho
-- 領料／出庫 / Xuất kho
+- 領貨 / Lấy hàng
 - 庫存轉撥 / Điều chuyển
-- Cross-site transfer applies immediately; no separate receiving confirmation
+- 出貨 / Xuất hàng
+- Cross-site 出貨 applies immediately to the exact destination storage; no separate receiving confirmation
 
 Normal users should not see direct stocktake/catalog/safety-minimum controls.
 
@@ -64,33 +65,42 @@ PC/mobile:
 - Destination must increase by the same amount.
 - No negative stock is allowed.
 
-### Test C — 央廚 -> 復興店
-央廚 PC:
-1. Open 領料／出庫.
-2. Select source storage and item.
-3. Destination = 復興店.
-4. Dispatch quantity.
-
-Expected:
-- 央廚 source stock decreases immediately.
-- 復興 stock does NOT increase yet.
-- Shipment appears as 已出貨 / 待收貨.
-
+### Test C — 領貨 / use / return
 復興 mobile:
-1. Open 待收貨.
-2. Select the actual receiving storage: 大冷凍 / 大冷藏 / 四門冰箱 / 廚房冰箱.
-3. Confirm receipt.
+1. Open 領貨.
+2. Choose 牛肉 from 大冷凍.
+3. 領貨 4 包.
+4. Confirm 大冷凍 decreases by 4 and 使用區 increases by 4.
+5. 使用 2 包.
+6. Confirm 使用區 decreases to 2.
+7. 歸位 the remaining 2 包 to 四門冰箱.
+8. Confirm 使用區 becomes 0 and 四門冰箱 increases by 2.
+
+### Test D — 出貨 between sites
+1. Open 出貨.
+2. Select source storage.
+3. Select destination site.
+4. Select the exact destination storage.
+5. Submit quantity.
 
 Expected:
-- 復興 stock increases only now.
-- Shipment becomes 已收貨.
+- source decreases immediately
+- exact destination storage increases immediately
+- there is no 待收貨 / 確認收貨 step
+- audit records operator, timestamp, item, amount, source and destination
 
-### Test D — 永吉店
+Repeat for:
+- 央廚 → 復興店
+- 央廚 → 永吉店
+- 復興店 → 永吉店
+- 永吉店 → 央廚
+
+### Test E — 永吉店
 Repeat Test C for:
 - 央廚 -> 永吉店
 - 永吉店 -> 央廚
 
-### Test E — bilingual and devices
+### Test F — bilingual and devices
 - VI mode: Vietnamese + Traditional Chinese.
 - 中文 mode: Traditional Chinese only.
 - Verify same language preference on PC/laptop/mobile.
@@ -102,7 +112,8 @@ Manager should evaluate:
 - Is normal staff flow fast enough during service?
 - Are source/destination choices understandable?
 - Is the quantity control large enough on phones?
-- Is the receiving confirmation clear enough to prevent mistaken stock additions?
+- Are 領貨 / 使用 / 歸位 meanings clear enough during service?
+- Is 出貨 destination-site + destination-storage selection clear?
 - Are admin-only controls separated enough from daily staff operations?
 - Are terminology and labels natural for Taiwan restaurant operations?
 
