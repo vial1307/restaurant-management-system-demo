@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Kitchen OS Update</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;padding:32px;line-height:1.5}
+    .box{max-width:560px;margin:auto}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Đang cập nhật Kitchen OS…</h2>
+    <p>正在清除舊版快取並載入最新版。</p>
+  </div>
+  <script>
+    (async () => {
+      try {
+        if ("serviceWorker" in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+      } catch {}
+      try {
+        if ("caches" in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.filter(k => k.startsWith("shitu-kitchen-os-")).map(k => caches.delete(k)));
+        }
+      } catch {}
+      const target = new URL("./", location.href);
+      target.searchParams.set("build", "61");
+      target.searchParams.set("t", Date.now().toString());
+      location.replace(target.href);
+    })();
+  </script>
+</body>
+</html>
