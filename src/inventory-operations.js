@@ -95,10 +95,21 @@ function sourceOptions(item,language){
     .join("");
 }
 
+function overviewCard(item,language,t){
+  const locations=item.locations
+    .filter((loc)=>Number(loc.quantity)!==0 || Number(loc.minimum)!==0)
+    .map((loc)=>`<span class="op-location-pill"><small>${esc(language==="zh"?loc.zh:`${loc.vi||loc.zh} · ${loc.zh}`)}</small><strong>${Number(loc.quantity||0)} ${esc(item.unit)}</strong></span>`)
+    .join("");
+  return `<article class="inventory-op-card inventory-overview-card" data-op-item="${esc(item.id)}">
+    <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi||"")}</small></div><span><small>${esc(t.current)}</small><strong>${Number(item.total||0)} ${esc(item.unit)}</strong></span></div>
+    <div class="op-location-list">${locations||'<span class="op-location-pill"><small>—</small><strong>0</strong></span>'}</div>
+  </article>`;
+}
+
 function itemCard(item,mode,locations,site,language,t){
   const firstSource=item.locations.find((loc)=>Number(loc.quantity)>0) || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
-  const otherSites=INVENTORY_SITES.filter((entry)=>entry.id!==site);
+  const otherSites=INVENTORY_SITES.filter((entry)=>site==="central" ? ["fuxing","yongji"].includes(entry.id) : entry.id==="central");
   const sourceSelect = `<label><span>${esc(t.from)}</span><select data-op-source="${esc(item.id)}">${sourceOptions(item,language)}</select></label>`;
   const destinationSelect = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,firstDestination?.id)}</select></label>`;
   const outboundDestination = `<label><span>${esc(t.to)}</span><select data-op-target="${esc(item.id)}"><option value="usage">${esc(t.usage)}</option>${otherSites.map((entry)=>`<option value="${entry.id}">${esc(siteLabel(entry.id,language))}</option>`).join("")}</select></label>`;
@@ -156,7 +167,10 @@ async function doRender(host,state){
 
     const data=await loadSiteOperationData(site);
     state.data=data;
-    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+    const cards = mode==="overview"
+      ? data.items.map((item)=>overviewCard(item,language,t))
+      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t));
+    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
     bind(host,state);
   }catch(error){
     host.innerHTML=`<div class="inventory-cloud-notice">${esc(t.cloudRequired)}<small>${esc(error?.message||"")}</small></div>`;
