@@ -510,6 +510,7 @@ declare
   v_item_id uuid;
   v_key text;
   v_expected_site text;
+  v_catalog_key text;
   v_zh text;
   v_vi text;
   v_unit text;
@@ -538,6 +539,10 @@ begin
     else null
   end;
   v_zh:=nullif(trim(p_item->>'zh'),'');
+  v_catalog_key:=coalesce(
+    nullif(trim(p_item->>'catalog_key'),''),
+    lower(regexp_replace(coalesce(v_zh,v_key), '[[:space:][:punct:]]+', '', 'g'))
+  );
   v_vi:=nullif(trim(p_item->>'vi'),'');
   v_unit:=nullif(trim(p_item->>'unit'),'');
   v_work_area:=coalesce(nullif(trim(p_item->>'work_area'),''),'noodles');
@@ -560,14 +565,15 @@ begin
 
   if v_item_id is null then
     insert into public.inventory_items(
-      item_key,name_zh_tw,name_vi,unit,work_area,storage_only,active,updated_at
+      item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active,updated_at
     ) values(
-      v_key,v_zh,v_vi,v_unit,v_work_area,v_storage_only,true,now()
+      v_key,v_catalog_key,v_zh,v_vi,v_unit,v_work_area,v_storage_only,true,now()
     )
     returning id into v_item_id;
   else
     update public.inventory_items
-    set name_zh_tw=v_zh,
+    set catalog_key=coalesce(v_catalog_key,catalog_key),
+        name_zh_tw=v_zh,
         name_vi=v_vi,
         unit=v_unit,
         work_area=v_work_area,
