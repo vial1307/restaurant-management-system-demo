@@ -848,9 +848,8 @@ function inventory(context) {
     in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
     out: language === "zh" ? "領料／出庫" : "Xuất kho · 領料／出庫",
     transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
-    receive: language === "zh" ? "待收貨" : "Nhận hàng · 待收貨",
   };
-  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="out" class="${opsMode==="out"?"active":""}">${escapeHtml(opLabel.out)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="receive" class="${opsMode==="receive"?"active":""}">${escapeHtml(opLabel.receive)}</button></div>` : "";
+  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="out" class="${opsMode==="out"?"active":""}">${escapeHtml(opLabel.out)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button></div>` : "";
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
