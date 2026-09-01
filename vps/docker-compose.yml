@@ -36,8 +36,6 @@ services:
       SESSION_DAYS: 14
       COOKIE_SECURE: "false"
       APP_RELEASE: ${APP_RELEASE:-vps-dev}
-    ports:
-      - "127.0.0.1:8080:8080"
     networks:
       - kitchen_internal
     healthcheck:
@@ -47,8 +45,33 @@ services:
       retries: 10
       start_period: 10s
 
+  web:
+    image: caddy:2.10-alpine
+    container_name: kitchen-os-web
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./repo:/srv:ro
+      - ./repo/vps/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - kitchen_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   kitchen_internal:
