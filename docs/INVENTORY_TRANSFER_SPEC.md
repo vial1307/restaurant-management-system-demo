@@ -1,6 +1,6 @@
 # Kitchen OS — Inventory Operations Specification
 
-Status: implemented in staging frontend v41; cloud activation requires canonical Supabase v7 migration
+Status: implemented in staging frontend v42; cloud activation requires canonical Supabase v7 migration
 Target sites: 央廚, 復興店, 永吉店
 Primary goal: one inventory source of truth across PC / laptop / mobile with auditable operator actions and Taiwan restaurant terminology.
 
