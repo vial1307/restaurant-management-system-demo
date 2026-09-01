@@ -102,6 +102,10 @@ export function canInventoryEdit() {
 }
 
 export function canInventoryDraftCount() {
+  // Staging uses Supabase/Postgres as the single source of truth.
+  // Never accept inventory writes into localStorage while SQL is configured,
+  // otherwise different phones can diverge before the VPS production cutover.
+  if (isSupabaseConfigured()) return false;
   return hasInventoryPermission("edit") && inventoryCloudState() !== "ready";
 }
 
@@ -113,12 +117,16 @@ export function canManageCentralCatalog() {
     && (currentRole === "admin" || (currentRole === "manager" && s?.location === "central"));
 }
 
-export function canManageBranchCatalog(site = activeInventorySite()) {
+export function canViewBranchCatalogManagement(site = activeInventorySite()) {
   const currentRole = role();
   const s=session();
-  if (!canInventoryEdit() || !["fuxing","yongji"].includes(site)) return false;
+  if (!hasInventoryPermission("edit") || !["fuxing","yongji"].includes(site)) return false;
   if (currentRole === "admin") return true;
   return currentRole === "manager" && s?.location === site;
+}
+
+export function canManageBranchCatalog(site = activeInventorySite()) {
+  return canViewBranchCatalogManagement(site) && canInventoryEdit();
 }
 
 export function canDirectInventoryAdjust() {
@@ -385,7 +393,7 @@ async function verifyMigration() {
   try {
     const supabase = await getSupabase();
     const { data: version, error } = await supabase.rpc("kitchen_inventory_schema_version");
-    if (!error && Number(version) >= 7) {
+    if (!error && Number(version) >= 10) {
       migrationAvailable = true;
       localStorage.setItem(CLOUD_FLAG_KEY, "ready");
       dispatchStatus("ready");
