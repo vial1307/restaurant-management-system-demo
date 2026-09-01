@@ -137,6 +137,15 @@ function centralPage(user) {
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
   const canViewHistory = accountRole === "admin";
   const log = canViewHistory && mode === "history" ? history() : [];
+  const language = document.documentElement.lang === "vi" ? "vi" : "zh";
+  const label = {
+    overview: language === "vi" ? "Tổng quan · 庫存總覽" : "庫存總覽",
+    inbound: language === "vi" ? "Nhập kho · 進貨入庫" : "進貨入庫",
+    outbound: language === "vi" ? "Xuất kho · 領料／出庫" : "領料／出庫",
+    transfer: language === "vi" ? "Điều chuyển · 庫存轉撥" : "庫存轉撥",
+    receive: language === "vi" ? "Nhận hàng · 待收貨" : "待收貨",
+    history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
+  };
   const cloudState = inventoryCloudState();
   const cloudNotice = cloudState === "migration-needed"
     ? '<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。</div>'
@@ -144,13 +153,13 @@ function centralPage(user) {
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong>${items.length}</strong><small>已建立產品</small></article><article><span>總數量</span><strong>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">庫存總覽</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">進貨入庫</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">領料／出庫</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">庫存轉撥</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">待收貨</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">操作紀錄</button>` : ""}</div>
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : ["in","out","transfer","receive"].includes(mode) ? `<section class="inventory-operations-host" data-inventory-operations></section>` : stockView(filtered, mode, selectedZone, query, canDirectInventoryAdjust())}
   `;
   bindCentral(user);
   if (["in","out","transfer","receive"].includes(mode)) {
     const host=content.querySelector("[data-inventory-operations]");
-    void mountInventoryOperations(host,{site:"central",mode,language:document.documentElement.lang==="vi"?"vi":"zh",onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
+    void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
   }
   void bootstrapCentralInventory(items);
   if (mode === "history" && canViewHistory) {
