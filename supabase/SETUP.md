@@ -51,13 +51,16 @@ The frontend maps it internally to `username@staff.shitu.local` for Supabase Aut
 Usernames must use lowercase Latin letters, digits, dots, underscores, or hyphens.
 
 
-## 6. Enable cross-device inventory sync (v7)
+## 6. Enable cross-device inventory sync (v8)
 
-For the current staging/demo database, run the canonical migration once:
+For a fresh staging/demo database, run:
 
-`supabase/20260901_inventory_ready_v7.sql`
+1. `supabase/20260901_inventory_ready_v7.sql`
+2. `supabase/20260901_inventory_manager_catalog_v8.sql`
 
 in **Supabase → SQL Editor** after `supabase/schema.sql`.
+
+If the database is already on v7, run only `supabase/20260901_inventory_manager_catalog_v8.sql`. This patch grants existing `manager` accounts at `central` inventory edit permission and allows them to add/edit central raw-material catalog entries and stocktake/minimum values.
 
 This single migration includes:
 - 復興店 storage/work locations
@@ -75,7 +78,7 @@ This single migration includes:
 - actor/user audit for every inventory transaction; no manager confirmation in staging
 - inventory cloud contract version 7
 
-The older split/full files remain in the repository as migration history. For the current staging database, use only the canonical `20260901_inventory_ready_v7.sql` file above.
+The older split/full files remain in the repository as migration history. Treat `20260901_inventory_ready_v7.sql` as the canonical base and `20260901_inventory_manager_catalog_v8.sql` as the required manager-permission patch.
 
 After the SQL succeeds:
 1. Redeploy the `admin-users` Edge Function so account workplace validation supports `yongji`.
@@ -85,7 +88,7 @@ After the SQL succeeds:
 
 
 
-### Inventory workflow v7
+### Inventory workflow v8
 
 - 領貨 / Lấy hàng: move stock from a storage location into the site's in-use/work location.
 - 使用 / Sử dụng: subtract the actually consumed amount from the in-use quantity.
