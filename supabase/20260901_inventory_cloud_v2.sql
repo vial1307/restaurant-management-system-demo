@@ -171,7 +171,8 @@ begin
   end if;
 
   if (v_site='fuxing' and v_item_key not like 'fuxing:%')
-     or (v_site='central' and v_item_key not like 'central:%') then
+     or (v_site='central' and v_item_key not like 'central:%')
+     or (v_site='yongji' and v_item_key not like 'yongji:%') then
     raise exception 'ITEM_SITE_MISMATCH';
   end if;
 
@@ -247,7 +248,8 @@ begin
   end if;
 
   if (v_site='fuxing' and v_item_key not like 'fuxing:%')
-     or (v_site='central' and v_item_key not like 'central:%') then
+     or (v_site='central' and v_item_key not like 'central:%')
+     or (v_site='yongji' and v_item_key not like 'yongji:%') then
     raise exception 'ITEM_SITE_MISMATCH';
   end if;
 
@@ -331,7 +333,8 @@ begin
     raise exception 'INVENTORY_EDIT_NOT_ALLOWED';
   end if;
   if (v_site='fuxing' and v_item_key not like 'fuxing:%')
-     or (v_site='central' and v_item_key not like 'central:%') then
+     or (v_site='central' and v_item_key not like 'central:%')
+     or (v_site='yongji' and v_item_key not like 'yongji:%') then
     raise exception 'ITEM_SITE_MISMATCH';
   end if;
   if p_direction not in ('in','out') then
@@ -432,7 +435,8 @@ begin
     raise exception 'LOCATION_NOT_ALLOWED';
   end if;
   if (v_source_site='fuxing' and v_item_key not like 'fuxing:%')
-     or (v_source_site='central' and v_item_key not like 'central:%') then
+     or (v_source_site='central' and v_item_key not like 'central:%')
+     or (v_source_site='yongji' and v_item_key not like 'yongji:%') then
     raise exception 'ITEM_SITE_MISMATCH';
   end if;
 
@@ -530,6 +534,7 @@ begin
   v_expected_site:=case
     when v_key like 'fuxing:%' then 'fuxing'
     when v_key like 'central:%' then 'central'
+    when v_key like 'yongji:%' then 'yongji'
     else null
   end;
   v_zh:=nullif(trim(p_item->>'zh'),'');
@@ -654,6 +659,7 @@ begin
   v_expected_site:=case
     when p_item_key like 'fuxing:%' then 'fuxing'
     when p_item_key like 'central:%' then 'central'
+    when p_item_key like 'yongji:%' then 'yongji'
     else null
   end;
   if v_expected_site is null
