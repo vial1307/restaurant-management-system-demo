@@ -283,38 +283,66 @@ Must be idempotent:
 ### cancel_inventory_transfer(p_transfer_id)
 Allowed only for draft status.
 
-## 11. Permissions
+## 11. Permissions and role-oriented UX
 
 Existing module permission remains:
 - inventory.view
 - inventory.edit
 
-Capability rules layered on top:
+The UI is split into two layers:
 
-Employee / central employee:
-- view inventory if inventory.view
-- inbound/outbound if inventory.edit
-- internal transfer if inventory.edit
-- create/dispatch cross-site shipment if inventory.edit and assigned site matches source
-- receive cross-site shipment if inventory.edit and assigned site matches destination
-- cannot stocktake-correct directly
+### Operational layer — employee / supervisor / manager
 
-Supervisor / 主管:
-- all employee inventory operations
-- direct 盤點調整
-- edit safety minimum
-- edit catalog/location assignment
-- view full inventory audit history
+The operational experience should stay intentionally simple.
 
-Manager / Admin:
-- all supervisor functions
-- cross-site oversight
+If the account has inventory.edit:
+- choose the item
+- choose source or destination location
+- choose branch when needed
+- set quantity with [-] [quantity] [+]
+- press the primary action
+
+Operational users may:
+- 進貨入庫 / inbound
+- 領料／出庫 / outbound
+- 庫存轉撥 / internal transfer
+- create and dispatch branch shipments when assigned site matches source
+- receive branch shipments when assigned site matches destination
+
+Do not expose deep inventory administration by default to employee, supervisor, or manager accounts.
+
+The workflow should not require users to understand database concepts, audit tables, stock IDs, or configuration screens.
+
+### Administrative layer — admin only
+
+Admin receives the deeper management interface:
+- direct 盤點調整 / stocktake correction
+- edit 安全庫存 / safety minimum
+- add/edit/archive catalog items
+- edit item location assignments
+- full inventory audit/history
+- cross-site shipment oversight
 - cancel draft transfers
-- future reporting/export
+- exception handling and reconciliation tools
+- reporting/export
+- future inventory configuration
+
+Admin may still use the same simplified operational inbound/outbound/transfer screens as staff.
+
+### Permission principle
+
+Role affects access to deep administration, but operational inventory actions remain permission-driven:
+- inventory.view = can see inventory
+- inventory.edit = can perform normal operational stock movements
 
 The database must enforce site and permission checks; hiding UI is not sufficient authorization.
 
 ## 12. Mobile UI
+
+Primary UX principle:
+- employee / supervisor / manager see an operation-first interface
+- admin sees the same operation-first interface, with a separate management entry for deeper controls
+- avoid mixing admin controls into the normal stock movement screen
 
 Target phone widths:
 - <=359
@@ -331,12 +359,15 @@ Row 1:
 - current source stock
 
 Row 2:
-- 來源儲位 / Từ
-- destination dropdown
+- only the selections needed for the chosen action
+- 來源儲位 / Từ when outbound/transfer
+- 目的儲位 or branch / Đến when inbound/transfer/shipment
 
 Row 3:
 - [-] [quantity] [+]
-- primary action button
+- one clear primary action button
+
+Do not show safety minimum, catalog editing, audit metadata, or stocktake fields in the normal employee/manager transaction card.
 
 For cross-site shipment:
 - destination uses 復興店 / 永吉店 cards or compact select
@@ -345,6 +376,8 @@ For cross-site shipment:
 Avoid squeezing source + destination + quantity + action into one horizontal phone row.
 
 ## 13. Desktop UI
+
+Desktop/tablet follows the same operation-first hierarchy as mobile.
 
 Desktop/tablet can use a compact table:
 
@@ -358,6 +391,8 @@ Primary action:
 - 出庫
 - 轉撥
 - 建立出貨單
+
+Admin-only management controls should live behind a separate 管理 / Quản trị entry or management panel, not inline with every operational row.
 
 ## 14. Translation catalog
 
@@ -501,8 +536,9 @@ Before release:
 - 復興 receipt increments only after confirmation
 - same behavior for 永吉
 - reverse branch -> 央廚 works
-- employee cannot use direct stocktake
-- supervisor can stocktake and audit is written
+- employee/supervisor/manager use the same simplified operational flow
+- employee/supervisor/manager do not see deep admin controls
+- admin can stocktake and audit is written
 - PC mutation appears on mobile
 - mobile mutation appears on laptop/PC
 - Vietnamese mode stays bilingual on all devices
