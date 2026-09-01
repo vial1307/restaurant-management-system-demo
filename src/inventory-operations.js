@@ -138,9 +138,10 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const workDestination = workLocation
     ? `<label><span>${esc(t.workDestination)}</span><select data-op-work-destination="${esc(item.id)}"><option value="${esc(workLocation.id)}" data-code="${esc(workLocation.code)}">${esc(locationLabel(workLocation,language))}</option></select></label>`
     : `<label><span>${esc(t.workDestination)}</span><span class="inventory-readonly-field">—</span></label>`;
+  const defaultTargetSite=otherSites[0]?.id || "";
   const shipSiteSelect = `<label><span>${esc(t.shipSite)}</span><select data-op-target="${esc(item.id)}">${otherSites.map((entry)=>`<option value="${entry.id}">${esc(siteLabel(entry.id,language))}</option>`).join("")}</select></label>`;
-  const crossSiteLocations=(allLocations||[]).filter((location)=>location.site&&location.site!==site);
-  const targetLocationSelect=`<label class="op-target-location" data-op-target-location-wrap="${esc(item.id)}"><span>${esc(t.destination)}</span><select data-op-target-location="${esc(item.id)}">${crossSiteLocations.map((location)=>`<option value="${esc(location.id)}" data-site="${esc(location.site)}">${esc(siteLabel(location.site,language))} · ${esc(locationLabel(location,language))}</option>`).join("")}</select></label>`;
+  const crossSiteLocations=(allLocations||[]).filter((location)=>location.site===defaultTargetSite);
+  const targetLocationSelect=`<label class="op-target-location" data-op-target-location-wrap="${esc(item.id)}"><span>${esc(t.destination)}</span><select data-op-target-location="${esc(item.id)}">${crossSiteLocations.map((location)=>`<option value="${esc(location.id)}">${esc(locationLabel(location,language))}</option>`).join("")}</select></label>`;
 
   let controls="";
   let action="";
@@ -209,24 +210,16 @@ function refreshTransferBalance(host,state,itemId){
   balance.innerHTML=`<span>${esc(locationLabel({name_zh_tw:source.zh,name_vi:source.vi},state.language))} <strong>${Number(source.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(destination,state.language))} <strong>${Number(stockAt(item,destinationId))||0}</strong></span>`;
 }
 
-function syncCrossSiteDestination(host,itemId,targetSite){
+function syncCrossSiteDestination(host,state,itemId,targetSite){
   const card=host.querySelector(`[data-op-item="${CSS.escape(itemId)}"]`);
   const wrap=card?.querySelector(`[data-op-target-location-wrap="${CSS.escape(itemId)}"]`);
   const select=card?.querySelector(`[data-op-target-location="${CSS.escape(itemId)}"]`);
   if(!wrap||!select)return;
-  if(!targetSite||targetSite==="usage"){
-    wrap.hidden=true;
-    return;
-  }
-  wrap.hidden=false;
-  let first="";
-  [...select.options].forEach((option)=>{
-    const active=option.dataset.site===targetSite;
-    option.disabled=!active;
-    option.hidden=!active;
-    if(active&&!first)first=option.value;
-  });
-  if(first)select.value=first;
+  const locations=(state.data?.allLocations||[]).filter((location)=>location.site===targetSite);
+  wrap.hidden=!targetSite;
+  select.innerHTML=locations.map((location)=>
+    `<option value="${esc(location.id)}">${esc(locationLabel(location,state.language))}</option>`
+  ).join("");
 }
 
 function setMessage(host,text,kind=""){
@@ -270,8 +263,8 @@ function bind(host,state){
     };
   });
   host.querySelectorAll("[data-op-target]").forEach((select)=>{
-    select.onchange=()=>syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
-    syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
+    select.onchange=()=>syncCrossSiteDestination(host,state,select.dataset.opTarget,select.value);
+    syncCrossSiteDestination(host,state,select.dataset.opTarget,select.value);
   });
 
 
@@ -461,8 +454,8 @@ function bindDraft(host,state){
     select.onchange=()=>refreshTransferBalance(host,state,select.dataset.opDestination);
   });
   host.querySelectorAll("[data-op-target]").forEach((select)=>{
-    select.onchange=()=>syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
-    syncCrossSiteDestination(host,select.dataset.opTarget,select.value);
+    select.onchange=()=>syncCrossSiteDestination(host,state,select.dataset.opTarget,select.value);
+    syncCrossSiteDestination(host,state,select.dataset.opTarget,select.value);
   });
 
 
