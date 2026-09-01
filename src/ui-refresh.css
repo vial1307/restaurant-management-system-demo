@@ -1169,3 +1169,22 @@ html[lang="vi"] .central-row small{line-height:1.35}
 .op-location-pill-use strong{
   color:#6f4b0c;
 }
+
+
+/* v43 — shipped quantity stays at the selected destination location */
+.ship-fixed-hint{
+  grid-column:1/-1;
+  padding:7px 9px;
+  border:1px solid #d9e5df;
+  border-radius:8px;
+  background:#f6faf8;
+  color:#5d736b;
+  font-size:10.5px;
+  line-height:1.45;
+}
+@media(max-width:760px){
+  .ship-fixed-hint{
+    padding:6px 8px;
+    font-size:10px;
+  }
+}
