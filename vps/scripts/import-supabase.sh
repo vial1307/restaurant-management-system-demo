@@ -26,16 +26,29 @@ chmod 700 "${IMPORT_DIR}"
 echo
 echo "Open Supabase Dashboard > Connect > Session pooler / Shared pooler."
 echo "Use the connection parameters shown there. Do not send the database secret in chat."
-read -r -p "Host: " SUPA_HOST
+
+DEFAULT_HOST="aws-1-ap-southeast-1.pooler.supabase.com"
+DEFAULT_USER="postgres.zqbpeizgxcaxrtpsujlr"
+
+read -r -p "Host [${DEFAULT_HOST}]: " SUPA_HOST
+SUPA_HOST="${SUPA_HOST:-$DEFAULT_HOST}"
+SUPA_HOST="$(printf '%s' "${SUPA_HOST}" | xargs)"
+
 read -r -p "Port [5432]: " SUPA_PORT
-SUPA_PORT="${SUPA_PORT:-5432}"
+SUPA_PORT="$(printf '%s' "${SUPA_PORT:-5432}" | xargs)"
+
 read -r -p "Database [postgres]: " SUPA_DB
-SUPA_DB="${SUPA_DB:-postgres}"
-read -r -p "User (postgres.<project-ref>): " SUPA_USER
+SUPA_DB="$(printf '%s' "${SUPA_DB:-postgres}" | xargs)"
+
+read -r -p "User [${DEFAULT_USER}]: " SUPA_USER
+SUPA_USER="${SUPA_USER:-$DEFAULT_USER}"
+SUPA_USER="$(printf '%s' "${SUPA_USER}" | xargs)"
+
 read -r -s -p "Database secret: " SUPA_SECRET
 echo
-[[ "${SUPA_HOST}" == *.pooler.supabase.com ]] || { echo "Invalid pooler host."; exit 1; }
-[[ "${SUPA_USER}" == postgres.* ]] || { echo "Invalid pooler user."; exit 1; }
+
+[[ "${SUPA_HOST}" == *.pooler.supabase.com ]] || { echo "Invalid pooler host: '${SUPA_HOST}'"; exit 1; }
+[[ "${SUPA_USER}" == postgres.* ]] || { echo "Invalid pooler user: '${SUPA_USER}'"; exit 1; }
 [[ -n "${SUPA_SECRET}" ]] || { echo "No database secret supplied."; exit 1; }
 
 remote_psql() {
