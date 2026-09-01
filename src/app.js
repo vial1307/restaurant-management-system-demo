@@ -574,6 +574,19 @@ function appStagingLocations(site){
   }
   return ZONES.map((zone)=>({id:branchLocationCode(site,zone.id),code:branchLocationCode(site,zone.id),name_zh_tw:zone.zh,name_vi:zone.vi,site,kind:"storage"}));
 }
+function appWorkLocations(site){
+  if(site==="central"){
+    return [{id:"central-work-use",code:"central-work-use",name_zh_tw:"使用中",name_vi:"Đang sử dụng",site,kind:"work"}];
+  }
+  return WORK_AREAS.map((area)=>({
+    id:branchWorkLocationCode(site,area.id),
+    code:branchWorkLocationCode(site,area.id),
+    name_zh_tw:`${area.zh}使用中`,
+    name_vi:`${area.vi} đang sử dụng`,
+    site,
+    kind:"work",
+  }));
+}
 function addToCentralDraftFromBranch(itemMeta,destinationLocationId,amount){
   const zoneMap={
     "central-freezer":"央廚冷凍",
@@ -653,6 +666,60 @@ function branchZoneByLocationCode(site,code){
   return ZONES.find((zone)=>branchLocationCode(site,zone.id)===code)?.id||"";
 }
 
+function loadBranchDraftBySite(site){
+  const key=branchDraftKey(site);
+  try{
+    const saved=JSON.parse(localStorage.getItem(key)||"null");
+    if(saved?.inventory&&saved?.workInventory)return saved;
+  }catch{}
+  let baseRecord={inventory:[],workInventory:[]};
+  try{
+    const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
+    const selected=state?.selectedDate;
+    baseRecord=state?.records?.[selected]||baseRecord;
+  }catch{}
+  return loadBranchDraftRecord(site,baseRecord);
+}
+
+function addToBranchDraftFromBranch(targetSite,itemMeta,destinationLocationId,amount){
+  if(!["fuxing","yongji"].includes(targetSite))return false;
+  const zone=branchZoneByLocationCode(targetSite,destinationLocationId);
+  if(!zone)return false;
+  const draft=loadBranchDraftBySite(targetSite);
+  let row=draft.inventory.find((entry)=>
+    (itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey) ||
+    entry.label===itemMeta?.zh
+  );
+  if(row){
+    const stockKey=row.stockKey||String(row.id||"").split("-")[0];
+    let target=draft.inventory.find((entry)=>entry.stockKey===stockKey&&entry.zone===zone);
+    if(!target){
+      target={...row,id:`${stockKey}-${zone}`,zone,quantity:0,minimum:0};
+      draft.inventory.push(target);
+    }
+    row=target;
+  }else{
+    const stockKey=`received-${String(itemMeta?.zh||"item").replace(/\s+/g,"-")}`;
+    row={
+      id:`${stockKey}-${zone}`,
+      stockKey,
+      catalogKey:itemMeta?.catalogKey||"",
+      label:itemMeta?.zh||stockKey,
+      labelVi:itemMeta?.vi||itemMeta?.zh||stockKey,
+      unit:itemMeta?.unit||"個",
+      workArea:itemMeta?.workArea||"noodles",
+      storageOnly:false,
+      zone,
+      quantity:0,
+      minimum:0,
+    };
+    draft.inventory.push(row);
+  }
+  row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);
+  saveBranchDraftRecord(targetSite,draft);
+  return true;
+}
+
 function branchDraftOperationData(site,baseRecord){
   const draft=loadBranchDraftRecord(site,baseRecord);
   const locations=ZONES.map((zone)=>({
@@ -663,6 +730,7 @@ function branchDraftOperationData(site,baseRecord){
     site,
     kind:"storage",
   }));
+  const workLocations=appWorkLocations(site);
   const grouped=new Map();
   for(const row of draft.inventory){
     const key=row.stockKey||String(row.id||"").split("-")[0];
@@ -670,12 +738,15 @@ function branchDraftOperationData(site,baseRecord){
       grouped.set(key,{
         id:key,
         itemKey:branchItemKey(site,key),
-        catalogKey:String(row.label||key).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,""),
+        catalogKey:row.catalogKey||String(row.label||key).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,""),
         zh:row.label||key,
         vi:row.labelVi||row.label||key,
         unit:row.unit||"個",
+        workArea:row.workArea||"noodles",
         locations:[],
+        workLocations:[],
         total:0,
+        workTotal:0,
       });
     }
     const item=grouped.get(key);
@@ -688,46 +759,52 @@ function branchDraftOperationData(site,baseRecord){
     });
     item.total+=quantity;
   }
+  for(const row of draft.workInventory||[]){
+    const key=row.stockKey||String(row.id||"").replace(/^work-/,"");
+    const item=grouped.get(key);
+    if(!item)continue;
+    item.workArea=row.workArea||item.workArea||"noodles";
+    const location=workLocations.find((entry)=>entry.code===branchWorkLocationCode(site,item.workArea));
+    if(!location)continue;
+    const quantity=Math.max(0,Number(row.quantity)||0);
+    item.workLocations.push({id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,quantity,minimum:Math.max(0,Number(row.minimum)||0)});
+    item.workTotal+=quantity;
+  }
   for(const item of grouped.values()){
     for(const location of locations){
       if(!item.locations.some((entry)=>entry.id===location.id)){
         item.locations.push({id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,quantity:0,minimum:0});
       }
     }
+    const preferred=workLocations.find((entry)=>entry.code===branchWorkLocationCode(site,item.workArea))||workLocations[0];
+    if(preferred&&!item.workLocations.some((entry)=>entry.id===preferred.id)){
+      item.workLocations.push({id:preferred.id,code:preferred.code,zh:preferred.name_zh_tw,vi:preferred.name_vi,quantity:0,minimum:0});
+    }
   }
-  return {site,items:[...grouped.values()],locations,allLocations:["central","fuxing","yongji"].flatMap((entry)=>appStagingLocations(entry))};
+  return {
+    site,
+    items:[...grouped.values()],
+    locations,
+    workLocations,
+    allLocations:["central","fuxing","yongji"].flatMap((entry)=>appStagingLocations(entry)),
+  };
 }
-
 function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceLocationId,destinationLocationId,amount,targetSite,sourceSite}){
   const draft=loadBranchDraftRecord(site,baseRecord);
   const value=Math.max(1,Number(amount)||1);
   const sourceZone=branchZoneByLocationCode(site,sourceLocationId);
   const destinationZone=branchZoneByLocationCode(site,destinationLocationId);
+  const sourceWorkArea=WORK_AREAS.find((area)=>branchWorkLocationCode(site,area.id)===sourceLocationId)?.id||"";
+  const destinationWorkArea=WORK_AREAS.find((area)=>branchWorkLocationCode(site,area.id)===destinationLocationId)?.id||"";
   let rows=draft.inventory.filter((row)=>(row.stockKey||String(row.id||""))===itemId);
   let template=rows[0];
   if(!template&&itemMeta?.zh){
     rows=draft.inventory.filter((row)=>row.label===itemMeta.zh);
     template=rows[0];
   }
-  if(!template&&type==="receive"&&itemMeta?.zh){
-    const receivedKey=itemId||`received-${Date.now()}`;
-    template={
-      id:`${receivedKey}-${destinationZone||"large-freezer"}`,
-      stockKey:receivedKey,
-      label:itemMeta.zh,
-      labelVi:itemMeta.vi||itemMeta.zh,
-      unit:itemMeta.unit||"個",
-      workArea:"noodles",
-      storageOnly:true,
-      zone:destinationZone||"large-freezer",
-      quantity:0,
-      minimum:0,
-    };
-    draft.inventory.push(template);
-  }
   if(!template)return {ok:false,error:new Error("ITEM_NOT_FOUND")};
 
-  function ensure(zone){
+  function ensureStorage(zone){
     let row=draft.inventory.find((entry)=>(entry.stockKey||String(entry.id||""))===(template.stockKey||itemId)&&entry.zone===zone);
     if(!row){
       row={...template,id:`${template.stockKey||itemId}-${zone}`,zone,quantity:0,minimum:0};
@@ -735,36 +812,79 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
     }
     return row;
   }
+  function ensureWork(area){
+    const stockKey=template.stockKey||itemId;
+    let row=(draft.workInventory||[]).find((entry)=>entry.stockKey===stockKey);
+    if(!row){
+      row={id:`work-${stockKey}`,stockKey,label:template.label,labelVi:template.labelVi,workArea:area||template.workArea||"noodles",quantity:0,minimum:0,unit:template.unit};
+      draft.workInventory.push(row);
+    }
+    if(area)row.workArea=area;
+    return row;
+  }
 
-  if(type==="in"||type==="receive"){
-    const target=ensure(destinationZone);
+  let sourceLabel=sourceZone||sourceWorkArea||sourceSite||"";
+  let destinationLabel=destinationZone||destinationWorkArea||targetSite||"";
+
+  if(type==="in"){
+    const target=ensureStorage(destinationZone);
     target.quantity=Math.max(0,Number(target.quantity)||0)+value;
-  }else if(type==="out"||type==="ship"){
-    const source=ensure(sourceZone);
+  }else if(type==="pick"){
+    const source=ensureStorage(sourceZone);
     const before=Math.max(0,Number(source.quantity)||0);
     if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
     source.quantity=before-value;
-    if(type==="ship"){
-      const ok=targetSite==="central" && addToCentralDraftFromBranch(itemMeta||{zh:template.label,vi:template.labelVi,unit:template.unit,catalogKey:template.catalogKey||""},destinationLocationId,value);
-      if(!ok){source.quantity=before;return {ok:false,error:new Error("INVALID_DESTINATION_LOCATION")};}
-    }
+    const work=ensureWork(destinationWorkArea||template.workArea||"noodles");
+    work.quantity=Math.max(0,Number(work.quantity)||0)+value;
+  }else if(type==="use"){
+    const work=ensureWork(sourceWorkArea||template.workArea||"noodles");
+    const before=Math.max(0,Number(work.quantity)||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    work.quantity=before-value;
+    sourceLabel=work.workArea;
+    destinationLabel="使用";
+  }else if(type==="return"){
+    const work=ensureWork(sourceWorkArea||template.workArea||"noodles");
+    const before=Math.max(0,Number(work.quantity)||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    work.quantity=before-value;
+    const target=ensureStorage(destinationZone);
+    target.quantity=Math.max(0,Number(target.quantity)||0)+value;
+    sourceLabel=work.workArea;
+  }else if(type==="ship"){
+    const source=ensureStorage(sourceZone);
+    const before=Math.max(0,Number(source.quantity)||0);
+    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
+    source.quantity=before-value;
+    const meta=itemMeta||{zh:template.label,vi:template.labelVi,unit:template.unit,catalogKey:template.catalogKey||"",workArea:template.workArea||"noodles"};
+    const ok=targetSite==="central"
+      ? addToCentralDraftFromBranch(meta,destinationLocationId,value)
+      : addToBranchDraftFromBranch(targetSite,meta,destinationLocationId,value);
+    if(!ok){source.quantity=before;return {ok:false,error:new Error("INVALID_DESTINATION_LOCATION")};}
   }else if(type==="transfer"){
     if(!sourceZone||!destinationZone||sourceZone===destinationZone)return {ok:false,error:new Error("SAME_LOCATION")};
-    const source=ensure(sourceZone);
+    const source=ensureStorage(sourceZone);
     const before=Math.max(0,Number(source.quantity)||0);
     if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
     source.quantity=before-value;
-    const target=ensure(destinationZone);
+    const target=ensureStorage(destinationZone);
     target.quantity=Math.max(0,Number(target.quantity)||0)+value;
   }else{
     return {ok:false,error:new Error("INVALID_OPERATION")};
   }
 
   saveBranchDraftRecord(site,draft);
-  appendBranchOperationLog({site,action:type,item:template.label||itemMeta?.zh||itemId,amount:value,unit:template.unit||itemMeta?.unit||"",source:sourceZone||sourceSite||"",destination:destinationZone||targetSite||""});
+  appendBranchOperationLog({
+    site,
+    action:type,
+    item:template.label||itemMeta?.zh||itemId,
+    amount:value,
+    unit:template.unit||itemMeta?.unit||"",
+    source:sourceLabel,
+    destination:destinationLabel,
+  });
   return {ok:true,targetSite,sourceSite};
 }
-
 
 function findBranchDraftItem(record,id,kind="item"){
   const list=kind==="workItem"?record.workInventory:record.inventory;
@@ -858,14 +978,16 @@ function inventory(context) {
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và hệ thống ghi lại người nhập/xuất/chuyển. Quy trình duyệt/xác nhận sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效並記錄入庫／出庫／轉撥人員；主管審核／確認流程將於 VPS 正式版再啟用。</small></div>`;
   const opsEnabled = editable && (!cloudReady || !historical) && ["fuxing","yongji"].includes(site);
   if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
+  if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
   const opsMode = opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
     in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
-    out: language === "zh" ? "領料／出庫" : "Xuất kho · 領料／出庫",
+    pick: language === "zh" ? "領貨" : "Lấy hàng · 領貨",
     transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
+    ship: language === "zh" ? "出貨" : "Xuất hàng · 出貨",
   };
-  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="out" class="${opsMode==="out"?"active":""}">${escapeHtml(opLabel.out)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button></div>` : "";
+  const opsTabs = opsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button></div>` : "";
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
