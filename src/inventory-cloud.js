@@ -1,4 +1,18 @@
 import { getSupabase, isSupabaseConfigured } from "./supabase-client.js";
+import {
+  isVpsApiConfigured,
+  vpsAdjustInventory,
+  vpsArchiveCatalogItem,
+  vpsInventory,
+  vpsInventoryHistory,
+  vpsReceiveDefaults,
+  vpsSchemaVersion,
+  vpsSetMinimum,
+  vpsSetQuantity,
+  vpsSetReceiveDefault,
+  vpsSyncCatalog,
+  vpsTransferInventory,
+} from "./vps-api.js";
 import { DEFAULT_ITEMS, STORAGE_KEY, stockKeyFor } from "./store.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
@@ -11,6 +25,10 @@ const POLL_MS = 60000;
 const REQUIRED_SCHEMA_VERSION = 11;
 const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
 const MIGRATION_RETRY_MS = 5000;
+
+function isInventoryBackendConfigured() {
+  return isVpsApiConfigured() || isSupabaseConfigured();
+}
 
 const FUXING_STORAGE_CODES = {
   "large-freezer": "fuxing-large-freezer",
@@ -113,7 +131,7 @@ export function canInventoryDraftCount() {
   // Staging uses Supabase/Postgres as the single source of truth.
   // Never accept inventory writes into localStorage while SQL is configured,
   // otherwise different phones can diverge before the VPS production cutover.
-  if (isSupabaseConfigured()) return false;
+  if (isInventoryBackendConfigured()) return false;
   return hasInventoryPermission("edit") && inventoryCloudState() !== "ready";
 }
 
