@@ -120,7 +120,7 @@ export function canInventoryDraftCount() {
 export function canManageCentralCatalog() {
   const currentRole = role();
   const s=session();
-  return hasInventoryPermission("edit")
+  return canInventoryEdit()
     && activeInventorySite() === "central"
     && (currentRole === "admin" || (currentRole === "manager" && ["central","all"].includes(s?.location)));
 }
