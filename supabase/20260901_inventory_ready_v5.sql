@@ -725,7 +725,7 @@ language sql
 stable
 security invoker
 set search_path = ''
-as $ select 4 $;
+as $$ select 4 $$;
 
 revoke all on function public.kitchen_inventory_schema_version() from public, anon;
 grant execute on function public.kitchen_inventory_schema_version() to authenticated;
