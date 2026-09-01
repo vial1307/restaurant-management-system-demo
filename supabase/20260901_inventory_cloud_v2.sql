@@ -5,6 +5,7 @@
 
 alter table public.inventory_items
   add column if not exists item_key text,
+  add column if not exists catalog_key text,
   add column if not exists work_area text not null default 'noodles',
   add column if not exists storage_only boolean not null default false;
 
