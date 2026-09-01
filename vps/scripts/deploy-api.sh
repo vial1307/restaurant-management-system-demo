@@ -24,7 +24,7 @@ bash "${REPO_DIR}/vps/scripts/migrate.sh"
 
 echo "[5/7] Building API image..."
 cd "${APP_DIR}"
-APP_RELEASE="$(git -C "${REPO_DIR}" rev-parse --short HEAD)"
+APP_RELEASE="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse --short HEAD)"
 export APP_RELEASE
 docker compose --env-file .env build app
 
