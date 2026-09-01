@@ -57,7 +57,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./repo:/srv:ro
+      - ./www:/srv:ro
       - ./repo/vps/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
