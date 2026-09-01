@@ -1108,13 +1108,15 @@ function inventory(context) {
       : "";
     const manageDbNotice = catalogManage
       ? ""
-      : vpsBackend
-        ? (cloudState === "checking"
-          ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在連線 VPS 資料庫":"Đang kết nối VPS database"}</strong><small>${language==="zh"?"系統會自動確認 API 與資料庫。":"Hệ thống tự kiểm tra API và database."}</small></div>`
-          : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"VPS 資料庫尚未連線":"VPS database chưa kết nối"}</strong><small>${language==="zh"?"請檢查 VPS/API 狀態。":"Hãy kiểm tra trạng thái VPS/API."}</small></div>`)
-        : cloudState === "checking"
-          ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在確認 SQL v11":"Đang xác minh SQL v11"}</strong><small>${language==="zh"?"請稍候，系統會自動確認資料庫版本，不需重新執行 SQL。":"Hệ thống đang tự kiểm tra database, không cần chạy lại SQL."}</small></div>`
-          : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"SQL schema v11 尚未確認":"Chưa xác nhận SQL schema v11"}</strong><small>${language==="zh"?"請確認資料庫已執行 Master v11。":"Hãy xác nhận database đã chạy Master v11."}</small></div>`;
+      : !cloudReady
+        ? (vpsBackend
+          ? (cloudState === "checking"
+            ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在連線 VPS 資料庫":"Đang kết nối VPS database"}</strong><small>${language==="zh"?"系統會自動確認 API 與資料庫。":"Hệ thống tự kiểm tra API và database."}</small></div>`
+            : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"VPS 資料庫尚未連線":"VPS database chưa kết nối"}</strong><small>${language==="zh"?"請檢查 VPS/API 狀態。":"Hãy kiểm tra trạng thái VPS/API."}</small></div>`)
+          : (cloudState === "checking"
+            ? `<div class="inventory-readonly-notice"><strong>${language==="zh"?"正在確認 SQL v11":"Đang xác minh SQL v11"}</strong><small>${language==="zh"?"請稍候，系統會自動確認資料庫版本，不需重新執行 SQL。":"Hệ thống đang tự kiểm tra database, không cần chạy lại SQL."}</small></div>`
+            : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"SQL schema v11 尚未確認":"Chưa xác nhận SQL schema v11"}</strong><small>${language==="zh"?"請確認資料庫已執行 Master v11。":"Hãy xác nhận database đã chạy Master v11."}</small></div>`))
+        : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"目前帳號無法編輯此據點":"Tài khoản hiện tại không được chỉnh sửa cơ sở này"}</strong><small>${language==="zh"?"資料庫已連線；請檢查帳號據點與庫存編輯權限。":"Database đã kết nối; hãy kiểm tra cơ sở và quyền chỉnh sửa kho của tài khoản."}</small></div>`;
     return `${heading(text.inventory, manageSubtitle, manageAction)}${cloudNotice}${opsTabs}${opsGuide}${manageDbNotice}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
