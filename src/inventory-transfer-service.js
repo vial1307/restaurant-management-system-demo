@@ -18,9 +18,10 @@ export function siteLabel(site, language = "vi") {
 }
 
 export async function loadSiteOperationData(site) {
-  const [rows, locations] = await Promise.all([
+  const [rows, locations, ...allSiteLocations] = await Promise.all([
     getSiteInventoryRows(site),
     getSiteLocations(site, "storage"),
+    ...INVENTORY_SITES.map((entry)=>getSiteLocations(entry.id,"storage")),
   ]);
 
   const byItem = new Map();
@@ -55,7 +56,31 @@ export async function loadSiteOperationData(site) {
     site,
     items: [...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant")),
     locations,
+    allLocations: INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id}))),
   };
+}
+
+export async function directBranchTransfer({
+  itemId,
+  sourceLocationId,
+  destinationLocationId,
+  quantity,
+  note = "",
+}) {
+  if (!isSupabaseConfigured()) return { ok:false, error:new Error("SUPABASE_REQUIRED") };
+  const supabase = await getSupabase();
+  const { data, error } = await supabase.rpc("direct_branch_transfer", {
+    p_item_id: itemId,
+    p_source_location_id: sourceLocationId,
+    p_destination_location_id: destinationLocationId,
+    p_quantity: Math.max(1,Number(quantity)||1),
+    p_note: note,
+  });
+  if (error) return { ok:false, error };
+  if (data?.from_site) await syncInventoryNow(data.from_site,{reloadBranch:false});
+  if (data?.to_site) await syncInventoryNow(data.to_site,{reloadBranch:false});
+  window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated",{detail:{transfer:data}}));
+  return { ok:true,data };
 }
 
 export async function dispatchBranchShipment({
