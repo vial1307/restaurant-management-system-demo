@@ -17,6 +17,59 @@ import {
   watchInventoryTransfers,
 } from "./inventory-transfer-service.js";
 
+const DRAFT_TRANSFER_KEY = "shitu-inventory-draft-transfers-v1";
+
+function readDraftTransfers(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(DRAFT_TRANSFER_KEY)||"[]");
+    return Array.isArray(saved)?saved:[];
+  }catch{return [];}
+}
+function saveDraftTransfers(list){
+  localStorage.setItem(DRAFT_TRANSFER_KEY,JSON.stringify(list.slice(0,500)));
+}
+function createDraftTransfer({fromSite,toSite,item,sourceLocationId,quantity}){
+  const id=crypto.randomUUID?.()||`draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const transfer={
+    id,
+    transfer_no:`DRAFT-${String(Date.now()).slice(-8)}`,
+    from_site:fromSite,
+    to_site:toSite,
+    status:"dispatched",
+    draft:true,
+    created_at:new Date().toISOString(),
+    lines:[{
+      quantity:Math.max(1,Number(quantity)||1),
+      unit:item.unit,
+      source_location_id:sourceLocationId,
+      sourceItem:{
+        id:item.id,
+        catalog_key:item.catalogKey||item.catalog_key||"",
+        name_zh_tw:item.zh,
+        name_vi:item.vi,
+        unit:item.unit,
+      },
+    }],
+  };
+  const list=readDraftTransfers();
+  list.unshift(transfer);
+  saveDraftTransfers(list);
+  return transfer;
+}
+function pendingDraftTransfers(site){
+  return readDraftTransfers().filter((entry)=>entry.to_site===site&&entry.status==="dispatched");
+}
+function markDraftTransferReceived(id,destinationLocationId){
+  const list=readDraftTransfers();
+  const target=list.find((entry)=>entry.id===id);
+  if(!target)return false;
+  target.status="received";
+  target.received_at=new Date().toISOString();
+  target.destination_location_id=destinationLocationId;
+  saveDraftTransfers(list);
+  return true;
+}
+
 const TEXT = {
   vi: {
     in:"Nhập kho · 進貨入庫",
@@ -314,6 +367,19 @@ function draftItemCard(item,mode,locations,site,language,t){
   return itemCard(item,mode,locations,site,language,t);
 }
 
+function draftReceiveCard(transfer,locations,site,language,t){
+  const line=transfer.lines?.[0];
+  const item=line?.sourceItem;
+  if(!line||!item)return "";
+  return `<article class="inventory-op-card shipment-card is-draft-shipment" data-transfer-id="${esc(transfer.id)}">
+    <div class="op-item-head"><div><strong>${esc(item.name_zh_tw)}</strong><small>${esc(item.name_vi||"")}</small></div><span class="shipment-status">${language==="zh"?"待審出貨":"Xuất tạm · 待審出貨"}</span></div>
+    <div class="shipment-route"><span>${esc(siteLabel(transfer.from_site,language))}</span><b>→</b><span>${esc(siteLabel(site,language))}</span></div>
+    <div class="shipment-meta"><span>${esc(t.transferNo)} <strong>${esc(transfer.transfer_no)}</strong></span><span>${line.quantity} ${esc(line.unit)}</span></div>
+    <div class="op-select-grid"><label><span>${esc(t.destination)}</span><select data-draft-receive-destination="${esc(transfer.id)}">${locationOptions(locations,language,locations[0]?.id)}</select></label></div>
+    <div class="op-action-row receive-row"><button class="op-primary" data-draft-receive="${esc(transfer.id)}">${esc(t.receiveAction)}</button></div>
+  </article>`;
+}
+
 function bindDraft(host,state){
   const {mode,language}=state;
   const t=langText(language);
@@ -348,19 +414,19 @@ function bindDraft(host,state){
         setMessage(host,t.sameLocation,"error");
         return;
       }
-      if(type==="out" && target!=="usage"){
-        setMessage(host,language==="zh"?"分店出貨需完成雲端同步後使用。":"Xuất hàng sang chi nhánh sẽ bật sau khi đồng bộ cloud hoàn tất. · 分店出貨需完成雲端同步後使用。","error");
-        return;
-      }
-
       button.disabled=true;
       const result=await state.onApply?.({
-        type,
+        type:type==="out"&&target!=="usage"?"ship":type,
         itemId:item.id,
+        itemMeta:{zh:item.zh,vi:item.vi,unit:item.unit,catalogKey:item.catalogKey||item.catalog_key||""},
         sourceLocationId:sourceId,
         destinationLocationId:destinationId,
+        targetSite:target,
         amount,
       });
+      if(result?.ok && type==="out" && target!=="usage"){
+        createDraftTransfer({fromSite:state.site,toSite:target,item,sourceLocationId:sourceId,quantity:amount});
+      }
 
       if(result?.ok){
         setMessage(host,language==="zh"?"已暫存，待主管確認。":"Đã lưu tạm, chờ cấp trên duyệt. · 已暫存，待主管確認。","ok");
@@ -372,6 +438,35 @@ function bindDraft(host,state){
       }
     };
   });
+  host.querySelectorAll("[data-draft-receive]").forEach((button)=>{
+    button.onclick=async()=>{
+      const transferId=button.dataset.draftReceive;
+      const transfer=pendingDraftTransfers(state.site).find((entry)=>entry.id===transferId);
+      const line=transfer?.lines?.[0];
+      const destinationLocationId=host.querySelector(`[data-draft-receive-destination="${CSS.escape(transferId)}"]`)?.value||"";
+      if(!transfer||!line||!destinationLocationId)return;
+      button.disabled=true;
+      const item=line.sourceItem||{};
+      const result=await state.onApply?.({
+        type:"receive",
+        itemId:item.id||"",
+        itemMeta:{zh:item.name_zh_tw||"",vi:item.name_vi||"",unit:item.unit||line.unit||"個",catalogKey:item.catalog_key||""},
+        destinationLocationId,
+        amount:Math.max(1,Number(line.quantity)||1),
+        transferId,
+        sourceSite:transfer.from_site,
+      });
+      if(result?.ok){
+        markDraftTransferReceived(transferId,destinationLocationId);
+        setMessage(host,state.language==="zh"?"已暫存收貨，待主管確認。":"Đã lưu tạm nhận hàng, chờ cấp trên duyệt. · 已暫存收貨，待主管確認。","ok");
+        await renderDraft(host,state);
+      }else{
+        setMessage(host,errorText(result?.error,t),"error");
+        button.disabled=false;
+      }
+    };
+  });
+
 }
 
 async function renderDraft(host,state){
@@ -379,7 +474,9 @@ async function renderDraft(host,state){
   const data=await state.reload();
   state.data=data;
   if(state.mode==="receive"){
-    host.innerHTML=`<div class="inventory-cloud-notice inventory-fallback-notice"><strong>${state.language==="zh"?"待收貨需雲端同步":"Nhận hàng cần đồng bộ cloud · 待收貨需雲端同步"}</strong><small>${state.language==="zh"?"完成 Supabase inventory v5 後即可使用跨店收貨。":"Sau khi Supabase inventory v5 hoàn tất, phiếu nhận hàng giữa các chi nhánh sẽ được bật. · 完成 Supabase inventory v5 後即可使用跨店收貨。"}</small></div>`;
+    const pending=pendingDraftTransfers(state.site);
+    host.innerHTML=`<section class="inventory-ops-shell draft-operations-shell"><div class="central-draft-banner">${state.language==="zh"?"暫存收貨：待主管確認":"Nhận hàng tạm: chờ cấp trên duyệt · 暫存收貨：待主管確認"}</div><div class="inventory-ops-list">${pending.length?pending.map((entry)=>draftReceiveCard(entry,data.locations,state.site,state.language,t)).join(""):`<p class="inventory-ops-empty">${esc(t.noPending)}</p>`}</div><p class="op-message" data-op-message></p></section>`;
+    bindDraft(host,state);
     return;
   }
   const cards=data.items.map((item)=>draftItemCard(item,state.mode,data.locations,state.site,state.language,t));
