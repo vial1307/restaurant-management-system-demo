@@ -570,12 +570,12 @@ function inventory(context) {
   const catalogManage = canDirectInventoryAdjust();
   const historical = !isCurrentBranchInventoryDate();
   const cloudState = inventoryCloudState();
-  const cloudNotice = cloudState === "migration-needed"
-    ? `<div class="inventory-cloud-notice">Đồng bộ Supabase cho kho chưa được kích hoạt đầy đủ. · 庫存 Supabase 同步尚未完成設定。</div>`
-    : "";
+  const cloudReady = cloudState === "ready";
+  const cloudNotice = cloudReady
+    ? ""
+    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Đang hiển thị bản lưu trên thiết bị ở chế độ chỉ xem. Sau khi hoàn tất Supabase inventory v5, nhập/xuất/chuyển và đồng bộ PC / laptop / mobile sẽ được bật lại. · 目前顯示裝置內的唯讀備份；完成 Supabase inventory v5 後即可重新啟用進出庫、轉撥與跨裝置同步。</small></div>`;
   const site = activeInventorySite() || "fuxing";
   const opsEnabled = editable && !historical && ["fuxing","yongji"].includes(site);
-  const cloudReady = cloudState === "ready";
   const opsMode = opsEnabled && cloudReady ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
