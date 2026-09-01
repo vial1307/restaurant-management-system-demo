@@ -24,28 +24,26 @@ mkdir -p "${IMPORT_DIR}"
 chmod 700 "${IMPORT_DIR}"
 
 echo
-echo "Open Supabase Dashboard > Connect > Session pooler."
-echo "Copy the PostgreSQL connection URI. Do NOT send it in chat."
-read -r -s -p "Paste Supabase PostgreSQL URI here: " SUPABASE_DB_URL
+echo "Open Supabase Dashboard > Connect > Session pooler / Shared pooler."
+echo "Use the connection parameters shown there. Do not send the database secret in chat."
+read -r -p "Host: " SUPA_HOST
+read -r -p "Port [5432]: " SUPA_PORT
+SUPA_PORT="${SUPA_PORT:-5432}"
+read -r -p "Database [postgres]: " SUPA_DB
+SUPA_DB="${SUPA_DB:-postgres}"
+read -r -p "User (postgres.<project-ref>): " SUPA_USER
+read -r -s -p "Database secret: " SUPA_SECRET
 echo
-[[ -n "${SUPABASE_DB_URL}" ]] || { echo "No URI supplied."; exit 1; }
-
-case "${SUPABASE_DB_URL}" in
-  postgresql://postgres.*@*.pooler.supabase.com:5432/postgres|postgres://postgres.*@*.pooler.supabase.com:5432/postgres)
-    ;;
-  *)
-    echo "Invalid Session pooler URI."
-    echo "Use the exact URI copied from Supabase Shared/Session pooler."
-    echo "It must use user postgres.<project-ref> and host *.pooler.supabase.com."
-    unset SUPABASE_DB_URL
-    exit 1
-    ;;
-esac
+[[ "${SUPA_HOST}" == *.pooler.supabase.com ]] || { echo "Invalid pooler host."; exit 1; }
+[[ "${SUPA_USER}" == postgres.* ]] || { echo "Invalid pooler user."; exit 1; }
+[[ -n "${SUPA_SECRET}" ]] || { echo "No database secret supplied."; exit 1; }
 
 remote_psql() {
-  docker run --rm postgres:16-alpine psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 "$@"
+  docker run --rm \
+    --env "PGPASSWORD=${SUPA_SECRET}" \
+    postgres:16-alpine \
+    psql -h "${SUPA_HOST}" -p "${SUPA_PORT}" -U "${SUPA_USER}" -d "${SUPA_DB}" -v ON_ERROR_STOP=1 "$@"
 }
-
 echo "Checking Supabase connection and source counts..."
 remote_psql -Atqc "
 select json_build_object(
@@ -74,7 +72,7 @@ export_csv stock "select item_id,location_id,quantity,minimum_quantity,updated_a
 export_csv transactions "select id,item_id,location_id,direction,amount,before_quantity,after_quantity,note,actor_id,created_at from public.inventory_transactions order by created_at,id"
 export_csv receive_defaults "select site,catalog_key,location_id,updated_by,updated_at from public.inventory_receive_defaults order by site,catalog_key"
 
-unset SUPABASE_DB_URL
+unset SUPA_SECRET SUPA_HOST SUPA_PORT SUPA_DB SUPA_USER
 
 local_psql() {
   docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" "$@"
