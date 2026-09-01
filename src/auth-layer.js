@@ -419,11 +419,11 @@ function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocatio
     amount:value,
     before,
     after,
-    note:type === "in" ? "暫存入庫"
-      : type === "out" ? "暫存出庫"
-      : type === "ship" ? `暫存分店出貨 → ${targetSite || ""}`
-      : type === "receive" ? `暫存收貨 ← ${sourceSite || ""}`
-      : "暫存轉撥",
+    note:type === "in" ? "進貨入庫"
+      : type === "out" ? "領料／出庫"
+      : type === "ship" ? `分店直接轉撥 → ${targetSite || ""}`
+      : type === "receive" ? `直接收貨 ← ${sourceSite || ""}`
+      : "庫存轉撥",
   });
   return { ok:true };
 }
@@ -467,7 +467,7 @@ function centralPage(user) {
   const canEdit = user.role === "admin" || Boolean(user.permissions?.inventory?.edit);
   const draftCountAllowed = canInventoryDraftCount();
   let mode = content.dataset.centralMode || "overview";
-  if (["in","out","transfer","receive"].includes(mode) && !canEdit) {
+  if (["in","out","transfer"].includes(mode) && !canEdit) {
     mode = "overview";
     content.dataset.centralMode = mode;
   }
@@ -485,7 +485,6 @@ function centralPage(user) {
     inbound: language === "vi" ? "Nhập kho · 進貨入庫" : "進貨入庫",
     outbound: language === "vi" ? "Xuất kho · 領料／出庫" : "領料／出庫",
     transfer: language === "vi" ? "Điều chuyển · 庫存轉撥" : "庫存轉撥",
-    receive: language === "vi" ? "Nhận hàng · 待收貨" : "待收貨",
     manage: language === "vi" ? "Quản trị kho · 庫存管理" : "庫存管理",
     history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
   };
@@ -493,15 +492,15 @@ function centralPage(user) {
   const cloudReady = cloudState === "ready";
   const cloudNotice = cloudReady
     ? ""
-    : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Đã mở toàn bộ thao tác kho ở chế độ tạm: chỉnh số lượng, nhập kho, xuất kho, điều chuyển, xuất/nhận giữa chi nhánh. Tất cả thay đổi chờ cấp trên duyệt và chưa ghi vào cloud chính thức. · 已開放完整暫存操作：數量調整、入庫、出庫、轉撥及分店出／收貨；所有變更待主管確認，尚未寫入正式雲端庫存。</small></div>'
+    : '<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Dữ liệu kho hiện tại vẫn còn · 現有庫存資料仍保留</strong><small>Môi trường thử nghiệm: thao tác kho có hiệu lực ngay và chỉ ghi lại người nhập/xuất/chuyển. Không cần xác nhận quản lý ở giai đoạn hiện tại; quy trình duyệt sẽ triển khai sau trên VPS. · 測試環境：庫存操作立即生效，目前只記錄入庫／出庫／轉撥人員；現階段不需主管確認，審核流程將於 VPS 正式版再啟用。</small></div>'
 
   content.innerHTML = `<div class="central-heading"><div><div class="central-eyebrow">工作區 · 央廚</div><h1>央廚庫存</h1><p>央廚冷凍、4門、臥櫃與冷藏的總覽及進出貨。</p></div>${branchSwitcher(user, "central")}</div>
     ${cloudNotice}<section class="central-stats"><article><span>品項</span><strong data-central-stat-items>${productCount}</strong><small>已建立產品</small></article><article><span>總數量</span><strong data-central-stat-total>${total}</strong><small>依各品項單位加總</small></article><article><span>儲存區</span><strong data-central-stat-zones>${CENTRAL_ZONES.length}</strong><small>央廚專用</small></article></section>
-    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="receive" class="${mode === "receive" ? "active" : ""}">${esc(label.receive)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
+    <div class="central-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${canEdit ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="out" class="${mode === "out" ? "active" : ""}">${esc(label.outbound)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button>` : ""}${canViewHistory ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button><button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
     ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && canViewHistory ? stockView(filtered, "overview", selectedZone, query, (cloudReady && canDirectInventoryAdjust()) || draftCountAllowed) : mode === "overview" ? stockView(filtered, "overview", selectedZone, query, draftCountAllowed) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
   `;
   bindCentral(user);
-  if (["in","out","transfer","receive"].includes(mode)) {
+  if (["in","out","transfer"].includes(mode)) {
     const host=content.querySelector("[data-inventory-operations]");
     if (cloudReady) {
       void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
@@ -651,7 +650,7 @@ function bindCentral(user) {
     if (result.fallback) {
       item.qty = next;
       saveStock(items);
-      pushHistory({ user: user.name, userId: user.id, direction: inventoryCloudState() === "ready" ? "adjust" : "draft", status: inventoryCloudState() === "ready" ? "approved" : "pending-approval", product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount: Math.abs(next - before), before, after: next });
+      pushHistory({ user: user.name, userId: user.id, direction: "adjust", status: inventoryCloudState() === "ready" ? "cloud" : "staging", product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount: Math.abs(next - before), before, after: next });
       centralPage(user);
       return;
     }
