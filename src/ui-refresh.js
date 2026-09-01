@@ -34,7 +34,7 @@ const EXTRA = {
   "盤點數量":"Số kiểm kê · 盤點數量",
   "盤點調整":"Điều chỉnh kiểm kê · 盤點調整",
   "央廚進出庫紀錄":"Lịch sử nhập/xuất bếp trung tâm · 央廚進出庫紀錄",
-  "主管以上可查看；資料來自 Supabase。":"Chủ quản trở lên được xem; dữ liệu từ Supabase. · 主管以上可查看；資料來自 Supabase。",
+  "主管以上可查看；資料來自目前主資料庫。":"Chủ quản trở lên được xem; dữ liệu từ database chính. · 主管以上可查看；資料來自目前主資料庫。",
   "Mật khẩu hiện tại":"Mật khẩu hiện tại · 目前密碼",
   "Đổi mật khẩu":"Đổi mật khẩu · 變更密碼",
 };
@@ -68,8 +68,15 @@ function buildCatalog(){
 }
 const CATALOG = buildCatalog();
 
-function patchText(root=document){
-  if (!vietnameseMode()) return;
+function queryWithin(root,selector){
+  const result=[];
+  if(root instanceof Element && root.matches(selector)) result.push(root);
+  if(root?.querySelectorAll) result.push(...root.querySelectorAll(selector));
+  return result;
+}
+
+function patchText(root=document.body){
+  if (!vietnameseMode() || !root) return;
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
   const nodes=[];
   while(walker.nextNode()) nodes.push(walker.currentNode);
@@ -83,14 +90,14 @@ function patchText(root=document){
     if(translated) node.nodeValue=raw.replace(value,translated);
   }
 
-  document.querySelectorAll("option").forEach(option=>{
+  queryWithin(root,"option").forEach(option=>{
     const value=(option.textContent||"").trim();
     if(!value || value.includes(" · ")) return;
     const translated=CATALOG.get(value);
     if(translated) option.textContent=translated;
   });
 
-  document.querySelectorAll("button,.primary-button,.secondary-button,.danger-button").forEach(el=>{
+  queryWithin(root,"button,.primary-button,.secondary-button,.danger-button").forEach(el=>{
     const text=(el.textContent||"").replace(/\s+/g," ").trim();
     const compact=BUTTON_SHORT.get(text);
     if(compact){
@@ -106,8 +113,8 @@ function patchText(root=document){
   });
 }
 
-function patchSearchPlaceholders(){
-  document.querySelectorAll('input').forEach(input=>{
+function patchSearchPlaceholders(root=document.body){
+  queryWithin(root,'input').forEach(input=>{
     const p=input.getAttribute("placeholder") || "";
     const explicit=input.dataset.field==="inventorySearch" || input.hasAttribute("data-central-search");
     const looksSearch=input.type==="search" || /tìm|search|搜尋|pinyin|注音/i.test(p);
@@ -123,25 +130,47 @@ function patchSearchPlaceholders(){
   });
 }
 
-function patchTables(){
-  document.querySelectorAll(".card,.stat-card,.central-card,.account-table").forEach(el=>{
+function patchTables(root=document.body){
+  queryWithin(root,".card,.stat-card,.central-card,.account-table").forEach(el=>{
     el.setAttribute("data-ui-density","compact");
   });
 }
 
 let frame=0;
-function schedule(){
+const pendingRoots=new Set();
+
+function schedule(root=document.body){
+  if(!root) return;
+  pendingRoots.add(root.nodeType===Node.TEXT_NODE ? root.parentElement : root);
   if(frame) return;
   frame=requestAnimationFrame(()=>{
     frame=0;
-    patchText(document.body);
-    patchSearchPlaceholders();
-    patchTables();
+    const roots=[...pendingRoots].filter(Boolean);
+    pendingRoots.clear();
+    const compact=roots.filter((candidate,index)=>
+      !roots.some((other,otherIndex)=>
+        otherIndex!==index && other instanceof Element && candidate instanceof Node && other.contains(candidate)
+      )
+    );
+    for(const root of compact){
+      patchText(root);
+      patchSearchPlaceholders(root);
+      patchTables(root);
+    }
   });
 }
-schedule();
-new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true});
-window.addEventListener("hashchange",schedule);
+
+schedule(document.body);
+new MutationObserver((mutations)=>{
+  for(const mutation of mutations){
+    for(const node of mutation.addedNodes){
+      if(node.nodeType===Node.ELEMENT_NODE) schedule(node);
+      else if(node.nodeType===Node.TEXT_NODE) schedule(node.parentElement);
+    }
+  }
+}).observe(document.body,{childList:true,subtree:true});
+
+window.addEventListener("hashchange",()=>schedule(document.body));
 document.addEventListener("click",e=>{
-  if(e.target.closest('[data-action="set-language"]')) setTimeout(schedule,0);
+  if(e.target.closest('[data-action="set-language"]')) setTimeout(()=>schedule(document.body),0);
 });

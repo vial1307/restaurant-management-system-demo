@@ -1,6 +1,8 @@
 const VPS_HOSTS = new Set(["82.47.180.185"]);
+const LEGACY_STATIC_HOSTS = new Set(["vial1307.github.io"]);
 const inventoryCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
+const API_TIMEOUT_MS = 12000;
 
 export function invalidateVpsInventoryCache(site = "") {
   if (site) inventoryCache.delete(site);
@@ -9,7 +11,10 @@ export function invalidateVpsInventoryCache(site = "") {
 
 export function isVpsApiConfigured() {
   if (typeof window === "undefined") return false;
-  return VPS_HOSTS.has(window.location.hostname);
+  const host = window.location.hostname;
+  if (VPS_HOSTS.has(host)) return true;
+  if (!/^https?:$/.test(window.location.protocol) || !host) return false;
+  return !LEGACY_STATIC_HOSTS.has(host) && !host.endsWith(".github.io");
 }
 
 export async function apiRequest(path, {
@@ -17,16 +22,33 @@ export async function apiRequest(path, {
   body,
   headers = {},
   allow404 = false,
+  timeoutMs = API_TIMEOUT_MS,
 } = {}) {
-  const response = await fetch(path, {
-    method,
-    credentials: "same-origin",
-    headers: {
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || API_TIMEOUT_MS));
+
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (cause) {
+    const code = controller.signal.aborted ? "REQUEST_TIMEOUT" : "API_UNREACHABLE";
+    const error = new Error(code);
+    error.code = code;
+    error.cause = cause;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   let data = null;
   const type = response.headers.get("content-type") || "";

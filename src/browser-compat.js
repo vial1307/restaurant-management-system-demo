@@ -39,10 +39,19 @@ function updateViewportVars() {
 detectBrowser();
 updateViewportVars();
 
-window.addEventListener("resize", updateViewportVars, { passive: true });
-window.addEventListener("orientationchange", () => setTimeout(updateViewportVars, 80), { passive: true });
-window.visualViewport?.addEventListener("resize", updateViewportVars, { passive: true });
-window.visualViewport?.addEventListener("scroll", updateViewportVars, { passive: true });
+let viewportFrame = 0;
+function scheduleViewportUpdate() {
+  if (viewportFrame) return;
+  viewportFrame = requestAnimationFrame(() => {
+    viewportFrame = 0;
+    updateViewportVars();
+  });
+}
+
+window.addEventListener("resize", scheduleViewportUpdate, { passive: true });
+window.addEventListener("orientationchange", () => setTimeout(scheduleViewportUpdate, 80), { passive: true });
+window.visualViewport?.addEventListener("resize", scheduleViewportUpdate, { passive: true });
+window.visualViewport?.addEventListener("scroll", scheduleViewportUpdate, { passive: true });
 
 let focusedControlTimer = 0;
 
@@ -50,6 +59,7 @@ function keepFocusedModalControlVisible(target) {
   if (!target?.matches?.(".ingredient-modal input, .ingredient-modal select, .ingredient-modal textarea")) return;
   clearTimeout(focusedControlTimer);
   focusedControlTimer = window.setTimeout(() => {
+    if (!target.isConnected) return;
     updateViewportVars();
     target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
   }, 280);

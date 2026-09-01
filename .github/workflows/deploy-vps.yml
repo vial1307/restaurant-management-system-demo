@@ -35,6 +35,21 @@ jobs:
             node --check "$file"
           done
 
+      - name: Search regression checks
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { searchMatches } from "./src/search-utils.js";
+
+          assert.equal(searchMatches("大冷凍", ""), true);
+          assert.equal(searchMatches("大冷凍", "da leng dong"), true);
+          assert.equal(searchMatches("牛肉", "niu rou"), true);
+          assert.equal(searchMatches("牛肉", "ㄋㄧㄡㄖㄡ"), true);
+          assert.equal(searchMatches("Thịt bò", "thit bo"), true);
+          assert.equal(searchMatches("永吉店", "yongji"), true);
+          assert.equal(searchMatches("麻辣湯", "malatang"), true);
+          NODE
+
       - name: Validate backend JavaScript
         run: |
           set -euo pipefail

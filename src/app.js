@@ -1,5 +1,6 @@
 import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
+import { searchMatches } from "./search-utils.js";
 import {
   buildGeneratedTasks,
   buildInventoryAlerts,
@@ -1013,8 +1014,8 @@ function inventory(context) {
     const matchesGroup = storageView
       ? view.zone === "all" || item.zone === view.zone
       : view.workArea === "all" || item.workArea === view.workArea;
-    const haystack = `${item.label} ${item.labelVi}`.toLowerCase();
-    return matchesGroup && haystack.includes(view.search.toLowerCase());
+    const searchable = `${item.label || ""} ${item.labelVi || ""} ${item.zone || ""} ${item.workArea || ""} ${item.unit || ""}`;
+    return matchesGroup && searchMatches(searchable, view.search);
   });
   const groups = storageView ? ZONES : WORK_AREAS;
   const groupKey = storageView ? "zone" : "workArea";
@@ -1083,7 +1084,7 @@ function inventory(context) {
       : "Dùng để thêm/sửa nguyên liệu, vị trí lưu, định mức và đơn vị; thao tác lấy/chuyển/xuất hàng hằng ngày dùng các mục phía trước.",
     history: language === "zh"
       ? "查看此據點的庫存操作人員、時間、數量與前後變化；資料與雲端庫存紀錄連動。"
-      : "Xem người thao tác, thời gian, số lượng và thay đổi tồn tại cơ sở này; dữ liệu liên kết với lịch sử kho trên cloud.",
+      : "Xem người thao tác, thời gian, số lượng và thay đổi tồn tại cơ sở này; dữ liệu liên kết trực tiếp với lịch sử trên database.",
   };
   const opsTabs = tabsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button>${opsEnabled ? `<button data-action="select-inventory-ops" data-mode="in" class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>` : ""}${catalogManageVisible ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}${canViewHistory ? `<button data-action="select-inventory-ops" data-mode="history" class="${opsMode==="history"?"active":""}">${escapeHtml(opLabel.history)}</button>` : ""}</div>` : "";
   const opsGuide = tabsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
@@ -1091,8 +1092,8 @@ function inventory(context) {
     const manageEntries = effectiveRecord.inventory;
     const manageFiltered = manageEntries.filter((item) => {
       const matchesZone = view.zone === "all" || item.zone === view.zone;
-      const haystack = `${item.label} ${item.labelVi}`.toLowerCase();
-      return matchesZone && haystack.includes(view.search.toLowerCase());
+      const searchable = `${item.label || ""} ${item.labelVi || ""} ${item.zone || ""} ${item.workArea || ""} ${item.unit || ""}`;
+      return matchesZone && searchMatches(searchable, view.search);
     });
     const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage };
     const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", manageRowContext, storageInventoryRow);
@@ -1662,15 +1663,37 @@ root.addEventListener("change", (event) => {
   if (field === "task") store.toggleTask(id);
 });
 
+let inventorySearchTimer = 0;
+
+function applyInventorySearch(input) {
+  const value = input.value;
+  const caret = input.selectionStart ?? value.length;
+  view.search = value;
+  clearTimeout(inventorySearchTimer);
+
+  const update = () => {
+    render();
+    const replacement = root.querySelector('[data-field="inventorySearch"]');
+    if (!replacement) return;
+    try {
+      replacement.focus({ preventScroll: true });
+      replacement.setSelectionRange(caret, caret);
+    } catch {}
+  };
+
+  // Clearing the field must restore the complete list immediately.
+  if (!value) update();
+  else inventorySearchTimer = window.setTimeout(update, 80);
+}
+
 root.addEventListener("input", (event) => {
   if (event.target.dataset.field !== "inventorySearch") return;
-  const input = event.target;
-  const start = input.selectionStart;
-  view.search = input.value;
-  render();
-  const replacement = root.querySelector('[data-field="inventorySearch"]');
-  replacement.focus();
-  replacement.setSelectionRange(start, start);
+  applyInventorySearch(event.target);
+});
+
+root.addEventListener("search", (event) => {
+  if (event.target.dataset.field !== "inventorySearch") return;
+  applyInventorySearch(event.target);
 });
 
 root.addEventListener("submit", (event) => {

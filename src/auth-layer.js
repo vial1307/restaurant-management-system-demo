@@ -18,6 +18,7 @@ import {
   setActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
+import { searchMatches } from "./search-utils.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
@@ -536,7 +537,11 @@ function centralPage(user) {
   const selectedZone = content.dataset.centralZone || "all";
   const query = content.dataset.centralSearch || "";
   const editorKey = content.dataset.centralEditor || "";
-  const filtered = items.filter(i => (selectedZone === "all" || i.zone === selectedZone) && `${i.zh} ${i.vi}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = items.filter((item) => {
+    const matchesZone = selectedZone === "all" || item.zone === selectedZone;
+    const searchable = `${item.zh || ""} ${item.vi || ""} ${item.zone || ""} ${item.workArea || ""} ${item.unit || ""}`;
+    return matchesZone && searchMatches(searchable, query);
+  });
   const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
   const productCount = new Set(items.map((item) => centralBaseKey(item))).size;
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
@@ -643,7 +648,7 @@ function stockView(items, mode, selectedZone, query, directAdjust = false) {
   const draft = direct && inventoryCloudState() !== "ready";
   const directQuantityLabel = draft ? "Số lượng · 數量" : "盤點數量";
   const directActionLabel = draft ? "Cập nhật · 更新" : "盤點調整";
-  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
+  return `<section class="central-card ${draft ? "central-draft-card" : ""}"><div class="central-toolbar"><div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map(z => `<button data-central-zone="${esc(z)}" class="${selectedZone === z ? "active" : ""}">${esc(z)}</button>`).join("")}</div><input type="search" autocomplete="off" data-central-search placeholder="搜尋品項..." value="${esc(query)}" /></div>
     ${draft ? '<div class="central-draft-banner">Dữ liệu thử nghiệm · thao tác có hiệu lực ngay · 測試資料即時生效</div>' : ""}
     <div class="central-table-head"><span>品項</span><span>位置</span><span>目前數量</span>${editing ? `<span>${mode === "in" ? "入庫數量" : "出庫數量"}</span><span>操作</span>` : direct ? `<span>${directQuantityLabel}</span><span>${draft ? "暫存" : "調整"}</span>` : ""}</div>
     <div class="central-list">${items.map(i => `<article class="central-row ${i.draft ? "is-draft" : ""}"><div><strong>${esc(i.zh)}</strong><small>${esc(i.vi)}</small></div><span class="zone-pill">${esc(i.zone)}</span><div class="central-current"><strong>${Number(i.qty || 0)}</strong><small>${esc(i.unit)}${i.draft ? " · 測試" : ""}</small></div>${editing ? `<input type="number" min="1" value="1" data-central-qty="${esc(i.id)}"/><button class="central-action ${mode === "out" ? "out" : ""}" data-central-adjust="${esc(i.id)}" data-direction="${mode}">${mode === "in" ? "+ 入庫" : "− 出庫"}</button>` : direct ? `<input type="number" min="0" value="${Number(i.qty || 0)}" data-central-set-qty="${esc(i.id)}"/><button class="central-action adjust ${draft ? "draft-save" : ""}" data-central-set="${esc(i.id)}">${directActionLabel}</button>` : ""}</article>`).join("") || `<p class="central-empty">沒有符合條件的品項。</p>`}</div></section>`;
@@ -682,8 +687,8 @@ function centralWorkAreaLabel(area, language) {
 function centralManageView(items, selectedZone, query, language, allowDelete = false) {
   const groups = centralProductGroups(items).filter(({ item, rows }) => {
     const matchesZone = selectedZone === "all" || rows.some((row) => row.zone === selectedZone);
-    const haystack = `${item.zh || ""} ${item.vi || ""}`.toLowerCase();
-    return matchesZone && haystack.includes(String(query || "").toLowerCase());
+    const searchable = `${item.zh || ""} ${item.vi || ""} ${rows.map((row) => row.zone).join(" ")} ${item.workArea || ""} ${item.unit || ""}`;
+    return matchesZone && searchMatches(searchable, query);
   });
   const addLabel = language === "zh" ? "新增食材" : "Thêm nguyên liệu · 新增食材";
   const editLabel = language === "zh" ? "編輯" : "Sửa · 編輯";
@@ -692,7 +697,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
     <div class="central-toolbar central-manage-toolbar">
       <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${CENTRAL_ZONES.map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(zone)}</button>`).join("")}</div>
       <button class="primary-button" type="button" data-central-editor-open="new">＋ ${esc(addLabel)}</button>
-      <input data-central-search placeholder="${language === "zh" ? "搜尋品項..." : "Tìm nguyên liệu..."}" value="${esc(query)}" />
+      <input type="search" autocomplete="off" data-central-search placeholder="${language === "zh" ? "搜尋品項..." : "Tìm nguyên liệu..."}" value="${esc(query)}" />
     </div>
     <div class="central-manage-list">${groups.map(({ key, item, rows }) => {
       const locations = rows.map((row) => `<span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><strong>${Number(row.qty || 0)} ${esc(row.unit || item.unit || "")}</strong><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>`).join("");
@@ -770,17 +775,24 @@ function bindCentral(user) {
   content.querySelectorAll("[data-central-mode]").forEach(b => b.onclick = () => { content.dataset.centralMode = b.dataset.centralMode; content.dataset.centralEditor = ""; centralPage(user); });
   content.querySelectorAll("[data-central-zone]").forEach(b => b.onclick = () => { content.dataset.centralZone = b.dataset.centralZone; centralPage(user); });
   const search = content.querySelector("[data-central-search]");
-  if (search) search.oninput = () => {
-    const value = search.value;
-    content.dataset.centralSearch = value;
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      centralPage(user);
-      const next = document.querySelector(".page-content [data-central-search]");
-      next?.focus();
-      next?.setSelectionRange(value.length, value.length);
-    }, 120);
-  };
+  if (search) {
+    const applySearch = () => {
+      const value = search.value;
+      content.dataset.centralSearch = value;
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        centralPage(user);
+        const next = document.querySelector(".page-content [data-central-search]");
+        if (!next) return;
+        try {
+          next.focus({ preventScroll: true });
+          next.setSelectionRange(value.length, value.length);
+        } catch {}
+      }, value ? 80 : 0);
+    };
+    search.oninput = applySearch;
+    search.onsearch = applySearch;
+  }
 
   content.querySelectorAll("[data-central-editor-open]").forEach((button) => {
     button.onclick = () => {
