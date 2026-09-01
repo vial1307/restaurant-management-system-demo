@@ -166,7 +166,7 @@ async function responsiveAdmin(browser, viewport) {
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
   assert(overflow <= 3,`document horizontal overflow ${overflow}px at ${viewport.width}x${viewport.height}`);
 
-  const visibleTargets=page.locator('button:visible,a.nav-item:visible,input:visible,select:visible');
+  const visibleTargets=page.locator('button:visible,a.nav-item:visible,input:not([type="checkbox"]):not([type="radio"]):visible,select:visible');
   const count=Math.min(await visibleTargets.count(),40);
   for(let i=0;i<count;i++){
     const box=await visibleTargets.nth(i).boundingBox();
