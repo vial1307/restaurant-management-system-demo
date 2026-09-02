@@ -140,6 +140,46 @@ function patchTables(root=document.body){
   });
 }
 
+function formatBilingualLabels(root=document.body){
+  const selector=[
+    ".mobile-nav>.nav-item>span",
+    ".central-tabs>button",
+    ".central-zone-tabs>button",
+    ".zone-tabs>.filter-tab",
+  ].join(",");
+
+  queryWithin(root,selector).forEach((element)=>{
+    if(element.dataset.bilingualLayout==="true") return;
+    const counter=element.matches(".filter-tab") ? element.querySelector(":scope > span") : null;
+    const text=[...element.childNodes]
+      .filter((node)=>node.nodeType===Node.TEXT_NODE)
+      .map((node)=>node.nodeValue||"")
+      .join(" ")
+      .replace(/\s+/g," ")
+      .trim();
+    if(!text.includes(" · ")) return;
+    const [primary,...secondaryParts]=text.split(" · ");
+    const secondary=secondaryParts.join(" · ").trim();
+    if(!primary.trim()||!secondary) return;
+
+    [...element.childNodes]
+      .filter((node)=>node.nodeType===Node.TEXT_NODE)
+      .forEach((node)=>node.remove());
+    const labels=document.createElement("span");
+    labels.className="bilingual-control-label";
+    const main=document.createElement("span");
+    main.className="label-primary";
+    main.textContent=primary.trim();
+    const sub=document.createElement("small");
+    sub.className="label-secondary";
+    sub.textContent=secondary;
+    labels.append(main,sub);
+    element.prepend(labels);
+    if(counter) element.append(counter);
+    element.dataset.bilingualLayout="true";
+  });
+}
+
 let frame=0;
 const pendingRoots=new Set();
 
@@ -160,6 +200,7 @@ function schedule(root=document.body){
       patchText(root);
       patchSearchPlaceholders(root);
       patchTables(root);
+      formatBilingualLabels(root);
     }
   });
 }
