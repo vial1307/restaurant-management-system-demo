@@ -800,8 +800,7 @@ function bindCentral(user) {
     const syncClear = () => {
       if (clear) clear.hidden = !search.value;
     };
-    const applySearch = (event) => {
-      if (event?.isComposing) return;
+    const applySearch = () => {
       const value = search.value;
       content.dataset.centralSearch = value;
       applyCentralSearchDom(content, value);
@@ -809,7 +808,10 @@ function bindCentral(user) {
     };
     search.oninput = applySearch;
     search.onsearch = applySearch;
-    search.oncompositionend = applySearch;
+    search.oncompositionend = () => {
+      applySearch();
+      requestAnimationFrame(applySearch);
+    };
     syncClear();
 
     if (clear) {

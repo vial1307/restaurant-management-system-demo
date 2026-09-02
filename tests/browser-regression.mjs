@@ -110,9 +110,29 @@ async function adminDesktop(browser) {
   await setSite(page,"central");
   const centralSearch=page.locator('input[data-central-search]').first();
   await centralSearch.waitFor({state:"visible"});
-  await centralSearch.fill("niu rou");
+  const centralRows=page.locator(".central-row");
+  const centralBefore=await centralRows.count();
+  assert(centralBefore > 1,"central inventory should have multiple rows");
+  await centralSearch.evaluate((input)=>{
+    input.value="niu rou";
+    input.dispatchEvent(new InputEvent("input",{
+      bubbles:true,
+      composed:true,
+      data:"niu rou",
+      inputType:"insertCompositionText",
+      isComposing:true,
+    }));
+  });
   assert.equal(await centralSearch.inputValue(),"niu rou");
+  await page.waitForTimeout(50);
+  const centralFiltered=await page.locator(".central-row:not([hidden])").count();
+  assert(centralFiltered > 0 && centralFiltered < centralBefore,"central search did not filter during IME composition");
+  for(let i=0;i<centralFiltered;i++){
+    assert.match(await page.locator(".central-row:not([hidden])").nth(i).innerText(),/牛肉|Thịt bò/);
+  }
   await centralSearch.fill("");
+  await page.waitForTimeout(50);
+  assert.equal(await page.locator(".central-row:not([hidden])").count(),centralBefore,"clearing central search did not restore all rows");
 
   await assertNoPageErrors(page,errors,"admin desktop");
   await context.close();
