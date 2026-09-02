@@ -83,6 +83,7 @@ function patchText(root=document.body){
   for(const node of nodes){
     const parent=node.parentElement;
     if(!parent || ["SCRIPT","STYLE","INPUT","TEXTAREA","OPTION"].includes(parent.tagName)) continue;
+    if(parent.closest(".bilingual-control-label")) continue;
     const raw=node.nodeValue || "";
     const value=raw.trim();
     if(!value || value.includes(" · ")) continue;
