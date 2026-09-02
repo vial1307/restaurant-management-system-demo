@@ -197,12 +197,13 @@ async function responsiveAdmin(browser, viewport) {
   if(viewport.width===390 && viewport.height===844){
     await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
     await page.locator("[data-account-edit]").first().waitFor({state:"visible"});
-    await page.evaluate(()=>{
-      document.documentElement.style.setProperty("--visual-height","520px");
-      document.documentElement.style.setProperty("--visual-offset-top","40px");
-    });
     await page.locator("[data-account-edit]").first().click();
     await page.locator(".account-modal").waitFor({state:"visible"});
+    await page.evaluate(async()=>{
+      document.documentElement.style.setProperty("--visual-height","520px");
+      document.documentElement.style.setProperty("--visual-offset-top","40px");
+      await new Promise((resolve)=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    });
     const modalBounds=await page.locator(".account-modal").evaluate((modal)=>{
       const box=modal.getBoundingClientRect();
       return {top:box.top,bottom:box.bottom};
