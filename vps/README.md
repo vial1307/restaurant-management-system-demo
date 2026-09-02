@@ -2,6 +2,8 @@
 
 This folder is the new VPS deployment path. It is isolated from the current Supabase/GitHub Pages runtime until cutover.
 
+Deployment note: the UI refresh requested on 2026-09-03 starts from a server-side database dump and retained previous web release.
+
 ## Target architecture
 
 - Ubuntu 22.04
