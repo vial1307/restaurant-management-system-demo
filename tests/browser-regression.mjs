@@ -46,17 +46,17 @@ async function setSite(page, site) {
 async function inventorySearchRoundTrip(page) {
   const input = page.locator('[data-field="inventorySearch"]');
   await input.waitFor({state:"visible"});
-  const before = await page.locator(".inventory-row:not([hidden])").count();
+  const before = await page.locator(".inventory-row:visible").count();
   assert(before > 0,"inventory should have visible rows");
   await input.fill("niu rou");
   assert.equal(await input.inputValue(),"niu rou");
   await page.waitForTimeout(50);
-  const filtered = await page.locator(".inventory-row:not([hidden])").count();
+  const filtered = await page.locator(".inventory-row:visible").count();
   assert(filtered > 0 && filtered <= before,"inventory search did not filter");
   await input.fill("");
   await page.waitForTimeout(50);
   assert.equal(await input.inputValue(),"");
-  const restored = await page.locator(".inventory-row:not([hidden])").count();
+  const restored = await page.locator(".inventory-row:visible").count();
   assert.equal(restored,before,"clearing inventory search did not restore all rows");
 }
 
@@ -125,14 +125,14 @@ async function adminDesktop(browser) {
   });
   assert.equal(await centralSearch.inputValue(),"niu rou");
   await page.waitForTimeout(50);
-  const centralFiltered=await page.locator(".central-row:not([hidden])").count();
+  const centralFiltered=await page.locator(".central-row:visible").count();
   assert(centralFiltered > 0 && centralFiltered < centralBefore,"central search did not filter during IME composition");
   for(let i=0;i<centralFiltered;i++){
-    assert.match(await page.locator(".central-row:not([hidden])").nth(i).innerText(),/牛肉|Thịt bò/);
+    assert.match(await page.locator(".central-row:visible").nth(i).innerText(),/牛肉|Thịt bò/);
   }
   await centralSearch.fill("");
   await page.waitForTimeout(50);
-  assert.equal(await page.locator(".central-row:not([hidden])").count(),centralBefore,"clearing central search did not restore all rows");
+  assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"clearing central search did not restore all rows");
 
   await assertNoPageErrors(page,errors,"admin desktop");
   await context.close();
