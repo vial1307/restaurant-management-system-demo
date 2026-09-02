@@ -34,5 +34,7 @@ export function normalizePermissionsForRole(role, input) {
 }
 
 export function normalizeLocationForRole(role, location) {
-  return role === "admin" ? "all" : location;
+  if (role === "admin") return "all";
+  if (role === "central") return "central";
+  return location;
 }

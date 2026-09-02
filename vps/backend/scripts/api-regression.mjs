@@ -18,10 +18,10 @@ async function request(path, { method="GET", body, cookie } = {}) {
   return { response, data, cookie: response.headers.get("set-cookie")?.split(";")[0] || "" };
 }
 
-async function login(username) {
+async function login(username, password = PASSWORD) {
   const result = await request("/api/auth/login", {
     method:"POST",
-    body:{ username, password:PASSWORD },
+    body:{ username, password },
   });
   assert.equal(result.response.status, 200, `login failed for ${username}: ${JSON.stringify(result.data)}`);
   assert(result.cookie, `missing session cookie for ${username}`);
@@ -188,15 +188,55 @@ const createdAdmin = await request("/api/admin/users",{
   body:{
     action:"create",username:"createdadmin",password:"AdminCreated!123",
     display_name:"Created Admin",role:"admin",location:"fuxing",active:true,
+    preferred_language:"zh",
     permissions:Object.fromEntries(MODULES.map((key)=>[key,{view:false,edit:false}]))
   }
 });
 assert.equal(createdAdmin.response.status,200);
 assert.equal(createdAdmin.data.user.location,"all");
+assert.equal(createdAdmin.data.user.preferred_language,"zh");
 for (const key of MODULES) {
   assert.equal(createdAdmin.data.user.permissions[key]?.view,true);
   assert.equal(createdAdmin.data.user.permissions[key]?.edit,true);
 }
+
+const shortPasswordUpdate = await request("/api/admin/users",{
+  method:"POST",cookie:admin.cookie,
+  body:{
+    action:"update",id:createdAdmin.data.user.id,username:"createdadmin",password:"short",
+    display_name:"Created Admin",role:"admin",location:"all",active:true,
+    permissions:Object.fromEntries(MODULES.map((key)=>[key,{view:true,edit:true}]))
+  }
+});
+assert.equal(shortPasswordUpdate.response.status,400);
+assert.equal(shortPasswordUpdate.data.error,"PASSWORD_TOO_SHORT");
+
+const preserveLanguageUpdate = await request("/api/admin/users",{
+  method:"POST",cookie:admin.cookie,
+  body:{
+    action:"update",id:createdAdmin.data.user.id,username:"createdadmin",password:"",
+    display_name:"Created Admin Updated",role:"admin",location:"all",active:true,
+    permissions:Object.fromEntries(MODULES.map((key)=>[key,{view:true,edit:true}]))
+  }
+});
+assert.equal(preserveLanguageUpdate.response.status,200);
+assert.equal(preserveLanguageUpdate.data.user.preferred_language,"zh");
+assert.equal((await login("createdadmin","AdminCreated!123")).user.displayName,"Created Admin Updated");
+
+const createdCentral = await request("/api/admin/users",{
+  method:"POST",cookie:admin.cookie,
+  body:{
+    action:"create",username:"createdcentral",password:"CentralCreated!123",
+    display_name:"Created Central",role:"central",location:"fuxing",active:true,
+    permissions:Object.fromEntries(MODULES.map((key)=>[key,{view:key==="inventory",edit:key==="inventory"}]))
+  }
+});
+assert.equal(createdCentral.response.status,200);
+assert.equal(createdCentral.data.user.location,"central");
+const createdCentralSession = await login("createdcentral","CentralCreated!123");
+assert.equal(createdCentralSession.user.location,"central");
+assert.equal((await inventory(createdCentralSession.cookie,"central")).response.status,200);
+assert.equal((await inventory(createdCentralSession.cookie,"fuxing")).response.status,403);
 
 const selfDemote = await request("/api/admin/users",{
   method:"POST",cookie:admin.cookie,

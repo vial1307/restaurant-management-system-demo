@@ -81,7 +81,8 @@ export function hasPermission(user, moduleName, actionName) {
 
 export function siteAllowed(user, site) {
   if (!user) return false;
-  return user.location === "all" || user.location === site;
+  const location = normalizeLocationForRole(user.role, user.location);
+  return location === "all" || location === site;
 }
 
 export function publicUser(user) {

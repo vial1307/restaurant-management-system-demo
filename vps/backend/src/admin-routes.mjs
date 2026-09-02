@@ -16,6 +16,11 @@ function normalizePreferredLanguage(value) {
   return ["vi","zh","zh-TW"].includes(value) ? value : "vi";
 }
 
+function requestedPreferredLanguage(body) {
+  if (!Object.prototype.hasOwnProperty.call(body || {}, "preferred_language")) return null;
+  return normalizePreferredLanguage(body.preferred_language);
+}
+
 export async function registerAdminRoutes(app) {
   app.get("/api/admin/users", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -49,7 +54,7 @@ export async function registerAdminRoutes(app) {
     const location = String(request.body?.location || "fuxing");
     const permissions = normalizePermissionsForRole(role, request.body?.permissions);
     const effectiveLocation = normalizeLocationForRole(role, location);
-    const preferredLanguage = normalizePreferredLanguage(request.body?.preferred_language);
+    const preferredLanguage = requestedPreferredLanguage(request.body);
     const active = request.body?.active !== false;
     const password = String(request.body?.password || "");
 
@@ -59,6 +64,7 @@ export async function registerAdminRoutes(app) {
     if (!displayName) return reply.code(400).send({ error: "DISPLAY_NAME_REQUIRED" });
     if (!VALID_ROLES.has(role)) return reply.code(400).send({ error: "INVALID_ROLE" });
     if (!VALID_LOCATIONS.has(location)) return reply.code(400).send({ error: "INVALID_LOCATION" });
+    if (password && password.length < 10) return reply.code(400).send({ error: "PASSWORD_TOO_SHORT" });
 
     try {
       if (action === "create") {
@@ -71,7 +77,7 @@ export async function registerAdminRoutes(app) {
            ) values($1,$2,$3,now(),$4,$5,$6::jsonb,$7,$8)
            returning id,username,display_name,role,location,permissions,
                      preferred_language,active,created_at,updated_at`,
-          [username,displayName,passwordHash,role,effectiveLocation,JSON.stringify(permissions),preferredLanguage,active]
+          [username,displayName,passwordHash,role,effectiveLocation,JSON.stringify(permissions),preferredLanguage || "vi",active]
         );
         return { user: result.rows[0] };
       }
@@ -92,7 +98,7 @@ export async function registerAdminRoutes(app) {
                role=$4,
                location=$5,
                permissions=$6::jsonb,
-               preferred_language=$7,
+               preferred_language=coalesce($7::text,preferred_language),
                active=$8,
                password_hash=case when $9::text is null then password_hash else $9 end,
                password_changed_at=case when $9::text is null then password_changed_at else now() end

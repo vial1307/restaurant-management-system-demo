@@ -43,6 +43,23 @@ async function setSite(page, site) {
   await page.waitForFunction(() => document.querySelectorAll(".inventory-row,.central-row,.central-manage-row").length > 0,{timeout:10000});
 }
 
+async function assertRoutePermissions(page, username) {
+  const session = await page.evaluate(()=>JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null"));
+  assert(session?.permissions,`${username} session permissions missing`);
+  for (const route of ACCOUNT_MODULES) {
+    await page.goto(BASE + "/#" + route,{waitUntil:"domcontentloaded"});
+    await page.waitForSelector(".page-content");
+    if (session.permissions[route]?.view) {
+      await page.waitForFunction((expected)=>location.hash.replace(/^#/,"").split("?")[0]===expected,route);
+      assert.equal(await page.locator(".access-empty-state").count(),0,`${username} blocked from allowed route ${route}`);
+    } else {
+      await page.waitForFunction((blocked)=>location.hash.replace(/^#/,"").split("?")[0]!==blocked,route);
+      const redirected = await page.evaluate(()=>location.hash.replace(/^#/,"").split("?")[0]);
+      assert.equal(session.permissions[redirected]?.view,true,`${username} redirected from ${route} to forbidden ${redirected}`);
+    }
+  }
+}
+
 async function inventorySearchRoundTrip(page) {
   const input = page.locator('[data-field="inventorySearch"]');
   await input.waitFor({state:"visible"});
@@ -81,6 +98,17 @@ async function adminDesktop(browser) {
     assert.equal(await page.locator(".access-empty-state").count(),0,`admin blocked from ${route}`);
   }
 
+  await page.goto(BASE + "/#dashboard",{waitUntil:"domcontentloaded"});
+  const initialDate=await page.locator('[data-action="toggle-calendar"] strong').innerText();
+  await page.locator('[data-action="shift-date"][data-offset="1"]').click();
+  assert.notEqual(await page.locator('[data-action="toggle-calendar"] strong').innerText(),initialDate,"next-day control did not change the service date");
+  await page.locator('[data-action="shift-date"][data-offset="-1"]').click();
+  assert.equal(await page.locator('[data-action="toggle-calendar"] strong').innerText(),initialDate,"previous-day control did not restore the service date");
+  await page.locator('[data-action="set-language"][data-language="zh"]').first().click();
+  await page.waitForFunction(()=>document.documentElement.lang==="zh-Hant");
+  await page.locator('[data-action="set-language"][data-language="vi"]').first().click();
+  await page.waitForFunction(()=>document.documentElement.lang==="vi");
+
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
 
@@ -106,6 +134,16 @@ async function adminDesktop(browser) {
 
   await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
   await page.locator("[data-account-add]").waitFor({state:"visible"});
+  await page.locator("[data-account-edit]").first().click();
+  const accountModal=page.locator(".account-modal");
+  await accountModal.waitFor({state:"visible"});
+  assert.equal(await accountModal.locator('input[name="password"]').getAttribute("minlength"),"10");
+  await accountModal.locator('select[name="role"]').selectOption("central");
+  assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"central","central role did not select central kitchen");
+  await accountModal.locator('select[name="role"]').selectOption("manager");
+  assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"fuxing","branch role did not return to a branch location");
+  await accountModal.locator("[data-account-close]").first().click();
+  await accountModal.waitFor({state:"detached"});
 
   await setSite(page,"central");
   const centralSearch=page.locator('input[data-central-search]').first();
@@ -133,6 +171,13 @@ async function adminDesktop(browser) {
   await centralSearch.fill("");
   await page.waitForTimeout(50);
   assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"clearing central search did not restore all rows");
+  const freezerTab=page.locator('[data-central-zone="央廚冷凍"]').first();
+  await freezerTab.click();
+  const zonedRows=page.locator(".central-row:visible");
+  assert((await zonedRows.count()) > 0,"central zone filter returned no rows");
+  for(let i=0;i<await zonedRows.count();i++) assert.match(await zonedRows.nth(i).innerText(),/央廚冷凍/);
+  await page.locator('[data-central-zone="all"]').first().click();
+  assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"central all-zone filter did not restore rows");
 
   await assertNoPageErrors(page,errors,"admin desktop");
   await context.close();
@@ -144,6 +189,7 @@ async function roleDesktop(browser, username, checks) {
   const errors=[];
   page.on("pageerror",(error)=>errors.push(error.message));
   await login(page,username);
+  await assertRoutePermissions(page,username);
   if(checks.central){
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
     await page.locator('input[data-central-search]').first().waitFor({state:"visible"});

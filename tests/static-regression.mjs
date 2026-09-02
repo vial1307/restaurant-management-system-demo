@@ -9,6 +9,7 @@ import {
 import {
   ACCOUNT_MODULES as BACKEND_MODULES,
   fullPermissions as backendFullPermissions,
+  normalizeLocationForRole,
 } from "../vps/backend/src/permissions.mjs";
 import { searchMatches } from "../src/search-utils.js";
 
@@ -17,6 +18,9 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 assert.deepEqual(BACKEND_MODULES, ACCOUNT_MODULES, "frontend/backend account module lists diverged");
 assert.deepEqual(backendFullPermissions(), fullAccountPermissions(), "frontend/backend admin permissions diverged");
+assert.equal(normalizeLocationForRole("admin", "fuxing"), "all");
+assert.equal(normalizeLocationForRole("central", "fuxing"), "central");
+assert.equal(normalizeLocationForRole("manager", "yongji"), "yongji");
 
 const poisonedAdmin = Object.fromEntries(
   ACCOUNT_MODULES.map((key) => [key, { view: false, edit: false }])
@@ -79,5 +83,8 @@ for (const [file, marker] of [
 }
 
 assert(!/function applyInventorySearchDom[\s\S]{0,2500}render\(\)/.test(app), "inventory search must not rerender the page while typing");
+
+const accountAdmin = read("src/account-admin.js");
+assert.match(accountAdmin, /name="password" type="password" minlength="10"/, "account editor must enforce the password policy");
 
 console.log("STATIC_REGRESSION_OK");
