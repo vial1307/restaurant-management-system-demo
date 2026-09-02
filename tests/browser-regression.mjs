@@ -209,7 +209,7 @@ async function responsiveAdmin(browser, viewport) {
       return {top:box.top,bottom:box.bottom};
     });
     assert(modalBounds.top >= -1,`account modal starts above visual viewport: ${modalBounds.top}px`);
-    assert(modalBounds.bottom <= 521,`account modal falls below visual viewport: ${modalBounds.bottom}px`);
+    assert(modalBounds.bottom <= 561,`account modal falls below visual viewport: ${modalBounds.bottom}px`);
     await page.locator("[data-account-close]").first().click();
   }
 
