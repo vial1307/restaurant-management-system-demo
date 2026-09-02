@@ -56,7 +56,7 @@ window.visualViewport?.addEventListener("scroll", scheduleViewportUpdate, { pass
 let focusedControlTimer = 0;
 
 function keepFocusedModalControlVisible(target) {
-  if (!target?.matches?.(".ingredient-modal input, .ingredient-modal select, .ingredient-modal textarea")) return;
+  if (!target?.matches?.(".ingredient-modal input, .ingredient-modal select, .ingredient-modal textarea, .account-modal input, .account-modal select, .account-modal textarea")) return;
   clearTimeout(focusedControlTimer);
   focusedControlTimer = window.setTimeout(() => {
     if (!target.isConnected) return;

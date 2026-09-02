@@ -252,7 +252,8 @@ input,textarea{
 .keyboard-open .page-content{
   padding-bottom:18px !important;
 }
-.keyboard-open .modal-backdrop{
+.keyboard-open .modal-backdrop,
+.keyboard-open .account-modal-backdrop{
   /* Keep edit sheets inside the visible viewport instead of behind the iOS keyboard. */
   inset:auto 0 auto 0 !important;
   top:var(--visual-offset-top,0px) !important;
@@ -260,7 +261,8 @@ input,textarea{
   min-height:0 !important;
   align-items:end !important;
 }
-.keyboard-open .ingredient-modal{
+.keyboard-open .ingredient-modal,
+.keyboard-open .account-modal{
   max-height:calc(var(--visual-height,100dvh) - 6px) !important;
   height:auto !important;
   overflow-y:auto !important;
@@ -282,6 +284,13 @@ input,textarea{
     align-items:end !important;
     padding:0 !important;
   }
+  .account-modal-backdrop{
+    inset:auto 0 auto 0 !important;
+    top:var(--visual-offset-top,0px) !important;
+    height:var(--visual-height,100dvh) !important;
+    min-height:0 !important;
+    overflow:hidden;
+  }
   .modal-card,.account-modal{
     width:100% !important;
     max-width:100% !important;
@@ -291,6 +300,10 @@ input,textarea{
     border-radius:16px 16px 0 0 !important;
     padding:10px !important;
     overscroll-behavior:contain;
+  }
+  .account-modal{
+    height:calc(var(--visual-height,100dvh) - 6px) !important;
+    max-height:calc(var(--visual-height,100dvh) - 6px) !important;
   }
   .modal-card>.card-heading,.account-card-head{
     position:sticky;

@@ -194,6 +194,24 @@ async function responsiveAdmin(browser, viewport) {
     assert(box.height >= 28,`tap target too short: ${box.height}px at ${viewport.width}x${viewport.height}`);
   }
 
+  if(viewport.width===390 && viewport.height===844){
+    await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
+    await page.locator("[data-account-edit]").first().waitFor({state:"visible"});
+    await page.evaluate(()=>{
+      document.documentElement.style.setProperty("--visual-height","520px");
+      document.documentElement.style.setProperty("--visual-offset-top","40px");
+    });
+    await page.locator("[data-account-edit]").first().click();
+    await page.locator(".account-modal").waitFor({state:"visible"});
+    const modalBounds=await page.locator(".account-modal").evaluate((modal)=>{
+      const box=modal.getBoundingClientRect();
+      return {top:box.top,bottom:box.bottom};
+    });
+    assert(modalBounds.top >= 39,`account modal starts above visual viewport: ${modalBounds.top}px`);
+    assert(modalBounds.bottom <= 561,`account modal falls below visual viewport: ${modalBounds.bottom}px`);
+    await page.locator("[data-account-close]").first().click();
+  }
+
   await assertNoPageErrors(page,errors,`responsive ${viewport.width}x${viewport.height}`);
   await context.close();
 }
