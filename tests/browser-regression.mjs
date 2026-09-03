@@ -198,6 +198,12 @@ async function roleDesktop(browser, username, checks) {
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
     await page.locator('input[data-central-search]').first().waitFor({state:"visible"});
     assert.equal(await page.locator(".warehouse-switch").count(),0);
+    if(checks.manage === true){
+      const manage=page.locator('[data-central-mode="manage"]');
+      await manage.waitFor({state:"visible"});
+      await manage.click();
+      await page.locator('[data-central-editor-open="new"]').waitFor({state:"visible"});
+    }
   } else {
     const site = await page.evaluate(() => {
       try {
@@ -274,7 +280,7 @@ try{
   await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true});
   await roleDesktop(browser,"employeefx",{manage:true,operations:true});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false});
-  await roleDesktop(browser,"centralreg",{central:true});
+  await roleDesktop(browser,"centralreg",{central:true,manage:true});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});
   await responsiveAdmin(browser,{width:844,height:390});

@@ -136,11 +136,10 @@ export function canInventoryDraftCount() {
 }
 
 export function canManageCentralCatalog() {
-  const currentRole = role();
   const s=session();
   return canInventoryEdit()
     && activeInventorySite() === "central"
-    && (currentRole === "admin" || (currentRole === "manager" && ["central","all"].includes(s?.location)));
+    && (role() === "admin" || ["central","all"].includes(s?.location));
 }
 
 export function canViewBranchCatalogManagement(site = activeInventorySite()) {
