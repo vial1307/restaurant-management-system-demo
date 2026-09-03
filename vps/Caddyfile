@@ -1,7 +1,7 @@
 :80 {
   encode zstd gzip
 
-  @freshFrontend path / /index.html /src/* /manifest.webmanifest
+  @freshFrontend path / /index.html /src/* /manifest.webmanifest /sw.js
   header @freshFrontend Cache-Control "no-store, no-cache, must-revalidate"
 
   @api path /api/*

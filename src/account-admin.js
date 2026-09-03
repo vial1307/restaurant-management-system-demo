@@ -6,7 +6,7 @@ import {
   ACCOUNT_ROLE_DEFAULTS,
   isAdminAccount,
   normalizeAccountPermissions,
-} from './account-permissions.js?v=84';
+} from './account-permissions.js?v=85';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';
@@ -158,7 +158,8 @@ function adminPanel(){
   const s=session();
   if(s?.role!=='admin') return '';
   const accounts=loadAccounts();
-  return `<article class="card account-admin-card"><div class="account-card-head"><div><h2>${esc(label('accountManagement'))}</h2><p>${esc(label('accountSubtitle'))}</p></div><button class="secondary-button" data-account-add>＋ ${esc(label('addAccount'))}</button></div><div class="account-table"><div class="account-table-head"><span>${esc(label('employeeName'))}</span><span>${esc(label('account'))}</span><span>${esc(label('role'))}</span><span>${esc(label('location'))}</span><span>${esc(label('status'))}</span><span></span></div>${accounts.map(a=>`<div class="account-row"><div><strong>${esc(a.name)}</strong><small>${esc(a.id)}</small></div><span>${esc(a.username)}</span><span>${esc(roleLabel(a.role))}</span><span>${esc(locationLabel(a.location))}</span><span class="account-status ${a.active?'on':'off'}">${esc(a.active?label('active'):label('disabled'))}</span><button class="icon-button account-edit" data-account-edit="${esc(a.id)}">✎</button></div>`).join('')}</div><p class="account-storage-note">${esc(label('temporaryStorage'))}</p></article>`;
+  const storageLabel=isVpsApiConfigured()?'vpsAccountStorage':'temporaryStorage';
+  return `<article class="card account-admin-card"><div class="account-card-head"><div><h2>${esc(label('accountManagement'))}</h2><p>${esc(label('accountSubtitle'))}</p></div><button class="secondary-button" data-account-add>＋ ${esc(label('addAccount'))}</button></div><div class="account-table"><div class="account-table-head"><span>${esc(label('employeeName'))}</span><span>${esc(label('account'))}</span><span>${esc(label('role'))}</span><span>${esc(label('location'))}</span><span>${esc(label('status'))}</span><span></span></div>${accounts.map(a=>`<div class="account-row"><div><strong>${esc(a.name)}</strong><small>${esc(a.id)}</small></div><span>${esc(a.username)}</span><span>${esc(roleLabel(a.role))}</span><span>${esc(locationLabel(a.location))}</span><span class="account-status ${a.active?'on':'off'}">${esc(a.active?label('active'):label('disabled'))}</span><button class="icon-button account-edit" data-account-edit="${esc(a.id)}">✎</button></div>`).join('')}</div><p class="account-storage-note">${esc(label(storageLabel))}</p></article>`;
 }
 
 let settingsCloudSynced=false;

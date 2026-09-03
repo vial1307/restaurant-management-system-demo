@@ -1,104 +1,29 @@
+// Retirement worker for installations that still have the old offline cache.
+// It clears Kitchen OS caches, unregisters itself and reloads controlled tabs
+// through a versioned URL so Safari cannot reuse an obsolete interface.
 const CACHE_PREFIX = "shitu-kitchen-os-";
-const CACHE_NAME = `${CACHE_PREFIX}v59`;
-const VERSION = "59";
-const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./manifest.webmanifest?v=59",
-  "./src/app.js?v=59",
-  "./src/supabase-config.js?v=59",
-  "./src/supabase-client.js?v=59",
-  "./src/supabase-auth-bridge.js?v=59",
-  "./src/inventory-cloud.js?v=59",
-  "./src/inventory-transfer-service.js?v=59",
-  "./src/inventory-operations.js?v=59",
-  "./src/device-sync.js?v=59",
-  "./src/store.js?v=59",
-  "./src/rules.js?v=59",
-  "./src/i18n.js?v=59",
-  "./src/locales.js?v=59",
-  "./src/operations.js?v=59",
-  "./src/management.js?v=59",
-  "./src/skills.js?v=59",
-  "./src/qr.js?v=59",
-  "./src/styles.css?v=59",
-  "./src/auth-layer.css?v=59",
-  "./src/account-admin.css?v=59",
-  "./src/ui-refresh.css?v=59",
-  "./src/mobile-browser-compat.css?v=59",
-  "./src/auth-layer.js?v=59",
-  "./src/search-i18n-layer.js?v=59",
-  "./src/account-admin.js?v=59",
-  "./src/ui-refresh.js?v=59",
-  "./src/browser-compat.js?v=59",
-  "./src/icon.svg?v=59",
-];
+const RELEASE = "85";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: "reload" }))))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    Promise.all([
-      caches.keys().then((names) =>
-        Promise.all(
-          names
-            .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
-            .map((name) => caches.delete(name))
-        )
-      ),
-      self.clients.claim(),
-    ])
-  );
-});
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(
+      names
+        .filter((name) => name.startsWith(CACHE_PREFIX))
+        .map((name) => caches.delete(name))
+    );
 
-async function networkFirst(request, fallbackUrl) {
-  const cache = await caches.open(CACHE_NAME);
-  try {
-    const response = await fetch(request, { cache: "no-store" });
-    if (response && response.ok) await cache.put(request, response.clone());
-    return response;
-  } catch {
-    return (await cache.match(request)) || (fallbackUrl ? await cache.match(fallbackUrl) : undefined) || Response.error();
-  }
-}
-
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
-  const network = fetch(request, { cache: "no-store" })
-    .then(async (response) => {
-      if (response && response.ok) await cache.put(request, response.clone());
-      return response;
-    })
-    .catch(() => undefined);
-  return cached || (await network) || Response.error();
-}
-
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
-
-  if (event.request.mode === "navigate") {
-    event.respondWith(networkFirst(event.request, "./index.html"));
-    return;
-  }
-
-  if (/\.(?:js|css|webmanifest)$/i.test(url.pathname)) {
-    event.respondWith(networkFirst(event.request));
-    return;
-  }
-
-  event.respondWith(staleWhileRevalidate(event.request));
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
-  if (event.data?.type === "GET_VERSION") event.source?.postMessage({ type: "SW_VERSION", version: VERSION });
+    await self.registration.unregister();
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    await Promise.all(windows.map((client) => {
+      const url = new URL(client.url);
+      if (url.origin !== self.location.origin) return Promise.resolve();
+      url.searchParams.set("release", RELEASE);
+      return client.navigate(url.href);
+    }));
+  })());
 });

@@ -138,6 +138,7 @@ async function adminDesktop(browser) {
 
   await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
   await page.locator("[data-account-add]").waitFor({state:"visible"});
+  assert.match(await page.locator(".account-storage-note").innerText(),/VPS PostgreSQL/,"VPS account storage notice is stale");
   await page.locator("[data-account-edit]").first().click();
   const accountModal=page.locator(".account-modal");
   await accountModal.waitFor({state:"visible"});

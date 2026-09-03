@@ -86,9 +86,15 @@ for (const [file, marker] of [
 assert(!/function applyInventorySearchDom[\s\S]{0,2500}render\(\)/.test(app), "inventory search must not rerender the page while typing");
 
 const accountAdmin = read("src/account-admin.js");
+const authBridge = read("src/supabase-auth-bridge.js");
 assert.match(accountAdmin, /name="password" type="password" minlength="10"/, "account editor must enforce the password policy");
 assert.match(accountAdmin, /PERMISSION_MODULES\.map/, "account editor must render all module permissions");
 assert.match(accountAdmin, /PERMISSION_MODULES = \['dashboard'/, "account editor must pin dashboard as the first permission");
+assert.match(authBridge, /PERMISSION_MODULES = \["dashboard"/, "cloud/VPS submit bridge must persist dashboard permission");
+assert.match(accountAdmin, /vpsAccountStorage/, "VPS account panel must not claim that Supabase stores its accounts");
+const retirementWorker = read("sw.js");
+assert.match(retirementWorker, /registration\.unregister\(\)/, "retirement worker must unregister the old offline worker");
+assert.match(retirementWorker, /caches\.delete/, "retirement worker must delete old Kitchen OS caches");
 assert.match(app, /route\(\) === "dashboard" && !accountCan\("dashboard", "edit"\)/, "dashboard task edits must enforce dashboard edit permission");
 
 const authLayer = read("src/auth-layer.js");

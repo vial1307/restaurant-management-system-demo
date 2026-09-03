@@ -18,7 +18,9 @@ import {
 import {
   ACCOUNT_MODULES,
   normalizeAccountPermissions,
-} from "./account-permissions.js";
+} from "./account-permissions.js?v=85";
+
+const PERMISSION_MODULES = ["dashboard", ...ACCOUNT_MODULES.filter((key) => key !== "dashboard")];
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
@@ -40,7 +42,7 @@ function showLoginError(message) {
 
 function permissionsFromForm(data) {
   const permissions = {};
-  for (const key of ACCOUNT_MODULES) {
+  for (const key of PERMISSION_MODULES) {
     const view = data.has(`perm:${key}:view`);
     const edit = data.has(`perm:${key}:edit`);
     permissions[key] = { view, edit: view && edit };
