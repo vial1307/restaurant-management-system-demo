@@ -207,3 +207,27 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-delay 2 \
             http://82.47.180.185/RELEASE
           echo
+
+  production-ui-smoke:
+    needs:
+      - deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install clean browser
+        run: |
+          npm install --prefix tests
+          ./tests/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Verify production permission modal
+        env:
+          PRODUCTION_BASE: https://82.47.180.185.nip.io
+        run: node tests/production-ui-smoke.mjs
