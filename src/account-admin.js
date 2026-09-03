@@ -6,10 +6,13 @@ import {
   ACCOUNT_ROLE_DEFAULTS,
   isAdminAccount,
   normalizeAccountPermissions,
-} from './account-permissions.js';
+} from './account-permissions.js?v=84';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';
+// Keep Dashboard explicit so an older cached dependency cannot remove it from
+// the account editor while the browser refreshes the module graph.
+const PERMISSION_MODULES = ['dashboard', ...ACCOUNT_MODULES.filter((key)=>key!=='dashboard')];
 
 const DEFAULT_ACCOUNTS = []
 
@@ -175,7 +178,7 @@ function renderSettingsAccounts(){
 
 function permissionGrid(account){
   const p=normalizePermissions(account.role, account.permissions);
-  return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${ACCOUNT_MODULES.map(k=>`<div class="permission-row"><span>${esc(moduleLabel(k))}</span><label class="permission-toggle" title="${esc(label('view'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label><label class="permission-toggle" title="${esc(label('edit'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label></div>`).join('')}</div>`;
+  return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${PERMISSION_MODULES.map(k=>`<div class="permission-row" data-permission-module="${esc(k)}"><span>${esc(moduleLabel(k))}</span><label class="permission-toggle" title="${esc(label('view'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label><label class="permission-toggle" title="${esc(label('edit'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label></div>`).join('')}</div>`;
 }
 
 async function openEditor(id=''){
@@ -231,7 +234,7 @@ function bindModal(host){
     if(!existing && password.length<10){ message.textContent=label('passwordLength'); return; }
     const role=String(data.get('role'));
     const permissions={};
-    for(const k of ACCOUNT_MODULES){ const view=data.has(`perm:${k}:view`), edit=data.has(`perm:${k}:edit`); permissions[k]={view,edit:view&&edit}; }
+    for(const k of PERMISSION_MODULES){ const view=data.has(`perm:${k}:view`), edit=data.has(`perm:${k}:edit`); permissions[k]={view,edit:view&&edit}; }
     const next={ id:existing?.id||`acct-${Date.now()}`, username, password:password||existing?.password||'', name:String(data.get('name')||'').trim(), role, location:String(data.get('location')), active:data.has('active'), permissions };
     if(existing) list[list.findIndex(a=>a.id===existing.id)]=next; else list.push(next);
     saveAccounts(list); host.remove(); refreshSettings();

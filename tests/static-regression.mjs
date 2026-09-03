@@ -87,7 +87,8 @@ assert(!/function applyInventorySearchDom[\s\S]{0,2500}render\(\)/.test(app), "i
 
 const accountAdmin = read("src/account-admin.js");
 assert.match(accountAdmin, /name="password" type="password" minlength="10"/, "account editor must enforce the password policy");
-assert.match(accountAdmin, /ACCOUNT_MODULES\.map/, "account editor must render all module permissions");
+assert.match(accountAdmin, /PERMISSION_MODULES\.map/, "account editor must render all module permissions");
+assert.match(accountAdmin, /PERMISSION_MODULES = \['dashboard'/, "account editor must pin dashboard as the first permission");
 assert.match(app, /route\(\) === "dashboard" && !accountCan\("dashboard", "edit"\)/, "dashboard task edits must enforce dashboard edit permission");
 
 const authLayer = read("src/auth-layer.js");

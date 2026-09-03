@@ -144,6 +144,7 @@ async function adminDesktop(browser) {
   assert.equal(await accountModal.locator('input[name="password"]').getAttribute("minlength"),"10");
   assert.equal(await accountModal.locator('input[name="perm:dashboard:view"]').count(),1,"dashboard view permission missing from account editor");
   assert.equal(await accountModal.locator('input[name="perm:dashboard:edit"]').count(),1,"dashboard edit permission missing from account editor");
+  assert.equal(await accountModal.locator('.permission-row').first().getAttribute('data-permission-module'),'dashboard',"dashboard must be the first permission row");
   await accountModal.locator('select[name="role"]').selectOption("central");
   assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"central","central role did not select central kitchen");
   await accountModal.locator('select[name="role"]').selectOption("manager");

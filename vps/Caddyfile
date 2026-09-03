@@ -1,6 +1,9 @@
 :80 {
   encode zstd gzip
 
+  @freshFrontend path / /index.html /src/* /manifest.webmanifest
+  header @freshFrontend Cache-Control "no-store, no-cache, must-revalidate"
+
   @api path /api/*
   handle @api {
     reverse_proxy app:8080
