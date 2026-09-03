@@ -1,4 +1,4 @@
-:80 {
+(kitchen_site) {
   encode zstd gzip
 
   @root path /
@@ -23,4 +23,12 @@
     X-Frame-Options "SAMEORIGIN"
     Referrer-Policy "strict-origin-when-cross-origin"
   }
+}
+
+:80 {
+  import kitchen_site
+}
+
+82.47.180.185.nip.io {
+  import kitchen_site
 }

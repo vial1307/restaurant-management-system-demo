@@ -51,6 +51,13 @@ jobs:
             node --check "$file"
           done
 
+      - name: Validate Caddy configuration
+        run: |
+          docker run --rm \
+            -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
       - name: Validate required production files
         run: |
           set -euo pipefail

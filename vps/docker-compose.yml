@@ -56,6 +56,8 @@ services:
         condition: service_healthy
     ports:
       - "80:80"
+      - "443:443"
+      - "443:443/udp"
     volumes:
       - ./www:/srv:ro
       - ./repo/vps/Caddyfile:/etc/caddy/Caddyfile:ro
