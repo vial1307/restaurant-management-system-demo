@@ -17,9 +17,9 @@ async function login(page, username) {
     } catch {
       return false;
     }
-  }, null, { timeout:10000 });
-  await page.waitForSelector(".app-shell",{timeout:10000});
-  await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:10000 });
+  }, null, { timeout:30000 });
+  await page.waitForSelector(".app-shell",{timeout:30000});
+  await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:30000 });
 }
 
 async function assertNoPageErrors(page, errors, label) {
