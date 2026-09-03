@@ -187,7 +187,7 @@ async function boot() {
     } catch (error) {
       if (legacy?.provider === "vps") {
         localStorage.removeItem(AUTH_KEY);
-        location.reload();
+        window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
       }
       return;
     }
@@ -209,6 +209,22 @@ async function boot() {
   await mirrorSupabaseSessionToLegacy(profile);
   window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
 }
+
+let lastVpsProfileRefresh = 0;
+async function refreshVpsProfile() {
+  if (!isVpsApiConfigured() || document.visibilityState === "hidden") return;
+  const now = Date.now();
+  if (now - lastVpsProfileRefresh < 30000) return;
+  lastVpsProfileRefresh = now;
+  try {
+    const profile = mirrorVpsSession((await vpsMe())?.user);
+    if (profile) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+  } catch {}
+}
+
+window.addEventListener("pageshow", () => { void refreshVpsProfile(); });
+window.addEventListener("focus", () => { void refreshVpsProfile(); });
+document.addEventListener("visibilitychange", () => { void refreshVpsProfile(); });
 
 document.addEventListener("submit", async (event) => {
   if (!isVpsApiConfigured() && !isSupabaseConfigured()) return;

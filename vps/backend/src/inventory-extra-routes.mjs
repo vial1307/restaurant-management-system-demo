@@ -19,11 +19,9 @@ function requireStocktakeRole(user, site, reply) {
 }
 
 function requireCatalogManager(user, site, reply) {
-  if (!requireInventory(user, site, "edit", reply)) return false;
-  if (user.role === "admin") return true;
-  if (user.role === "manager" && siteAllowed(user, site)) return true;
-  reply.code(403).send({ error: "CATALOG_MANAGER_REQUIRED" });
-  return false;
+  // Catalogue access follows the explicit inventory edit permission. Role
+  // names must not silently override a permission granted by an administrator.
+  return requireInventory(user, site, "edit", reply);
 }
 
 export async function registerInventoryExtraRoutes(app) {

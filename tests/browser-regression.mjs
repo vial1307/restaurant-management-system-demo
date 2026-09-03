@@ -180,6 +180,10 @@ async function adminDesktop(browser) {
   assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"central all-zone filter did not restore rows");
 
   await assertNoPageErrors(page,errors,"admin desktop");
+  await context.clearCookies();
+  await page.reload({waitUntil:"domcontentloaded"});
+  await page.locator("#auth-login-form").waitFor({state:"visible"});
+  assert.equal(await page.getByText("AUTH_REQUIRED",{exact:true}).count(),0,"expired VPS session leaked a database error");
   await context.close();
 }
 
@@ -267,8 +271,8 @@ const browser=await chromium.launch({headless:true});
 try{
   await adminDesktop(browser);
   await roleDesktop(browser,"managerfx",{manage:true,operations:true});
-  await roleDesktop(browser,"supervisorfx",{manage:false,operations:true,stocktake:true});
-  await roleDesktop(browser,"employeefx",{manage:false,operations:true});
+  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false});
   await roleDesktop(browser,"centralreg",{central:true});
   await responsiveAdmin(browser,{width:359,height:740});

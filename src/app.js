@@ -1806,6 +1806,7 @@ window.addEventListener("keydown", (event) => {
 });
 window.addEventListener("offline", render);
 window.addEventListener("online", () => { if (store.getState().operations.pendingSync) store.clearPendingSync(); else render(); });
+window.addEventListener("shitu:auth-synced", render);
 window.addEventListener("shitu:inventory-cloud-status", () => {
   if (route() === "inventory" && !document.querySelector(".central-heading")) render();
 });

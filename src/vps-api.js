@@ -60,6 +60,10 @@ export async function apiRequest(path, {
 
   if (!response.ok && !(allow404 && response.status === 404)) {
     const code = data && typeof data === "object" ? data.error : "";
+    if (response.status === 401 && code === "AUTH_REQUIRED") {
+      try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
+      window.dispatchEvent(new CustomEvent("shitu:auth-expired", { detail: { path } }));
+    }
     const error = new Error(code || `HTTP_${response.status}`);
     error.status = response.status;
     error.code = code || "";

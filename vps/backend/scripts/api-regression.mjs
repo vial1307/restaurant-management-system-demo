@@ -100,12 +100,12 @@ assert.equal(supervisorMinimum.response.status,200);
 assert.equal((await request("/api/inventory/catalog/sync",{
   method:"POST",cookie:supervisor.cookie,
   body:{item:{key:"fuxing:test-supervisor",catalog_key:"test-supervisor",zh:"測試",vi:"Test",unit:"包",work_area:"noodles",locations:[]}}
-})).response.status,403);
+})).response.status,200);
 
 assert.equal((await request("/api/inventory/receive-default",{
   method:"POST",cookie:supervisor.cookie,
   body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"}
-})).response.status,403);
+})).response.status,200);
 
 const managerCatalog = await request("/api/inventory/catalog/sync",{
   method:"POST",cookie:manager.cookie,

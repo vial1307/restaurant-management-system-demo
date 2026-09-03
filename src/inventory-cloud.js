@@ -144,11 +144,12 @@ export function canManageCentralCatalog() {
 }
 
 export function canViewBranchCatalogManagement(site = activeInventorySite()) {
-  const currentRole = role();
   const s=session();
   if (!hasInventoryPermission("edit") || !["fuxing","yongji"].includes(site)) return false;
-  if (currentRole === "admin") return true;
-  return currentRole === "manager" && (s?.location === site || s?.location === "all");
+  // The inventory edit checkbox is the source of truth. A branch employee who
+  // is explicitly granted edit access must receive the same operational and
+  // catalogue entry points for their assigned site.
+  return role() === "admin" || s?.location === site || s?.location === "all";
 }
 
 export function canManageBranchCatalog(site = activeInventorySite()) {

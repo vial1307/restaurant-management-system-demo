@@ -1091,6 +1091,7 @@ const appRoot = document.querySelector("#app");
 if (appRoot) observer.observe(appRoot, { childList: true });
 window.addEventListener("hashchange", scheduleAccess);
 window.addEventListener("shitu:auth-synced", scheduleAccess);
+window.addEventListener("shitu:auth-expired", scheduleAccess);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (event.detail?.site !== "central" || !location.hash.startsWith("#inventory")) return;
   const user = session();
