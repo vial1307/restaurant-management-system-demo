@@ -27,17 +27,20 @@ async function assertNoPageErrors(page, errors, label) {
   assert.deepEqual(errors,[],`${label} page errors: ${errors.join(" | ")}`);
 }
 
+async function selectToday(page) {
+  const calendarToggle = page.locator('[data-action="toggle-calendar"]').first();
+  if (!await calendarToggle.count()) return;
+  await calendarToggle.click();
+  const today = page.locator('[data-action="calendar-shortcut"][data-shortcut="today"]').first();
+  if (await today.count()) await today.click();
+}
+
 async function setSite(page, site) {
   await page.evaluate((value)=>localStorage.setItem("shitu-admin-active-site-v1",value),site);
   await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
   await page.waitForSelector(".page-content");
 
-  const calendarToggle = page.locator('[data-action="toggle-calendar"]').first();
-  if (await calendarToggle.count()) {
-    await calendarToggle.click();
-    const today = page.locator('[data-action="calendar-shortcut"][data-shortcut="today"]').first();
-    if (await today.count()) await today.click();
-  }
+  await selectToday(page);
 
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, {timeout:10000});
   await page.waitForFunction(() => document.querySelectorAll(".inventory-row,.central-row,.central-manage-row").length > 0,{timeout:10000});
@@ -211,6 +214,9 @@ async function roleDesktop(browser, username, checks) {
   if(checks.central){
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
     await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
+    await selectToday(page);
+    await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, {timeout:10000});
+    await page.locator('[data-central-mode="in"]').waitFor({state:"visible"});
     assert.equal(await page.locator(".inventory-summary").count(),1,"central inventory summary must match branch layout");
     assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation tabs must match branch layout");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
