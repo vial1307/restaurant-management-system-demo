@@ -113,7 +113,7 @@ app.post("/api/auth/preferences", async (request, reply) => {
   const preferredLanguage = ["vi", "zh-TW"].includes(request.body?.preferredLanguage)
     ? request.body.preferredLanguage
     : "vi";
-  const { rows } = await query(
+  const { rows } = await pool.query(
     `update public.app_users
      set preferred_language=$2
      where id=$1
