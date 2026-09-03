@@ -101,5 +101,7 @@ for (const marker of [
 for (const mode of ["in", "pick", "transfer", "ship"]) {
   assert(authLayer.includes(`data-central-mode="${mode}"`), `central inventory missing ${mode} operation`);
 }
+assert(app.includes('data-manage-adjust="true"'), "branch management must expose quantity controls");
+assert(authLayer.includes('data-central-manage-adjust="true"'), "central management must expose quantity controls");
 
 console.log("STATIC_REGRESSION_OK");

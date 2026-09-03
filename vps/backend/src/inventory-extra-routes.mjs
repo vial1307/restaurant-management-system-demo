@@ -206,8 +206,8 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireStocktakeRole(user, row.site, reply)) {
-          throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
+        if (!requireInventory(user, row.site, "edit", reply)) {
+          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
         }
 
         await client.query(

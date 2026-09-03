@@ -688,9 +688,10 @@ function centralStockStatus(quantity,minimum){
   return "ok";
 }
 
-function centralQuantityControl({id,itemKey,locationCode,quantity,unit,direct}){
+function centralQuantityControl({id,itemKey,locationCode,quantity,unit,direct,manageAdjust=false}){
   if(!direct) return `<div class="quantity-control"><strong class="quantity-readonly">${Number(quantity||0)}</strong><small>${esc(unit)}</small></div>`;
-  return `<div class="quantity-control central-quantity-control"><button class="quantity-button" type="button" data-central-step="${esc(id)}" data-delta="-1" aria-label="Decrease">−</button><input class="quantity-input" type="number" min="0" inputmode="numeric" value="${Number(quantity||0)}" data-central-set-qty="${esc(id)}" data-central-item-key="${esc(itemKey)}" data-central-location-code="${esc(locationCode)}"><button class="quantity-button plus" type="button" data-central-step="${esc(id)}" data-delta="1" aria-label="Increase">＋</button><small>${esc(unit)}</small></div>`;
+  const manageAttribute=manageAdjust?' data-central-manage-adjust="true"':"";
+  return `<div class="quantity-control central-quantity-control"><button class="quantity-button" type="button" data-central-step="${esc(id)}" data-delta="-1"${manageAttribute} aria-label="Decrease">−</button><input class="quantity-input" type="number" min="0" inputmode="numeric" value="${Number(quantity||0)}" data-central-set-qty="${esc(id)}" data-central-item-key="${esc(itemKey)}" data-central-location-code="${esc(locationCode)}"${manageAttribute}><button class="quantity-button plus" type="button" data-central-step="${esc(id)}" data-delta="1"${manageAttribute} aria-label="Increase">＋</button><small>${esc(unit)}</small></div>`;
 }
 
 function stockView(items, selectedZone, query, directAdjust = false, { inventoryView="storage", canManageCatalog=false, workMap={} } = {}) {
@@ -764,7 +765,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
       ${centralSearchField(query, language)}
     </div>
     <div class="central-manage-list">${groups.map(({ key, item, rows }) => {
-      const locations = rows.map((row) => `<span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><strong>${Number(row.qty || 0)} ${esc(row.unit || item.unit || "")}</strong><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>`).join("");
+      const locations = rows.map((row) => `<div class="central-manage-location"><span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>${centralQuantityControl({id:`manage-${row.id}`,itemKey:row.itemKey||key,locationCode:centralLocationCode(row.zone),quantity:row.qty,unit:row.unit||item.unit||"",direct:writable,manageAdjust:true})}</div>`).join("");
       return `<article class="central-manage-row" data-central-product="${esc(key)}">
         <div class="central-manage-product"><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small><span>${esc(centralWorkAreaLabel(item.workArea || "noodles", language))} · ${esc(item.unit || "")}</span></div>
         <div class="op-location-list">${locations}</div>
@@ -1030,13 +1031,14 @@ function bindCentral(user) {
   });
 
   async function commitCentralQuantity(input) {
-    if (!input || (!canDirectInventoryAdjust() && !(canInventoryDraftCount() && user.role === "admin"))) return;
+    const manageAdjust=input?.dataset.centralManageAdjust==="true" && canManageCentralCatalog();
+    if (!input || (!canDirectInventoryAdjust() && !manageAdjust && !(canInventoryDraftCount() && user.role === "admin"))) return;
     const itemKey=input.dataset.centralItemKey;
     const locationCode=input.dataset.centralLocationCode;
     const next=Math.max(0,Number(input.value)||0);
     if(!itemKey||!locationCode)return;
     input.disabled=true;
-    const result=await cloudSetQuantity({itemKey,locationCode,quantity:next,note:"盤點調整 / Điều chỉnh kiểm kê"});
+    const result=await cloudSetQuantity({itemKey,locationCode,quantity:next,note:"盤點調整 / Điều chỉnh kiểm kê",allowInventoryEditor:manageAdjust});
     if(result.ok){
       await syncInventoryNow("central",{reloadBranch:false});
       centralPage(user);

@@ -128,6 +128,7 @@ async function adminDesktop(browser) {
   }
 
   await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
+  assert((await page.locator('[data-manage-adjust="true"]').count()) > 0,"branch management quantity controls missing");
   const add=page.locator('[data-action="open-add-item"]').first();
   await add.waitFor({state:"visible"});
   await add.click();
@@ -240,6 +241,7 @@ async function roleDesktop(browser, username, checks) {
       await manage.waitFor({state:"visible"});
       await manage.click();
       await page.locator('[data-central-editor-open="new"]').waitFor({state:"visible"});
+      assert((await page.locator('[data-central-manage-adjust="true"]').count()) > 0,"central management quantity controls missing");
     }
   } else {
     const site = await page.evaluate(() => {
@@ -252,6 +254,12 @@ async function roleDesktop(browser, username, checks) {
     await setSite(page, site === "yongji" ? "yongji" : "fuxing");
     if(checks.manage === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').count(),0);
+    }
+    if(checks.manage === true){
+      const manage=page.locator('[data-action="select-inventory-ops"][data-mode="manage"]');
+      await manage.waitFor({state:"visible"});
+      await manage.click();
+      assert((await page.locator('[data-manage-adjust="true"]').count()) > 0,`${username} missing management quantity controls`);
     }
     if(checks.operations === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count(),0);

@@ -829,9 +829,10 @@ export async function cloudSetQuantity({
   quantity,
   note = "盤點調整 / Điều chỉnh kiểm kê",
   sync = true,
+  allowInventoryEditor = false,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
+  if (!canDirectInventoryAdjust() && !(allowInventoryEditor && canInventoryEdit())) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
   if (isVpsApiConfigured()) {

@@ -90,7 +90,8 @@ const employeeSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:employee.cookie,
   body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:99}
 });
-assert.equal(employeeSet.response.status,403);
+assert.equal(employeeSet.response.status,200);
+assert.equal(Number(employeeSet.data.after),99);
 
 const supervisorSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:supervisor.cookie,
