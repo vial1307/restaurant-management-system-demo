@@ -130,6 +130,14 @@ export function vpsInventory(site, { force = false } = {}) {
   return promise;
 }
 
+export function vpsInventoryDestinations(source, sites = []) {
+  const params = new URLSearchParams({
+    source:String(source || ""),
+    sites:[...new Set(sites.map(String).filter(Boolean))].join(","),
+  });
+  return apiRequest(`/api/inventory/destinations?${params.toString()}`);
+}
+
 export function vpsInventoryHistory(site, limit = 200) {
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 200));
   return apiRequest(`/api/inventory/${encodeURIComponent(site)}/transactions?limit=${safeLimit}`);

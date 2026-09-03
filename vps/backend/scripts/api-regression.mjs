@@ -59,6 +59,14 @@ assert.equal((await inventory(manager.cookie,"yongji")).response.status,403);
 assert.equal((await inventory(central.cookie,"central")).response.status,200);
 assert.equal((await inventory(central.cookie,"fuxing")).response.status,403);
 
+const centralDestinations = await request("/api/inventory/destinations?source=central&sites=fuxing,yongji",{cookie:central.cookie});
+assert.equal(centralDestinations.response.status,200);
+assert(centralDestinations.data.locations.some((entry)=>entry.site==="fuxing"));
+assert(centralDestinations.data.locations.some((entry)=>entry.site==="yongji"));
+assert(centralDestinations.data.catalog.some((entry)=>entry.site==="fuxing" && entry.catalogKey==="beef"));
+assert.equal((await request("/api/inventory/destinations?source=fuxing&sites=yongji",{cookie:central.cookie})).response.status,403);
+assert.equal((await request("/api/inventory/destinations?source=fuxing&sites=yongji",{cookie:parttime.cookie})).response.status,403);
+
 const adminUsers = await request("/api/admin/users",{cookie:admin.cookie});
 assert.equal(adminUsers.response.status,200);
 assert.equal((await request("/api/admin/users",{cookie:manager.cookie})).response.status,403);

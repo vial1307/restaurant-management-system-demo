@@ -1,5 +1,5 @@
 import { getSupabase, isSupabaseConfigured } from "./supabase-client.js";
-import { isVpsApiConfigured, vpsDirectTransfer } from "./vps-api.js";
+import { isVpsApiConfigured, vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
 import {
   getInventoryReceiveDefaults,
   getSiteInventoryRows,
@@ -25,7 +25,11 @@ export async function loadSiteOperationData(site,{includeDestinations=false}={})
     getSiteLocations(site, "storage"),
     getSiteLocations(site, "work"),
   ]);
-  const allSiteLocations=includeDestinations
+  const destinationSites=INVENTORY_SITES.map((entry)=>entry.id).filter((target)=>target!==site);
+  const destinationMetadata=includeDestinations && isVpsApiConfigured()
+    ? await vpsInventoryDestinations(site,destinationSites)
+    : null;
+  const allSiteLocations=includeDestinations && !destinationMetadata
     ? await Promise.all(INVENTORY_SITES.map((entry)=>getSiteLocations(entry.id,"storage")))
     : [];
 
@@ -68,11 +72,11 @@ export async function loadSiteOperationData(site,{includeDestinations=false}={})
   const items=[...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant"));
   const catalogKeys=[...new Set(items.map((item)=>item.catalogKey).filter(Boolean))];
 
-  const destinationCatalog=[];
-  const allRowsBySite=includeDestinations
+  const destinationCatalog=destinationMetadata?.catalog ? [...destinationMetadata.catalog] : [];
+  const allRowsBySite=includeDestinations && !destinationMetadata
     ? await Promise.all(INVENTORY_SITES.map((entry)=>getSiteInventoryRows(entry.id).catch(()=>[])))
     : [];
-  for(let index=0;includeDestinations && index<INVENTORY_SITES.length;index+=1){
+  for(let index=0;includeDestinations && !destinationMetadata && index<INVENTORY_SITES.length;index+=1){
     const destinationSite=INVENTORY_SITES[index].id;
     const grouped=new Map();
     for(const row of allRowsBySite[index]||[]){
@@ -122,7 +126,7 @@ export async function loadSiteOperationData(site,{includeDestinations=false}={})
     receiveDefaults,
     destinationCatalog,
     allLocations: includeDestinations
-      ? INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id})))
+      ? destinationMetadata?.locations || INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id})))
       : locations.map((location)=>({...location,site})),
   };
 }

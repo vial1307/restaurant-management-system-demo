@@ -31,6 +31,73 @@ export async function registerInventoryExtraRoutes(app) {
     return { version: 11 };
   });
 
+  app.get("/api/inventory/destinations", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const source = String(request.query?.source || "").trim();
+    const sites = [...new Set(String(request.query?.sites || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => SITES.has(value) && value !== source))];
+    if (!SITES.has(source)) return reply.code(400).send({ error:"INVALID_SITE" });
+    if (!requireInventory(user, source, "edit", reply)) return;
+    if (!sites.length) return { locations:[], catalog:[] };
+
+    // Shipping users only receive routing metadata for other sites. Quantities
+    // remain protected by the normal site-scoped inventory endpoint.
+    const [locationResult, catalogResult] = await Promise.all([
+      pool.query(
+        `select id,code,name_zh_tw,name_vi,site,kind,sort_order
+         from public.inventory_locations
+         where site=any($1::text[]) and kind='storage' and active=true
+         order by site,sort_order,code`,
+        [sites]
+      ),
+      pool.query(
+        `select i.id as item_id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,
+                l.id as location_id,l.code as location_code,l.name_zh_tw as location_zh,
+                l.name_vi as location_vi,l.site
+         from public.inventory_items i
+         join public.inventory_stock s on s.item_id=i.id
+         join public.inventory_locations l on l.id=s.location_id
+         where i.active=true and l.active=true and l.kind='storage'
+           and l.site=any($1::text[])
+         order by l.site,i.name_zh_tw,l.sort_order,l.code`,
+        [sites]
+      ),
+    ]);
+
+    const catalog = [];
+    const grouped = new Map();
+    for (const row of catalogResult.rows) {
+      const key = `${row.site}:${row.item_id}`;
+      let item = grouped.get(key);
+      if (!item) {
+        item = {
+          site:row.site,
+          catalogKey:row.catalog_key,
+          itemId:row.item_id,
+          itemKey:row.item_key,
+          zh:row.name_zh_tw,
+          vi:row.name_vi,
+          locations:[],
+        };
+        grouped.set(key,item);
+        catalog.push(item);
+      }
+      item.locations.push({
+        id:row.location_id,
+        code:row.location_code,
+        name_zh_tw:row.location_zh,
+        name_vi:row.location_vi,
+        site:row.site,
+      });
+    }
+
+    return { locations:locationResult.rows, catalog };
+  });
+
   app.get("/api/inventory/receive-defaults", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
