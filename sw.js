@@ -2,7 +2,7 @@
 // It clears Kitchen OS caches, unregisters itself and reloads controlled tabs
 // through a versioned URL so Safari cannot reuse an obsolete interface.
 const CACHE_PREFIX = "shitu-kitchen-os-";
-const RELEASE = "86";
+const RELEASE = "87";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

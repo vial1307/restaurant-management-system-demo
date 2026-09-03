@@ -5,7 +5,7 @@ import {
   ACCOUNT_ROLE_DEFAULTS,
   isAdminAccount,
   normalizeAccountPermissions,
-} from './account-permissions.js?v=86';
+} from './account-permissions.js?v=87';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';

@@ -26,6 +26,10 @@ export async function apiRequest(path, {
 } = {}) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || API_TIMEOUT_MS));
+  let sessionAtStart = null;
+  try {
+    sessionAtStart = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null");
+  } catch {}
 
   let response;
   try {
@@ -60,9 +64,15 @@ export async function apiRequest(path, {
 
   if (!response.ok && !(allow404 && response.status === 404)) {
     const code = data && typeof data === "object" ? data.error : "";
-    if (response.status === 401 && code === "AUTH_REQUIRED") {
-      try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
-      window.dispatchEvent(new CustomEvent("shitu:auth-expired", { detail: { path } }));
+    if (response.status === 401 && code === "AUTH_REQUIRED" && sessionAtStart?.id) {
+      let currentSession = null;
+      try { currentSession = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
+      // A request started before a successful login must never remove the new
+      // session when its stale 401 response arrives later.
+      if (currentSession?.id === sessionAtStart.id) {
+        try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
+        window.dispatchEvent(new CustomEvent("shitu:auth-expired", { detail: { path } }));
+      }
     }
     const error = new Error(code || `HTTP_${response.status}`);
     error.status = response.status;

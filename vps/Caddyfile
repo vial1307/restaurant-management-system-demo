@@ -2,7 +2,7 @@
   encode zstd gzip
 
   @root path /
-  redir @root /vps-entry.html?release=86 302
+  redir @root /vps-entry.html?release=87 302
 
   @freshFrontend path / /index.html /vps-entry.html /src/* /manifest.webmanifest /sw.js
   header @freshFrontend Cache-Control "no-store, no-cache, must-revalidate"

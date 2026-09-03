@@ -7,7 +7,7 @@ import {
   vpsMe,
   vpsSaveUser,
 } from "./vps-api.js";
-import { ACCOUNT_MODULES, normalizeAccountPermissions } from "./account-permissions.js?v=86";
+import { ACCOUNT_MODULES, normalizeAccountPermissions } from "./account-permissions.js?v=87";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
