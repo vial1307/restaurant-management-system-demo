@@ -399,6 +399,10 @@ function dashboard(context) {
   const { text, state, reservations, progress, alerts, reserveAlerts, workAlerts, rice, tasks, record, language, capacity } = context;
   const openTasks = tasks.filter((task) => !record.completedTasks[task.id]);
   const hasCriticalAlert = alerts.some((item) => inventoryStatus(item) === "empty");
+  const dashboardAction = (moduleKey, href, label) => accountCan("dashboard", "edit") && accountCan(moduleKey, "edit")
+    ? `<a class="text-link" data-dashboard-edit-action="${escapeHtml(moduleKey)}" href="#${escapeHtml(href)}">${escapeHtml(label)} ${icon("arrowRight")}</a>`
+    : "";
+  const dashboardTaskEdit = accountCan("dashboard", "edit") && accountCan("preparation", "edit");
   return `${heading(text.dashboard, text.overviewSubtitle)}
     <section class="stats-grid">
       ${statCard({ label: text.totalTables, value: reservations.tables, unit: text.tables, note: `${text.lunch}: ${reservations.lunchTables} · ${text.dinner}: ${reservations.dinnerTables} · ${capacity.requiredInside} 內場`, tone: capacity.overloaded ? "red" : "green", iconName: "reservations" })}
@@ -406,11 +410,11 @@ function dashboard(context) {
       ${statCard({ label: text.pending, value: progress.pending, unit: "", note: `${progress.done}/${progress.total} ${text.completed.toLowerCase()}`, tone: "blue", iconName: "preparation" })}
       ${statCard({ label: text.riceToCook, value: compactNumber(rice.toCook, language), unit: "g", note: `${text.remaining}: ${compactNumber(rice.remaining, language)} g`, tone: "slate", iconName: "bowl" })}
     </section>
-    <section class="dashboard-grid"><article class="card preparation-overview">${cardHeading(text.sectionPrep, `<a class="text-link" href="#reservations">${escapeHtml(text.editReservations)} ${icon("arrowRight")}</a>`, `<p>${reservations.tables} ${escapeHtml(text.tables)} + ${reservations.buffer} ${escapeHtml(text.buffer.toLowerCase())}</p>`)}${reservations.portions.map((portion) => portionSummary(portion, context)).join("")}</article>
-      <article class="card progress-overview">${cardHeading(text.sectionTasks)}<div class="progress-overview-body">${progressRing(progress)}<div><strong>${progress.done}/${progress.total}</strong><span>${escapeHtml(text.completed)}</span><a class="text-link" href="#preparation">${escapeHtml(text.manage)} ${icon("arrowRight")}</a></div></div></article>
-      <article class="card capacity-overview">${cardHeading(language === "zh" ? "訂位連動人力" : "Nhân sự liên kết đặt bàn", `<a class="text-link" href="#schedule">${escapeHtml(text.manage)} ${icon("arrowRight")}</a>`, `<p>${reservations.dinnerTables} ${escapeHtml(text.tables)} · ${capacity.fixedAreas ? (language === "zh" ? "四區固定" : "4 khu cố định") : (language === "zh" ? "可輪調" : "có thể xoay vòng")}</p>`)}<div class="capacity-summary ${capacity.overloaded ? "capacity-overloaded" : "capacity-ready"}"><strong>${capacity.inside.length}/${capacity.requiredInside} 內場</strong><span>${capacity.overloaded ? (language === "zh" ? "超載風險" : "Có nguy cơ quá tải") : (language === "zh" ? "人力足夠" : "Đủ nhân lực")}</span></div><div class="capacity-zones">${["noodles", "soup", "seafood", "meat"].map((area) => `<span class="capacity-zone ${capacity.missingAreas.includes(area) ? "missing" : "ready"}">${escapeHtml(workAreaLabel(area, language))}<small>${capacity.missingAreas.includes(area) ? (language === "zh" ? "缺 SOP 人員" : "Thiếu người đạt SOP") : (language === "zh" ? "已覆蓋" : "Đã bố trí")}</small></span>`).join("")}</div></article>
-      <article class="card alert-overview">${cardHeading(text.sectionAlerts, `<a class="text-link" href="#inventory">${escapeHtml(text.updateStock)} ${icon("arrowRight")}</a>`)}${alerts.length ? `<div class="priority-list">${alerts.map((item) => alertRow(item, context)).join("")}</div>` : `<p class="empty-state">${escapeHtml(text.noAlert)}</p>`}</article>
-      <article class="card task-overview">${cardHeading(text.sectionTasks)}${openTasks.length ? `<div class="priority-list">${openTasks.map((task) => taskRow(task, context, true)).join("")}</div>` : `<p class="empty-state">${escapeHtml(text.noTasks)}</p>`}</article>
+    <section class="dashboard-grid"><article class="card preparation-overview">${cardHeading(text.sectionPrep, dashboardAction("reservations", "reservations", text.editReservations), `<p>${reservations.tables} ${escapeHtml(text.tables)} + ${reservations.buffer} ${escapeHtml(text.buffer.toLowerCase())}</p>`)}${reservations.portions.map((portion) => portionSummary(portion, context)).join("")}</article>
+      <article class="card progress-overview">${cardHeading(text.sectionTasks)}<div class="progress-overview-body">${progressRing(progress)}<div><strong>${progress.done}/${progress.total}</strong><span>${escapeHtml(text.completed)}</span>${dashboardAction("preparation", "preparation", text.manage)}</div></div></article>
+      <article class="card capacity-overview">${cardHeading(language === "zh" ? "訂位連動人力" : "Nhân sự liên kết đặt bàn", dashboardAction("schedule", "schedule", text.manage), `<p>${reservations.dinnerTables} ${escapeHtml(text.tables)} · ${capacity.fixedAreas ? (language === "zh" ? "四區固定" : "4 khu cố định") : (language === "zh" ? "可輪調" : "có thể xoay vòng")}</p>`)}<div class="capacity-summary ${capacity.overloaded ? "capacity-overloaded" : "capacity-ready"}"><strong>${capacity.inside.length}/${capacity.requiredInside} 內場</strong><span>${capacity.overloaded ? (language === "zh" ? "超載風險" : "Có nguy cơ quá tải") : (language === "zh" ? "人力足夠" : "Đủ nhân lực")}</span></div><div class="capacity-zones">${["noodles", "soup", "seafood", "meat"].map((area) => `<span class="capacity-zone ${capacity.missingAreas.includes(area) ? "missing" : "ready"}">${escapeHtml(workAreaLabel(area, language))}<small>${capacity.missingAreas.includes(area) ? (language === "zh" ? "缺 SOP 人員" : "Thiếu người đạt SOP") : (language === "zh" ? "已覆蓋" : "Đã bố trí")}</small></span>`).join("")}</div></article>
+      <article class="card alert-overview">${cardHeading(text.sectionAlerts, dashboardAction("inventory", "inventory", text.updateStock))}${alerts.length ? `<div class="priority-list">${alerts.map((item) => alertRow(item, context)).join("")}</div>` : `<p class="empty-state">${escapeHtml(text.noAlert)}</p>`}</article>
+      <article class="card task-overview">${cardHeading(text.sectionTasks)}${openTasks.length ? `<div class="priority-list">${openTasks.map((task) => taskRow(task, context, true, dashboardTaskEdit)).join("")}</div>` : `<p class="empty-state">${escapeHtml(text.noTasks)}</p>`}</article>
     </section>
     <p class="save-note"><span></span>${escapeHtml(text.autoSaved)} · ${escapeHtml(state.settings.employeeName)}</p>`;
 }
@@ -1235,13 +1239,13 @@ function taskDetail(task, context) {
   return text.customTask;
 }
 
-function taskRow(task, context, compact = false) {
+function taskRow(task, context, compact = false, editable = accountCan("preparation", "edit")) {
   const { record, text } = context;
   const checked = Boolean(record.completedTasks[task.id]);
   const priority = task.priority === "high" && !checked
     ? compact ? '<span class="task-priority-dot" aria-hidden="true"></span>' : `<span class="tag tag-empty">${escapeHtml(text.urgent)}</span>`
     : "";
-  return `<label class="task-row ${compact ? "compact" : ""} ${checked ? "task-done" : ""} ${task.kind === "procurement" ? "procurement-task" : ""}" data-task-kind="${escapeHtml(task.kind)}" data-priority="${escapeHtml(task.priority ?? "normal")}"><input type="checkbox" data-field="task" data-id="${escapeHtml(task.id)}" ${checked ? "checked" : ""} /><span class="custom-checkbox">${icon("check")}</span><span class="task-copy"><strong>${escapeHtml(taskLabel(task, context))}</strong><small>${escapeHtml(taskDetail(task, context))}</small></span>${priority}</label>`;
+  return `<label class="task-row ${compact ? "compact" : ""} ${checked ? "task-done" : ""} ${task.kind === "procurement" ? "procurement-task" : ""}" data-task-kind="${escapeHtml(task.kind)}" data-priority="${escapeHtml(task.priority ?? "normal")}"><input type="checkbox" data-field="task" data-id="${escapeHtml(task.id)}" ${checked ? "checked" : ""} ${editable ? "" : 'disabled aria-disabled="true"'} /><span class="custom-checkbox">${icon("check")}</span><span class="task-copy"><strong>${escapeHtml(taskLabel(task, context))}</strong><small>${escapeHtml(taskDetail(task, context))}</small></span>${priority}</label>`;
 }
 
 function preparationPage(context) {
@@ -1532,6 +1536,10 @@ root.addEventListener("change", (event) => {
   if (!field) return;
   const requiredEditModule = FIELD_EDIT_MODULE[field];
   if (requiredEditModule && !accountCan(requiredEditModule, "edit")) {
+    render();
+    return;
+  }
+  if (field === "task" && route() === "dashboard" && !accountCan("dashboard", "edit")) {
     render();
     return;
   }

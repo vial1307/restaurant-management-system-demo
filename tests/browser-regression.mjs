@@ -138,6 +138,8 @@ async function adminDesktop(browser) {
   const accountModal=page.locator(".account-modal");
   await accountModal.waitFor({state:"visible"});
   assert.equal(await accountModal.locator('input[name="password"]').getAttribute("minlength"),"10");
+  assert.equal(await accountModal.locator('input[name="perm:dashboard:view"]').count(),1,"dashboard view permission missing from account editor");
+  assert.equal(await accountModal.locator('input[name="perm:dashboard:edit"]').count(),1,"dashboard edit permission missing from account editor");
   await accountModal.locator('select[name="role"]').selectOption("central");
   assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"central","central role did not select central kitchen");
   await accountModal.locator('select[name="role"]').selectOption("manager");
@@ -194,6 +196,18 @@ async function roleDesktop(browser, username, checks) {
   page.on("pageerror",(error)=>errors.push(error.message));
   await login(page,username);
   await assertRoutePermissions(page,username);
+  if(checks.dashboardEdit !== undefined){
+    await page.goto(BASE + "/#dashboard",{waitUntil:"domcontentloaded"});
+    await page.waitForSelector(".dashboard-grid");
+    const actions=page.locator("[data-dashboard-edit-action]");
+    if(checks.dashboardEdit){
+      assert((await actions.count()) > 0,`${username} missing dashboard edit actions`);
+    }else{
+      assert.equal(await actions.count(),0,`${username} can access dashboard edit actions without permission`);
+      const taskControls=page.locator('.task-overview input[data-field="task"]');
+      for(let i=0;i<await taskControls.count();i++) assert.equal(await taskControls.nth(i).isDisabled(),true,`${username} can update a task from read-only dashboard`);
+    }
+  }
   if(checks.central){
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
     await page.locator('input[data-central-search]').first().waitFor({state:"visible"});
@@ -273,10 +287,10 @@ async function responsiveAdmin(browser, viewport) {
 const browser=await chromium.launch({headless:true});
 try{
   await adminDesktop(browser);
-  await roleDesktop(browser,"managerfx",{manage:true,operations:true});
-  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true});
-  await roleDesktop(browser,"employeefx",{manage:true,operations:true});
-  await roleDesktop(browser,"parttimefx",{manage:false,operations:false});
+  await roleDesktop(browser,"managerfx",{manage:true,operations:true,dashboardEdit:true});
+  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,dashboardEdit:false});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true,dashboardEdit:false});
+  await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
   await roleDesktop(browser,"centralreg",{central:true,manage:true});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});

@@ -36,6 +36,7 @@ const routeMatch = app.match(/const ROUTES\s*=\s*\[([^\]]+)\]/);
 assert(routeMatch, "ROUTES list not found");
 const routes = [...routeMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
 assert.deepEqual(routes, ACCOUNT_MODULES, "navigation routes diverged from account modules");
+assert(ACCOUNT_MODULES.includes("dashboard"), "dashboard must be available in account permissions");
 
 const uiFiles = [
   "src/app.js",
@@ -86,5 +87,7 @@ assert(!/function applyInventorySearchDom[\s\S]{0,2500}render\(\)/.test(app), "i
 
 const accountAdmin = read("src/account-admin.js");
 assert.match(accountAdmin, /name="password" type="password" minlength="10"/, "account editor must enforce the password policy");
+assert.match(accountAdmin, /ACCOUNT_MODULES\.map/, "account editor must render all module permissions");
+assert.match(app, /route\(\) === "dashboard" && !accountCan\("dashboard", "edit"\)/, "dashboard task edits must enforce dashboard edit permission");
 
 console.log("STATIC_REGRESSION_OK");
