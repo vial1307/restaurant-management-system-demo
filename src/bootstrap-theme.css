@@ -193,6 +193,12 @@ body {
 .inventory-row:hover { background: #fbfdfc; }
 .inventory-row,
 .central-row { border-color: #e8efec; }
+.inventory-table .central-row.storage-row {
+  grid-template-columns: minmax(145px, 1.45fr) minmax(95px, 1fr) minmax(115px, 1.15fr) minmax(165px, 1.2fr) minmax(72px, .7fr) minmax(150px, 1.2fr);
+}
+.inventory-table .central-row.work-row {
+  grid-template-columns: minmax(145px, 1.45fr) minmax(95px, 1fr) minmax(145px, 1.2fr) minmax(72px, .7fr) minmax(115px, 1.15fr) minmax(80px, .75fr);
+}
 .zone-pill,
 .source-quantity { background: #edf7f3; color: #31695b; }
 .quantity-button.plus,
@@ -421,6 +427,8 @@ body {
   }
   .central-row > div:first-child strong { font-size: 15px; }
   .central-current strong { font-size: 20px; }
+  .inventory-table .central-row.storage-row,
+  .inventory-table .central-row.work-row { grid-template-columns: minmax(0, 1fr) auto; }
 
   .inventory-op-card,
   .shipment-card {

@@ -17,6 +17,7 @@ import { DEFAULT_ITEMS, STORAGE_KEY, stockKeyFor } from "./store.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
+const CENTRAL_WORK_KEY = "shitu-central-kitchen-work-v1";
 const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const RECEIVE_DEFAULT_KEY = "shitu-inventory-receive-defaults-v1";
@@ -637,11 +638,21 @@ export async function getSiteLocations(site = currentSite(), kind = "storage") {
 function applyCentral(rows) {
   if (!rows.length) return false;
   const previous = readJson(CENTRAL_KEY, []);
+  const previousWork = readJson(CENTRAL_WORK_KEY, {});
   const next=[];
+  const nextWork={};
 
   for (const row of rows) {
-    if (row.location.kind !== "storage") continue;
     if (!row.item.item_key?.startsWith("central:")) continue;
+    if (row.location.kind === "work") {
+      nextWork[row.item.item_key] = {
+        quantity:Number(row.quantity)||0,
+        minimum:Number(row.minimum_quantity)||0,
+        locationCode:row.location.code,
+      };
+      continue;
+    }
+    if (row.location.kind !== "storage") continue;
     const baseId = row.item.item_key.slice("central:".length);
     const zone = CENTRAL_CODE_TO_ZONE[row.location.code];
     if (!zone) continue;
@@ -665,8 +676,11 @@ function applyCentral(rows) {
   next.sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant") || String(a.zone).localeCompare(String(b.zone),"zh-Hant"));
   const oldJson=JSON.stringify(previous);
   const nextJson=JSON.stringify(next);
-  if(oldJson===nextJson) return false;
+  const oldWorkJson=JSON.stringify(previousWork);
+  const nextWorkJson=JSON.stringify(nextWork);
+  if(oldJson===nextJson && oldWorkJson===nextWorkJson) return false;
   localStorage.setItem(CENTRAL_KEY,nextJson);
+  localStorage.setItem(CENTRAL_WORK_KEY,nextWorkJson);
   window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated",{detail:{site:"central"}}));
   return true;
 }

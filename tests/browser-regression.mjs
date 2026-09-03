@@ -210,8 +210,25 @@ async function roleDesktop(browser, username, checks) {
   }
   if(checks.central){
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
-    await page.locator('input[data-central-search]').first().waitFor({state:"visible"});
+    await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
+    assert.equal(await page.locator(".inventory-summary").count(),1,"central inventory summary must match branch layout");
+    assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation tabs must match branch layout");
+    assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
+    assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
+    await page.locator('[data-central-view="work"]').click();
+    assert((await page.locator(".inventory-table.work-table .central-row").count()) > 0,"central work overview cards missing");
+    await page.locator('[data-central-view="storage"]').click();
     assert.equal(await page.locator(".warehouse-switch").count(),0);
+    for(const mode of ["in","pick","transfer","ship"]){
+      const tab=page.locator(`[data-central-mode="${mode}"]`);
+      await tab.waitFor({state:"visible"});
+      await tab.click();
+      const search=page.locator("[data-op-search]");
+      await search.waitFor({state:"visible"});
+      await search.fill("niu rou");
+      assert.equal(await search.inputValue(),"niu rou");
+      await search.fill("");
+    }
     if(checks.manage === true){
       const manage=page.locator('[data-central-mode="manage"]');
       await manage.waitFor({state:"visible"});

@@ -90,4 +90,16 @@ assert.match(accountAdmin, /name="password" type="password" minlength="10"/, "ac
 assert.match(accountAdmin, /ACCOUNT_MODULES\.map/, "account editor must render all module permissions");
 assert.match(app, /route\(\) === "dashboard" && !accountCan\("dashboard", "edit"\)/, "dashboard task edits must enforce dashboard edit permission");
 
+const authLayer = read("src/auth-layer.js");
+for (const marker of [
+  'class="central-tabs branch-ops-tabs"',
+  'class="inventory-view-switch"',
+  'data-central-view="storage"',
+  'data-central-view="work"',
+  'data-central-mode="manage"',
+]) assert(authLayer.includes(marker), `central inventory missing shared branch UI marker: ${marker}`);
+for (const mode of ["in", "pick", "transfer", "ship"]) {
+  assert(authLayer.includes(`data-central-mode="${mode}"`), `central inventory missing ${mode} operation`);
+}
+
 console.log("STATIC_REGRESSION_OK");
