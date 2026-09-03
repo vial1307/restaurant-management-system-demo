@@ -1,4 +1,3 @@
-import { getSupabase, isSupabaseConfigured } from "./supabase-client.js";
 import {
   isVpsApiConfigured,
   vpsAdjustInventory,
@@ -21,14 +20,13 @@ const CENTRAL_WORK_KEY = "shitu-central-kitchen-work-v1";
 const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const RECEIVE_DEFAULT_KEY = "shitu-inventory-receive-defaults-v1";
-const SYNC_DELAY = 180;
 const POLL_MS = 60000;
 const REQUIRED_SCHEMA_VERSION = 11;
 const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
 const MIGRATION_RETRY_MS = 5000;
 
 function isInventoryBackendConfigured() {
-  return isVpsApiConfigured() || isSupabaseConfigured();
+  return isVpsApiConfigured();
 }
 
 const FUXING_STORAGE_CODES = {
@@ -63,8 +61,6 @@ const CENTRAL_CODE_TO_ZONE = Object.fromEntries(
 
 let migrationAvailable = null;
 let migrationCheckedAt = 0;
-let realtime = null;
-let syncTimer = 0;
 let polling = 0;
 let bootedUserId = "";
 let syncing = false;
@@ -129,9 +125,8 @@ export function canInventoryEdit() {
 }
 
 export function canInventoryDraftCount() {
-  // Staging uses Supabase/Postgres as the single source of truth.
-  // Never accept inventory writes into localStorage while SQL is configured,
-  // otherwise different phones can diverge before the VPS production cutover.
+  // PostgreSQL on the VPS is the only shared source of truth. Never accept
+  // inventory writes into localStorage, otherwise devices can diverge.
   if (isInventoryBackendConfigured()) return false;
   return hasInventoryPermission("edit") && inventoryCloudState() !== "ready";
 }
@@ -246,41 +241,20 @@ function saveLocalReceiveDefault(site,catalogKeyValue,locationCode="") {
 }
 
 async function fetchCloudReceiveDefaults(sites=[],catalogKeys=[]) {
-  if(isVpsApiConfigured()){
-    const result=await vpsReceiveDefaults({sites,catalogKeys});
-    return (result?.defaults||[]).map((row)=>({
-      site:row.site,
-      catalogKey:row.catalog_key,
-      locationId:row.location_id,
-      locationCode:row.location_code||"",
-      location:{
-        code:row.location_code||"",
-        name_zh_tw:row.name_zh_tw||"",
-        name_vi:row.name_vi||"",
-        site:row.site,
-        kind:row.kind||"storage",
-        active:row.active!==false,
-      },
-      updatedAt:row.updated_at,
-    }));
-  }
-  if(!isSupabaseConfigured()) return [];
-  const supabase=await getSupabase();
-  let query=supabase
-    .from("inventory_receive_defaults")
-    .select("site,catalog_key,location_id,updated_at,inventory_locations!inner(code,name_zh_tw,name_vi,site,kind,active)")
-    .eq("inventory_locations.active",true)
-    .eq("inventory_locations.kind","storage");
-  if(sites.length) query=query.in("site",sites);
-  if(catalogKeys.length) query=query.in("catalog_key",catalogKeys);
-  const {data,error}=await query;
-  if(error) throw error;
-  return (data||[]).map((row)=>({
+  const result=await vpsReceiveDefaults({sites,catalogKeys});
+  return (result?.defaults||[]).map((row)=>({
     site:row.site,
     catalogKey:row.catalog_key,
     locationId:row.location_id,
-    locationCode:row.inventory_locations?.code||"",
-    location:row.inventory_locations||null,
+    locationCode:row.location_code||"",
+    location:{
+      code:row.location_code||"",
+      name_zh_tw:row.name_zh_tw||"",
+      name_vi:row.name_vi||"",
+      site:row.site,
+      kind:row.kind||"storage",
+      active:row.active!==false,
+    },
     updatedAt:row.updated_at,
   }));
 }
@@ -318,26 +292,13 @@ export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,lo
   saveLocalReceiveDefault(site,key,code);
   if(!(await verifyMigration()) || globalThis.navigator?.onLine===false) return {ok:true,fallback:true};
   if(!hasInventoryPermission("edit")) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
-  if(isVpsApiConfigured()){
-    try{
-      await vpsSetReceiveDefault({site,catalogKey:key,locationCode:code});
-      return {ok:true,fallback:false};
-    }catch(error){
-      dispatchStatus("error",{error:error.message,stage:"receive-default"});
-      return {ok:false,fallback:false,error};
-    }
-  }
-  const {error}=await rpc("set_inventory_receive_default",{
-    p_site:site,
-    p_catalog_key:key,
-    p_location_code:code||null,
-  });
-  if(error){
-    if(/set_inventory_receive_default|schema cache|function/i.test(String(error.message||""))) return {ok:true,fallback:true};
+  try{
+    await vpsSetReceiveDefault({site,catalogKey:key,locationCode:code});
+    return {ok:true,fallback:false};
+  }catch(error){
     dispatchStatus("error",{error:error.message,stage:"receive-default"});
     return {ok:false,fallback:false,error};
   }
-  return {ok:true,fallback:false};
 }
 
 function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
@@ -427,12 +388,6 @@ function buildCentralCatalog(items) {
   return [...grouped.values()].filter((entry)=>entry.locations.length);
 }
 
-async function rpc(name, args = {}) {
-  const supabase = await getSupabase();
-  if (!supabase) return { data: null, error: new Error("SUPABASE_UNAVAILABLE") };
-  return supabase.rpc(name, args);
-}
-
 async function verifyMigration({ force = false } = {}) {
   const now = Date.now();
   if (!force && migrationAvailable === true) return true;
@@ -456,18 +411,9 @@ async function verifyMigration({ force = false } = {}) {
   }
 
   try {
-    let version = 0;
-    let error = null;
-
-    if (isVpsApiConfigured()) {
-      const result = await vpsSchemaVersion();
-      version = Number(result?.version || 0);
-    } else {
-      const supabase = await getSupabase();
-      const result = await supabase.rpc("kitchen_inventory_schema_version");
-      version = Number(result?.data || 0);
-      error = result?.error || null;
-    }
+    const result = await vpsSchemaVersion();
+    const version = Number(result?.version || 0);
+    const error = null;
 
     migrationCheckedAt = Date.now();
 
@@ -507,86 +453,24 @@ export async function refreshInventoryCloudState() {
 }
 
 export async function bootstrapFuxingInventory() {
-  if (isVpsApiConfigured()) return true;
-  if (!(await verifyMigration()) || role() !== "admin") return false;
-  const catalog = buildBranchCatalog("fuxing");
-  if (!catalog.length) return false;
-  const { error } = await rpc("bootstrap_inventory_catalog", { p_items: catalog });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "bootstrap-fuxing" });
-    return false;
-  }
-  return true;
+  return isVpsApiConfigured();
 }
 
 export async function bootstrapYongjiInventory() {
-  if (isVpsApiConfigured()) return true;
-  if (!(await verifyMigration()) || role() !== "admin") return false;
-  const catalog = buildBranchCatalog("yongji", { zeroQuantities: true });
-  if (!catalog.length) return false;
-  const { error } = await rpc("bootstrap_inventory_catalog", { p_items: catalog });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "bootstrap-yongji" });
-    return false;
-  }
-  return true;
+  return isVpsApiConfigured();
 }
 
-export async function bootstrapCentralInventory(items = readJson(CENTRAL_KEY, [])) {
-  if (isVpsApiConfigured()) return true;
-  if (!(await verifyMigration()) || role() !== "admin") return false;
-  const catalog = buildCentralCatalog(items);
-  if (!catalog.length) return false;
-  const { error } = await rpc("bootstrap_inventory_catalog", { p_items: catalog });
-  if (error) {
-    dispatchStatus("error", { error: error.message, stage: "bootstrap-central" });
-    return false;
-  }
-  return true;
+export async function bootstrapCentralInventory() {
+  return isVpsApiConfigured();
 }
 
 async function fetchSite(site) {
   if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
 
-  let locations = [];
-  let stocks = [];
-  let items = [];
-
-  if (isVpsApiConfigured()) {
-    const result = await vpsInventory(site);
-    locations = result?.locations || [];
-    stocks = result?.stock || [];
-    items = result?.items || [];
-  } else {
-    const supabase = await getSupabase();
-    const { data: cloudLocations, error: locError } = await supabase
-      .from("inventory_locations")
-      .select("id,code,name_zh_tw,name_vi,site,kind,sort_order")
-      .eq("site", site)
-      .eq("active", true)
-      .order("sort_order", { ascending: true });
-    if (locError) throw locError;
-    locations = cloudLocations || [];
-    if (!locations.length) return [];
-
-    const locationIds = locations.map((loc) => loc.id);
-    const { data: cloudStocks, error: stockError } = await supabase
-      .from("inventory_stock")
-      .select("item_id,location_id,quantity,minimum_quantity,updated_at")
-      .in("location_id", locationIds);
-    if (stockError) throw stockError;
-    stocks = cloudStocks || [];
-    if (!stocks.length) return [];
-
-    const itemIds = [...new Set(stocks.map((row) => row.item_id))];
-    const { data: cloudItems, error: itemError } = await supabase
-      .from("inventory_items")
-      .select("id,item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active")
-      .in("id", itemIds)
-      .eq("active", true);
-    if (itemError) throw itemError;
-    items = cloudItems || [];
-  }
+  const result = await vpsInventory(site);
+  const locations = result?.locations || [];
+  const stocks = result?.stock || [];
+  const items = result?.items || [];
 
   if (!locations.length || !stocks.length || !items.length) return [];
 
@@ -618,21 +502,9 @@ export async function getSiteInventoryRows(site = currentSite()) {
 
 export async function getSiteLocations(site = currentSite(), kind = "storage") {
   if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
-  if (isVpsApiConfigured()) {
-    const result = await vpsInventory(site);
-    const locations = result?.locations || [];
-    return kind ? locations.filter((entry)=>entry.kind===kind) : locations;
-  }
-  const supabase = await getSupabase();
-  const query = supabase
-    .from("inventory_locations")
-    .select("id,code,name_zh_tw,name_vi,site,kind,sort_order")
-    .eq("site",site)
-    .eq("active",true)
-    .order("sort_order",{ascending:true});
-  const { data, error } = kind ? await query.eq("kind",kind) : await query;
-  if (error) throw error;
-  return data || [];
+  const result = await vpsInventory(site);
+  const locations = result?.locations || [];
+  return kind ? locations.filter((entry)=>entry.kind===kind) : locations;
 }
 
 function applyCentral(rows) {
@@ -793,31 +665,17 @@ export async function cloudAdjustQuantity({
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
-  if (isVpsApiConfigured()) {
-    try {
-      await vpsAdjustInventory({
-        itemId: resolved.item.id,
-        locationId: resolved.location.id,
-        direction,
-        amount: value,
-        note,
-      });
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "adjust" });
-      return { ok: false, fallback: false, error };
-    }
-  } else {
-    const { error } = await rpc("adjust_inventory", {
-      p_item_id: resolved.item.id,
-      p_location_id: resolved.location.id,
-      p_direction: direction,
-      p_amount: value,
-      p_note: note,
+  try {
+    await vpsAdjustInventory({
+      itemId: resolved.item.id,
+      locationId: resolved.location.id,
+      direction,
+      amount: value,
+      note,
     });
-    if (error) {
-      dispatchStatus("error", { error: error.message, stage: "adjust" });
-      return { ok: false, fallback: false, error };
-    }
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "adjust" });
+    return { ok: false, fallback: false, error };
   }
   await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
@@ -835,29 +693,16 @@ export async function cloudSetQuantity({
   if (!canDirectInventoryAdjust() && !(allowInventoryEditor && canInventoryEdit())) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
-  if (isVpsApiConfigured()) {
-    try {
-      await vpsSetQuantity({
-        itemId: resolved.item.id,
-        locationId: resolved.location.id,
-        quantity: Math.max(0, Number(quantity) || 0),
-        note,
-      });
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "set-quantity" });
-      return { ok: false, fallback: false, error };
-    }
-  } else {
-    const { error } = await rpc("set_inventory_quantity", {
-      p_item_id: resolved.item.id,
-      p_location_id: resolved.location.id,
-      p_quantity: Math.max(0, Number(quantity) || 0),
-      p_note: note,
+  try {
+    await vpsSetQuantity({
+      itemId: resolved.item.id,
+      locationId: resolved.location.id,
+      quantity: Math.max(0, Number(quantity) || 0),
+      note,
     });
-    if (error) {
-      dispatchStatus("error", { error: error.message, stage: "set-quantity" });
-      return { ok: false, fallback: false, error };
-    }
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "set-quantity" });
+    return { ok: false, fallback: false, error };
   }
   if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
@@ -873,27 +718,15 @@ export async function cloudSetMinimum({
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
-  if (isVpsApiConfigured()) {
-    try {
-      await vpsSetMinimum({
-        itemId: resolved.item.id,
-        locationId: resolved.location.id,
-        minimum: Math.max(0, Number(minimum) || 0),
-      });
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "set-minimum" });
-      return { ok: false, fallback: false, error };
-    }
-  } else {
-    const { error } = await rpc("set_inventory_minimum", {
-      p_item_id: resolved.item.id,
-      p_location_id: resolved.location.id,
-      p_minimum: Math.max(0, Number(minimum) || 0),
+  try {
+    await vpsSetMinimum({
+      itemId: resolved.item.id,
+      locationId: resolved.location.id,
+      minimum: Math.max(0, Number(minimum) || 0),
     });
-    if (error) {
-      dispatchStatus("error", { error: error.message, stage: "set-minimum" });
-      return { ok: false, fallback: false, error };
-    }
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "set-minimum" });
+    return { ok: false, fallback: false, error };
   }
   if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
   return { ok: true };
@@ -917,31 +750,17 @@ export async function cloudTransferInventory({
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
 
-  if (isVpsApiConfigured()) {
-    try {
-      await vpsTransferInventory({
-        itemId: source.item.id,
-        sourceLocationId: source.location.id,
-        destinationLocationId: destination.location.id,
-        amount: value,
-        note,
-      });
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "transfer" });
-      return { ok: false, fallback: false, error };
-    }
-  } else {
-    const { error } = await rpc("transfer_inventory", {
-      p_item_id: source.item.id,
-      p_source_location_id: source.location.id,
-      p_destination_location_id: destination.location.id,
-      p_amount: value,
-      p_note: note,
+  try {
+    await vpsTransferInventory({
+      itemId: source.item.id,
+      sourceLocationId: source.location.id,
+      destinationLocationId: destination.location.id,
+      amount: value,
+      note,
     });
-    if (error) {
-      dispatchStatus("error", { error: error.message, stage: "transfer" });
-      return { ok: false, fallback: false, error };
-    }
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "transfer" });
+    return { ok: false, fallback: false, error };
   }
 
   await syncInventoryNow(siteFromLocationCode(sourceLocationCode), { reloadBranch: false });
@@ -985,33 +804,18 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   if (!changes.length) return { ok: true, changed: 0 };
 
   for (const change of changes) {
-    if (isVpsApiConfigured()) {
-      try {
-        await vpsAdjustInventory({
-          itemId: change.itemId,
-          locationId: change.locationId,
-          direction: change.direction,
-          amount: change.amount,
-          note,
-        });
-      } catch (error) {
-        dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
-        await syncInventoryNow("fuxing", { reloadBranch: false });
-        return { ok: false, fallback: false, error };
-      }
-    } else {
-      const { error } = await rpc("adjust_inventory", {
-        p_item_id: change.itemId,
-        p_location_id: change.locationId,
-        p_direction: change.direction,
-        p_amount: change.amount,
-        p_note: note,
+    try {
+      await vpsAdjustInventory({
+        itemId: change.itemId,
+        locationId: change.locationId,
+        direction: change.direction,
+        amount: change.amount,
+        note,
       });
-      if (error) {
-        dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
-        await syncInventoryNow("fuxing", { reloadBranch: false });
-        return { ok: false, fallback: false, error };
-      }
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
+      await syncInventoryNow("fuxing", { reloadBranch: false });
+      return { ok: false, fallback: false, error };
     }
   }
 
@@ -1028,48 +832,14 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
   const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
-  if (isVpsApiConfigured()) {
-    try {
-      await vpsSyncCatalog(item);
-      await syncInventoryNow(site, { reloadBranch: false });
-      return { ok: true };
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
-      return { ok: false, fallback: false, error };
-    }
-  }
-
-  const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
-  if (error) {
+  try {
+    await vpsSyncCatalog(item);
+    await syncInventoryNow(site, { reloadBranch: false });
+    return { ok: true };
+  } catch (error) {
     dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
     return { ok: false, fallback: false, error };
   }
-
-  const currentRows = await fetchSite(site);
-  const currentByCode = new Map(
-    currentRows
-      .filter((row) => row.item.item_key === item.key)
-      .map((row) => [row.location.code, row])
-  );
-
-  for (const location of item.locations || []) {
-    const current = currentByCode.get(location.code);
-    const wanted = Math.max(0, Number(location.quantity) || 0);
-    const actual = Math.max(0, Number(current?.quantity) || 0);
-    if (wanted !== actual) {
-      const result = await cloudSetQuantity({
-        itemKey: item.key,
-        locationCode: location.code,
-        quantity: wanted,
-        note: "品項資料調整／盤點 / Chỉnh mặt hàng và kiểm kê",
-        sync: false,
-      });
-      if (!result.ok) return result;
-    }
-  }
-
-  await syncInventoryNow(site, { reloadBranch: false });
-  return { ok: true };
 }
 
 export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, [])) {
@@ -1079,82 +849,28 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
   const item = catalog.find((entry) => entry.key === itemKey);
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
-  if (isVpsApiConfigured()) {
-    try {
-      await vpsSyncCatalog(item);
-      await syncInventoryNow("central", { reloadBranch: false });
-      return { ok: true };
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "central-catalog-sync" });
-      return { ok: false, fallback: false, error };
-    }
-  }
-
-  const { error } = await rpc("sync_inventory_catalog_item", { p_item: item });
-  if (error) {
+  try {
+    await vpsSyncCatalog(item);
+    await syncInventoryNow("central", { reloadBranch: false });
+    return { ok: true };
+  } catch (error) {
     dispatchStatus("error", { error: error.message, stage: "central-catalog-sync" });
     return { ok: false, fallback: false, error };
   }
-
-  const currentRows = await fetchSite("central");
-  const currentByCode = new Map(
-    currentRows
-      .filter((row) => row.item.item_key === item.key)
-      .map((row) => [row.location.code, row])
-  );
-
-  for (const location of item.locations || []) {
-    const current = currentByCode.get(location.code);
-    const wanted = Math.max(0, Number(location.quantity) || 0);
-    const actual = Math.max(0, Number(current?.quantity) || 0);
-    if (wanted !== actual) {
-      const result = await cloudSetQuantity({
-        itemKey: item.key,
-        locationCode: location.code,
-        quantity: wanted,
-        note: "央廚品項資料調整／盤點 / Chỉnh mặt hàng và kiểm kê bếp trung tâm",
-        sync: false,
-      });
-      if (!result.ok) return result;
-    }
-    const currentMinimum = Math.max(0, Number(current?.minimum_quantity) || 0);
-    const wantedMinimum = Math.max(0, Number(location.minimum) || 0);
-    if (wantedMinimum !== currentMinimum) {
-      const result = await cloudSetMinimum({
-        itemKey: item.key,
-        locationCode: location.code,
-        minimum: wantedMinimum,
-        sync: false,
-      });
-      if (!result.ok) return result;
-    }
-  }
-
-  await syncInventoryNow("central", { reloadBranch: false });
-  return { ok: true };
 }
 
 export async function cloudArchiveCentralItem(itemKey) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
-  if (isVpsApiConfigured()) {
-    try {
-      const data = await vpsArchiveCatalogItem(itemKey);
-      await syncInventoryNow("central", { reloadBranch: false });
-      return { ok: Boolean(data?.archived), fallback: false };
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "central-catalog-archive" });
-      return { ok: false, fallback: false, error };
-    }
-  }
-  const { data, error } = await rpc("archive_inventory_item", { p_item_key: itemKey });
-  if (error) {
+  try {
+    const data = await vpsArchiveCatalogItem(itemKey);
+    await syncInventoryNow("central", { reloadBranch: false });
+    return { ok: Boolean(data?.archived), fallback: false };
+  } catch (error) {
     dispatchStatus("error", { error: error.message, stage: "central-catalog-archive" });
     return { ok: false, fallback: false, error };
   }
-  await syncInventoryNow("central", { reloadBranch: false });
-  return { ok: data === true || data === false, fallback: false };
 }
 
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
@@ -1163,24 +879,14 @@ export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const itemKey = branchItemKey(site,stockKey);
-  if (isVpsApiConfigured()) {
-    try {
-      const data = await vpsArchiveCatalogItem(itemKey);
-      await syncInventoryNow(site, { reloadBranch: false });
-      return { ok: Boolean(data?.archived), fallback: false };
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
-      return { ok: false, fallback: false, error };
-    }
-  }
-  const { data, error } = await rpc("archive_inventory_item", {
-    p_item_key: itemKey,
-  });
-  if (error) {
+  try {
+    const data = await vpsArchiveCatalogItem(itemKey);
+    await syncInventoryNow(site, { reloadBranch: false });
+    return { ok: Boolean(data?.archived), fallback: false };
+  } catch (error) {
     dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
     return { ok: false, fallback: false, error };
   }
-  return { ok: data === true || data === false, fallback: false };
 }
 
 export function cloudSyncFuxingCatalogItem(stockKey) {
@@ -1230,100 +936,44 @@ export function centralItemKey(id) {
 export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
   if (!(await verifyMigration()) || role() !== "admin") return [];
 
-  if (isVpsApiConfigured()) {
-    try {
-      const [historyResult, rows] = await Promise.all([
-        vpsInventoryHistory(site, limit),
-        fetchSite(site),
-      ]);
-      const itemMap = new Map(rows.map((row) => [row.item.id, row.item]));
-      const locationMap = new Map(rows.map((row) => [row.location.id, row.location]));
-      const tx = historyResult?.transactions || [];
+  try {
+    const [historyResult, rows] = await Promise.all([
+      vpsInventoryHistory(site, limit),
+      fetchSite(site),
+    ]);
+    const itemMap = new Map(rows.map((row) => [row.item.id, row.item]));
+    const locationMap = new Map(rows.map((row) => [row.location.id, row.location]));
+    const tx = historyResult?.transactions || [];
 
-      return tx.map((entry) => {
-        const locationId = entry.destination_location_id || entry.source_location_id || "";
-        const meta = entry.metadata || {};
-        const before = meta.before_quantity ?? meta.source_before ?? meta.destination_before ?? "";
-        const after = meta.after_quantity ?? meta.source_after ?? meta.destination_after ?? "";
-        return {
-          ...entry,
-          location_id: locationId,
-          direction: entry.action || "",
-          before_quantity: before,
-          after_quantity: after,
-          actor_id: entry.actor_user_id,
-          item: itemMap.get(entry.item_id),
-          location: locationMap.get(locationId),
-          actor: entry.actor_username ? {
-            id: entry.actor_user_id,
-            username: entry.actor_username,
-            display_name: entry.actor_username,
-          } : null,
-        };
-      });
-    } catch {
-      return [];
-    }
+    return tx.map((entry) => {
+      const locationId = entry.destination_location_id || entry.source_location_id || "";
+      const meta = entry.metadata || {};
+      const before = meta.before_quantity ?? meta.source_before ?? meta.destination_before ?? "";
+      const after = meta.after_quantity ?? meta.source_after ?? meta.destination_after ?? "";
+      return {
+        ...entry,
+        location_id: locationId,
+        direction: entry.action || "",
+        before_quantity: before,
+        after_quantity: after,
+        actor_id: entry.actor_user_id,
+        item: itemMap.get(entry.item_id),
+        location: locationMap.get(locationId),
+        actor: entry.actor_username ? {
+          id: entry.actor_user_id,
+          username: entry.actor_username,
+          display_name: entry.actor_username,
+        } : null,
+      };
+    });
+  } catch {
+    return [];
   }
-
-  const supabase = await getSupabase();
-  const { data: locations, error: locError } = await supabase
-    .from("inventory_locations")
-    .select("id,code,name_zh_tw,name_vi")
-    .eq("site", site);
-  if (locError || !locations?.length) return [];
-  const locMap = new Map(locations.map((loc) => [loc.id, loc]));
-  const ids = locations.map((loc) => loc.id);
-  const { data: tx, error } = await supabase
-    .from("inventory_transactions")
-    .select("id,item_id,location_id,direction,amount,before_quantity,after_quantity,note,actor_id,created_at")
-    .in("location_id", ids)
-    .order("created_at", { ascending: false })
-    .limit(Math.max(1, Math.min(500, Number(limit) || 200)));
-  if (error || !tx?.length) return [];
-  const itemIds = [...new Set(tx.map((entry) => entry.item_id))];
-  const { data: items } = await supabase
-    .from("inventory_items")
-    .select("id,item_key,name_zh_tw,name_vi,unit")
-    .in("id", itemIds);
-  const itemMap = new Map((items || []).map((item) => [item.id, item]));
-  const actorIds = [...new Set(tx.map((entry) => entry.actor_id).filter(Boolean))];
-  let actorMap = new Map();
-  if (actorIds.length) {
-    const { data: actors } = await supabase
-      .from("profiles")
-      .select("id,display_name,username,role")
-      .in("id", actorIds);
-    actorMap = new Map((actors || []).map((actor) => [actor.id, actor]));
-  }
-  return tx.map((entry) => ({
-    ...entry,
-    item: itemMap.get(entry.item_id),
-    location: locMap.get(entry.location_id),
-    actor: actorMap.get(entry.actor_id),
-  }));
 }
 
 async function subscribeRealtime(site) {
   if (!(await verifyMigration()) || !site) return;
   lastSite = site;
-
-  if (isVpsApiConfigured()) {
-    realtime = null;
-    return;
-  }
-
-  const supabase = await getSupabase();
-  if (realtime) {
-    try { await supabase.removeChannel(realtime); } catch {}
-  }
-  realtime = supabase
-    .channel(`kitchen-os-inventory-${site}-${session()?.id || "user"}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "inventory_stock" }, () => {
-      clearTimeout(syncTimer);
-      syncTimer = setTimeout(() => { void syncInventoryNow(lastSite); }, SYNC_DELAY);
-    })
-    .subscribe();
 }
 
 async function boot() {
@@ -1332,13 +982,6 @@ async function boot() {
   if (bootedUserId === s.id && polling) return;
   if (!(await verifyMigration())) return;
   bootedUserId = s.id || "";
-
-  if (role() === "admin" && !isVpsApiConfigured()) {
-    await bootstrapFuxingInventory();
-    await bootstrapYongjiInventory();
-    const central = readJson(CENTRAL_KEY, []);
-    if (central.length) await bootstrapCentralInventory(central);
-  }
 
   const site = currentSite();
   if (site) {
@@ -1366,9 +1009,7 @@ window.addEventListener("hashchange", () => {
   setTimeout(() => { void syncInventoryNow(site); }, 80);
 });
 window.addEventListener("shitu:central-stock-ready", (event) => {
-  if (role() === "admin" && !isVpsApiConfigured()) {
-    void bootstrapCentralInventory(event.detail?.items || readJson(CENTRAL_KEY, []));
-  }
+  void event;
 });
 
 void boot();

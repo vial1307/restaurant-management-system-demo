@@ -51,6 +51,16 @@ const employee = await login("employeefx");
 const parttime = await login("parttimefx");
 const central = await login("centralreg");
 
+const preferenceUpdate = await request("/api/auth/preferences", {
+  method:"POST",cookie:manager.cookie,body:{preferredLanguage:"zh-TW"}
+});
+assert.equal(preferenceUpdate.response.status,200);
+assert.equal(preferenceUpdate.data.user.preferredLanguage,"zh-TW");
+assert.equal((await request("/api/auth/me",{cookie:manager.cookie})).data.user.preferredLanguage,"zh-TW");
+assert.equal((await request("/api/auth/preferences",{
+  method:"POST",body:{preferredLanguage:"vi"}
+})).response.status,401);
+
 for (const site of ["fuxing","yongji","central"]) {
   assert.equal((await inventory(admin.cookie,site)).response.status,200,`admin cannot view ${site}`);
 }

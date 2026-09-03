@@ -1,6 +1,6 @@
 # Kitchen OS — Inventory Operations Specification
 
-Status: implemented in staging frontend v42; cloud activation requires canonical Supabase v7 migration
+Status: implemented on VPS API + PostgreSQL
 Target sites: 央廚, 復興店, 永吉店
 Primary goal: one inventory source of truth across PC / laptop / mobile with auditable operator actions and Taiwan restaurant terminology.
 
@@ -167,7 +167,7 @@ Current staging does not require a second manager approval record.
 
 Formal approval/confirmation is intentionally deferred to the VPS production phase.
 
-## 9. Cloud RPC contract
+## 9. VPS API contract
 
 ### adjust_inventory(...)
 Used for:
@@ -197,20 +197,12 @@ The operation:
 
 ## 10. Staging vs VPS production
 
-### Current staging
-- immediate mutation
+### Current VPS production
+- immediate atomic mutation through the API
 - no manager approval
 - no receiving confirmation
-- operator audit only
-- Supabase RPC + Realtime
-
-### Future VPS production
-The UI workflow can remain the same while the backend moves to:
-- API service
-- PostgreSQL
-- WebSocket/SSE
-- optional approval policy
-- optional receiving confirmation
-- stronger audit/reporting and backups
+- operator audit stored in PostgreSQL
+- focus/visibility refresh plus periodic polling
+- automatic PostgreSQL backups before deployment
 
 Approval should be added as a policy layer, not by changing the meaning of 領貨 or 出貨.

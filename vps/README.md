@@ -1,6 +1,6 @@
 # Kitchen OS VPS
 
-This folder is the new VPS deployment path. It is isolated from the current Supabase/GitHub Pages runtime until cutover.
+This folder is the production VPS deployment path. Supabase is no longer part of the runtime.
 
 Deployment note: the UI refresh requested on 2026-09-03 starts from a server-side database dump and retained previous web release.
 
@@ -10,7 +10,7 @@ Deployment note: the UI refresh requested on 2026-09-03 starts from a server-sid
 - Docker + Docker Compose
 - PostgreSQL 16 (private network only)
 - Node.js API
-- Caddy HTTPS
+- Caddy web edge
 - GitHub Actions deployment
 - PostgreSQL backups via pg_dump / pg_restore
 
@@ -38,4 +38,4 @@ PostgreSQL is the single source of truth. Frontend must call /api and must not c
 
 First secure SSH and install Docker. Then copy .env.example to /opt/kitchen-os/.env and set a strong random PostgreSQL password. Do not commit .env.
 
-The first compose file starts PostgreSQL only. Backend/API will be connected after Supabase data export and schema conversion are verified.
+The browser talks only to `/api`; PostgreSQL remains private inside the Docker network.

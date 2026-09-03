@@ -96,6 +96,13 @@ export function vpsChangePassword(currentPassword, newPassword) {
   });
 }
 
+export function vpsUpdatePreferences(preferredLanguage) {
+  return apiRequest("/api/auth/preferences", {
+    method: "POST",
+    body: { preferredLanguage },
+  });
+}
+
 export function vpsListUsers() {
   return apiRequest("/api/admin/users");
 }

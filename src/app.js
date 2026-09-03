@@ -1036,11 +1036,7 @@ function inventory(context) {
       : cloudState === "checking"
         ? `<div class="inventory-cloud-notice"><strong>Đang kết nối VPS database · 正在連線 VPS 資料庫</strong><small>Hệ thống đang tự kiểm tra API và PostgreSQL. · 系統正在自動檢查 API 與 PostgreSQL。</small></div>`
         : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Không kết nối được VPS database · VPS 資料庫連線失敗</strong><small>Thao tác ghi kho tạm khóa để tránh sai lệch dữ liệu. · 為避免資料分歧，暫時鎖定庫存寫入。</small></div>`)
-    : (cloudReady
-      ? `<div class="inventory-sql-status inventory-sql-ready"><strong>SQL staging · 已連線</strong><small>Dữ liệu kho hiện đang ghi trực tiếp vào Supabase PostgreSQL. · 現階段庫存直接寫入 Supabase PostgreSQL。</small></div>`
-      : cloudState === "checking"
-        ? `<div class="inventory-cloud-notice"><strong>Đang xác minh SQL v11 · 正在確認 SQL v11</strong><small>Hệ thống đang kiểm tra kết nối và phiên bản database. · 系統正在確認資料庫連線與版本。</small></div>`
-        : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>SQL chưa đạt schema v11 · SQL 尚未達到 v11</strong><small>Hiện chỉ cho xem dữ liệu đang có; thao tác chỉnh kho được khóa. · 目前僅保留查看。</small></div>`);
+    : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Chỉ hỗ trợ VPS database · 僅支援 VPS 資料庫</strong><small>Vui lòng mở website từ máy chủ VPS. · 請從 VPS 伺服器開啟網站。</small></div>`;
   const opsEnabled = editable && cloudReady && !historical && ["fuxing","yongji"].includes(site);
   const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
   const tabsEnabled = (opsEnabled || canViewHistory || catalogManageVisible) && ["fuxing","yongji"].includes(site);
@@ -1821,8 +1817,7 @@ window.addEventListener("shitu:auth-synced", render);
 window.addEventListener("shitu:inventory-cloud-status", () => {
   if (route() === "inventory" && !document.querySelector(".central-heading")) render();
 });
-// Service worker intentionally disabled for the staging web app.
- // GitHub Pages + Supabase must always load the newest frontend during active development.
+// The former offline worker is retired so every VPS session loads one release.
 store.subscribe(render);
 render();
 setTimeout(() => { void bootstrapFuxingInventory(); }, 0);

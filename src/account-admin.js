@@ -1,12 +1,11 @@
 import { tr, currentLocale } from './locales.js';
-import { getSupabase, isSupabaseConfigured } from './supabase-client.js';
 import { isVpsApiConfigured, vpsListUsers } from './vps-api.js';
 import {
   ACCOUNT_MODULES,
   ACCOUNT_ROLE_DEFAULTS,
   isAdminAccount,
   normalizeAccountPermissions,
-} from './account-permissions.js?v=85';
+} from './account-permissions.js?v=86';
 
 const ACCOUNTS_KEY = 'shitu-kitchen-accounts-v2';
 const AUTH_KEY = 'shitu-kitchen-auth-v1';
@@ -36,34 +35,12 @@ let cloudAccountsLoading = null;
 async function refreshAccountsFromCloud(){
   const s=session();
   if(s?.role!=='admin') return loadAccounts();
-  if(!isVpsApiConfigured() && !isSupabaseConfigured()) return loadAccounts();
+  if(!isVpsApiConfigured()) return loadAccounts();
   if(cloudAccountsLoading) return cloudAccountsLoading;
   cloudAccountsLoading=(async()=>{
     try{
-      if(isVpsApiConfigured()){
-        const result=await vpsListUsers();
-        const list=(result?.users||[]).map(p=>({
-          id:p.id,
-          username:p.username,
-          password:'',
-          name:p.display_name,
-          role:p.role,
-          location:p.location,
-          active:p.active,
-          permissions:p.permissions||{},
-          preferredLanguage:p.preferred_language||'vi',
-          provider:'vps',
-        }));
-        saveAccounts(list);
-        return list;
-      }
-      const supabase=await getSupabase();
-      const {data,error}=await supabase
-        .from('profiles')
-        .select('id,username,display_name,role,location,active,permissions,preferred_language')
-        .order('created_at',{ascending:true});
-      if(error || !Array.isArray(data)) return loadAccounts();
-      const list=data.map(p=>({
+      const result=await vpsListUsers();
+      const list=(result?.users||[]).map(p=>({
         id:p.id,
         username:p.username,
         password:'',
@@ -73,7 +50,7 @@ async function refreshAccountsFromCloud(){
         active:p.active,
         permissions:p.permissions||{},
         preferredLanguage:p.preferred_language||'vi',
-        provider:'supabase',
+        provider:'vps',
       }));
       saveAccounts(list);
       return list;
@@ -120,7 +97,7 @@ function applyRoleAccess(){
 }
 
 function interceptLogin(){
-  if (isSupabaseConfigured() || isVpsApiConfigured()) return;
+  if (isVpsApiConfigured()) return;
   document.addEventListener('submit', (event)=>{
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || form.id !== 'auth-login-form') return;
@@ -217,13 +194,13 @@ function bindModal(host){
     if(locationSelect && !['admin','central'].includes(roleSelect.value) && ['all','central'].includes(locationSelect.value)) locationSelect.value='fuxing';
   });
   host.querySelector('[data-account-delete]')?.addEventListener('click',e=>{
-    if(isSupabaseConfigured()) return;
+    if(isVpsApiConfigured()) return;
     if(!confirm(label('confirmDelete'))) return;
     const id=e.currentTarget.dataset.accountDelete;
     saveAccounts(loadAccounts().filter(a=>a.id!==id)); host.remove(); refreshSettings();
   });
   host.querySelector('[data-account-form]')?.addEventListener('submit',e=>{
-    if(isSupabaseConfigured()) return;
+    if(isVpsApiConfigured()) return;
     e.preventDefault();
     const form=e.currentTarget, data=new FormData(form), editId=form.dataset.editId;
     const list=loadAccounts();
@@ -251,7 +228,7 @@ function bindSettings(){
   document.querySelector('[data-account-add]')?.addEventListener('click',()=>{ void openEditor(); });
   document.querySelectorAll('[data-account-edit]').forEach(b=>b.addEventListener('click',()=>{ void openEditor(b.dataset.accountEdit); }));
   document.querySelector('[data-account-self-password]')?.addEventListener('submit',e=>{
-    if(isSupabaseConfigured()) return;
+    if(isVpsApiConfigured()) return;
     e.preventDefault(); const form=e.currentTarget, data=new FormData(form), msg=form.querySelector('[data-account-self-message]');
     const s=session(), list=loadAccounts(), idx=list.findIndex(a=>a.id===s?.id); if(idx<0)return;
     const current=String(data.get('current')||''), next=String(data.get('next')||''), confirmPw=String(data.get('confirm')||'');

@@ -107,6 +107,23 @@ app.post("/api/auth/change-password", async (request, reply) => {
   return { ok: true, reloginRequired: true };
 });
 
+app.post("/api/auth/preferences", async (request, reply) => {
+  const user = await requireUser(request, reply);
+  if (!user) return;
+  const preferredLanguage = ["vi", "zh-TW"].includes(request.body?.preferredLanguage)
+    ? request.body.preferredLanguage
+    : "vi";
+  const { rows } = await query(
+    `update public.app_users
+     set preferred_language=$2
+     where id=$1
+     returning id,username,display_name,role,location,permissions,
+               preferred_language,active,password_changed_at`,
+    [user.id, preferredLanguage]
+  );
+  return { user: publicUser(rows[0]) };
+});
+
 app.get("/api/inventory/:site", async (request, reply) => {
   const user = await requireUser(request, reply);
   if (!user) return;

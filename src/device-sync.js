@@ -1,11 +1,4 @@
-import {
-  getSupabase,
-  getMyProfile,
-  invalidateMyProfileCache,
-  isSupabaseConfigured,
-  mirrorSupabaseSessionToLegacy,
-} from "./supabase-client.js";
-import { isVpsApiConfigured } from "./vps-api.js";
+import { vpsListUsers, vpsMe, vpsUpdatePreferences } from "./vps-api.js";
 
 const APP_KEY = "shitu-kitchen-os-v1";
 const AUTH_KEY = "shitu-kitchen-auth-v1";
@@ -14,10 +7,7 @@ const SYNC_INTERVAL = 60000;
 const MIN_SYNC_GAP = 10000;
 const ADMIN_ACCOUNTS_INTERVAL = 300000;
 
-let timer = 0;
 let running = false;
-let channel = null;
-let currentUserId = "";
 let lastSyncAt = 0;
 let lastAdminAccountsAt = 0;
 
@@ -33,7 +23,7 @@ function appLanguage(profileLanguage) {
   return profileLanguage === "zh-TW" || profileLanguage === "zh" ? "zh" : "vi";
 }
 
-function supabaseLanguage(appLang) {
+function apiLanguage(appLang) {
   return appLang === "zh" ? "zh-TW" : "vi";
 }
 
@@ -46,43 +36,39 @@ function applyLanguageToLocalState(profileLanguage) {
   return true;
 }
 
-function sessionSnapshot(profile) {
+function sessionSnapshot(user) {
+  const role = user.role || "employee";
   return {
-    id: profile.id,
-    username: profile.username,
-    name: profile.display_name,
-    role: profile.role === "admin" ? "admin" : profile.role === "central" ? "central" : "branch",
-    accountRole: profile.role,
-    location: profile.location,
-    permissions: profile.permissions || {},
-    preferredLanguage: profile.preferred_language || "vi",
-    provider: "supabase",
+    id: user.id,
+    username: user.username,
+    name: user.displayName || user.display_name || user.username,
+    role: role === "admin" ? "admin" : role === "central" ? "central" : "branch",
+    accountRole: role,
+    location: role === "admin" ? "all" : (user.location || "fuxing"),
+    permissions: user.permissions || {},
+    preferredLanguage: user.preferredLanguage || user.preferred_language || "vi",
+    provider: "vps",
   };
 }
 
-async function syncAdminAccounts(supabase, profile, { force = false } = {}) {
-  if (profile.role !== "admin") return false;
+async function syncAdminAccounts(profile, { force = false } = {}) {
+  if (profile.accountRole !== "admin") return false;
   const now = Date.now();
   if (!force && lastAdminAccountsAt && now - lastAdminAccountsAt < ADMIN_ACCOUNTS_INTERVAL) return false;
   lastAdminAccountsAt = now;
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id,username,display_name,role,location,active,permissions,preferred_language")
-    .order("created_at", { ascending: true });
-  if (error || !Array.isArray(data)) return false;
-
-  const next = data.map((p) => ({
-    id: p.id,
-    username: p.username,
+  const result = await vpsListUsers();
+  const next = (result?.users || []).map((user) => ({
+    id: user.id,
+    username: user.username,
     password: "",
-    name: p.display_name,
-    role: p.role,
-    location: p.location,
-    active: p.active,
-    permissions: p.permissions || {},
-    preferredLanguage: p.preferred_language || "vi",
-    provider: "supabase",
+    name: user.display_name,
+    role: user.role,
+    location: user.location,
+    active: user.active,
+    permissions: user.permissions || {},
+    preferredLanguage: user.preferred_language || "vi",
+    provider: "vps",
   }));
   const previous = readJson(ACCOUNTS_KEY);
   if (sameJson(previous, next)) return false;
@@ -91,102 +77,55 @@ async function syncAdminAccounts(supabase, profile, { force = false } = {}) {
   return true;
 }
 
-async function ensureBroadcastChannel(supabase, userId) {
-  if (!userId || (currentUserId === userId && channel)) return;
-  if (channel) {
-    try { await supabase.removeChannel(channel); } catch {}
-  }
-  currentUserId = userId;
-  channel = supabase
-    .channel(`kitchen-os-user-${userId}`, { config: { broadcast: { self: false } } })
-    .on("broadcast", { event: "preference" }, ({ payload }) => {
-      const changed = applyLanguageToLocalState(payload?.preferred_language);
-      if (changed) location.reload();
-    })
-    .on("broadcast", { event: "profile" }, () => {
-      invalidateMyProfileCache();
-      void syncNow({ force: true, forceAccounts: true });
-    })
-    .subscribe();
-}
-
 async function syncNow({ force = false, forceAccounts = false } = {}) {
-  if (isVpsApiConfigured() || !isSupabaseConfigured() || running) return;
+  if (running) return;
   const now = Date.now();
   if (!force && lastSyncAt && now - lastSyncAt < MIN_SYNC_GAP) return;
   running = true;
   lastSyncAt = now;
 
   try {
-    const supabase = await getSupabase();
-    if (!supabase) return;
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) return;
-
-    let profile;
-    try { profile = await getMyProfile({ force }); } catch { return; }
-    if (!profile?.id) return;
-    if (profile.active === false) {
-      try { await supabase.auth.signOut(); } catch {}
+    const result = await vpsMe();
+    const user = result?.user;
+    if (!user?.id || user.active === false) {
       localStorage.removeItem(AUTH_KEY);
-      location.reload();
+      window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
       return;
     }
 
-    await ensureBroadcastChannel(supabase, profile.id);
-
-    const previousSession = readJson(AUTH_KEY);
-    const nextSession = sessionSnapshot(profile);
-    const securityChanged = Boolean(previousSession) && (
-      previousSession.accountRole !== nextSession.accountRole ||
-      previousSession.location !== nextSession.location ||
-      previousSession.name !== nextSession.name ||
-      previousSession.username !== nextSession.username ||
-      !sameJson(previousSession.permissions || {}, nextSession.permissions || {})
+    const previous = readJson(AUTH_KEY);
+    const next = sessionSnapshot(user);
+    const securityChanged = Boolean(previous) && (
+      previous.accountRole !== next.accountRole ||
+      previous.location !== next.location ||
+      previous.name !== next.name ||
+      previous.username !== next.username ||
+      !sameJson(previous.permissions || {}, next.permissions || {})
     );
 
-    if (!sameJson(previousSession, nextSession)) {
-      await mirrorSupabaseSessionToLegacy(profile);
-    }
-
-    const languageChanged = applyLanguageToLocalState(profile.preferred_language);
-    await syncAdminAccounts(supabase, profile, { force: forceAccounts });
+    if (!sameJson(previous, next)) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+    const languageChanged = applyLanguageToLocalState(next.preferredLanguage);
+    await syncAdminAccounts(next, { force: forceAccounts });
 
     if (securityChanged) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
     if (languageChanged) location.reload();
+  } catch (error) {
+    if ([401, 403].includes(Number(error?.status))) {
+      localStorage.removeItem(AUTH_KEY);
+      window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
+    }
   } finally {
     running = false;
   }
 }
 
 async function persistLanguage(appLang) {
-  if (isVpsApiConfigured() || !isSupabaseConfigured()) return;
-  const supabase = await getSupabase();
-  if (!supabase) return;
-  const preferred_language = supabaseLanguage(appLang);
-  const { data, error } = await supabase.auth.updateUser({
-    data: { preferred_language },
-  });
-  if (error) return;
-
-  invalidateMyProfileCache();
-  const userId = data?.user?.id;
-  if (userId) {
-    await ensureBroadcastChannel(supabase, userId);
-    try {
-      await channel?.send({
-        type: "broadcast",
-        event: "preference",
-        payload: { preferred_language },
-      });
-    } catch {}
-  }
-
-  const session = readJson(AUTH_KEY);
-  if (session) {
-    session.preferredLanguage = preferred_language;
-    localStorage.setItem(AUTH_KEY, JSON.stringify(session));
-  }
+  const preferredLanguage = apiLanguage(appLang);
+  try {
+    const result = await vpsUpdatePreferences(preferredLanguage);
+    const next = sessionSnapshot(result?.user || {});
+    if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+  } catch {}
 }
 
 document.addEventListener("click", (event) => {
@@ -201,8 +140,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void syncNow();
 });
 window.addEventListener("online", () => { void syncNow({ force: true }); });
-
-timer = window.setInterval(() => {
+window.setInterval(() => {
   if (document.visibilityState === "visible") void syncNow();
 }, SYNC_INTERVAL);
 

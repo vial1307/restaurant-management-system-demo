@@ -1,5 +1,4 @@
-import { getSupabase, isSupabaseConfigured } from "./supabase-client.js";
-import { isVpsApiConfigured, vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
+import { vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
 import {
   getInventoryReceiveDefaults,
   getSiteInventoryRows,
@@ -19,19 +18,16 @@ export function siteLabel(site, language = "vi") {
   return language === "zh" ? found.zh : `${found.vi} · ${found.zh}`;
 }
 
-export async function loadSiteOperationData(site,{includeDestinations=false}={}) {
+export async function loadSiteOperationData(site, { includeDestinations = false } = {}) {
   const [rows, locations, workLocations] = await Promise.all([
     getSiteInventoryRows(site),
     getSiteLocations(site, "storage"),
     getSiteLocations(site, "work"),
   ]);
-  const destinationSites=INVENTORY_SITES.map((entry)=>entry.id).filter((target)=>target!==site);
-  const destinationMetadata=includeDestinations && isVpsApiConfigured()
-    ? await vpsInventoryDestinations(site,destinationSites)
+  const destinationSites = INVENTORY_SITES.map((entry) => entry.id).filter((target) => target !== site);
+  const destinationMetadata = includeDestinations
+    ? await vpsInventoryDestinations(site, destinationSites)
     : null;
-  const allSiteLocations=includeDestinations && !destinationMetadata
-    ? await Promise.all(INVENTORY_SITES.map((entry)=>getSiteLocations(entry.id,"storage")))
-    : [];
 
   const byItem = new Map();
   for (const row of rows) {
@@ -69,53 +65,11 @@ export async function loadSiteOperationData(site,{includeDestinations=false}={})
     byItem.set(item.id, current);
   }
 
-  const items=[...byItem.values()].sort((a,b)=>String(a.zh).localeCompare(String(b.zh),"zh-Hant"));
-  const catalogKeys=[...new Set(items.map((item)=>item.catalogKey).filter(Boolean))];
-
-  const destinationCatalog=destinationMetadata?.catalog ? [...destinationMetadata.catalog] : [];
-  const allRowsBySite=includeDestinations && !destinationMetadata
-    ? await Promise.all(INVENTORY_SITES.map((entry)=>getSiteInventoryRows(entry.id).catch(()=>[])))
-    : [];
-  for(let index=0;includeDestinations && !destinationMetadata && index<INVENTORY_SITES.length;index+=1){
-    const destinationSite=INVENTORY_SITES[index].id;
-    const grouped=new Map();
-    for(const row of allRowsBySite[index]||[]){
-      if(row.location?.kind!=="storage" || !row.item?.catalog_key) continue;
-      const key=row.item.catalog_key;
-      if(!grouped.has(key)){
-        grouped.set(key,{
-          site:destinationSite,
-          catalogKey:key,
-          itemId:row.item.id,
-          itemKey:row.item.item_key,
-          zh:row.item.name_zh_tw,
-          vi:row.item.name_vi,
-          locations:[],
-        });
-      }
-      const target=grouped.get(key);
-      if(!target.locations.some((location)=>location.id===row.location.id)){
-        target.locations.push({
-          id:row.location.id,
-          code:row.location.code,
-          name_zh_tw:row.location.name_zh_tw,
-          name_vi:row.location.name_vi,
-          quantity:Number(row.quantity)||0,
-          minimum:Number(row.minimum_quantity)||0,
-          site:destinationSite,
-        });
-      }
-    }
-    destinationCatalog.push(...grouped.values());
-  }
-  let receiveDefaults=[];
-  if(includeDestinations){
-    try{
-      receiveDefaults=await getInventoryReceiveDefaults({
-        sites:INVENTORY_SITES.map((entry)=>entry.id).filter((target)=>target!==site),
-        catalogKeys,
-      });
-    }catch{}
+  const items = [...byItem.values()].sort((a, b) => String(a.zh).localeCompare(String(b.zh), "zh-Hant"));
+  const catalogKeys = [...new Set(items.map((item) => item.catalogKey).filter(Boolean))];
+  let receiveDefaults = [];
+  if (includeDestinations) {
+    receiveDefaults = await getInventoryReceiveDefaults({ sites: destinationSites, catalogKeys }).catch(() => []);
   }
 
   return {
@@ -124,10 +78,10 @@ export async function loadSiteOperationData(site,{includeDestinations=false}={})
     locations,
     workLocations,
     receiveDefaults,
-    destinationCatalog,
+    destinationCatalog: destinationMetadata?.catalog || [],
     allLocations: includeDestinations
-      ? destinationMetadata?.locations || INVENTORY_SITES.flatMap((entry,index)=>(allSiteLocations[index]||[]).map((location)=>({...location,site:entry.id})))
-      : locations.map((location)=>({...location,site})),
+      ? destinationMetadata?.locations || []
+      : locations.map((location) => ({ ...location, site })),
   };
 }
 
@@ -138,174 +92,25 @@ export async function directBranchTransfer({
   quantity,
   note = "",
 }) {
-  if (isVpsApiConfigured()) {
-    try {
-      const data = await vpsDirectTransfer({
-        itemId,
-        sourceLocationId,
-        destinationLocationId,
-        quantity: Math.max(1,Number(quantity)||1),
-        note,
-      });
-      if (data?.from_site) await syncInventoryNow(data.from_site,{reloadBranch:false});
-      if (data?.to_site) await syncInventoryNow(data.to_site,{reloadBranch:false});
-      window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated",{detail:{transfer:data}}));
-      return { ok:true,data };
-    } catch (error) {
-      return { ok:false,error };
-    }
-  }
-
-  if (!isSupabaseConfigured()) return { ok:false, error:new Error("SUPABASE_REQUIRED") };
-  const supabase = await getSupabase();
-  const { data, error } = await supabase.rpc("direct_branch_transfer", {
-    p_item_id: itemId,
-    p_source_location_id: sourceLocationId,
-    p_destination_location_id: destinationLocationId,
-    p_quantity: Math.max(1,Number(quantity)||1),
-    p_note: note,
-  });
-  if (error) return { ok:false, error };
-  if (data?.from_site) await syncInventoryNow(data.from_site,{reloadBranch:false});
-  if (data?.to_site) await syncInventoryNow(data.to_site,{reloadBranch:false});
-  window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated",{detail:{transfer:data}}));
-  return { ok:true,data };
-}
-
-export async function dispatchBranchShipment({
-  itemId,
-  sourceLocationId,
-  toSite,
-  quantity,
-  note = "",
-}) {
-  if (!isSupabaseConfigured()) return { ok:false, error:new Error("SUPABASE_REQUIRED") };
-  const supabase = await getSupabase();
-  const { data, error } = await supabase.rpc("dispatch_branch_shipment", {
-    p_item_id: itemId,
-    p_source_location_id: sourceLocationId,
-    p_to_site: toSite,
-    p_quantity: Math.max(1, Number(quantity) || 1),
-    p_note: note,
-  });
-  if (error) return { ok:false, error };
-  const fromSite = data?.from_site;
-  if (fromSite) await syncInventoryNow(fromSite, { reloadBranch:false });
-  window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated", { detail:{ site:fromSite, transfer:data } }));
-  return { ok:true, data };
-}
-
-export async function receiveBranchShipment({
-  transferId,
-  destinationLocationId,
-  site,
-}) {
-  if (!isSupabaseConfigured()) return { ok:false, error:new Error("SUPABASE_REQUIRED") };
-  const supabase = await getSupabase();
-  const { data, error } = await supabase.rpc("receive_branch_shipment", {
-    p_transfer_id: transferId,
-    p_destination_location_id: destinationLocationId,
-  });
-  if (error) return { ok:false, error };
-  if (site) await syncInventoryNow(site, { reloadBranch:false });
-  window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated", { detail:{ site, transfer:data } }));
-  return { ok:true, data };
-}
-
-export async function cancelBranchShipment(transferId) {
-  if (!isSupabaseConfigured()) return { ok:false, error:new Error("SUPABASE_REQUIRED") };
-  const supabase = await getSupabase();
-  const { data, error } = await supabase.rpc("cancel_dispatched_shipment", {
-    p_transfer_id: transferId,
-  });
-  if (error) return { ok:false, error };
-  window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated", { detail:{ transfer:data } }));
-  return { ok:true, data };
-}
-
-export async function listShipments(site, {
-  direction = "all",
-  status = "",
-  limit = 100,
-} = {}) {
-  if (!isSupabaseConfigured()) return [];
-  const supabase = await getSupabase();
-
-  let query = supabase
-    .from("inventory_transfers")
-    .select("id,transfer_no,from_site,to_site,transfer_type,status,note,created_by,dispatched_by,received_by,created_at,dispatched_at,received_at,cancelled_at")
-    .order("created_at",{ascending:false})
-    .limit(Math.max(1,Math.min(300,Number(limit)||100)));
-
-  if (direction === "incoming") query = query.eq("to_site",site);
-  else if (direction === "outgoing") query = query.eq("from_site",site);
-  else query = query.or(`from_site.eq.${site},to_site.eq.${site}`);
-  if (status) query = query.eq("status",status);
-
-  const { data: transfers, error } = await query;
-  if (error || !transfers?.length) return [];
-
-  const ids = transfers.map((entry)=>entry.id);
-  const { data: lines } = await supabase
-    .from("inventory_transfer_lines")
-    .select("id,transfer_id,source_item_id,destination_item_id,source_location_id,destination_location_id,quantity,received_quantity,unit")
-    .in("transfer_id",ids);
-
-  const itemIds = [...new Set((lines||[]).flatMap((line)=>[line.source_item_id,line.destination_item_id]).filter(Boolean))];
-  const locationIds = [...new Set((lines||[]).flatMap((line)=>[line.source_location_id,line.destination_location_id]).filter(Boolean))];
-  const actorIds = [...new Set(transfers.flatMap((entry)=>[entry.created_by,entry.dispatched_by,entry.received_by]).filter(Boolean))];
-
-  const [{ data:items },{ data:locations },{ data:actors }] = await Promise.all([
-    itemIds.length ? supabase.from("inventory_items").select("id,name_zh_tw,name_vi,unit,catalog_key").in("id",itemIds) : Promise.resolve({data:[]}),
-    locationIds.length ? supabase.from("inventory_locations").select("id,code,name_zh_tw,name_vi,site").in("id",locationIds) : Promise.resolve({data:[]}),
-    actorIds.length ? supabase.from("profiles").select("id,display_name,username").in("id",actorIds) : Promise.resolve({data:[]}),
-  ]);
-
-  const itemMap = new Map((items||[]).map((entry)=>[entry.id,entry]));
-  const locationMap = new Map((locations||[]).map((entry)=>[entry.id,entry]));
-  const actorMap = new Map((actors||[]).map((entry)=>[entry.id,entry]));
-  const linesByTransfer = new Map();
-  for (const line of lines||[]) {
-    const arr = linesByTransfer.get(line.transfer_id) || [];
-    arr.push({
-      ...line,
-      sourceItem:itemMap.get(line.source_item_id),
-      destinationItem:itemMap.get(line.destination_item_id),
-      sourceLocation:locationMap.get(line.source_location_id),
-      destinationLocation:locationMap.get(line.destination_location_id),
+  try {
+    const data = await vpsDirectTransfer({
+      itemId,
+      sourceLocationId,
+      destinationLocationId,
+      quantity: Math.max(1, Number(quantity) || 1),
+      note,
     });
-    linesByTransfer.set(line.transfer_id,arr);
+    if (data?.from_site) await syncInventoryNow(data.from_site, { reloadBranch: false });
+    if (data?.to_site) await syncInventoryNow(data.to_site, { reloadBranch: false });
+    window.dispatchEvent(new CustomEvent("shitu:inventory-transfer-updated", { detail: { transfer: data } }));
+    return { ok: true, data };
+  } catch (error) {
+    return { ok: false, error };
   }
-
-  return transfers.map((entry)=>({
-    ...entry,
-    lines:linesByTransfer.get(entry.id)||[],
-    createdBy:actorMap.get(entry.created_by),
-    dispatchedBy:actorMap.get(entry.dispatched_by),
-    receivedBy:actorMap.get(entry.received_by),
-  }));
 }
 
-export async function countPendingIncoming(site) {
-  const list = await listShipments(site,{direction:"incoming",status:"dispatched",limit:100});
-  return list.length;
-}
-
-export async function watchInventoryTransfers(site, onChange) {
-  if (isVpsApiConfigured()) return () => {};
-  if (!isSupabaseConfigured()) return () => {};
-  const supabase = await getSupabase();
-  const channel = supabase
-    .channel(`kitchen-os-transfers-${site}-${Date.now()}`)
-    .on("postgres_changes",{event:"*",schema:"public",table:"inventory_transfers"},(payload)=>{
-      const row = payload.new || payload.old || {};
-      if (row.from_site===site || row.to_site===site) onChange?.(payload);
-    })
-    .on("postgres_changes",{event:"*",schema:"public",table:"inventory_transfer_lines"},()=>{
-      onChange?.();
-    })
-    .subscribe();
-  return async () => {
-    try { await supabase.removeChannel(channel); } catch {}
-  };
+// VPS uses immediate atomic transfers. Cross-device convergence is handled by
+// focus/visibility refresh and the inventory polling loop.
+export async function watchInventoryTransfers() {
+  return () => {};
 }

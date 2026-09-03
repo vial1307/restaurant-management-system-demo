@@ -4,10 +4,10 @@ These rules are mandatory for every future feature, fix, refactor, and UI update
 
 ## 1. One account system / SSO-ready architecture
 
-- Supabase Auth is the current identity source.
+- VPS API + PostgreSQL is the only identity and permission source.
 - Authentication, session, role, workplace, permissions, and user preferences must not depend on one browser's localStorage.
 - New code must remain portable to a future VPS deployment.
-- Do not hard-code provider-specific behavior into UI components. Keep auth/data access behind dedicated modules so Supabase can later be replaced or fronted by VPS services.
+- Keep provider-specific behavior behind the VPS API modules; UI components must not access PostgreSQL directly.
 
 ## 2. Cross-device consistency
 
@@ -31,7 +31,7 @@ Browser localStorage may be used only as cache/offline fallback, never as the au
 ## 3. Data synchronization
 
 - Shared business data must use the cloud database as the source of truth.
-- Prefer Realtime where useful, plus focus/visibility refresh and periodic fallback synchronization.
+- Use focus/visibility refresh and periodic polling until VPS SSE/WebSocket synchronization is introduced.
 - Writes must be idempotent or auditable when possible.
 - Inventory mutations must create transaction/audit records.
 - Direct stocktake correction is restricted to supervisor/manager/admin and must record before/after values.
@@ -75,9 +75,9 @@ Permission checks must exist in both:
 
 Do not rely only on hidden buttons for security.
 
-## 7. Migration to VPS
+## 7. VPS architecture
 
-New modules should be designed so migration can happen incrementally.
+All runtime modules must use the VPS API. Supabase runtime imports and direct browser database connections are prohibited.
 
 Keep these boundaries:
 - UI
@@ -88,12 +88,11 @@ Keep these boundaries:
 
 Avoid coupling pages directly to Supabase internals when a small data-service abstraction can be used.
 
-Future VPS target can replace:
-- Supabase Auth -> VPS/OIDC-compatible identity service if desired
-- Supabase Database/RPC -> PostgreSQL + backend API
-- Supabase Realtime -> WebSocket/SSE service
-
-The UI and permission model should require minimal changes.
+Current stack:
+- VPS session authentication
+- PostgreSQL behind the Node.js API
+- polling plus focus/visibility refresh
+- optional future WebSocket/SSE without changing the UI permission model
 
 ## 8. Release checklist
 
@@ -153,7 +152,7 @@ Mandatory review areas:
 ### Performance
 - Check for repeated full-page renders, MutationObserver loops, duplicate subscriptions, memory leaks, and unnecessary network calls.
 - Debounce high-frequency search/input events.
-- Avoid repeated Supabase queries when cached/live data is already valid.
+- Avoid repeated API queries when cached data is still valid.
 - Confirm Service Worker does not serve mixed release versions.
 
 ### Browser/PWA compatibility

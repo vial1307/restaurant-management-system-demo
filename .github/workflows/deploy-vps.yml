@@ -55,10 +55,12 @@ jobs:
         run: |
           set -euo pipefail
           test -f index.html
+          test -f vps-entry.html
           test -f manifest.webmanifest
           test -f sw.js
           test -f vps/docker-compose.yml
           test -f vps/Caddyfile
+          test -f src/vps-auth-bridge.js
           test -f vps/scripts/deploy-api.sh
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
