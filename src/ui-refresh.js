@@ -183,6 +183,8 @@ function formatBilingualLabels(root=document.body){
 
 let frame=0;
 const pendingRoots=new Set();
+const OBSERVER_OPTIONS={childList:true,subtree:true};
+let observer=null;
 
 function schedule(root=document.body){
   if(!root) return;
@@ -197,24 +199,35 @@ function schedule(root=document.body){
         otherIndex!==index && other instanceof Element && candidate instanceof Node && other.contains(candidate)
       )
     );
-    for(const root of compact){
-      patchText(root);
-      patchSearchPlaceholders(root);
-      patchTables(root);
-      formatBilingualLabels(root);
+
+    // The patcher itself adds/removes text and label nodes. Disconnecting here
+    // prevents those internal changes from recursively scheduling more patch
+    // frames and causing visible jank after a large app render.
+    observer?.disconnect();
+    try{
+      for(const root of compact){
+        patchText(root);
+        patchSearchPlaceholders(root);
+        patchTables(root);
+        formatBilingualLabels(root);
+      }
+    }finally{
+      observer?.takeRecords();
+      observer?.observe(document.body,OBSERVER_OPTIONS);
     }
   });
 }
 
-schedule(document.body);
-new MutationObserver((mutations)=>{
+observer=new MutationObserver((mutations)=>{
   for(const mutation of mutations){
     for(const node of mutation.addedNodes){
       if(node.nodeType===Node.ELEMENT_NODE) schedule(node);
       else if(node.nodeType===Node.TEXT_NODE) schedule(node.parentElement);
     }
   }
-}).observe(document.body,{childList:true,subtree:true});
+});
+observer.observe(document.body,OBSERVER_OPTIONS);
+schedule(document.body);
 
 window.addEventListener("hashchange",()=>schedule(document.body));
 document.addEventListener("click",e=>{
