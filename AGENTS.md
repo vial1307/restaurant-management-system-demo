@@ -5,19 +5,20 @@ This file is mandatory guidance for every human engineer and AI coding agent wor
 Primary specification: `docs/SYSTEM_SPECIFICATION.md`
 Supporting rules:
 - `docs/DEVELOPMENT_RULES.md`
+- `docs/FRONTEND_DATA_RULES.md`
 - `docs/INVENTORY_TRANSFER_SPEC.md`
 - `docs/DATABASE_PERSISTENCE_AUDIT.md`
 
 ## 1. Read the spec first
 
-Before changing code, identify the affected section of `docs/SYSTEM_SPECIFICATION.md`.
+Before changing code, identify the affected section of `docs/SYSTEM_SPECIFICATION.md` and the applicable supporting rule documents.
 
 If the requested behavior differs from the current specification:
-1. update the specification first;
+1. update the specification/rule first;
 2. write acceptance criteria/examples;
 3. then change code and tests.
 
-Do not implement a new interpretation only from conversation context while leaving the canonical spec unchanged.
+Do not implement a new interpretation only from conversation context while leaving the canonical repository documentation unchanged.
 
 ## 2. Never remove existing behavior accidentally
 
@@ -35,15 +36,41 @@ If intentional removal is required, it must be explicitly documented in the spec
 
 ## 3. PostgreSQL is the shared source of truth
 
-Business data that is shared across devices must persist through the VPS API into PostgreSQL.
+All shared business data must persist through the Kitchen OS VPS API into PostgreSQL.
 
-`localStorage` is cache/fallback/UI state only.
+`localStorage`, IndexedDB, service-worker cache and in-memory state are cache/fallback/UI state only unless a future explicit specification says otherwise.
 
 Never report a save as successful merely because local cache changed.
 
-Never overwrite newer server stock with stale browser state.
+Never overwrite newer server state with stale browser state.
 
-## 4. Database changes
+## 4. Every interactive control must have a verified result
+
+A button is not complete just because it renders or receives a click event.
+
+For every data-changing action:
+- show pending/processing state where appropriate;
+- send the operation through the VPS API;
+- validate permission/input/business rules server-side;
+- persist the database change;
+- show success only after VPS confirmation;
+- show a useful error on validation, permission, network, API or database failure;
+- reconcile the visible state with the server result;
+- prevent accidental duplicate submissions where relevant.
+
+Fake-success UI states are prohibited.
+
+## 5. Frontend and responsive standard
+
+All text, buttons, forms, cards, modals, tables, alerts and navigation must follow the responsive/component rules in `docs/FRONTEND_DATA_RULES.md`.
+
+Bootstrap-style responsive standards are required. If Bootstrap itself is used, it must be self-hosted with the application; do not add a third-party Bootstrap CDN dependency.
+
+Long Vietnamese/Traditional Chinese labels and user-entered text must remain readable. Prefer wrapping, stacking, responsive sizing and safe overflow over clipping or hiding important text.
+
+Equivalent desktop/mobile layouts may rearrange, but must preserve the same functional meaning and access unless an explicit product rule says otherwise.
+
+## 6. Database changes
 
 Do not rewrite an already-applied production migration to change history.
 
@@ -57,7 +84,7 @@ For schema changes:
 
 No destructive migration without explicit product approval and a recovery plan.
 
-## 5. Inventory invariants
+## 7. Inventory invariants
 
 All stock mutations must preserve these invariants:
 
@@ -77,7 +104,7 @@ Do not change the semantics of:
 - `庫存轉撥` = same-site storage movement;
 - `出貨` = cross-site shipment.
 
-## 6. Permissions
+## 8. Permissions
 
 Every permission-sensitive feature must be enforced in both:
 - frontend interaction/visibility;
@@ -90,15 +117,53 @@ Test at minimum:
 
 A hidden button is not authorization.
 
-## 7. Cross-device and responsive requirement
+## 9. Cross-device and translation consistency
 
 Every functional UI change must be verified on desktop and mobile.
 
-Critical inventory and Save controls must not disappear, clip, or become unreachable at small widths.
+Critical controls must not disappear, clip, become unreadable or become unreachable at small widths.
 
-Check representative mobile widths and landscape when the changed layout can be affected.
+The same account/site must converge to the same:
+- data;
+- permissions;
+- business rules;
+- module visibility;
+- language preference;
+- translated labels;
+- action semantics;
+- audit/history.
 
-## 8. Synchronization
+New UI text must enter the translation catalog and be checked for responsive overflow.
+
+## 10. Cross-module and cross-branch synchronization
+
+Shared business facts must not be maintained as independent unsynchronized copies.
+
+Review all affected dependencies, including examples such as:
+- inventory <-> procurement/shortage alerts;
+- reservations <-> preparation/staffing;
+- SOP revision <-> training/skills qualification;
+- schedules <-> staffing assessment.
+
+Equivalent features in Central Kitchen, Fuxing and Yongji must remain functionally consistent unless the canonical spec explicitly defines a branch-specific difference.
+
+A common feature fix must include a branch-parity review.
+
+## 11. VPS-only runtime authority
+
+Core runtime architecture is:
+
+`Browser/UI -> Kitchen OS VPS API -> PostgreSQL`
+
+Do not introduce Supabase, Firebase or another parallel hosted backend as an authoritative runtime path without an explicit architecture-spec change.
+
+Core authentication, permission, inventory mutation, business-state persistence and critical synchronization must remain under Kitchen OS VPS control.
+
+GitHub is the approved external service for source-code storage, version history, CI/CD workflow and deployment source.
+
+Any other external integration must be documented and must not silently become the authoritative business-data processor.
+
+## 12. Synchronization
 
 After changes involving shared business data, verify:
 - one-device write;
@@ -108,13 +173,13 @@ After changes involving shared business data, verify:
 - stale state convergence;
 - no unintended device-data erasure from partial server state.
 
-## 9. Service worker/release cache
+## 13. Service worker/release cache
 
 When frontend assets change, ensure release/service-worker cache behavior cannot serve mixed versions.
 
 Do not solve cache problems by deleting business data.
 
-## 10. Mandatory validation before completion
+## 14. Mandatory validation before completion
 
 Run all applicable checks:
 
@@ -126,25 +191,32 @@ Run all applicable checks:
 6. permission test;
 7. inventory atomicity/audit test when inventory is affected;
 8. desktop browser smoke test;
-9. mobile browser smoke test;
-10. production smoke test after deployment.
+9. mobile browser smoke test across representative breakpoints;
+10. long-label/bilingual responsive test;
+11. cross-module dependency test when shared facts change;
+12. branch-parity test when a shared branch feature changes;
+13. production smoke test after deployment.
 
 A feature is not complete just because the edited page looks correct locally.
 
-## 11. Git discipline
+## 15. Git discipline
 
 Every completed stage must be committed to GitHub with the complete coherent change set.
 
-Do not leave required migration, test, module include, service-worker reference, or documentation change outside the commit.
+Do not leave required migration, test, module include, service-worker reference, translation, documentation or dependency update outside the commit.
 
-## 12. Definition of Done
+## 16. Definition of Done
 
 A change is `DONE` only when:
 - implementation matches the canonical spec;
-- data persists correctly;
-- permissions are correct;
+- every changed control produces correct pending/success/error behavior;
+- VPS/API confirms data-changing success;
+- PostgreSQL persistence is verified;
+- permissions are correct frontend and backend;
+- cross-module dependencies remain synchronized;
+- branch-equivalent behavior remains consistent unless explicitly exempted;
+- responsive desktop/mobile behavior and translations are verified;
 - regression tests pass;
-- mobile and desktop behavior is verified;
 - existing adjacent functions remain present;
 - documentation is current;
 - GitHub contains the completed change;
