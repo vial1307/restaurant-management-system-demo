@@ -41,6 +41,8 @@ assert.equal(inventory.response.status, 200);
 const beef = inventory.data.items.find((item) => item.catalog_key === "beef");
 const freezer = inventory.data.locations.find((location) => location.code === "fuxing-freezer");
 assert(beef && freezer, "concurrency fixture beef/freezer missing");
+const originalStockRow = inventory.data.stock.find((row) => row.item_id === beef.id && row.location_id === freezer.id);
+const originalQuantity = Number(originalStockRow?.quantity || 0);
 
 const baseline = 50;
 const reset = await request("/api/inventory/set-quantity", {
@@ -80,22 +82,49 @@ assert.equal(concurrentTransactions.length, mutationCount, "not every concurrent
 assert(concurrentTransactions.some((tx) => tx.actor_username === "employeefx"), "employee actor missing from concurrent audit history");
 assert(concurrentTransactions.some((tx) => tx.actor_username === "supervisorfx"), "supervisor actor missing from concurrent audit history");
 
-// Distinct business modules saved at the same time must both survive. The
-// server locks the site row, re-reads current modules and merges only modules
-// the authenticated user is allowed to edit.
+// Return the stock fixture to its pre-test quantity so later browser tests do
+// not inherit a synthetic load-test quantity.
+const restoreStock = await request("/api/inventory/set-quantity", {
+  method:"POST",
+  cookie:adminCookie,
+  body:{ itemId:beef.id, locationId:freezer.id, quantity:originalQuantity },
+});
+assert.equal(restoreStock.response.status, 200, "failed to restore inventory concurrency fixture");
+
+// Distinct business modules saved at the same time must both survive. Preserve
+// every pre-existing field so this regression does not destroy fixtures that
+// subsequent browser tests expect.
+const beforeBusiness = await request("/api/business-state/fuxing", { cookie:adminCookie });
+assert.equal(beforeBusiness.response.status, 200);
+const originalSettings = structuredClone(beforeBusiness.data.modules.settings || {});
+const originalAttendance = structuredClone(beforeBusiness.data.modules.attendance || { attendance:[], payroll:{} });
+
+const testSettings = {
+  ...originalSettings,
+  concurrencyMarker:"admin-settings-write",
+};
+const testAttendance = {
+  ...originalAttendance,
+  attendance:[
+    ...(Array.isArray(originalAttendance.attendance) ? originalAttendance.attendance : []),
+    { id:"concurrency-attendance", employeeId:"staff-concurrency", clockIn:"2026-09-05T00:00:00.000Z" },
+  ],
+  payroll:{
+    ...(originalAttendance.payroll || {}),
+    concurrencyMarker:"employee-attendance-write",
+  },
+};
+
 const businessWrites = await Promise.all([
   request("/api/business-state/fuxing", {
     method:"POST",
     cookie:adminCookie,
-    body:{ modules:{ settings:{ concurrencyMarker:"admin-settings-write" } } },
+    body:{ modules:{ settings:testSettings } },
   }),
   request("/api/business-state/fuxing", {
     method:"POST",
     cookie:employeeCookie,
-    body:{ modules:{ attendance:{
-      attendance:[{ id:"concurrency-attendance", employeeId:"staff-concurrency", clockIn:"2026-09-05T00:00:00.000Z" }],
-      payroll:{ concurrencyMarker:"employee-attendance-write" },
-    } } },
+    body:{ modules:{ attendance:testAttendance } },
   }),
 ]);
 for (const [index, result] of businessWrites.entries()) {
@@ -106,6 +135,13 @@ const sharedState = await request("/api/business-state/fuxing", { cookie:adminCo
 assert.equal(sharedState.response.status, 200);
 assert.equal(sharedState.data.modules.settings?.concurrencyMarker, "admin-settings-write", "concurrent settings module was overwritten");
 assert.equal(sharedState.data.modules.attendance?.payroll?.concurrencyMarker, "employee-attendance-write", "concurrent attendance module was overwritten");
+
+const restoreBusiness = await request("/api/business-state/fuxing", {
+  method:"POST",
+  cookie:adminCookie,
+  body:{ modules:{ settings:originalSettings, attendance:originalAttendance } },
+});
+assert.equal(restoreBusiness.response.status, 200, "failed to restore business-state concurrency fixtures");
 
 // Read fan-out is a lightweight CI safety check for the current DB pool. It is
 // deliberately not a production stress test.
@@ -118,6 +154,7 @@ assert(fanout.every((result) => result.response.status === 200), "concurrent inv
 
 console.log("MULTI_USER_CONCURRENCY_OK", JSON.stringify({
   inventoryMutations:mutationCount,
-  finalQuantity:Number(finalRow.quantity),
+  verifiedQuantity:Number(finalRow.quantity),
+  restoredQuantity:originalQuantity,
   concurrentReads:fanout.length,
 }));
