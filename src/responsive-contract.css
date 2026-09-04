@@ -1,0 +1,189 @@
+/* Kitchen OS responsive/readability contract.
+   This layer is intentionally loaded last. It standardizes interactive
+   geometry and bilingual wrapping without changing business behavior. */
+
+:root {
+  --kitchen-control-font-min: 12px;
+  --kitchen-control-height: 32px;
+  --kitchen-touch-height: 40px;
+}
+
+html,
+body,
+#app,
+.app-shell,
+.main-shell,
+.page-content {
+  max-width: 100%;
+}
+
+button,
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  min-width: 0;
+  font-size: max(var(--kitchen-control-font-min), 0.75rem);
+}
+
+button,
+[role="button"],
+.nav-item {
+  min-height: var(--kitchen-control-height);
+}
+
+button:not(.icon-button),
+.primary-button,
+.secondary-button,
+.danger-button,
+.central-action,
+.op-primary,
+.operation-filter-chip,
+.operation-tab,
+.report-tab,
+.permission-action,
+.level-pill,
+.area-tabs button,
+.qr-action-button,
+.qr-print-sheet button,
+.central-zone-tab,
+.central-mode-tab,
+.calendar-shortcut,
+.language-switch > button,
+.topbar-language-switch > button,
+.auth-user-chip button,
+.skill-layout-toggle button {
+  min-width: 24px;
+  min-height: var(--kitchen-control-height);
+  font-size: var(--kitchen-control-font-min);
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.icon-button {
+  min-width: var(--kitchen-control-height);
+  min-height: var(--kitchen-control-height);
+}
+
+.calendar-field input,
+.calendar-field select,
+.modal .input-grid input,
+.modal .input-grid select,
+.account-modal input,
+.account-modal select,
+.account-modal textarea,
+.central-editor-modal input,
+.central-editor-modal select,
+.central-editor-modal textarea {
+  font-size: max(12px, 0.8rem);
+}
+
+.bilingual-control-label,
+.bilingual-control-label > span,
+.label-primary,
+.label-secondary,
+button > span,
+.nav-item > span {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Long translated labels should reflow before the control shrinks below a
+   readable size. */
+.branch-ops-tabs,
+.central-tabs,
+.inventory-view-switch,
+.warehouse-switch,
+.filters-row,
+.actions-row,
+.modal-actions,
+.account-actions {
+  min-width: 0;
+}
+
+.branch-ops-tabs button,
+.central-tabs button,
+.inventory-view-switch button,
+.warehouse-switch button,
+.filter-tab {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Scrolling is allowed inside a deliberate table/strip container, never as a
+   consequence of the document itself being wider than the device. */
+.inventory-table,
+.account-table,
+.table-scroll,
+.storage-table-scroll {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  html,
+  body,
+  #app,
+  .app-shell,
+  .main-shell {
+    width: 100%;
+    min-width: 0 !important;
+    overflow-x: clip;
+  }
+
+  button,
+  [role="button"],
+  .nav-item,
+  .primary-button,
+  .secondary-button,
+  .danger-button,
+  .central-action,
+  .op-primary,
+  .operation-filter-chip,
+  .operation-tab,
+  .report-tab,
+  .permission-action,
+  .level-pill,
+  .area-tabs button,
+  .qr-action-button,
+  .central-zone-tab,
+  .central-mode-tab,
+  .calendar-shortcut {
+    min-height: var(--kitchen-touch-height);
+    font-size: 12px;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .calendar-field input,
+  .calendar-field select,
+  .modal .input-grid input,
+  .modal .input-grid select,
+  .account-modal input,
+  .account-modal select,
+  .account-modal textarea,
+  .central-editor-modal input,
+  .central-editor-modal select,
+  .central-editor-modal textarea {
+    font-size: 16px;
+  }
+
+  .modal-card,
+  .account-modal,
+  .central-editor-modal {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 12px);
+  }
+
+  .modal-actions,
+  .account-actions,
+  .page-heading,
+  .filters-row {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+}
