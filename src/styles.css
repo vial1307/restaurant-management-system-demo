@@ -332,7 +332,10 @@ a { color: inherit; text-decoration: none; }
 .modal-location-row > label > input[type="number"] { height: 32px; padding: 0 7px; }
 .modal-location-choice { display: flex !important; min-height: 32px; align-items: center; gap: 7px !important; color: var(--ink) !important; font-size: 10px !important; }
 .modal-location-choice > input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); }
-.modal-submit-bar { position: sticky; z-index: 7; bottom: -22px; margin: 2px -22px -22px; padding: 10px 22px 22px; border-top: 1px solid var(--line); background: rgb(255 255 255 / 96%); box-shadow: 0 -10px 24px rgb(17 39 36 / 7%); }
+.modal-heading-actions { display: flex; align-items: center; gap: 8px; }
+.modal-header-save { min-height: 36px; padding: 0 11px; color: var(--green); }
+.modal-header-save > .icon { width: 15px; height: 15px; }
+.modal-submit-bar { position: sticky; z-index: 7; bottom: -22px; margin: 2px -22px -22px; padding: 10px 22px calc(22px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgb(255 255 255 / 96%); box-shadow: 0 -10px 24px rgb(17 39 36 / 7%); }
 .modal-submit { width: 100%; min-height: 44px; margin: 0; font-size: 12px; }
 .mobile-nav { display: none; }
 
@@ -800,6 +803,8 @@ a { color: inherit; text-decoration: none; }
   .mobile-nav > .nav-item.active { background: transparent; color: var(--green); }
   .mobile-nav > .nav-item.active > .icon { color: var(--green); }
   .modal-card { padding: 17px; }
+  .modal-header-save { min-height: 34px; max-width: 190px; padding: 0 9px; font-size: 10px; }
+  .modal-header-save > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .modal-location-row { grid-template-columns: minmax(100px, 1.15fr) minmax(54px, .7fr) minmax(54px, .7fr); gap: 5px; }
   .page-actions { justify-content: flex-end; gap: 5px; }
   .page-actions > .secondary-button, .page-actions > .primary-button { min-height: 35px; padding: 0 7px; font-size: 9px; }

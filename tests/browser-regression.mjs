@@ -134,11 +134,12 @@ async function adminDesktop(browser) {
   await add.waitFor({state:"visible"});
   await add.click();
   await page.locator('form[data-form="add-item"]').waitFor({state:"visible"});
-  const saveProduct=page.locator('[data-save-item]');
+  const saveProduct=page.locator('.modal-header-save[data-save-item]');
   await saveProduct.waitFor({state:"visible"});
   assert.match(await saveProduct.innerText(),/Lưu sản phẩm/);
   const saveBox=await saveProduct.boundingBox();
-  assert(saveBox && saveBox.y + saveBox.height <= 900,"product save button is outside the visible viewport");
+  const viewport=page.viewportSize();
+  assert(saveBox && viewport && saveBox.y >= 0 && saveBox.y + saveBox.height <= viewport.height,"product save button is outside the visible viewport");
   await page.locator('button[data-action="close-modal"]').first().click();
   await page.locator(".modal-backdrop").waitFor({state:"detached"});
 
@@ -250,6 +251,10 @@ async function roleDesktop(browser, username, checks) {
       await manage.click();
       await page.locator('[data-central-editor-open="new"]').waitFor({state:"visible"});
       assert((await page.locator('[data-central-manage-adjust="true"]').count()) > 0,"central management quantity controls missing");
+      await page.locator('[data-central-editor-open="new"]').click();
+      const centralSave=page.locator('.modal-header-save[data-central-save-item]');
+      await centralSave.waitFor({state:"visible"});
+      assert.match(await centralSave.innerText(),/Lưu sản phẩm|儲存品項/,"central product save action missing");
       await page.locator('[data-central-editor-open="new"]').click();
       const centralSave=page.locator('[data-central-save-item]');
       await centralSave.waitFor({state:"visible"});
