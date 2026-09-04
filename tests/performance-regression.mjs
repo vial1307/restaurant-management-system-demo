@@ -30,5 +30,7 @@ assert.match(deploy, /SOURCE_BEFORE=.*rev-parse HEAD/, "deploy must capture the 
 assert.match(deploy, /SOURCE_AFTER=.*rev-parse HEAD/, "deploy must capture the source revision after pulling");
 assert.match(deploy, /KITCHEN_DEPLOY_REEXEC/, "deploy must reload itself when git pull changes deployment logic");
 assert.match(deploy, /exec \/usr\/bin\/bash .*deploy-api\.sh/, "deploy self-reload must execute the newly pulled script");
+assert.match(deploy, /docker run --rm[\s\S]{0,400}node:22-alpine[\s\S]{0,200}stamp-frontend-release\.mjs/, "frontend release stamping must run inside the pinned Node container");
+assert.doesNotMatch(deploy, /^node .*stamp-frontend-release\.mjs/m, "deployment must not require Node.js installed on the VPS host");
 
 console.log("PERFORMANCE_REGRESSION_OK");
