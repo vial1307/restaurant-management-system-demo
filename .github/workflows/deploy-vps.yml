@@ -44,6 +44,9 @@ jobs:
       - name: Full static regression
         run: node tests/static-regression.mjs
 
+      - name: Performance regression guards
+        run: node tests/performance-regression.mjs
+
       - name: Validate backend JavaScript
         run: |
           set -euo pipefail
