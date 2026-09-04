@@ -60,7 +60,26 @@ async function setSite(page, site) {
   await selectToday(page);
 
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, {timeout:10000});
-  await page.waitForFunction(() => document.querySelectorAll(".inventory-row,.central-row,.central-manage-row").length > 0,{timeout:10000});
+  try {
+    await page.waitForFunction(() => document.querySelectorAll(".inventory-row,.central-row,.central-manage-row").length > 0,{timeout:10000});
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => {
+      const state = JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null");
+      const selected = state?.selectedDate;
+      const record = state?.records?.[selected];
+      return {
+        href:location.href,
+        selectedDate:selected,
+        browserToday:new Date().toISOString().slice(0,10),
+        activeSite:localStorage.getItem("shitu-admin-active-site-v1"),
+        cloud:localStorage.getItem("shitu-inventory-cloud-v2"),
+        inventory:Number(record?.inventory?.length || 0),
+        workInventory:Number(record?.workInventory?.length || 0),
+        pageText:document.querySelector(".page-content")?.innerText?.slice(0,300) || "",
+      };
+    });
+    throw new Error(`inventory rows did not render: ${JSON.stringify(diagnostics)}`, { cause:error });
+  }
 }
 
 async function assertRoutePermissions(page, username) {
