@@ -38,8 +38,14 @@ async function selectToday(page) {
 }
 
 async function setSite(page, site) {
-  await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
-  await page.waitForSelector(".page-content");
+  const currentRoute = await page.evaluate(() => location.hash.replace(/^#\/?/, "").split("?")[0] || "dashboard");
+  if (currentRoute !== "inventory") {
+    const inventoryNav = page.locator('.desktop-nav .nav-item[href="#inventory"]:visible, .mobile-nav .nav-item[href="#inventory"]:visible').first();
+    await inventoryNav.waitFor({ state:"visible", timeout:10000 });
+    await inventoryNav.click();
+  }
+  await page.waitForFunction(() => location.hash.replace(/^#\/?/, "").split("?")[0] === "inventory");
+  await page.locator(".inventory-sql-status,.inventory-cloud-notice,.central-heading").first().waitFor({ state:"visible", timeout:10000 });
 
   const activeSite = await page.evaluate(() => {
     try {
