@@ -8,6 +8,7 @@ const PASSWORD = "KitchenTest!123";
 async function login(page, username) {
   await page.goto(BASE + "/", { waitUntil:"domcontentloaded" });
   await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:10000 });
+  assert.equal(await page.locator(".app-shell").count(),0,"unauthenticated sessions must not render the full application behind login");
   await page.locator('#auth-login-form input[name="username"]').fill(username);
   await page.locator('#auth-login-form input[name="password"]').fill(PASSWORD);
   await page.locator('#auth-login-form button[type="submit"]').click();
@@ -194,10 +195,20 @@ async function adminDesktop(browser) {
   await page.locator('[data-central-zone="all"]').first().click();
   assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"central all-zone filter did not restore rows");
 
+  const navigationCount=await page.evaluate(()=>performance.getEntriesByType("navigation").length);
+  await page.locator('[data-warehouse="fuxing"]').click();
+  await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
+  assert.equal(await page.locator(".central-heading").count(),0,"central page remained mounted after switching warehouse");
+  assert.equal(await page.evaluate(()=>performance.getEntriesByType("navigation").length),navigationCount,"switching warehouses reloaded the whole application");
+  await page.locator('[data-warehouse="central"]').click();
+  await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
+  assert.equal(await page.evaluate(()=>performance.getEntriesByType("navigation").length),navigationCount,"returning to central warehouse reloaded the whole application");
+
   await assertNoPageErrors(page,errors,"admin desktop");
   await context.clearCookies();
   await page.reload({waitUntil:"domcontentloaded"});
   await page.locator("#auth-login-form").waitFor({state:"visible"});
+  assert.equal(await page.locator(".app-shell").count(),0,"expired sessions must not keep the heavy application mounted");
   assert.equal(await page.getByText("AUTH_REQUIRED",{exact:true}).count(),0,"expired VPS session leaked a database error");
   await context.close();
 }

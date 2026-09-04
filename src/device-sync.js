@@ -78,7 +78,7 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
 }
 
 async function syncNow({ force = false, forceAccounts = false } = {}) {
-  if (running) return;
+  if (document.documentElement.dataset.vpsAuthReady !== "true" || running) return;
   const now = Date.now();
   if (!force && lastSyncAt && now - lastSyncAt < MIN_SYNC_GAP) return;
   running = true;
@@ -144,4 +144,5 @@ window.setInterval(() => {
   if (document.visibilityState === "visible") void syncNow();
 }, SYNC_INTERVAL);
 
-void syncNow({ force: true });
+window.addEventListener("shitu:vps-auth-ready", () => { void syncNow({ force: true }); });
+if (document.documentElement.dataset.vpsAuthReady === "true") void syncNow({ force: true });

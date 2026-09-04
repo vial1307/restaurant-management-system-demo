@@ -7,9 +7,10 @@ import {
   vpsMe,
   vpsSaveUser,
 } from "./vps-api.js";
-import { ACCOUNT_MODULES, normalizeAccountPermissions } from "./account-permissions.js?v=88";
+import { ACCOUNT_MODULES, normalizeAccountPermissions } from "./account-permissions.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
+document.documentElement.dataset.vpsAuthReady = "checking";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
 const PERMISSION_MODULES = ["dashboard", ...ACCOUNT_MODULES.filter((key) => key !== "dashboard")];
 
@@ -81,13 +82,15 @@ async function boot() {
   const previous = legacySession();
   try {
     const profile = mirrorVpsSession((await vpsMe())?.user);
-    if (!profile) return;
-    window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+    if (profile) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
   } catch (error) {
     if (previous?.provider === "vps" && Number(error?.status) === 401) {
       localStorage.removeItem(AUTH_KEY);
       window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
     }
+  } finally {
+    document.documentElement.dataset.vpsAuthReady = "true";
+    window.dispatchEvent(new CustomEvent("shitu:vps-auth-ready"));
   }
 }
 
@@ -130,8 +133,8 @@ document.addEventListener("submit", async (event) => {
       await syncProfiles(profile);
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
-      location.hash = initialRoute(profile);
-      location.reload();
+      history.replaceState(null, "", `${location.pathname}${initialRoute(profile)}`);
+      window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
     } catch (error) {
       const code = error instanceof Error ? (error.code || error.message) : "";
       showLoginError(code === "USERNAME_FORMAT"
@@ -209,8 +212,8 @@ document.addEventListener("click", async (event) => {
     event.stopImmediatePropagation();
     try { await vpsLogout(); } catch {}
     localStorage.removeItem(AUTH_KEY);
-    location.hash = "#dashboard";
-    location.reload();
+    history.replaceState(null, "", `${location.pathname}#dashboard`);
+    window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
     return;
   }
 
@@ -237,5 +240,4 @@ window.addEventListener("pageshow", () => { void refreshProfile(); });
 window.addEventListener("focus", () => { void refreshProfile(); });
 document.addEventListener("visibilitychange", () => { void refreshProfile(); });
 
-document.documentElement.dataset.vpsAuthReady = "true";
 void boot();

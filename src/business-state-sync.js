@@ -105,6 +105,7 @@ export function attachBusinessStateSync(store) {
   };
 
   async function save() {
+    if (document.documentElement.dataset.vpsAuthReady !== "true") return;
     const key = identityKey();
     const site = currentSite();
     if (!key || key !== loadedKey || !site || !hasBusinessEdit() || navigator.onLine === false) return;
@@ -127,6 +128,7 @@ export function attachBusinessStateSync(store) {
   }
 
   async function load() {
+    if (document.documentElement.dataset.vpsAuthReady !== "true") return;
     const key = identityKey();
     const site = currentSite();
     const token = ++loadToken;
@@ -165,6 +167,7 @@ export function attachBusinessStateSync(store) {
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
   window.addEventListener("shitu:auth-synced", reload);
+  window.addEventListener("shitu:vps-auth-ready", reload);
   window.addEventListener("shitu:active-site-changed", reload);
   const saveThenReload = () => { void (async () => { await save(); await load(); })(); };
   window.addEventListener("online", saveThenReload);
@@ -174,6 +177,7 @@ export function attachBusinessStateSync(store) {
     unsubscribe();
     clearTimeout(saveTimer);
     window.removeEventListener("shitu:auth-synced", reload);
+    window.removeEventListener("shitu:vps-auth-ready", reload);
     window.removeEventListener("shitu:active-site-changed", reload);
     window.removeEventListener("online", saveThenReload);
     window.removeEventListener("focus", saveThenReload);

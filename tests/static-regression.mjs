@@ -16,7 +16,14 @@ import { searchMatches } from "../src/search-utils.js";
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
-assert.equal(read("vps-entry.html"), read("index.html"), "VPS cache-busting entry must match the application shell");
+assert.equal(read("vps-entry.html"), read("index.html"), "Legacy entry must match the canonical application shell");
+const caddy = read("vps/Caddyfile");
+assert.doesNotMatch(caddy, /redir\s+@root\s+\/vps-entry\.html/, "canonical root must not redirect to a versioned legacy URL");
+assert.match(caddy, /@legacyEntry[\s\S]{0,180}redir\s+@legacyEntry\s+\/\s+308/, "legacy VPS entry must redirect permanently to the root URL");
+assert.match(caddy, /@appAssets[\s\S]{0,160}no-cache, must-revalidate/, "frontend assets must revalidate without manual release URLs");
+for (const shell of ["index.html", "vps-entry.html"]) {
+  assert.doesNotMatch(read(shell), /\?v=\d+/, `${shell} must not require manual asset version parameters`);
+}
 
 assert.deepEqual(BACKEND_MODULES, ACCOUNT_MODULES, "frontend/backend account module lists diverged");
 assert.deepEqual(backendFullPermissions(), fullAccountPermissions(), "frontend/backend admin permissions diverged");
@@ -86,6 +93,10 @@ for (const [file, marker] of [
 }
 
 assert(!/function applyInventorySearchDom[\s\S]{0,2500}render\(\)/.test(app), "inventory search must not rerender the page while typing");
+assert.match(app, /function renderWhenAuthorized\(\)/, "application rendering must wait for VPS authentication");
+assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not rerender the full page");
+assert.match(app, /shitu:inventory-cloud-updated/, "actual inventory changes must still refresh the page");
+assert.doesNotMatch(read("src/auth-layer.js"), /data-warehouse[\s\S]{0,500}location\.reload\(\)/, "switching warehouses must not reload the entire application");
 
 const accountAdmin = read("src/account-admin.js");
 const authBridge = read("src/vps-auth-bridge.js");
@@ -93,6 +104,8 @@ assert.match(accountAdmin, /name="password" type="password" minlength="10"/, "ac
 assert.match(accountAdmin, /PERMISSION_MODULES\.map/, "account editor must render all module permissions");
 assert.match(accountAdmin, /PERMISSION_MODULES = \['dashboard'/, "account editor must pin dashboard as the first permission");
 assert.match(authBridge, /PERMISSION_MODULES = \["dashboard"/, "cloud/VPS submit bridge must persist dashboard permission");
+assert.match(authBridge, /dataset\.vpsAuthReady = "checking"/, "VPS auth must gate the initial application render");
+assert.match(authBridge, /shitu:vps-auth-ready/, "VPS auth must release the application after verification");
 assert.match(accountAdmin, /vpsAccountStorage/, "VPS account panel must identify PostgreSQL storage");
 for (const runtimeFile of ["index.html", "vps-entry.html", ...fs.readdirSync(path.join(ROOT, "src")).filter((name) => name.endsWith(".js")).map((name) => `src/${name}`)]) {
   assert(!/supabase/i.test(read(runtimeFile)), `${runtimeFile} still contains a Supabase runtime dependency`);
