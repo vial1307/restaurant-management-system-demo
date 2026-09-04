@@ -55,29 +55,44 @@ async function assertGeometry(page, label) {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const horizontalOverflow = document.documentElement.scrollWidth - viewportWidth;
-    const selectors = 'button:visible,a.nav-item:visible,input:not([type="checkbox"]):not([type="radio"]):visible,select:visible';
     const nodes = [...document.querySelectorAll('button,a.nav-item,input:not([type="checkbox"]):not([type="radio"]),select')]
       .filter((node) => {
         const style = getComputedStyle(node);
         const rect = node.getBoundingClientRect();
         return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
       });
+    const describe = (node, rect, extra = {}) => ({
+      tag:node.tagName.toLowerCase(),
+      id:node.id || "",
+      className:typeof node.className === "string" ? node.className.slice(0,120) : "",
+      name:node.getAttribute("name") || "",
+      action:node.getAttribute("data-action") || "",
+      text:(node.textContent || node.value || "").trim().slice(0,80),
+      width:Math.round(rect.width),
+      height:Math.round(rect.height),
+      ...extra,
+    });
     const tooSmall = [];
     const clippedText = [];
-    for (const node of nodes.slice(0, 120)) {
+    for (const node of nodes.slice(0, 160)) {
       const rect = node.getBoundingClientRect();
       const style = getComputedStyle(node);
       const tag = node.tagName.toLowerCase();
       const text = (node.textContent || node.value || "").trim();
       if (rect.height < 28 || rect.width < 24) {
-        tooSmall.push({ tag, text:text.slice(0,50), width:Math.round(rect.width), height:Math.round(rect.height) });
+        tooSmall.push(describe(node, rect));
       }
       const fontSize = Number.parseFloat(style.fontSize || "0");
       if ((tag === "button" || tag === "select" || tag === "input") && fontSize > 0 && fontSize < 12) {
-        tooSmall.push({ tag, text:text.slice(0,50), fontSize });
+        tooSmall.push(describe(node, rect, { fontSize }));
       }
       if (text.length > 2 && node.scrollWidth > node.clientWidth + 3 && style.overflowX !== "visible") {
-        clippedText.push({ tag, text:text.slice(0,60), scrollWidth:node.scrollWidth, clientWidth:node.clientWidth });
+        clippedText.push(describe(node, rect, {
+          scrollWidth:node.scrollWidth,
+          clientWidth:node.clientWidth,
+          overflowX:style.overflowX,
+          whiteSpace:style.whiteSpace,
+        }));
       }
     }
     const visibleModal = [...document.querySelectorAll('.modal,.account-modal,.central-editor-modal,.modal-card')]
@@ -89,10 +104,27 @@ async function assertGeometry(page, label) {
     let modal = null;
     if (visibleModal) {
       const rect = visibleModal.getBoundingClientRect();
-      modal = { top:rect.top, left:rect.left, right:rect.right, bottom:rect.bottom, viewportWidth, viewportHeight };
+      modal = {
+        ...describe(visibleModal, rect),
+        top:Math.round(rect.top),
+        left:Math.round(rect.left),
+        right:Math.round(rect.right),
+        bottom:Math.round(rect.bottom),
+        viewportWidth,
+        viewportHeight,
+      };
     }
-    return { horizontalOverflow, tooSmall, clippedText, modal, unusedSelector:selectors };
+    return { horizontalOverflow, viewportWidth, viewportHeight, tooSmall, clippedText, modal };
   });
+
+  const modalOut = Boolean(result.modal && (
+    result.modal.top < -1 || result.modal.left < -1 ||
+    result.modal.right > result.modal.viewportWidth + 1 ||
+    result.modal.bottom > result.modal.viewportHeight + 1
+  ));
+  if (result.horizontalOverflow > 3 || result.tooSmall.length || result.clippedText.length || modalOut) {
+    console.error("FULL_DEVICE_GEOMETRY_FAILURE", JSON.stringify({ label, ...result }));
+  }
 
   assert(result.horizontalOverflow <= 3, `${label}: page horizontally overflows by ${result.horizontalOverflow}px`);
   assert.deepEqual(result.tooSmall, [], `${label}: undersized interactive targets: ${JSON.stringify(result.tooSmall.slice(0,8))}`);
@@ -132,7 +164,6 @@ async function assertInventoryParity(page, label) {
   await page.locator('button[data-action="close-modal"]').first().click();
   await page.locator(".modal-backdrop").waitFor({ state:"detached", timeout:10000 });
 
-  // Stress the responsive contract with deliberately long bilingual text.
   const longTab = page.locator('[data-action="select-inventory-ops"][data-mode="overview"]').first();
   await longTab.evaluate((node) => {
     node.dataset.originalText = node.textContent || "";
@@ -181,9 +212,11 @@ async function runProfile(profile) {
   page.on("pageerror", (error) => errors.push(error.message));
 
   try {
+    console.log("FULL_DEVICE_PROFILE_START", profile.name);
     await login(page);
     const routes = profile.allRoutes ? ACCOUNT_MODULES : CRITICAL_ROUTES;
     for (const route of routes) {
+      console.log("FULL_DEVICE_ROUTE", profile.name, route);
       await gotoRoute(page, route);
       await assertGeometry(page, `${profile.name} ${route}`);
     }
@@ -210,6 +243,11 @@ async function runProfile(profile) {
 
     assert.deepEqual(errors, [], `${profile.name}: page errors: ${errors.join(" | ")}`);
     console.log("FULL_DEVICE_PROFILE_OK", profile.name);
+  } catch (error) {
+    const failurePath = path.join(OUTPUT, `${safeName(profile.name)}-failure.png`);
+    await page.screenshot({ path:failurePath, fullPage:true }).catch(() => {});
+    console.error("FULL_DEVICE_PROFILE_FAILURE", profile.name, error?.stack || error);
+    throw error;
   } finally {
     await context.close();
     await browser.close();
