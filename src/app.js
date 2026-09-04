@@ -45,7 +45,6 @@ import {
   inventoryCatalogKey,
   inventoryCloudState,
   refreshInventoryCloudState,
-  isCurrentBranchInventoryDate,
   syncInventoryNow,
 } from "./inventory-cloud.js";
 
@@ -1030,7 +1029,10 @@ function inventory(context) {
   const editable = canInventoryEdit() || canInventoryDraftCount();
   const catalogManage = canManageBranchCatalog(site);
   const catalogManageVisible = canViewBranchCatalogManagement(site);
-  const historical = !isCurrentBranchInventoryDate();
+  // The rendered store state is authoritative for the selected service date.
+  // Reading the persisted copy here can briefly lag behind a date click and
+  // makes mobile render the wrong set of inventory operations.
+  const historical = state.selectedDate !== formatDateKey();
   const vpsBackend = accountSession()?.provider === "vps";
   const cloudNotice = vpsBackend
     ? (cloudReady
