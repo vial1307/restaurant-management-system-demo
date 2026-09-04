@@ -56,10 +56,7 @@ jobs:
 
       - name: Validate Caddy configuration
         run: |
-          docker run --rm \
-            -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2.10-alpine \
-            caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
 
       - name: Validate required production files
         run: |
@@ -133,9 +130,7 @@ jobs:
           node vps/backend/src/server.mjs >/tmp/kitchen-api.log 2>&1 &
           echo $! >/tmp/kitchen-api.pid
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
-              exit 0
-            fi
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
             sleep 1
           done
           cat /tmp/kitchen-api.log
@@ -152,9 +147,7 @@ jobs:
           node tests/web-server.mjs >/tmp/kitchen-web.log 2>&1 &
           echo $! >/tmp/kitchen-web.pid
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then
-              exit 0
-            fi
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then exit 0; fi
             sleep 1
           done
           cat /tmp/kitchen-web.log
@@ -195,10 +188,7 @@ jobs:
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
-          if [ -z "$VPS_SSH_KEY" ]; then
-            echo "::error::Repository secret VPS_SSH_KEY is not configured."
-            exit 1
-          fi
+          test -n "$VPS_SSH_KEY"
 
       - name: Configure SSH
         env:
@@ -210,24 +200,23 @@ jobs:
           chmod 600 "$HOME/.ssh/kitchen_actions"
           ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
 
-      - name: Deploy with server-side backup and rollback
-        run: |
-          ssh \
-            -i "$HOME/.ssh/kitchen_actions" \
-            -o BatchMode=yes \
-            -o ConnectTimeout=15 \
-            deploy@82.47.180.185 \
-            'sudo -n /usr/local/sbin/kitchen-os-deploy'
-
-      - name: Production health check
+      - name: Deploy exact tested commit with server-side backup and rollback
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-            http://82.47.180.185/api/health
+          printf '%s\n' "$GITHUB_SHA" > /tmp/kitchen-os-deploy-target
+          chmod 600 /tmp/kitchen-os-deploy-target
+          scp -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 /tmp/kitchen-os-deploy-target deploy@82.47.180.185:/home/deploy/.kitchen-os-deploy-target
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-os-deploy'
+
+      - name: Production health and release check
+        run: |
+          set -euo pipefail
+          EXPECTED_RELEASE="${GITHUB_SHA:0:7}"
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
           echo
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-            http://82.47.180.185/RELEASE
-          echo
+          ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          echo "Release: ${ACTUAL_RELEASE}"
+          test "$ACTUAL_RELEASE" = "$EXPECTED_RELEASE"
 
   production-ui-smoke:
     needs:
@@ -251,4 +240,5 @@ jobs:
       - name: Verify production permission modal
         env:
           PRODUCTION_BASE: https://82.47.180.185.nip.io
+          EXPECTED_RELEASE: ${{ github.sha }}
         run: node tests/production-ui-smoke.mjs
