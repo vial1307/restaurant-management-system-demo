@@ -50,11 +50,14 @@ try {
     }));
   }, admin);
 
-  await page.goto(`${BASE}/vps-entry.html?production-smoke=1#settings`, {
+  await page.goto(`${BASE}/#settings`, {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   });
   await page.locator("[data-account-edit]").first().waitFor({ state: "visible", timeout: 30000 });
+  const canonical = new URL(page.url());
+  assert.equal(canonical.pathname, "/", "Production did not stay on the canonical root URL");
+  assert.equal(canonical.search, "", "Production root still requires a release query parameter");
   await page.locator("[data-account-edit]").first().click();
   const modal = page.locator(".account-modal");
   await modal.waitFor({ state: "visible", timeout: 10000 });
