@@ -1348,6 +1348,15 @@ function render() {
   }
 }
 
+function renderWhenAuthorized() {
+  if (document.documentElement.dataset.vpsAuthReady !== "true") return;
+  if (!accountSession()) {
+    root.replaceChildren();
+    return;
+  }
+  render();
+}
+
 const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render });
 
 root.addEventListener("click", (event) => {
@@ -1811,20 +1820,29 @@ window.addEventListener("hashchange", () => {
   if (route() === "sop" && params.get("sop")) view.sopSelected = params.get("sop");
   if (route() === "skills" && WORK_AREAS.some((entry) => entry.id === area)) view.skillsArea = area;
   if (route() === "skills" && ["overview", "catalog", "assessment"].includes(params.get("panel"))) view.skillsPanel = params.get("panel");
-  render();
+  renderWhenAuthorized();
 });
 window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && view.modal) { view.modal = null; view.editingStockKey = null; render(); }
   if (event.key === "Escape" && view.managementModal) { view.managementModal = null; render(); }
   if (event.key === "Escape" && view.calendarOpen) { view.calendarOpen = false; render(); }
 });
-window.addEventListener("offline", render);
-window.addEventListener("online", () => { if (store.getState().operations.pendingSync) store.clearPendingSync(); else render(); });
-window.addEventListener("shitu:auth-synced", render);
-window.addEventListener("shitu:inventory-cloud-status", () => {
-  if (route() === "inventory" && !document.querySelector(".central-heading")) render();
+window.addEventListener("offline", renderWhenAuthorized);
+window.addEventListener("online", () => { if (store.getState().operations.pendingSync) store.clearPendingSync(); else renderWhenAuthorized(); });
+window.addEventListener("shitu:auth-synced", renderWhenAuthorized);
+window.addEventListener("shitu:auth-expired", renderWhenAuthorized);
+window.addEventListener("shitu:vps-auth-ready", renderWhenAuthorized);
+window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
+window.addEventListener("shitu:inventory-cloud-updated", (event) => {
+  if (route() !== "inventory" || document.querySelector(".central-heading")) return;
+  const site = activeInventorySite();
+  if (!event.detail?.site || event.detail.site === site) renderWhenAuthorized();
+});
+window.addEventListener("shitu:inventory-cloud-status", (event) => {
+  if (event.detail?.status === "synced") return;
+  if (route() === "inventory" && !document.querySelector(".central-heading")) renderWhenAuthorized();
 });
 // The former offline worker is retired so every VPS session loads one release.
-store.subscribe(render);
-render();
+store.subscribe(renderWhenAuthorized);
+renderWhenAuthorized();
 setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
