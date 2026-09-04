@@ -6,6 +6,7 @@ Primary specification: `docs/SYSTEM_SPECIFICATION.md`
 Supporting rules:
 - `docs/DEVELOPMENT_RULES.md`
 - `docs/FRONTEND_DATA_RULES.md`
+- `docs/PERFORMANCE_RULES.md`
 - `docs/INVENTORY_TRANSFER_SPEC.md`
 - `docs/DATABASE_PERSISTENCE_AUDIT.md`
 
@@ -70,7 +71,25 @@ Long Vietnamese/Traditional Chinese labels and user-entered text must remain rea
 
 Equivalent desktop/mobile layouts may rearrange, but must preserve the same functional meaning and access unless an explicit product rule says otherwise.
 
-## 6. Database changes
+## 6. Performance and frame stability
+
+Every frontend/data-sync change must also follow `docs/PERFORMANCE_RULES.md`.
+
+A change is incomplete if it causes visible lag, frame drops, repeated flashes, unnecessary full-page reloads, self-triggering DOM observer loops, avoidable whole-application rerenders, or unchanged VPS state to be merged/rendered again.
+
+At minimum review:
+- route/module switching;
+- Central/Fuxing/Yongji switching;
+- data entry and save flows;
+- focus/visibility refresh;
+- inventory polling;
+- translation/DOM patching;
+- modal/table/list rendering;
+- desktop and mobile scroll/frame stability.
+
+Fix root causes rather than masking lag with arbitrary delays.
+
+## 7. Database changes
 
 Do not rewrite an already-applied production migration to change history.
 
@@ -84,7 +103,7 @@ For schema changes:
 
 No destructive migration without explicit product approval and a recovery plan.
 
-## 7. Inventory invariants
+## 8. Inventory invariants
 
 All stock mutations must preserve these invariants:
 
@@ -104,7 +123,7 @@ Do not change the semantics of:
 - `庫存轉撥` = same-site storage movement;
 - `出貨` = cross-site shipment.
 
-## 8. Permissions
+## 9. Permissions
 
 Every permission-sensitive feature must be enforced in both:
 - frontend interaction/visibility;
@@ -117,7 +136,7 @@ Test at minimum:
 
 A hidden button is not authorization.
 
-## 9. Cross-device and translation consistency
+## 10. Cross-device and translation consistency
 
 Every functional UI change must be verified on desktop and mobile.
 
@@ -135,7 +154,7 @@ The same account/site must converge to the same:
 
 New UI text must enter the translation catalog and be checked for responsive overflow.
 
-## 10. Cross-module and cross-branch synchronization
+## 11. Cross-module and cross-branch synchronization
 
 Shared business facts must not be maintained as independent unsynchronized copies.
 
@@ -149,7 +168,7 @@ Equivalent features in Central Kitchen, Fuxing and Yongji must remain functional
 
 A common feature fix must include a branch-parity review.
 
-## 11. VPS-only runtime authority
+## 12. VPS-only runtime authority
 
 Core runtime architecture is:
 
@@ -163,7 +182,7 @@ GitHub is the approved external service for source-code storage, version history
 
 Any other external integration must be documented and must not silently become the authoritative business-data processor.
 
-## 12. Synchronization
+## 13. Synchronization
 
 After changes involving shared business data, verify:
 - one-device write;
@@ -173,13 +192,13 @@ After changes involving shared business data, verify:
 - stale state convergence;
 - no unintended device-data erasure from partial server state.
 
-## 13. Service worker/release cache
+## 14. Service worker/release cache
 
 When frontend assets change, ensure release/service-worker cache behavior cannot serve mixed versions.
 
 Do not solve cache problems by deleting business data.
 
-## 14. Mandatory validation before completion
+## 15. Mandatory validation before completion
 
 Run all applicable checks:
 
@@ -195,17 +214,18 @@ Run all applicable checks:
 10. long-label/bilingual responsive test;
 11. cross-module dependency test when shared facts change;
 12. branch-parity test when a shared branch feature changes;
-13. production smoke test after deployment.
+13. route/data/focus performance regression review;
+14. production smoke test after deployment.
 
 A feature is not complete just because the edited page looks correct locally.
 
-## 15. Git discipline
+## 16. Git discipline
 
 Every completed stage must be committed to GitHub with the complete coherent change set.
 
 Do not leave required migration, test, module include, service-worker reference, translation, documentation or dependency update outside the commit.
 
-## 16. Definition of Done
+## 17. Definition of Done
 
 A change is `DONE` only when:
 - implementation matches the canonical spec;
@@ -216,6 +236,7 @@ A change is `DONE` only when:
 - cross-module dependencies remain synchronized;
 - branch-equivalent behavior remains consistent unless explicitly exempted;
 - responsive desktop/mobile behavior and translations are verified;
+- performance/frame-stability regression checks pass for affected flows;
 - regression tests pass;
 - existing adjacent functions remain present;
 - documentation is current;
