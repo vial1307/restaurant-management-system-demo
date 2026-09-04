@@ -794,8 +794,8 @@ function centralEditorModal(items, editorKey, language) {
   }).join("");
   return `<div class="modal-backdrop central-editor-backdrop" data-central-editor-close>
     <section class="modal-card ingredient-modal central-editor-modal" role="dialog" aria-modal="true">
-      <div class="card-heading"><h2>${esc(title)}</h2><button class="icon-button" type="button" data-central-editor-close>×</button></div>
-      <form data-central-editor-form data-editor-key="${esc(editorKey)}">
+      <div class="card-heading"><h2>${esc(title)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="central-product-form" data-central-save-item>✓ <span>${esc(editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項")}</span></button><button class="icon-button" type="button" data-central-editor-close>×</button></div></div>
+      <form id="central-product-form" data-central-editor-form data-editor-key="${esc(editorKey)}">
         <label>中文<input required name="central-label" value="${esc(item.zh || "")}" placeholder="牛肉"/></label>
         <label>Tiếng Việt<input required name="central-label-vi" value="${esc(item.vi || "")}" placeholder="Thịt bò"/></label>
         <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${CENTRAL_WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea || "noodles") === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "設定此原物料主要提供給哪個工作區使用。" : "Chọn khu làm việc chính sử dụng nguyên vật liệu này."}</small></label>
@@ -913,12 +913,6 @@ function bindCentral(user) {
     const unit = String(data.get("central-unit") || "個");
     const workArea = String(data.get("central-work-area") || "noodles");
     if (!zh || !vi) return;
-    const saveButton = editorForm.querySelector("[data-central-save-item]");
-    if (saveButton) {
-      saveButton.disabled = true;
-      saveButton.textContent = "Đang lưu vào database… · 正在儲存…";
-    }
-
     const oldItems = loadStock();
     const editorKey = String(editorForm.dataset.editorKey || "new");
     const editing = editorKey !== "new";
@@ -954,21 +948,26 @@ function bindCentral(user) {
       ? oldItems.filter((row) => centralProductKey(row) !== editorKey).concat(nextRows)
       : oldItems.concat(nextRows);
 
+    if (inventoryCloudState() !== "ready") {
+      alert("Chưa kết nối được VPS database, sản phẩm chưa được lưu. · 目前無法連線 VPS 資料庫，品項尚未儲存。");
+      return;
+    }
+    const saveButtons = editorForm.closest(".ingredient-modal")?.querySelectorAll("[data-central-save-item]") || [];
+    for (const button of saveButtons) {
+      button.disabled = true;
+      button.textContent = "Đang lưu vào database… · 正在儲存…";
+    }
     saveStock(nextItems);
-    if (inventoryCloudState() === "ready") {
-      const result = await cloudSyncCentralCatalogItem(itemKey, nextItems);
-      if (!result.ok) {
-        saveStock(oldItems);
-        const message = result.error?.message === "LOCATION_HAS_STOCK"
-          ? "儲位仍有庫存，請先轉撥或盤點為 0。"
-          : "品項資料同步失敗，已還原原本資料。";
-        alert(message);
-        await syncInventoryNow("central", { reloadBranch: false });
-        centralPage(user);
-        return;
-      }
-    } else {
-      announceCentralStock(nextItems);
+    const result = await cloudSyncCentralCatalogItem(itemKey, nextItems);
+    if (!result.ok || result.fallback) {
+      saveStock(oldItems);
+      const message = result.error?.message === "LOCATION_HAS_STOCK"
+        ? "儲位仍有庫存，請先轉撥或盤點為 0。"
+        : "Không lưu được sản phẩm vào VPS database; dữ liệu tạm đã được hoàn tác. · 無法儲存至 VPS 資料庫，暫存資料已還原。";
+      alert(message);
+      await syncInventoryNow("central", { reloadBranch: false });
+      centralPage(user);
+      return;
     }
     content.dataset.centralEditor = "";
     centralPage(user);
