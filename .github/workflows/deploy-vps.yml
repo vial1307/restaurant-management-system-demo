@@ -76,6 +76,7 @@ jobs:
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh
+          test -f vps/backend/scripts/concurrency-regression.mjs
           test -f vps/database/migrations/004_restore_primary_admin.sql
           test -f vps/database/migrations/005_business_state.sql
 
@@ -142,6 +143,9 @@ jobs:
 
       - name: API role and inventory regression
         run: node vps/backend/scripts/api-regression.mjs
+
+      - name: Multi-user PostgreSQL concurrency regression
+        run: node vps/backend/scripts/concurrency-regression.mjs
 
       - name: Start frontend test server
         run: |
