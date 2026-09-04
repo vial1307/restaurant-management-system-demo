@@ -121,8 +121,10 @@ assert(app.includes("attachBusinessStateSync(store)"), "business modules must sy
 const inventoryCloud = read("src/inventory-cloud.js");
 assert.match(inventoryCloud, /cloudSyncBranchCatalogItem[\s\S]{0,300}canManageBranchCatalog\(site\)/, "inventory editors must be allowed to save branch catalog items");
 const businessRoutes = read("vps/backend/src/business-state-routes.mjs");
-for (const moduleName of ["settings","reservations","procurement","preparation","menu","sop","skills","attendance","schedule","shared","audit"]) {
+const businessSync = read("src/business-state-sync.js");
+for (const moduleName of ["settings","reservations","procurement","preparation","menu","sop","skills","attendance","schedule","remote","shared","audit"]) {
   assert(businessRoutes.includes(`${moduleName}:`), `business-state route missing ${moduleName}`);
 }
+assert.match(businessSync, /remote:\s*\{\s*jobCatalog:/, "remote job catalog must persist under remote permission");
 
 console.log("STATIC_REGRESSION_OK");

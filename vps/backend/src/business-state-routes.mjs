@@ -11,6 +11,7 @@ const MODULE_RULES = {
   skills: ["skills"],
   attendance: ["attendance"],
   schedule: ["schedule"],
+  remote: ["remote"],
   shared: ["settings", "skills", "attendance", "schedule", "preparation", "dashboard"],
   audit: ["reports", "remote"],
 };
@@ -21,6 +22,9 @@ function validSite(site) {
 
 function can(user, moduleName, action) {
   const rules = MODULE_RULES[moduleName] || [];
+  if (moduleName === "shared" && action === "edit") {
+    return user.role === "admin" || hasPermission(user, "settings", "edit");
+  }
   if (moduleName === "audit" && action === "edit") {
     return user.role === "admin" || Object.values(user.permissions || {}).some((entry) => entry?.edit);
   }

@@ -50,6 +50,7 @@ const supervisor = await login("supervisorfx");
 const employee = await login("employeefx");
 const parttime = await login("parttimefx");
 const central = await login("centralreg");
+const remoteOnly = await login("remoteonly");
 
 const statePayload = {
   settings:{reservationBuffer:3},
@@ -86,6 +87,21 @@ assert.equal((await request("/api/business-state/yongji",{cookie:employee.cookie
 assert.equal((await request("/api/business-state/central",{
   method:"POST",cookie:central.cookie,body:{modules:{settings:{reservationBuffer:9}}}
 })).response.status,403);
+
+const remoteStateSave = await request("/api/business-state/fuxing",{
+  method:"POST",cookie:remoteOnly.cookie,
+  body:{modules:{
+    preparation:{jobCatalog:[{id:"wrong-module"}]},
+    shared:{staff:[{id:"unauthorized-staff"}]},
+    remote:{jobCatalog:[{id:"remote-job",label:"遠端工作",labelVi:"Việc từ xa",active:true}]},
+  }}
+});
+assert.equal(remoteStateSave.response.status,200);
+assert.deepEqual(remoteStateSave.data.savedModules,["remote"]);
+const remoteStateRead = await request("/api/business-state/fuxing",{cookie:remoteOnly.cookie});
+assert.deepEqual(remoteStateRead.data.modules.remote.jobCatalog.map((job)=>job.id),["remote-job"]);
+assert.equal(remoteStateRead.data.modules.preparation,undefined,"remote-only user read preparation state");
+assert.equal(remoteStateRead.data.modules.shared,undefined,"remote-only user read staff state");
 
 const preferenceUpdate = await request("/api/auth/preferences", {
   method:"POST",cookie:manager.cookie,body:{preferredLanguage:"zh-TW"}

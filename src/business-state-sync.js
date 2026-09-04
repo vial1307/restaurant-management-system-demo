@@ -60,7 +60,6 @@ export function businessModulesFromState(state) {
         completedTasks: structuredClone(record.completedTasks || {}),
         customTasks: structuredClone(record.customTasks || []),
       })),
-      jobCatalog: structuredClone(operations.jobCatalog || []),
     },
     menu: {
       menuCatalog: structuredClone(operations.menuCatalog || []),
@@ -83,6 +82,7 @@ export function businessModulesFromState(state) {
       payroll: structuredClone(operations.payroll || {}),
     },
     schedule: { schedules: structuredClone(operations.schedules || []) },
+    remote: { jobCatalog: structuredClone(operations.jobCatalog || []) },
     shared: {
       staff: structuredClone(operations.staff || []).map(({ pin: _pin, ...member }) => member),
     },

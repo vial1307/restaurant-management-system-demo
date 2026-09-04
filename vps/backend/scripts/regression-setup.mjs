@@ -43,6 +43,7 @@ const parttimePermissions = {
   settings:{view:false,edit:false},
 };
 const centralPermissions = Object.fromEntries(MODULES.map((key) => [key, { view:key === "inventory", edit:key === "inventory" }]));
+const remotePermissions = Object.fromEntries(MODULES.map((key) => [key, { view:key === "remote", edit:key === "remote" }]));
 
 async function applyMigration(file) {
   const version = file.split("_")[0];
@@ -108,6 +109,7 @@ try {
   users.employeefx = await insertUser("employeefx","employee","fuxing",employeePermissions);
   users.parttimefx = await insertUser("parttimefx","parttime","fuxing",parttimePermissions);
   users.centralreg = await insertUser("centralreg","central","central",centralPermissions);
+  users.remoteonly = await insertUser("remoteonly","employee","fuxing",remotePermissions);
 
   const locations = {};
   for (const entry of [

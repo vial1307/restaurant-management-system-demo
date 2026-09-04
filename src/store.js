@@ -392,12 +392,12 @@ export function createStore(storage = globalThis.localStorage) {
     }
 
     const operationKeys = {
-      preparation: ["jobCatalog"],
       menu: ["menuCatalog", "trainingRecords"],
       sop: ["sops", "learning", "inspections"],
       skills: ["customSkills", "skillProfiles", "skillAssessments", "skillApprovals", "trainingRecords"],
       attendance: ["attendance", "payroll"],
       schedule: ["schedules"],
+      remote: ["jobCatalog"],
       shared: ["staff"],
       audit: ["audit"],
     };
