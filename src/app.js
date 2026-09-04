@@ -1001,7 +1001,7 @@ function branchInventoryHistoryView(rows, language="vi", cloud=false) {
 }
 
 function inventory(context) {
-  const { text, record, reserveAlerts, workAlerts, language } = context;
+  const { text, record, reserveAlerts, workAlerts, language, state } = context;
   const site = activeInventorySite() || "fuxing";
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
