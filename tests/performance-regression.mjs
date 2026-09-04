@@ -9,6 +9,7 @@ const api = read("src/vps-api.js");
 const businessSync = read("src/business-state-sync.js");
 const uiRefresh = read("src/ui-refresh.js");
 const app = read("src/app.js");
+const deploy = read("vps/scripts/deploy-api.sh");
 
 assert.match(api, /const receiveDefaultsCache = new Map\(\)/, "receive-default requests must have a shared request cache");
 assert.match(api, /RECEIVE_DEFAULTS_CACHE_MS\s*=\s*5000/, "receive-default burst cache window changed unexpectedly");
@@ -24,5 +25,10 @@ assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must n
 assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must discard self-generated records");
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not trigger a whole-app render");
 assert.doesNotMatch(app, /function applyInventorySearchDom[\s\S]{0,2500}render\(\)/, "inventory search must remain local-DOM filtered");
+
+assert.match(deploy, /SOURCE_BEFORE=.*rev-parse HEAD/, "deploy must capture the source revision before pulling");
+assert.match(deploy, /SOURCE_AFTER=.*rev-parse HEAD/, "deploy must capture the source revision after pulling");
+assert.match(deploy, /KITCHEN_DEPLOY_REEXEC/, "deploy must reload itself when git pull changes deployment logic");
+assert.match(deploy, /exec \/usr\/bin\/bash .*deploy-api\.sh/, "deploy self-reload must execute the newly pulled script");
 
 console.log("PERFORMANCE_REGRESSION_OK");
