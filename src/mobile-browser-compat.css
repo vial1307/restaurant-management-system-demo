@@ -688,17 +688,3 @@ input,textarea{
     background: #fff;
   }
 }
-
-/* Let modern browsers defer layout/paint for long inventory and task lists
-   below the viewport. Unsupported browsers simply ignore this optimization. */
-@supports (content-visibility: auto) {
-  .inventory-row,
-  .central-manage-row,
-  .inventory-op-card,
-  .shipment-card,
-  .management-list-row,
-  .task-list > label {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 112px;
-  }
-}
