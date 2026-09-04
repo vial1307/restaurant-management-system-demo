@@ -117,6 +117,9 @@ assert(app.includes('data-manage-adjust="true"'), "branch management must expose
 assert(authLayer.includes('data-central-manage-adjust="true"'), "central management must expose quantity controls");
 assert(app.includes("data-save-item"), "branch product editor must expose an explicit save button");
 assert(authLayer.includes("data-central-save-item"), "central product editor must expose an explicit save button");
+assert(app.includes('class="secondary-button modal-header-save"'), "branch save action must remain visible in the modal header");
+assert(authLayer.includes('class="secondary-button modal-header-save"'), "central save action must remain visible in the modal header");
+assert.match(authLayer, /inventoryCloudState\(\) !== "ready"[\s\S]{0,250}品項尚未儲存/, "central catalog must reject local-only saves");
 assert(app.includes("attachBusinessStateSync(store)"), "business modules must synchronize with PostgreSQL");
 const inventoryCloud = read("src/inventory-cloud.js");
 assert.match(inventoryCloud, /cloudSyncBranchCatalogItem[\s\S]{0,300}canManageBranchCatalog\(site\)/, "inventory editors must be allowed to save branch catalog items");
