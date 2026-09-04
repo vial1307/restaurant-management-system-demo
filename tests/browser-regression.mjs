@@ -255,10 +255,6 @@ async function roleDesktop(browser, username, checks) {
       const centralSave=page.locator('.modal-header-save[data-central-save-item]');
       await centralSave.waitFor({state:"visible"});
       assert.match(await centralSave.innerText(),/Lưu sản phẩm|儲存品項/,"central product save action missing");
-      await page.locator('[data-central-editor-open="new"]').click();
-      const centralSave=page.locator('[data-central-save-item]');
-      await centralSave.waitFor({state:"visible"});
-      assert.match(await centralSave.innerText(),/Lưu sản phẩm/);
       await page.locator('button[data-central-editor-close]').click();
     }
   } else {
