@@ -1,30 +1,68 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# KITCHEN_EXACT_TARGET_V1
+# GitHub Actions must provide the exact tested commit through TARGET_FILE.
+# This prevents an older queued workflow from testing commit A and then
+# accidentally deploying a newer untested commit B by pulling main at runtime.
+
 APP_DIR="${APP_DIR:-/opt/kitchen-os}"
 REPO_DIR="${APP_DIR}/repo"
 WEB_LIVE="${APP_DIR}/www"
 WEB_NEXT="${APP_DIR}/www.next"
 WEB_PREV="${APP_DIR}/www.prev"
+TARGET_FILE="/home/deploy/.kitchen-os-deploy-target"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root."
   exit 1
 fi
 
-echo "[1/11] Updating source..."
+echo "[1/11] Loading exact tested source..."
 SOURCE_BEFORE="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
-runuser -u deploy -- git -C "${REPO_DIR}" pull --ff-only origin main
+DEPLOY_TARGET="${KITCHEN_DEPLOY_TARGET:-}"
+if [[ -z "${DEPLOY_TARGET}" && -f "${TARGET_FILE}" ]]; then
+  DEPLOY_TARGET="$(tr -d '[:space:]' < "${TARGET_FILE}")"
+fi
+rm -f "${TARGET_FILE}"
+
+if [[ ! "${DEPLOY_TARGET}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "DEPLOY_TARGET_REQUIRED: refusing to deploy an unpinned main branch."
+  exit 64
+fi
+export KITCHEN_DEPLOY_TARGET="${DEPLOY_TARGET}"
+
+runuser -u deploy -- git -C "${REPO_DIR}" fetch --prune origin main
+if ! runuser -u deploy -- git -C "${REPO_DIR}" cat-file -e "${DEPLOY_TARGET}^{commit}" 2>/dev/null; then
+  echo "DEPLOY_TARGET_NOT_FOUND: ${DEPLOY_TARGET}"
+  exit 65
+fi
+if ! runuser -u deploy -- git -C "${REPO_DIR}" merge-base --is-ancestor "${DEPLOY_TARGET}" origin/main; then
+  echo "DEPLOY_TARGET_NOT_ON_MAIN: ${DEPLOY_TARGET}"
+  exit 66
+fi
+if ! runuser -u deploy -- git -C "${REPO_DIR}" show "${DEPLOY_TARGET}:vps/scripts/deploy-api.sh" 2>/dev/null | grep -q "KITCHEN_EXACT_TARGET_V1"; then
+  echo "DEPLOY_TARGET_TOO_OLD: exact-target deployment contract missing."
+  exit 67
+fi
+
+runuser -u deploy -- git -C "${REPO_DIR}" reset --hard "${DEPLOY_TARGET}"
 SOURCE_AFTER="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse HEAD)"
+if [[ "${SOURCE_AFTER}" != "${DEPLOY_TARGET}" ]]; then
+  echo "DEPLOY_TARGET_MISMATCH: expected ${DEPLOY_TARGET}, got ${SOURCE_AFTER}"
+  exit 68
+fi
 
 # Bash may continue executing the copy of this script that was loaded before
-# git pull replaced it on disk. Re-exec exactly once so deployment logic from
-# the newly pulled commit is what validates and activates that same release.
-if [[ "${KITCHEN_DEPLOY_REEXEC:-0}" != "1" && -n "${SOURCE_BEFORE}" && "${SOURCE_BEFORE}" != "${SOURCE_AFTER}" ]]; then
-  echo "Source changed ${SOURCE_BEFORE:0:7} -> ${SOURCE_AFTER:0:7}; reloading deploy script..."
+# the repository was reset to the tested commit. Re-exec exactly once so the
+# deployment logic stored in that same tested commit performs activation.
+if [[ "${KITCHEN_DEPLOY_REEXEC:-0}" != "1" && "${SOURCE_BEFORE}" != "${SOURCE_AFTER}" ]]; then
+  echo "Source changed ${SOURCE_BEFORE:0:7} -> ${SOURCE_AFTER:0:7}; reloading tested deploy script..."
   export KITCHEN_DEPLOY_REEXEC=1
   exec /usr/bin/bash "${REPO_DIR}/vps/scripts/deploy-api.sh"
 fi
+
+echo "Deploy target verified: ${DEPLOY_TARGET}"
 
 echo "[2/11] Updating compose definition..."
 cp "${REPO_DIR}/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
