@@ -141,7 +141,9 @@ export function attachBusinessStateSync(store) {
       const modules = result?.modules || {};
       if (Number(result?.revision || 0) > 0) {
         applyingRemote = true;
-        store.resetBusinessModules();
+        // Merge only modules that already exist on the server. Modules not yet
+        // migrated must keep their device copy until an authorized real edit
+        // persists them, especially when the first writer has limited rights.
         store.mergeBusinessModules(modules);
         applyingRemote = false;
         lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
