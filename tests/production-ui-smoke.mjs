@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 const BASE = process.env.PRODUCTION_BASE || "https://82.47.180.185.nip.io";
+const EXPECTED_RELEASE = String(process.env.EXPECTED_RELEASE || "").trim().slice(0, 7);
 const admin = {
   id: "production-ui-smoke-admin",
   username: "ui-smoke-admin",
@@ -90,6 +91,9 @@ try {
   const release = await page.locator('meta[name="kitchen-release"]').getAttribute("content");
   if (!new URL(BASE).hostname.match(/^(?:127\.0\.0\.1|localhost)$/)) {
     assert(release && release !== "__KITCHEN_RELEASE__", "Production HTML was not stamped with a release");
+    if (EXPECTED_RELEASE) {
+      assert.equal(release, EXPECTED_RELEASE, `Production UI release ${release} does not match tested commit ${EXPECTED_RELEASE}`);
+    }
     const assetVersions = await page.locator('script[src],link[rel="stylesheet"][href]').evaluateAll((elements) =>
       elements.map((element) => new URL(element.src || element.href).searchParams.get("v"))
     );
