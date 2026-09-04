@@ -371,6 +371,10 @@ async function responsiveAdmin(browser, viewport) {
 
     for(const site of ["fuxing","yongji"]){
       await setSite(page,site);
+      const overview=page.locator('[data-action="select-inventory-ops"][data-mode="overview"]');
+      await overview.waitFor({state:"visible"});
+      await overview.click();
+      await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
       await page.locator('[data-action="shift-date"][data-offset="-1"]').first().click();
       await page.locator(".inventory-history-notice").waitFor({state:"visible"});
       for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
