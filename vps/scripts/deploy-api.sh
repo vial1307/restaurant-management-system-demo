@@ -52,7 +52,14 @@ cp -a "${REPO_DIR}/vps-entry.html" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/manifest.webmanifest" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/sw.js" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/src" "${WEB_NEXT}/"
-node "${REPO_DIR}/vps/scripts/stamp-frontend-release.mjs" "${WEB_NEXT}" "${APP_RELEASE}"
+# Node.js is intentionally not installed on the VPS host. Run release stamping
+# in the same pinned Node container family used by CI/preflight so deployment
+# has no hidden host-runtime dependency.
+docker run --rm \
+  -v "${REPO_DIR}:/repo:ro" \
+  -v "${WEB_NEXT}:/release" \
+  node:22-alpine \
+  node /repo/vps/scripts/stamp-frontend-release.mjs /release "${APP_RELEASE}"
 printf '%s\n' "${APP_RELEASE}" > "${WEB_NEXT}/RELEASE"
 chown -R deploy:deploy "${WEB_NEXT}"
 
