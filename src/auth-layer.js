@@ -14,7 +14,6 @@ import {
   cloudSetQuantity,
   cloudSyncCentralCatalogItem,
   getCloudInventoryHistory,
-  getSiteInventoryRows,
   inventoryCloudState,
   isCurrentBranchInventoryDate,
   setActiveInventorySite,
@@ -661,20 +660,6 @@ function centralPage(user) {
     }
   }
   if (cloudReady) void bootstrapCentralInventory(items);
-  if (cloudReady) void getSiteInventoryRows("central").then((rows) => {
-    if (!rows?.length) return;
-    const page=document.querySelector(".page-content");
-    if (!page?.querySelector(".central-heading")) return;
-    const uniqueItems=new Set(rows.map((row)=>row.item_id));
-    const quantity=rows.reduce((sum,row)=>sum+Number(row.quantity||0),0);
-    const low=rows.filter((row)=>row.location?.kind==="storage" && Number(row.quantity||0)<Number(row.minimum_quantity||0)).length;
-    const itemNode=page.querySelector("[data-central-stat-items]");
-    const totalNode=page.querySelector("[data-central-stat-total]");
-    const lowNode=page.querySelector("[data-central-stat-low]");
-    if(itemNode) itemNode.textContent=String(uniqueItems.size);
-    if(totalNode) totalNode.textContent=String(quantity);
-    if(lowNode) lowNode.textContent=String(low);
-  }).catch(()=>{});
   if (cloudReady && mode === "history" && canViewHistory) {
     void getCloudInventoryHistory("central", 300).then((cloudLog) => {
       const current = document.querySelector(".page-content");
@@ -1136,16 +1121,14 @@ function bindCentral(user) {
   content.querySelectorAll("[data-warehouse]").forEach(b => b.onclick = () => {
     const site=b.dataset.warehouse;
     if (!setActiveInventorySite(site)) return;
-    if (site === "central") { centralPage(user); return; }
     content.dataset.centralView = "off";
     location.hash = "#inventory";
-    setTimeout(() => location.reload(), 20);
   });
 }
 
 let patching = false;
 function applyAccess() {
-  if (patching) return;
+  if (patching || document.documentElement.dataset.vpsAuthReady !== "true") return;
   const user = session();
   if (!user) return loginScreen();
   patching = true;
@@ -1200,8 +1183,7 @@ function applyAccess() {
         heading.querySelectorAll("[data-warehouse]").forEach((button)=>button.addEventListener("click",()=>{
           const site=button.dataset.warehouse;
           if(!setActiveInventorySite(site)) return;
-          if(site==="central") centralPage(user);
-          else location.reload();
+          location.hash="#inventory";
         }));
       }
     }
@@ -1225,12 +1207,14 @@ if (appRoot) observer.observe(appRoot, { childList: true });
 window.addEventListener("hashchange", scheduleAccess);
 window.addEventListener("shitu:auth-synced", scheduleAccess);
 window.addEventListener("shitu:auth-expired", scheduleAccess);
+window.addEventListener("shitu:vps-auth-ready", scheduleAccess);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (event.detail?.site !== "central" || !location.hash.startsWith("#inventory")) return;
   const user = session();
   if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
 });
-window.addEventListener("shitu:inventory-cloud-status", () => {
+window.addEventListener("shitu:inventory-cloud-status", (event) => {
+  if (event.detail?.status === "synced") return;
   if (!location.hash.startsWith("#inventory") || !document.querySelector(".central-heading")) return;
   const user = session();
   if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
