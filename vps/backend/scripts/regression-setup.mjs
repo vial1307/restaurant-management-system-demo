@@ -98,6 +98,8 @@ try {
 
   for (const file of migrations.filter((name) => name >= "004_")) await applyMigration(file);
 
+  await client.query("truncate table public.business_state");
+
   const users = {};
   users.admin = (await client.query("select * from public.app_users where username='yangchuadmin'")).rows[0];
   users.managerfx = await insertUser("managerfx","manager","fuxing",managerPermissions);

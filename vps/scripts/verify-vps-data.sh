@@ -22,6 +22,7 @@ select
   (select count(*) from public.inventory_stock) as stock_rows,
   (select count(*) from public.inventory_transactions) as transactions,
   (select count(*) from public.inventory_receive_defaults) as receive_defaults,
+  (select count(*) from public.business_state) as business_state_sites,
   (select max(version) from public.schema_migrations) as schema_version;
 "
 
@@ -106,6 +107,9 @@ check_zero "active catalog rows missing required fields" "
   where active=true
     and (trim(item_key)='' or trim(catalog_key)='' or trim(name_zh_tw)='' or trim(name_vi)='' or trim(unit)='')
 "
+check_zero "business state rows outside known sites" "
+  select count(*) from public.business_state where site not in ('central','fuxing','yongji')
+"
 
 FULL_ADMIN_KEYS="dashboard inventory procurement reservations preparation menu sop skills attendance schedule reports remote settings"
 missing_admin=0
@@ -144,8 +148,8 @@ warn_nonzero "duplicate active catalog keys inside the same site" "
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "004" ]]; then
-  echo "ERROR: schema version ${schema} is older than 004"
+if [[ "${schema}" < "005" ]]; then
+  echo "ERROR: schema version ${schema} is older than 005"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"

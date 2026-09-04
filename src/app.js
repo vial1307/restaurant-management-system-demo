@@ -21,6 +21,7 @@ import {
 import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
+import { attachBusinessStateSync } from "./business-state-sync.js";
 import {
   activeInventorySite,
   bootstrapFuxingInventory,
@@ -49,6 +50,7 @@ import {
 } from "./inventory-cloud.js";
 
 const store = createStore();
+attachBusinessStateSync(store);
 const root = document.querySelector("#app");
 const view = {
   inventoryView: "storage",
@@ -1289,7 +1291,8 @@ function addItemModal(context) {
     .concat(ZONES.map((zone)=>`<option value="${zone.id}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
     .join("");
 
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><button class="icon-button" data-action="close-modal">${icon("close")}</button></div><form data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}<small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 1}" /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone">${receiveOptions}</select><small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><button class="primary-button modal-submit" type="submit">${icon(editing ? "check" : "plus")}${escapeHtml(editing ? text.saveChanges : text.addItem)}</button></form></section></div>`;
+  const saveLabel = editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項";
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><button class="icon-button" data-action="close-modal">${icon("close")}</button></div><form data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}<small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 1}" /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone">${receiveOptions}</select><small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
 }
 
 function syncReceiveZoneOptions(form) {
@@ -1710,7 +1713,7 @@ root.addEventListener("compositionend", (event) => {
   if (event.target?.dataset?.field === "inventorySearch") applyInventorySearchDom(event.target);
 });
 
-root.addEventListener("submit", (event) => {
+root.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
   const formName = form.dataset.form || "";
@@ -1731,7 +1734,10 @@ root.addEventListener("submit", (event) => {
       quantity: Number(data.get(`quantity:${zone}`)),
       minimum: Number(data.get(`minimum:${zone}`)),
     }));
-    if (!locations.length) return;
+    if (!locations.length) {
+      window.alert("Hãy chọn ít nhất một vị trí lưu. · 請至少選擇一個存放位置。");
+      return;
+    }
     const stockKey = view.editingStockKey;
     const existingItem=stockKey ? state.records[state.selectedDate].inventory.find((entry)=>entry.stockKey===stockKey) : null;
     const receiveZone=String(data.get("receiveZone")||"");
@@ -1751,45 +1757,46 @@ root.addEventListener("submit", (event) => {
       workMinimum: Number(data.get("workMinimum")),
       locations,
     };
+    const site = activeInventorySite();
+    const submitButton = form.querySelector("[data-save-item]");
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang lưu vào database… · 正在儲存…";
+    }
     view.modal = null;
     view.editingStockKey = null;
     if (form.dataset.form === "edit-item") {
       store.updateIngredient(stockKey, item);
-      setTimeout(() => {
-        void cloudSyncBranchCatalogItem(stockKey,activeInventorySite()).then(async(result) => {
-          if (result.ok || result.fallback) {
-            await cloudSetReceiveDefault({
-              site:activeInventorySite(),
-              catalogKey,
-              locationCode:receiveZone ? branchLocationCode(activeInventorySite(),receiveZone) : "",
-            });
-          }
-          if (!result.ok && !result.fallback) {
-            const message = result.error?.message === "LOCATION_HAS_STOCK"
-              ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
-              : "Không thể đồng bộ chỉnh sửa mặt hàng. · 品項修改無法同步至雲端。";
-            window.alert(message);
-            void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-          }
+      const result = await cloudSyncBranchCatalogItem(stockKey, site);
+      if (result.ok) {
+        await cloudSetReceiveDefault({
+          site,
+          catalogKey,
+          locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
         });
-      }, 0);
+      } else {
+        const message = result.error?.message === "LOCATION_HAS_STOCK"
+          ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
+          : "Không thể lưu chỉnh sửa vào database. · 品項修改無法儲存至資料庫。";
+        window.alert(message);
+        await syncInventoryNow(site, { reloadBranch: true });
+      }
     } else {
       const createdStockKey=store.addItem(item);
-      setTimeout(() => {
-        void (async()=>{
-          const result=createdStockKey
-            ? await cloudSyncBranchCatalogItem(createdStockKey,activeInventorySite())
-            : {ok:false,fallback:false};
-          if(result.ok || result.fallback){
-            await cloudSetReceiveDefault({
-              site:activeInventorySite(),
-              catalogKey,
-              locationCode:receiveZone ? branchLocationCode(activeInventorySite(),receiveZone) : "",
-            });
-          }
-          await syncInventoryNow(activeInventorySite(),{reloadBranch:false});
-        })();
-      }, 0);
+      const result=createdStockKey
+        ? await cloudSyncBranchCatalogItem(createdStockKey,site)
+        : {ok:false,fallback:false};
+      if(result.ok){
+        await cloudSetReceiveDefault({
+          site,
+          catalogKey,
+          locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
+        });
+      }else{
+        if(createdStockKey) store.removeIngredient(createdStockKey);
+        window.alert("Không thể lưu sản phẩm vào database; dữ liệu tạm đã được hoàn tác. · 無法儲存品項至資料庫，暫存資料已還原。");
+      }
+      await syncInventoryNow(site,{reloadBranch:false});
     }
   }
 });

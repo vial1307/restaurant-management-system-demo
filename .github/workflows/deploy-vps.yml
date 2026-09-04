@@ -73,6 +73,7 @@ jobs:
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh
           test -f vps/database/migrations/004_restore_primary_admin.sql
+          test -f vps/database/migrations/005_business_state.sql
 
   regression:
     runs-on: ubuntu-latest

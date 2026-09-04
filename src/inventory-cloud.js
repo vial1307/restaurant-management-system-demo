@@ -181,6 +181,7 @@ export function setActiveInventorySite(site) {
   const s = session();
   if (s?.location !== "all" || !["central","fuxing","yongji"].includes(site)) return false;
   localStorage.setItem(ACTIVE_SITE_KEY, site);
+  window.dispatchEvent(new CustomEvent("shitu:active-site-changed", { detail:{ site } }));
   return true;
 }
 
@@ -825,7 +826,7 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
 
 export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: true };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const catalog = buildBranchCatalog(site);

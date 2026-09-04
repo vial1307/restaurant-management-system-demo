@@ -357,12 +357,101 @@ export function createStore(storage = globalThis.localStorage) {
     draft.operations.audit = draft.operations.audit.slice(0, 500);
   }
 
+  function mergeBusinessModules(modules = {}) {
+    if (!modules || typeof modules !== "object") return state;
+    const activeStaffId = state.operations?.activeStaffId;
+    const language = state.settings?.language;
+
+    if (modules.settings && typeof modules.settings === "object") {
+      state.settings = { ...state.settings, ...structuredClone(modules.settings), language };
+    }
+    if (modules.procurement?.procurementSchedules) {
+      state.settings.procurementSchedules = structuredClone(modules.procurement.procurementSchedules);
+    }
+
+    const recordModules = ["reservations", "procurement", "preparation"];
+    for (const moduleName of recordModules) {
+      const records = modules[moduleName]?.records;
+      if (!records || typeof records !== "object") continue;
+      for (const [date, input] of Object.entries(records)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !input || typeof input !== "object") continue;
+        const record = ensureRecord(state, date);
+        if (moduleName === "reservations") {
+          if (input.reservation) record.reservation = structuredClone(input.reservation);
+          if (Object.hasOwn(input, "riceRemaining")) record.riceRemaining = clampNumber(input.riceRemaining);
+        }
+        if (moduleName === "procurement" && input.procurement) {
+          record.procurement = structuredClone(input.procurement);
+        }
+        if (moduleName === "preparation") {
+          if (input.completedTasks) record.completedTasks = structuredClone(input.completedTasks);
+          if (Array.isArray(input.customTasks)) record.customTasks = structuredClone(input.customTasks);
+        }
+        if (input.updatedAt) record.updatedAt = input.updatedAt;
+      }
+    }
+
+    const operationKeys = {
+      preparation: ["jobCatalog"],
+      menu: ["menuCatalog", "trainingRecords"],
+      sop: ["sops", "learning", "inspections"],
+      skills: ["customSkills", "skillProfiles", "skillAssessments", "skillApprovals", "trainingRecords"],
+      attendance: ["attendance", "payroll"],
+      schedule: ["schedules"],
+      shared: ["staff"],
+      audit: ["audit"],
+    };
+    const operationPatch = {};
+    for (const [moduleName, keys] of Object.entries(operationKeys)) {
+      const input = modules[moduleName];
+      if (!input || typeof input !== "object") continue;
+      for (const key of keys) {
+        if (!Object.hasOwn(input, key)) continue;
+        if (moduleName === "shared" && key === "staff" && Array.isArray(input.staff)) {
+          operationPatch.staff = input.staff.map((member) => ({
+            ...structuredClone(member),
+            pin: state.operations.staff.find((existing) => existing.id === member.id)?.pin || "",
+          }));
+        } else {
+          operationPatch[key] = structuredClone(input[key]);
+        }
+      }
+    }
+    state.operations = hydrateOperations({ ...state.operations, ...operationPatch }, state.settings);
+    if (state.operations.staff.some((member) => member.id === activeStaffId && member.active)) {
+      state.operations.activeStaffId = activeStaffId;
+    }
+    state.operations.pendingSync = 0;
+    ensureRecord(state, state.selectedDate);
+    persist();
+    return state;
+  }
+
+  function resetBusinessModules() {
+    const language = state.settings?.language || "vi";
+    const defaults = createDefaultState(state.selectedDate);
+    state.settings = { ...defaults.settings, language };
+    for (const [date, record] of Object.entries(state.records)) {
+      const clean = createDefaultRecord(date);
+      record.reservation = clean.reservation;
+      record.riceRemaining = clean.riceRemaining;
+      record.procurement = clean.procurement;
+      record.completedTasks = clean.completedTasks;
+      record.customTasks = clean.customTasks;
+    }
+    state.operations = createOperationalState(state.settings);
+    persist();
+    return state;
+  }
+
   return {
     getState: () => state,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    mergeBusinessModules,
+    resetBusinessModules,
     update,
     selectDate(date) {
       return update((draft) => {

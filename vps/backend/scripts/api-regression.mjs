@@ -34,7 +34,7 @@ async function inventory(cookie, site) {
 
 const health = await request("/api/health");
 assert.equal(health.response.status,200);
-assert.equal(health.data.schema,"004");
+assert.equal(health.data.schema,"005");
 
 const admin = await login("yangchuadmin");
 assert.equal(admin.user.role,"admin");
@@ -50,6 +50,42 @@ const supervisor = await login("supervisorfx");
 const employee = await login("employeefx");
 const parttime = await login("parttimefx");
 const central = await login("centralreg");
+
+const statePayload = {
+  settings:{reservationBuffer:3},
+  reservations:{records:{"2026-09-04":{reservation:{lunchTables:5,dinnerTables:9,remaining:{}},riceRemaining:700}}},
+  preparation:{records:{"2026-09-04":{completedTasks:{"task-a":true},customTasks:[]}},jobCatalog:[]},
+  attendance:{attendance:[],payroll:{overtimeRate:1.34}},
+  shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""}]},
+};
+const adminStateSave = await request("/api/business-state/fuxing",{
+  method:"POST",cookie:admin.cookie,body:{modules:statePayload}
+});
+assert.equal(adminStateSave.response.status,200);
+assert.equal(adminStateSave.data.revision,1);
+assert.deepEqual(new Set(adminStateSave.data.savedModules),new Set(Object.keys(statePayload)));
+const adminStateRead = await request("/api/business-state/fuxing",{cookie:admin.cookie});
+assert.equal(adminStateRead.response.status,200);
+assert.equal(adminStateRead.data.modules.settings.reservationBuffer,3);
+assert.equal(adminStateRead.data.modules.reservations.records["2026-09-04"].riceRemaining,700);
+
+const employeeStateRead = await request("/api/business-state/fuxing",{cookie:employee.cookie});
+assert.equal(employeeStateRead.response.status,200);
+assert.equal(employeeStateRead.data.modules.settings,undefined,"employee must not read settings state");
+assert.equal(employeeStateRead.data.modules.attendance.payroll.overtimeRate,1.34);
+const employeeStateSave = await request("/api/business-state/fuxing",{
+  method:"POST",cookie:employee.cookie,
+  body:{modules:{settings:{reservationBuffer:99},attendance:{attendance:[{id:"clock-test"}],payroll:{overtimeRate:1.5}}}}
+});
+assert.equal(employeeStateSave.response.status,200);
+assert.deepEqual(employeeStateSave.data.savedModules,["attendance"]);
+const protectedStateRead = await request("/api/business-state/fuxing",{cookie:admin.cookie});
+assert.equal(protectedStateRead.data.modules.settings.reservationBuffer,3,"unauthorized settings write was accepted");
+assert.equal(protectedStateRead.data.modules.attendance.payroll.overtimeRate,1.5);
+assert.equal((await request("/api/business-state/yongji",{cookie:employee.cookie})).response.status,403);
+assert.equal((await request("/api/business-state/central",{
+  method:"POST",cookie:central.cookie,body:{modules:{settings:{reservationBuffer:9}}}
+})).response.status,403);
 
 const preferenceUpdate = await request("/api/auth/preferences", {
   method:"POST",cookie:manager.cookie,body:{preferredLanguage:"zh-TW"}
@@ -135,6 +171,21 @@ const managerCatalog = await request("/api/inventory/catalog/sync",{
   }}
 });
 assert.equal(managerCatalog.response.status,200);
+
+for (const [site, locationCode] of [["yongji","yongji-freezer"],["central","central-freezer"]]) {
+  const itemKey = `${site}:save-button-regression`;
+  const saved = await request("/api/inventory/catalog/sync",{
+    method:"POST",cookie:admin.cookie,
+    body:{item:{
+      key:itemKey,catalog_key:`save-button-${site}`,zh:"儲存測試",vi:`Kiểm thử lưu ${site}`,
+      unit:"包",work_area:"noodles",storage_only:false,
+      locations:[{code:locationCode,quantity:0,minimum:1}]
+    }}
+  });
+  assert.equal(saved.response.status,200,`catalog save failed for ${site}`);
+  const reloaded = await inventory(admin.cookie,site);
+  assert(reloaded.data.items.some((item)=>item.item_key===itemKey),`catalog item was not persisted for ${site}`);
+}
 
 assert.equal((await request("/api/inventory/receive-default",{
   method:"POST",cookie:managerYj.cookie,

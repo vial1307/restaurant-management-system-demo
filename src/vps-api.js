@@ -125,6 +125,18 @@ export function vpsDeleteUser(id) {
   return apiRequest(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export function vpsBusinessState(site) {
+  return apiRequest(`/api/business-state/${encodeURIComponent(site)}`);
+}
+
+export function vpsSaveBusinessState(site, modules) {
+  return apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
+    method: "POST",
+    body: { modules },
+    timeoutMs: 30000,
+  });
+}
+
 export function vpsSchemaVersion() {
   return apiRequest("/api/inventory/schema-version");
 }

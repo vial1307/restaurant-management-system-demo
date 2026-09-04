@@ -801,7 +801,7 @@ function centralEditorModal(items, editorKey, language) {
         <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${CENTRAL_WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea || "noodles") === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "設定此原物料主要提供給哪個工作區使用。" : "Chọn khu làm việc chính sử dụng nguyên vật liệu này."}</small></label>
         <fieldset class="modal-locations"><legend>${language === "zh" ? "選擇食材存放位置" : "Chọn nơi cất nguyên liệu · 選擇食材存放位置"}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的位置；「現有」為目前實際庫存，「標準量」為補貨／低庫存判斷基準。" : "Chọn vị trí thực tế có cất hàng; 現有 là tồn thực tế, 標準量 là mức chuẩn để cảnh báo/bổ hàng."}</p>${locationRows}</fieldset>
         <div class="modal-grid modal-meta-grid"><label>${language === "zh" ? "數量單位" : "Đơn vị · 數量"}<select name="central-unit">${CENTRAL_UNITS.map((unit) => `<option value="${esc(unit)}" ${item.unit === unit ? "selected" : ""}>${esc(unit)}</option>`).join("")}</select></label></div>
-        <button class="primary-button modal-submit" type="submit">${editing ? "✓" : "＋"} ${esc(title)}</button>
+        <div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-central-save-item>✓ ${esc(editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項")}</button></div>
       </form>
     </section>
   </div>`;
@@ -913,6 +913,11 @@ function bindCentral(user) {
     const unit = String(data.get("central-unit") || "個");
     const workArea = String(data.get("central-work-area") || "noodles");
     if (!zh || !vi) return;
+    const saveButton = editorForm.querySelector("[data-central-save-item]");
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "Đang lưu vào database… · 正在儲存…";
+    }
 
     const oldItems = loadStock();
     const editorKey = String(editorForm.dataset.editorKey || "new");

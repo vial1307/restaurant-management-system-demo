@@ -115,5 +115,14 @@ for (const mode of ["in", "pick", "transfer", "ship"]) {
 }
 assert(app.includes('data-manage-adjust="true"'), "branch management must expose quantity controls");
 assert(authLayer.includes('data-central-manage-adjust="true"'), "central management must expose quantity controls");
+assert(app.includes("data-save-item"), "branch product editor must expose an explicit save button");
+assert(authLayer.includes("data-central-save-item"), "central product editor must expose an explicit save button");
+assert(app.includes("attachBusinessStateSync(store)"), "business modules must synchronize with PostgreSQL");
+const inventoryCloud = read("src/inventory-cloud.js");
+assert.match(inventoryCloud, /cloudSyncBranchCatalogItem[\s\S]{0,300}canManageBranchCatalog\(site\)/, "inventory editors must be allowed to save branch catalog items");
+const businessRoutes = read("vps/backend/src/business-state-routes.mjs");
+for (const moduleName of ["settings","reservations","procurement","preparation","menu","sop","skills","attendance","schedule","shared","audit"]) {
+  assert(businessRoutes.includes(`${moduleName}:`), `business-state route missing ${moduleName}`);
+}
 
 console.log("STATIC_REGRESSION_OK");

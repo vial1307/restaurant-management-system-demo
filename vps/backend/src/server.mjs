@@ -5,6 +5,7 @@ import { pool, withTransaction } from "./db.mjs";
 import { hashPassword, verifyPassword } from "./password.mjs";
 import { registerAdminRoutes } from "./admin-routes.mjs";
 import { registerInventoryExtraRoutes } from "./inventory-extra-routes.mjs";
+import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
 import {
   createSession,
   destroySession,
@@ -18,6 +19,7 @@ import {
 const app = Fastify({
   logger: true,
   trustProxy: true,
+  bodyLimit: 12 * 1024 * 1024,
   requestIdHeader: "x-request-id",
   genReqId: () => crypto.randomUUID(),
 });
@@ -25,6 +27,7 @@ const app = Fastify({
 await app.register(cookie);
 await registerAdminRoutes(app);
 await registerInventoryExtraRoutes(app);
+await registerBusinessStateRoutes(app);
 
 app.get("/api/health", async () => {
   const db = await pool.query("select now() as now");
