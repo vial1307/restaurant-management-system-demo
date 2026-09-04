@@ -13,7 +13,18 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 
 echo "[1/11] Updating source..."
+SOURCE_BEFORE="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
 runuser -u deploy -- git -C "${REPO_DIR}" pull --ff-only origin main
+SOURCE_AFTER="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse HEAD)"
+
+# Bash may continue executing the copy of this script that was loaded before
+# git pull replaced it on disk. Re-exec exactly once so deployment logic from
+# the newly pulled commit is what validates and activates that same release.
+if [[ "${KITCHEN_DEPLOY_REEXEC:-0}" != "1" && -n "${SOURCE_BEFORE}" && "${SOURCE_BEFORE}" != "${SOURCE_AFTER}" ]]; then
+  echo "Source changed ${SOURCE_BEFORE:0:7} -> ${SOURCE_AFTER:0:7}; reloading deploy script..."
+  export KITCHEN_DEPLOY_REEXEC=1
+  exec /usr/bin/bash "${REPO_DIR}/vps/scripts/deploy-api.sh"
+fi
 
 echo "[2/11] Updating compose definition..."
 cp "${REPO_DIR}/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
