@@ -78,10 +78,21 @@ async function syncProfiles(profile = null) {
   window.dispatchEvent(new CustomEvent("shitu:accounts-synced"));
 }
 
+let authCheckPromise = null;
+
+function currentVpsUser() {
+  if (!authCheckPromise) {
+    authCheckPromise = vpsMe().finally(() => {
+      authCheckPromise = null;
+    });
+  }
+  return authCheckPromise;
+}
+
 async function boot() {
   const previous = legacySession();
   try {
-    const profile = mirrorVpsSession((await vpsMe())?.user);
+    const profile = mirrorVpsSession((await currentVpsUser())?.user);
     if (profile) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
   } catch (error) {
     if (previous?.provider === "vps" && Number(error?.status) === 401) {
@@ -96,12 +107,13 @@ async function boot() {
 
 let lastProfileRefresh = 0;
 async function refreshProfile() {
+  if (document.documentElement.dataset.vpsAuthReady !== "true") return;
   if (document.visibilityState === "hidden") return;
   const now = Date.now();
   if (now - lastProfileRefresh < 30000) return;
   lastProfileRefresh = now;
   try {
-    const profile = mirrorVpsSession((await vpsMe())?.user);
+    const profile = mirrorVpsSession((await currentVpsUser())?.user);
     if (profile) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
   } catch {}
 }
