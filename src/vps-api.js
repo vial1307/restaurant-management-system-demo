@@ -1,12 +1,23 @@
 const VPS_HOSTS = new Set(["82.47.180.185"]);
 const LEGACY_STATIC_HOSTS = new Set(["vial1307.github.io"]);
 const inventoryCache = new Map();
+const receiveDefaultsCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
+const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
 
 export function invalidateVpsInventoryCache(site = "") {
   if (site) inventoryCache.delete(site);
   else inventoryCache.clear();
+}
+
+export function invalidateVpsReceiveDefaultsCache() {
+  receiveDefaultsCache.clear();
+}
+
+function clearRuntimeCaches() {
+  invalidateVpsInventoryCache("");
+  invalidateVpsReceiveDefaultsCache();
 }
 
 export function isVpsApiConfigured() {
@@ -71,6 +82,7 @@ export async function apiRequest(path, {
       // session when its stale 401 response arrives later.
       if (currentSession?.id === sessionAtStart.id) {
         try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
+        clearRuntimeCaches();
         window.dispatchEvent(new CustomEvent("shitu:auth-expired", { detail: { path } }));
       }
     }
@@ -84,7 +96,8 @@ export async function apiRequest(path, {
   return data;
 }
 
-export function vpsLogin(username, password) {
+export async function vpsLogin(username, password) {
+  clearRuntimeCaches();
   return apiRequest("/api/auth/login", {
     method: "POST",
     body: { username, password },
@@ -95,8 +108,12 @@ export function vpsMe() {
   return apiRequest("/api/auth/me");
 }
 
-export function vpsLogout() {
-  return apiRequest("/api/auth/logout", { method: "POST" });
+export async function vpsLogout() {
+  try {
+    return await apiRequest("/api/auth/logout", { method: "POST" });
+  } finally {
+    clearRuntimeCaches();
+  }
 }
 
 export function vpsChangePassword(currentPassword, newPassword) {
@@ -202,16 +219,32 @@ export async function vpsDirectTransfer(body) {
   return result;
 }
 
-export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
+export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}, { force = false } = {}) {
+  const normalizedSites = [...new Set(sites.map(String).filter(Boolean))].sort();
+  const normalizedCatalogKeys = [...new Set(catalogKeys.map(String).filter(Boolean))].sort();
+  const key = `${normalizedSites.join(",")}|${normalizedCatalogKeys.join(",")}`;
+  const now = Date.now();
+  const cached = receiveDefaultsCache.get(key);
+  if (!force && cached && now - cached.at < RECEIVE_DEFAULTS_CACHE_MS) {
+    return cached.promise;
+  }
+
   const params = new URLSearchParams();
-  if (sites.length) params.set("sites", sites.join(","));
-  if (catalogKeys.length) params.set("catalogKeys", catalogKeys.join(","));
+  if (normalizedSites.length) params.set("sites", normalizedSites.join(","));
+  if (normalizedCatalogKeys.length) params.set("catalogKeys", normalizedCatalogKeys.join(","));
   const suffix = params.toString() ? `?${params}` : "";
-  return apiRequest(`/api/inventory/receive-defaults${suffix}`);
+  const promise = apiRequest(`/api/inventory/receive-defaults${suffix}`)
+    .catch((error) => {
+      receiveDefaultsCache.delete(key);
+      throw error;
+    });
+  receiveDefaultsCache.set(key, { at: now, promise });
+  return promise;
 }
 
 export async function vpsSetReceiveDefault(body) {
   const result = await apiRequest("/api/inventory/receive-default", { method: "POST", body });
+  invalidateVpsReceiveDefaultsCache();
   invalidateVpsInventoryCache(String(body?.site || ""));
   return result;
 }
@@ -230,6 +263,7 @@ export async function vpsArchiveCatalogItem(itemKey) {
     method: "POST",
     body: { itemKey },
   });
+  invalidateVpsReceiveDefaultsCache();
   invalidateVpsInventoryCache(String(itemKey || "").split(":")[0] || "");
   return result;
 }
