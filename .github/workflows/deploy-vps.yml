@@ -81,7 +81,7 @@ jobs:
 
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16-alpine
@@ -122,7 +122,7 @@ jobs:
         run: |
           npm install --prefix vps/backend
           npm install --prefix tests
-          ./tests/node_modules/.bin/playwright install --with-deps chromium
+          ./tests/node_modules/.bin/playwright install --with-deps chromium firefox webkit
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs
@@ -156,8 +156,20 @@ jobs:
           cat /tmp/kitchen-web.log
           exit 1
 
-      - name: Desktop and mobile browser regression
+      - name: Desktop and mobile Chromium regression
         run: node tests/browser-regression.mjs
+
+      - name: Full-device cross-browser regression
+        run: node tests/full-device-regression.mjs
+
+      - name: Upload full-device screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-device-screenshots
+          path: tests/artifacts/full-device
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Dump regression logs on failure
         if: failure()
