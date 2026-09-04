@@ -1,6 +1,9 @@
 // One-time cleanup for the retired Kitchen OS service worker.
 // The old worker caused stale JavaScript and repeated controller/update reloads on iOS/Safari.
-const CLEANUP_KEY = "shitu-kitchen-sw-cleanup-v87";
+const RELEASE = document.querySelector('meta[name="kitchen-release"]')?.content || "development";
+const CLEANUP_KEY = `shitu-kitchen-sw-cleanup-${RELEASE}`;
+
+document.documentElement.dataset.release = RELEASE;
 
 async function cleanupKitchenServiceWorker() {
   if (sessionStorage.getItem(CLEANUP_KEY) === "1") return;

@@ -69,6 +69,7 @@ jobs:
           test -f vps/Caddyfile
           test -f src/vps-auth-bridge.js
           test -f vps/scripts/deploy-api.sh
+          test -f vps/scripts/stamp-frontend-release.mjs
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh

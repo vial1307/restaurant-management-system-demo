@@ -41,6 +41,7 @@ cp -a "${REPO_DIR}/vps-entry.html" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/manifest.webmanifest" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/sw.js" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/src" "${WEB_NEXT}/"
+node "${REPO_DIR}/vps/scripts/stamp-frontend-release.mjs" "${WEB_NEXT}" "${APP_RELEASE}"
 printf '%s\n' "${APP_RELEASE}" > "${WEB_NEXT}/RELEASE"
 chown -R deploy:deploy "${WEB_NEXT}"
 

@@ -679,6 +679,13 @@ input,textarea{
 /* Performance: fixed translucent layers are expensive while scrolling on iOS
    and embedded browsers. Use an opaque surface so taps and scroll remain stable. */
 @media (max-width: 900px) {
+  .inventory-history-notice{
+    display:grid !important;
+    gap:8px;
+  }
+  .inventory-history-notice .secondary-button{
+    width:100%;
+  }
   .topbar,
   .mobile-nav,
   .browser-ios .topbar,

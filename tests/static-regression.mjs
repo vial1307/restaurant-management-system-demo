@@ -22,8 +22,14 @@ assert.doesNotMatch(caddy, /redir\s+@root\s+\/vps-entry\.html/, "canonical root 
 assert.match(caddy, /@legacyEntry[\s\S]{0,180}redir\s+@legacyEntry\s+\/\s+308/, "legacy VPS entry must redirect permanently to the root URL");
 assert.match(caddy, /@appAssets[\s\S]{0,160}no-cache, must-revalidate/, "frontend assets must revalidate without manual release URLs");
 for (const shell of ["index.html", "vps-entry.html"]) {
-  assert.doesNotMatch(read(shell), /\?v=\d+/, `${shell} must not require manual asset version parameters`);
+  assert.match(read(shell), /meta name="kitchen-release" content="__KITCHEN_RELEASE__"/, `${shell} must expose the deployed release`);
+  assert.match(read(shell), /src\/app\.js\?v=__KITCHEN_RELEASE__/, `${shell} must cache-bust the application bundle internally`);
 }
+const deployScript = read("vps/scripts/deploy-api.sh");
+const releaseStamper = read("vps/scripts/stamp-frontend-release.mjs");
+assert.match(deployScript, /stamp-frontend-release\.mjs/, "deployment must stamp frontend assets with the Git release");
+assert.match(releaseStamper, /replaceAll\("__KITCHEN_RELEASE__", release\)/, "release stamper must replace every frontend placeholder");
+assert.match(read("src/cache-reset.js"), /shitu-kitchen-sw-cleanup-\$\{RELEASE\}/, "service-worker cleanup must rerun for every deployed release");
 
 assert.deepEqual(BACKEND_MODULES, ACCOUNT_MODULES, "frontend/backend account module lists diverged");
 assert.deepEqual(backendFullPermissions(), fullAccountPermissions(), "frontend/backend admin permissions diverged");

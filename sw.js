@@ -1,8 +1,8 @@
 // Retirement worker for installations that still have the old offline cache.
 // It clears Kitchen OS caches, unregisters itself and reloads controlled tabs
-// through a versioned URL so Safari cannot reuse an obsolete interface.
+// through the canonical URL so Safari cannot reuse an obsolete interface.
 const CACHE_PREFIX = "shitu-kitchen-os-";
-const RELEASE = "87";
+const RELEASE = "__KITCHEN_RELEASE__";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -22,7 +22,8 @@ self.addEventListener("activate", (event) => {
     await Promise.all(windows.map((client) => {
       const url = new URL(client.url);
       if (url.origin !== self.location.origin) return Promise.resolve();
-      url.searchParams.set("release", RELEASE);
+      url.pathname = "/";
+      url.search = "";
       return client.navigate(url.href);
     }));
   })());

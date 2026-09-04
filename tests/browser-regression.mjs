@@ -322,6 +322,54 @@ async function responsiveAdmin(browser, viewport) {
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
 
+  if(viewport.width <= 390 && viewport.height >= 700){
+    const mobileRoutes=page.locator(".mobile-nav .nav-item");
+    assert.equal(await mobileRoutes.count(),ACCOUNT_MODULES.length,"mobile navigation does not contain every desktop module");
+    for(const route of ACCOUNT_MODULES){
+      assert.equal(await page.locator(`.mobile-nav .nav-item[href="#${route}"]`).count(),1,`mobile navigation is missing ${route}`);
+    }
+
+    for(const site of ["fuxing","yongji"]){
+      await setSite(page,site);
+      await page.locator('[data-action="shift-date"][data-offset="-1"]').first().click();
+      await page.locator(".inventory-history-notice").waitFor({state:"visible"});
+      for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
+        const tab=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
+        await tab.waitFor({state:"visible"});
+      }
+      await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').click();
+      await page.locator('[data-branch-inventory-operations][data-mode="in"]').waitFor({state:"visible"});
+      assert.equal(await page.locator(".inventory-history-notice").count(),0,`${site} mobile operation did not switch back to today`);
+      await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
+      await page.locator('[data-action="open-add-item"]').first().click();
+      const branchSave=page.locator('.modal-header-save[data-save-item]');
+      await branchSave.waitFor({state:"visible"});
+      assert.match(await branchSave.innerText(),/Lưu sản phẩm|儲存品項/,`${site} mobile product save action missing`);
+      await page.locator('button[data-action="close-modal"]').first().click();
+      await page.locator(".modal-backdrop").waitFor({state:"detached"});
+    }
+
+    await setSite(page,"central");
+    for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
+      const tab=page.locator(`[data-central-mode="${mode}"]`);
+      await tab.waitFor({state:"visible"});
+    }
+    await page.locator('[data-central-mode="manage"]').click();
+    await page.locator('[data-central-editor-open="new"]').click();
+    const centralSave=page.locator('.modal-header-save[data-central-save-item]');
+    await centralSave.waitFor({state:"visible"});
+    assert.match(await centralSave.innerText(),/Lưu sản phẩm|儲存品項/,"central mobile product save action missing");
+    await page.locator('button[data-central-editor-close]').click();
+
+    await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
+    await page.locator("[data-account-edit]").first().click();
+    const mobileAccountModal=page.locator(".account-modal");
+    await mobileAccountModal.waitFor({state:"visible"});
+    assert.equal(await mobileAccountModal.locator(".permission-row").count(),ACCOUNT_MODULES.length,"mobile permission editor does not contain every module");
+    assert.equal(await mobileAccountModal.locator(".permission-row").first().getAttribute("data-permission-module"),"dashboard","mobile permission editor does not begin with dashboard");
+    await mobileAccountModal.locator("[data-account-close]").first().click();
+  }
+
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
   assert(overflow <= 3,`document horizontal overflow ${overflow}px at ${viewport.width}x${viewport.height}`);
 
