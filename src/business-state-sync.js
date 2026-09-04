@@ -145,8 +145,11 @@ export function attachBusinessStateSync(store) {
         store.mergeBusinessModules(modules);
         applyingRemote = false;
         lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
-      } else if (hasBusinessEdit()) {
-        await save();
+      } else {
+        // An empty server row means this browser may still hold the only copy of
+        // existing operational data. Treat it as the baseline and wait for a
+        // real user mutation before creating the first database revision.
+        lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
       }
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site } }));
     } catch (error) {

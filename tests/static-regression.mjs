@@ -126,5 +126,6 @@ for (const moduleName of ["settings","reservations","procurement","preparation",
   assert(businessRoutes.includes(`${moduleName}:`), `business-state route missing ${moduleName}`);
 }
 assert.match(businessSync, /remote:\s*\{\s*jobCatalog:/, "remote job catalog must persist under remote permission");
+assert(!/revision\s*\|\|\s*0\)\s*>\s*0[\s\S]{0,500}else if\s*\(hasBusinessEdit\(\)\)\s*\{\s*await save\(\)/.test(businessSync), "an empty server must not be seeded by an untouched clean browser");
 
 console.log("STATIC_REGRESSION_OK");
