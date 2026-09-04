@@ -1360,6 +1360,13 @@ function renderWhenAuthorized() {
   render();
 }
 
+function selectServiceDate(date) {
+  store.selectDate(date);
+  if (date === formatDateKey() && route() === "inventory") {
+    void syncInventoryNow(activeInventorySite(), { reloadBranch: false });
+  }
+}
+
 const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render });
 
 root.addEventListener("click", (event) => {
@@ -1376,8 +1383,8 @@ root.addEventListener("click", (event) => {
   if (action === "reset" && !accountCan("settings", "edit")) return;
   if (management.handleClick(target, event, currentContext())) return;
 
-  if (action === "shift-date") { view.calendarOpen = false; store.selectDate(shiftDate(state.selectedDate, Number(target.dataset.offset))); }
-  if (action === "select-date" || action === "calendar-select-day") { view.calendarOpen = false; store.selectDate(target.dataset.date); }
+  if (action === "shift-date") { view.calendarOpen = false; selectServiceDate(shiftDate(state.selectedDate, Number(target.dataset.offset))); }
+  if (action === "select-date" || action === "calendar-select-day") { view.calendarOpen = false; selectServiceDate(target.dataset.date); }
   if (action === "toggle-calendar") {
     const selected = new Date(`${state.selectedDate}T12:00:00`);
     view.calendarOpen = !view.calendarOpen;
@@ -1401,20 +1408,20 @@ root.addEventListener("click", (event) => {
       "next-month": shiftMonth(state.selectedDate, 1),
     };
     view.calendarOpen = false;
-    store.selectDate(dates[target.dataset.shortcut]);
+    selectServiceDate(dates[target.dataset.shortcut]);
   }
   if (action === "toggle-language") store.updateSetting("language", state.settings.language === "vi" ? "zh" : "vi");
   if (action === "set-language") store.updateSetting("language", target.dataset.language);
   if (action === "select-inventory-view") { view.inventoryView = target.dataset.view; view.search = ""; render(); }
   if (action === "inventory-go-today") {
     view.inventoryOpsMode = "overview";
-    store.selectDate(formatDateKey());
+    selectServiceDate(formatDateKey());
     return;
   }
   if (action === "select-inventory-ops") {
     view.inventoryOpsMode = target.dataset.mode || "overview";
     if (target.dataset.switchToToday === "true") {
-      store.selectDate(formatDateKey());
+      selectServiceDate(formatDateKey());
       return;
     }
     render();
