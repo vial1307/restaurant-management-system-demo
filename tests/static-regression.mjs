@@ -115,6 +115,10 @@ for (const mode of ["in", "pick", "transfer", "ship"]) {
 }
 assert(app.includes('data-manage-adjust="true"'), "branch management must expose quantity controls");
 assert(authLayer.includes('data-central-manage-adjust="true"'), "central management must expose quantity controls");
+assert.match(authLayer, /function centralPage[\s\S]{0,900}const historical = false;/, "central inventory must remain live across service dates");
+assert.doesNotMatch(authLayer, /function centralPage[\s\S]{0,900}const historical = !isCurrentBranchInventoryDate\(\)/, "central inventory must not inherit the branch historical-date lock");
+assert.match(authLayer, /const operationsEnabled = editGranted && cloudReady;/, "central operation tabs must stay available whenever permission and VPS are ready");
+assert.match(authLayer, /const canManageCatalog = catalogManageVisible && canManageCentralCatalog\(\);/, "central management must not be locked by service date");
 assert(app.includes("data-save-item"), "branch product editor must expose an explicit save button");
 assert(authLayer.includes("data-central-save-item"), "central product editor must expose an explicit save button");
 assert(app.includes('class="secondary-button modal-header-save"'), "branch save action must remain visible in the modal header");
