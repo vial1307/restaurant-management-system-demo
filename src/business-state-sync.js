@@ -97,6 +97,8 @@ export function attachBusinessStateSync(store) {
   let loadToken = 0;
   let saveTimer = 0;
   let lastSavedSnapshot = "";
+  let loadedRevisionKey = "";
+  let loadedRevision = -1;
 
   const identityKey = () => {
     const user = readSession();
@@ -113,8 +115,13 @@ export function attachBusinessStateSync(store) {
     const snapshot = JSON.stringify(modules);
     if (snapshot === lastSavedSnapshot) return;
     try {
-      await vpsSaveBusinessState(site, modules);
+      const saved = await vpsSaveBusinessState(site, modules);
       lastSavedSnapshot = snapshot;
+      const revision = Number(saved?.revision);
+      if (Number.isFinite(revision)) {
+        loadedRevisionKey = key;
+        loadedRevision = revision;
+      }
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
     } catch (error) {
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
@@ -133,15 +140,24 @@ export function attachBusinessStateSync(store) {
     const site = currentSite();
     const token = ++loadToken;
     clearTimeout(saveTimer);
-    loadedKey = "";
-    lastSavedSnapshot = "";
+    const identityChanged = key !== loadedKey;
+    if (identityChanged) {
+      loadedKey = "";
+      lastSavedSnapshot = "";
+    }
     if (!key || !site || !hasBusinessView() || navigator.onLine === false) return;
     try {
       const result = await vpsBusinessState(site);
       if (token !== loadToken || key !== identityKey()) return;
       loadedKey = key;
+      const revision = Math.max(0, Number(result?.revision) || 0);
+      if (loadedRevisionKey === key && loadedRevision === revision) {
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, unchanged:true } }));
+        return;
+      }
+
       const modules = result?.modules || {};
-      if (Number(result?.revision || 0) > 0) {
+      if (revision > 0) {
         applyingRemote = true;
         // Merge only modules that already exist on the server. Modules not yet
         // migrated must keep their device copy until an authorized real edit
@@ -155,6 +171,8 @@ export function attachBusinessStateSync(store) {
         // real user mutation before creating the first database revision.
         lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
       }
+      loadedRevisionKey = key;
+      loadedRevision = revision;
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site } }));
     } catch (error) {
       if (token !== loadToken) return;
