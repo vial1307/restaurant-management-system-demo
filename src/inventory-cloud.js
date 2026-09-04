@@ -978,6 +978,7 @@ async function subscribeRealtime(site) {
 }
 
 async function boot() {
+  if (document.documentElement.dataset.vpsAuthReady !== "true") return;
   const s = session();
   if (!isInventoryBackendConfigured() || !s) return;
   if (bootedUserId === s.id && polling) return;
@@ -1000,9 +1001,14 @@ async function boot() {
 }
 
 window.addEventListener("shitu:auth-synced", () => { void boot(); });
-window.addEventListener("focus", () => { void syncInventoryNow(currentSite()); });
+window.addEventListener("shitu:vps-auth-ready", () => { void boot(); });
+window.addEventListener("focus", () => {
+  if (document.documentElement.dataset.vpsAuthReady === "true") void syncInventoryNow(currentSite());
+});
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") void syncInventoryNow(currentSite());
+  if (document.visibilityState === "visible" && document.documentElement.dataset.vpsAuthReady === "true") {
+    void syncInventoryNow(currentSite());
+  }
 });
 window.addEventListener("hashchange", () => {
   const site = currentSite();
@@ -1013,4 +1019,4 @@ window.addEventListener("shitu:central-stock-ready", (event) => {
   void event;
 });
 
-void boot();
+if (document.documentElement.dataset.vpsAuthReady === "true") void boot();
