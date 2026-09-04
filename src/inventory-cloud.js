@@ -182,6 +182,9 @@ export function setActiveInventorySite(site) {
   if (s?.location !== "all" || !["central","fuxing","yongji"].includes(site)) return false;
   localStorage.setItem(ACTIVE_SITE_KEY, site);
   window.dispatchEvent(new CustomEvent("shitu:active-site-changed", { detail:{ site } }));
+  // A warehouse switch can keep the same #inventory route, so hashchange will
+  // not necessarily fire. Start the new site's sync explicitly.
+  setTimeout(() => { void syncInventoryNow(site, { reloadBranch: false }); }, 0);
   return true;
 }
 

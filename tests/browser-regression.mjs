@@ -38,9 +38,24 @@ async function selectToday(page) {
 }
 
 async function setSite(page, site) {
-  await page.evaluate((value)=>localStorage.setItem("shitu-admin-active-site-v1",value),site);
   await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
   await page.waitForSelector(".page-content");
+
+  const activeSite = await page.evaluate(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null");
+      if (["central", "fuxing", "yongji"].includes(user?.location)) return user.location;
+      return localStorage.getItem("shitu-admin-active-site-v1") || "fuxing";
+    } catch {
+      return "fuxing";
+    }
+  });
+  if (activeSite !== site) {
+    const siteButton = page.locator(`[data-warehouse="${site}"]`).first();
+    await siteButton.waitFor({ state:"visible", timeout:10000 });
+    await siteButton.click();
+    await page.waitForFunction((expected) => localStorage.getItem("shitu-admin-active-site-v1") === expected, site);
+  }
 
   await selectToday(page);
 
