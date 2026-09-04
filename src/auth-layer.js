@@ -554,9 +554,12 @@ function centralPage(user) {
   const draftDirectAdjust = draftCountAllowed && user.role === "admin";
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  const historical = !isCurrentBranchInventoryDate();
-  const directAdjust = !historical && (canDirectInventoryAdjust() || draftDirectAdjust);
-  const operationsEnabled = editGranted && cloudReady && !historical;
+  // Central stock is a live balance shared by all service dates. Only branch
+  // snapshots are date-locked; changing the service date must never hide or
+  // disable central inventory operations.
+  const historical = false;
+  const directAdjust = canDirectInventoryAdjust() || draftDirectAdjust;
+  const operationsEnabled = editGranted && cloudReady;
   let mode = content.dataset.centralMode || "overview";
   if (mode === "receive") { mode = "overview"; content.dataset.centralMode = "overview"; }
   if (mode === "out") { mode = "pick"; content.dataset.centralMode = "pick"; }
@@ -573,7 +576,7 @@ function centralPage(user) {
   const lowCount = items.filter((item) => Number(item.qty || 0) < Number(item.minimum || 0)).length;
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
   const catalogManageVisible = editGranted && ["central","all"].includes(user.location);
-  const canManageCatalog = catalogManageVisible && canManageCentralCatalog() && !historical;
+  const canManageCatalog = catalogManageVisible && canManageCentralCatalog();
   const canViewHistory = accountRole === "admin";
   if (mode === "manage" && !catalogManageVisible) { mode = "overview"; content.dataset.centralMode = mode; }
   if (mode === "history" && !canViewHistory) { mode = "overview"; content.dataset.centralMode = mode; }
@@ -618,7 +621,7 @@ function centralPage(user) {
       ? `<div class="inventory-cloud-notice"><strong>Đang kết nối VPS database · 正在連線 VPS 資料庫</strong><small>Hệ thống đang tự kiểm tra API và PostgreSQL. · 系統正在自動檢查 API 與 PostgreSQL。</small></div>`
       : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Không kết nối được VPS database · VPS 資料庫連線失敗</strong><small>Thao tác ghi kho tạm khóa để tránh sai lệch dữ liệu. · 為避免資料分歧，暫時鎖定庫存寫入。</small></div>`;
   const manageNotice = mode === "manage" && catalogManageVisible && !canManageCatalog
-    ? `<div class="inventory-readonly-notice"><strong>${language === "zh" ? "目前無法編輯央廚庫存" : "Hiện chưa thể chỉnh sửa kho Bếp trung tâm"}</strong><small>${language === "zh" ? "請切回今天並確認 VPS 資料庫連線。" : "Hãy chuyển về ngày hôm nay và kiểm tra kết nối VPS database."}</small></div>`
+    ? `<div class="inventory-readonly-notice"><strong>${language === "zh" ? "目前無法編輯央廚庫存" : "Hiện chưa thể chỉnh sửa kho Bếp trung tâm"}</strong><small>${language === "zh" ? "請確認帳號權限與 VPS 資料庫連線。" : "Hãy kiểm tra quyền tài khoản và kết nối VPS database."}</small></div>`
     : "";
   const pageTitle = language === "zh" ? "庫存" : "Tồn kho";
   const pageSubtitle = language === "zh" ? "央廚冷凍、4門、臥櫃與冷藏的庫存管理。" : "Quản lý kho đông, kho mát, tủ 4 cánh và tủ đông nằm của Bếp trung tâm.";
