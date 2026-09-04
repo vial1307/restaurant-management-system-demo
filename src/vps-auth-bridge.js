@@ -133,7 +133,7 @@ document.addEventListener("submit", async (event) => {
       await syncProfiles(profile);
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
-      location.hash = initialRoute(profile);
+      history.replaceState(null, "", `${location.pathname}${initialRoute(profile)}`);
       window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
     } catch (error) {
       const code = error instanceof Error ? (error.code || error.message) : "";
@@ -212,7 +212,7 @@ document.addEventListener("click", async (event) => {
     event.stopImmediatePropagation();
     try { await vpsLogout(); } catch {}
     localStorage.removeItem(AUTH_KEY);
-    location.hash = "#dashboard";
+    history.replaceState(null, "", `${location.pathname}#dashboard`);
     window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
     return;
   }
