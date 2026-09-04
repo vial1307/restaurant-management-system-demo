@@ -237,4 +237,5 @@ window.addEventListener("pageshow", () => { void refreshProfile(); });
 window.addEventListener("focus", () => { void refreshProfile(); });
 document.addEventListener("visibilitychange", () => { void refreshProfile(); });
 
+document.documentElement.dataset.vpsAuthReady = "true";
 void boot();

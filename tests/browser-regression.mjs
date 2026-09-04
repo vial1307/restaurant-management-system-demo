@@ -7,6 +7,7 @@ const PASSWORD = "KitchenTest!123";
 
 async function login(page, username) {
   await page.goto(BASE + "/", { waitUntil:"domcontentloaded" });
+  await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:10000 });
   await page.locator('#auth-login-form input[name="username"]').fill(username);
   await page.locator('#auth-login-form input[name="password"]').fill(PASSWORD);
   await page.locator('#auth-login-form button[type="submit"]').click();
