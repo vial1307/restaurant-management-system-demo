@@ -21,7 +21,7 @@ import {
 import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
-import { attachBusinessStateSync } from "./business-state-sync.js?v=92";
+import { attachBusinessStateSync } from "./business-state-sync.js";
 import {
   activeInventorySite,
   bootstrapFuxingInventory,
