@@ -1,11 +1,19 @@
 (kitchen_site) {
   encode zstd gzip
 
-  @root path /
-  redir @root /vps-entry.html?release=87 302
+  # The application has one canonical entry point. Old bookmarks continue to
+  # work and keep their hash route, but the browser address becomes "/".
+  @legacyEntry path /vps-entry.html
+  redir @legacyEntry / 308
 
-  @freshFrontend path / /index.html /vps-entry.html /src/* /manifest.webmanifest /sw.js
-  header @freshFrontend Cache-Control "no-store, no-cache, must-revalidate"
+  # Always revalidate the application shell so every device sees the newest
+  # release from the same URL. Static assets may be kept locally, but must be
+  # revalidated by Caddy before reuse.
+  @freshShell path / /index.html /manifest.webmanifest /sw.js /RELEASE
+  header @freshShell Cache-Control "no-store, no-cache, must-revalidate"
+
+  @appAssets path /src/*
+  header @appAssets Cache-Control "no-cache, must-revalidate"
 
   @api path /api/*
   handle @api {
