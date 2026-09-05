@@ -1,0 +1,88 @@
+name: One-time dependency lock migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-time-lock-dependencies.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Generate deterministic lockfiles
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix vps/backend
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund --prefix tests
+          test -s vps/backend/package-lock.json
+          test -s tests/package-lock.json
+      - name: Switch Docker and CI to npm ci
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          docker = Path('vps/backend/Dockerfile')
+          text = docker.read_text(encoding='utf-8')
+          old = 'COPY package.json ./\nRUN npm install --omit=dev'
+          new = 'COPY package.json package-lock.json ./\nRUN npm ci --omit=dev'
+          if old not in text:
+              raise SystemExit('Docker dependency install anchor missing; refusing edit')
+          docker.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          wf = Path('.github/workflows/deploy-vps.yml')
+          text = wf.read_text(encoding='utf-8')
+          if text.count('npm install --prefix vps/backend') != 1:
+              raise SystemExit('Expected one backend npm install in deploy workflow')
+          if text.count('npm install --prefix tests') != 2:
+              raise SystemExit('Expected two tests npm install commands in deploy workflow')
+          text = text.replace('npm install --prefix vps/backend', 'npm ci --prefix vps/backend')
+          text = text.replace('npm install --prefix tests', 'npm ci --prefix tests')
+          marker = '          test -f vps/backend/scripts/concurrency-regression.mjs\n'
+          addition = marker + '          test -f vps/backend/package-lock.json\n          test -f tests/package-lock.json\n'
+          if marker not in text:
+              raise SystemExit('Required-files anchor missing; refusing edit')
+          text = text.replace(marker, addition, 1)
+          wf.write_text(text, encoding='utf-8')
+
+          perf = Path('tests/performance-regression.mjs')
+          text = perf.read_text(encoding='utf-8')
+          anchor = 'assert.doesNotMatch(workflow, /actions\\/(?:checkout@v5|setup-node@v4|upload-artifact@v4)/, "deprecated Node 20-generation CI actions must not return");\n'
+          addition = anchor + '\nassert.equal(fs.existsSync(path.join(ROOT, "vps/backend/package-lock.json")), true, "backend dependencies must be lockfile-pinned");\nassert.equal(fs.existsSync(path.join(ROOT, "tests/package-lock.json")), true, "browser test dependencies must be lockfile-pinned");\nassert.match(read("vps/backend/Dockerfile"), /COPY package\\.json package-lock\\.json \\.\\/[\\s\\S]{0,80}RUN npm ci --omit=dev/, "production image must install exactly from the backend lockfile");\nassert.doesNotMatch(read("vps/backend/Dockerfile"), /npm install --omit=dev/, "production image must not resolve semver ranges during deployment");\nassert.match(workflow, /npm ci --prefix vps\\/backend/, "CI backend install must use the committed lockfile");\nassert.equal((workflow.match(/npm ci --prefix tests/g) || []).length, 2, "both browser regression jobs must use the committed test lockfile");\n'
+          if anchor not in text:
+              raise SystemExit('Performance regression anchor missing; refusing edit')
+          if 'backend dependencies must be lockfile-pinned' not in text:
+              text = text.replace(anchor, addition, 1)
+          perf.write_text(text, encoding='utf-8')
+
+          Path('.github/workflows/one-time-lock-dependencies.yml').unlink()
+          PY
+      - name: Validate locked installs and guards
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund --prefix vps/backend
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tests
+          node --check tests/performance-regression.mjs
+          node tests/performance-regression.mjs
+          git diff --check
+      - name: Commit deterministic dependencies
+        run: |
+          set -euo pipefail
+          git config user.name 'Kitchen OS CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Lock production and test dependencies'
+          git push origin HEAD:main
