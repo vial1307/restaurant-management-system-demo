@@ -2,8 +2,8 @@
 
 Status: canonical specification for current production/staging system
 Baseline repository: `vial1307/restaurant-management-system-demo`
-Baseline commit: `e73861a5be4bd42d3c5770f5f4a10624fab0992a`
-Last consolidated: 2026-09-05
+Baseline commit: `88e80a9a4320da3b6e0ead37d083fb2bec187c32`
+Last consolidated: 2026-09-06
 
 > This document is the primary product and engineering specification. Future feature work, bug fixes, refactors, database changes, permission changes, and UI changes must preserve this specification unless the specification itself is deliberately updated first.
 
@@ -953,7 +953,11 @@ Database backup is required before deployment/migration when the deployment pipe
 - VPS/PostgreSQL is source of truth.
 - Inventory must refresh from VPS after relevant account/site/date/navigation changes.
 - Non-inventory business state syncs by site and account permission.
-- Focus/visibility/online refresh is retained until a future SSE/WebSocket implementation replaces polling/fallback behavior.
+- Focus, transition back to visible state, and online recovery must refresh shared business state until a future SSE/WebSocket implementation replaces polling/fallback behavior.
+- Before any business-state refresh or full-page reload that could discard an eligible unsaved local business edit, the client must attempt to persist the current edit to VPS first.
+- If that persistence attempt fails, a stale business-state reload or language/profile-triggered page reload must be blocked rather than silently discarding the local edit.
+- When an authentication/profile refresh and a language-triggered safe reload happen in the same synchronization cycle, exactly one persistence path owns the business-state save; duplicate writes/revision bumps are not allowed.
+- A profile/language-triggered full-page reload must use a cancelable safe-reload contract while business-state synchronization is active. Direct reload is only an allowed fallback when no business-state persistence guard is attached.
 - A stale device must not silently overwrite newer cloud quantity.
 - Failed VPS writes must surface as failure and must not be presented as successful local saves.
 - Partial server state must not erase device data that has not yet been migrated/saved to the server.
