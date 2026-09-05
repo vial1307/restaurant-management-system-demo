@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "index.html"
+      - "vps-entry.html"
       - "manifest.webmanifest"
       - "sw.js"
       - "src/**"
