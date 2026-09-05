@@ -25,6 +25,23 @@ textarea {
   font-size: max(var(--kitchen-control-font-min), 0.75rem);
 }
 
+/* Desktop form controls are interactive targets too. Legacy inventory rules
+   used 19-27px inputs and 11.5px selects; keep every visible form control at
+   the same readable baseline as buttons. */
+input:not([type="checkbox"]):not([type="radio"]),
+select {
+  min-height: var(--kitchen-control-height);
+  box-sizing: border-box;
+}
+
+.inventory-select,
+.quantity-input,
+.minimum-input {
+  min-height: var(--kitchen-control-height) !important;
+  font-size: var(--kitchen-control-font-min) !important;
+  box-sizing: border-box;
+}
+
 button,
 [role="button"],
 .nav-item {
@@ -64,6 +81,19 @@ button:not(.icon-button),
 .icon-button {
   min-width: var(--kitchen-control-height);
   min-height: var(--kitchen-control-height);
+}
+
+/* Account administration uses compact icon/actions in the legacy table. Keep
+   them comfortably clickable without enlarging unrelated inventory rows. */
+.account-admin-card button,
+.account-modal button,
+.account-self-card button {
+  min-height: 42px;
+}
+
+.account-admin-card .icon-button,
+.account-modal .icon-button {
+  min-width: 42px;
 }
 
 .calendar-field input,
@@ -169,7 +199,26 @@ button > span,
   .central-editor-modal input,
   .central-editor-modal select,
   .central-editor-modal textarea {
+    min-height: var(--kitchen-touch-height);
     font-size: 16px;
+  }
+
+  .inventory-select,
+  .quantity-input,
+  .minimum-input {
+    min-height: var(--kitchen-touch-height) !important;
+    font-size: 16px !important;
+  }
+
+  .account-admin-card button,
+  .account-modal button,
+  .account-self-card button {
+    min-height: 44px;
+  }
+
+  .account-admin-card .icon-button,
+  .account-modal .icon-button {
+    min-width: 44px;
   }
 
   .modal-card,
