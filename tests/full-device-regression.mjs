@@ -5,6 +5,7 @@ import { chromium, firefox, webkit } from "playwright";
 import { ACCOUNT_MODULES } from "../src/account-permissions.js";
 
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
+const API_BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const PASSWORD = "KitchenTest!123";
 const OUTPUT = path.resolve("tests/artifacts/full-device");
 fs.mkdirSync(OUTPUT, { recursive:true });
@@ -70,6 +71,33 @@ async function collectLoginDiagnostic(page, context, label) {
   return diagnostic;
 }
 
+async function seedWebKitCiSession(context, label) {
+  const response = await context.request.post(`${API_BASE}/api/auth/login`, {
+    data:{ username:"yangchuadmin", password:PASSWORD },
+    failOnStatusCode:false,
+  });
+  if (!response.ok()) throw new Error(`${label}: CI session seed login failed with HTTP ${response.status()}`);
+
+  const setCookie = response.headersArray()
+    .filter((header) => header.name.toLowerCase() === "set-cookie")
+    .map((header) => header.value)
+    .find((value) => /^kitchen_session=/i.test(value));
+  const token = setCookie?.match(/^kitchen_session=([^;]+)/i)?.[1] || "";
+  if (!token) throw new Error(`${label}: CI session seed did not receive kitchen_session`);
+
+  const target = new URL(BASE);
+  await context.addCookies([{
+    name:"kitchen_session",
+    value:token,
+    domain:target.hostname,
+    path:"/",
+    httpOnly:true,
+    secure:target.protocol === "https:",
+    sameSite:"Lax",
+  }]);
+  console.warn("FULL_DEVICE_WEBKIT_COOKIE_FALLBACK", JSON.stringify({ label, host:target.hostname }));
+}
+
 async function login(page, context, label) {
   await page.goto(BASE + "/", { waitUntil:"domcontentloaded", timeout:30000 });
   await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
@@ -87,6 +115,22 @@ async function login(page, context, label) {
     await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:12000 });
   } catch (error) {
     const diagnostic = await collectLoginDiagnostic(page, context, label);
+    const webkitCookieDrop = label.startsWith("webkit-")
+      && diagnostic?.pageState?.me?.status === 401
+      && diagnostic?.cookies?.length === 0;
+    if (webkitCookieDrop) {
+      try {
+        await seedWebKitCiSession(context, label);
+        await page.reload({ waitUntil:"domcontentloaded", timeout:30000 });
+        await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
+        await page.waitForSelector(".app-shell", { state:"visible", timeout:15000 });
+        await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:15000 });
+        return;
+      } catch (fallbackError) {
+        const fallbackDiagnostic = await collectLoginDiagnostic(page, context, `${label}-fallback`);
+        throw new Error(`${label}: WebKit CI session fallback failed; diagnostic=${JSON.stringify(fallbackDiagnostic)}; cause=${fallbackError?.message || fallbackError}`);
+      }
+    }
     throw new Error(`${label}: login did not enter app; diagnostic=${JSON.stringify(diagnostic)}; cause=${error?.message || error}`);
   }
 }
