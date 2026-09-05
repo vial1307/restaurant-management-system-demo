@@ -13,6 +13,8 @@ const app = read("src/app.js");
 const deploy = read("vps/scripts/deploy-api.sh");
 const workflow = read(".github/workflows/deploy-vps.yml");
 const backendDocker = read("vps/backend/Dockerfile");
+const gitignore = read(".gitignore");
+const backendDockerignore = read("vps/backend/.dockerignore");
 
 assert.match(api, /const receiveDefaultsCache = new Map\(\)/, "receive-default requests must have a shared request cache");
 assert.match(api, /RECEIVE_DEFAULTS_CACHE_MS\s*=\s*5000/, "receive-default burst cache window changed unexpectedly");
@@ -77,5 +79,12 @@ assert.doesNotMatch(backendDocker, /npm install --omit=dev/, "production image m
 assert.match(workflow, /npm ci --prefix vps\/backend/, "CI backend install must use the committed lockfile");
 assert.equal((workflow.match(/npm ci --prefix tests/g) || []).length, 2, "both browser regression jobs must use the committed test lockfile");
 assert.doesNotMatch(workflow, /npm install --prefix (?:vps\/backend|tests)/, "CI dependency installs must not bypass committed lockfiles");
+
+assert.match(gitignore, /(?:^|\n)\*\*\/node_modules\//, "repository must ignore nested dependency folders");
+assert.match(gitignore, /(?:^|\n)\.env(?:\n|$)/, "repository must ignore local environment secrets");
+assert.match(gitignore, /!\*\*\/\.env\.example/, "documented environment templates must remain committable");
+assert.match(gitignore, /tests\/artifacts\//, "browser screenshots and traces must stay out of normal commits");
+assert.match(backendDockerignore, /(?:^|\n)node_modules(?:\n|$)/, "Docker build context must exclude local dependencies");
+assert.match(backendDockerignore, /(?:^|\n)\.env(?:\n|$)/, "Docker build context must exclude local environment secrets");
 
 console.log("PERFORMANCE_REGRESSION_OK");
