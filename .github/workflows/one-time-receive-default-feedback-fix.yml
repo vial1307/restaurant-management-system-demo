@@ -1,0 +1,102 @@
+name: One-time receive-default save feedback fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/one-time-receive-default-feedback-fix.yml"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Make receive-default save failures visible
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path("src/app.js")
+          text = app.read_text(encoding="utf-8")
+          pattern = re.compile(
+              r'(?P<indent>[ \t]*)await cloudSetReceiveDefault\(\{\n'
+              r'(?P=indent)  site,\n'
+              r'(?P=indent)  catalogKey,\n'
+              r'(?P=indent)  locationCode:receiveZone \? branchLocationCode\(site,receiveZone\) : "",\n'
+              r'(?P=indent)\}\);'
+          )
+          matches = list(pattern.finditer(text))
+          if len(matches) != 2:
+              raise SystemExit(f"Expected exactly 2 product receive-default saves, found {len(matches)}; refusing edit")
+
+          def repl(match):
+              i = match.group("indent")
+              return (
+                  f'{i}const receiveResult = await cloudSetReceiveDefault({{\n'
+                  f'{i}  site,\n'
+                  f'{i}  catalogKey,\n'
+                  f'{i}  locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",\n'
+                  f'{i}}});\n'
+                  f'{i}await syncInventoryNow(site, {{ reloadBranch: false }});\n'
+                  f'{i}if (!receiveResult.ok) {{\n'
+                  f'{i}  window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");\n'
+                  f'{i}}}'
+              )
+
+          text = pattern.sub(repl, text)
+          if text.count("const receiveResult = await cloudSetReceiveDefault") != 2:
+              raise SystemExit("Receive-default confirmation guards were not installed exactly twice")
+          app.write_text(text, encoding="utf-8")
+
+          test = Path("tests/performance-regression.mjs")
+          source = test.read_text(encoding="utf-8")
+          anchor = 'assert.doesNotMatch(app, /function applyInventorySearchDom[\\s\\S]{0,2500}render\\(\\)/, "inventory search must remain local-DOM filtered");\n'
+          addition = anchor + '\nassert.equal((app.match(/const receiveResult = await cloudSetReceiveDefault/g) || []).length, 2, "both product create/edit flows must verify receive-default persistence");\nassert.match(app, /if \\(!receiveResult\\.ok\\) \\{[\\s\\S]{0,500}window\\.alert/, "receive-default persistence failures must be visible instead of silently reporting a complete save");\n'
+          if anchor not in source:
+              raise SystemExit("App regression anchor not found; refusing test edit")
+          if "both product create/edit flows must verify receive-default persistence" not in source:
+              source = source.replace(anchor, addition, 1)
+          test.write_text(source, encoding="utf-8")
+
+          Path(".github/workflows/one-time-receive-default-feedback-fix.yml").unlink()
+          PY
+
+      - name: Validate guarded patch
+        run: |
+          set -euo pipefail
+          node --check src/app.js
+          node --check tests/performance-regression.mjs
+          node tests/performance-regression.mjs
+
+      - name: Commit save-feedback fix
+        run: |
+          set -euo pipefail
+          git config user.name "Kitchen OS CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/app.js tests/performance-regression.mjs .github/workflows/one-time-receive-default-feedback-fix.yml
+          git commit -m "Surface receive-default persistence failures"
+          git push origin HEAD:main
+
+      - name: Run full production pipeline for patched main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail-with-body -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-vps.yml/dispatches" \
+            -d '{"ref":"main"}'
