@@ -102,6 +102,9 @@ export function attachBusinessStateSync(store) {
   let replayingSiteSwitch = false;
   let siteSwitchPending = false;
   let safeReloadPending = false;
+  let saveInFlight = null;
+  let saveInFlightKey = "";
+  let saveInFlightSnapshot = "";
 
   const identityKey = () => {
     const user = readSession();
@@ -110,34 +113,62 @@ export function attachBusinessStateSync(store) {
   };
 
   async function save() {
-    clearTimeout(saveTimer);
-    saveTimer = 0;
     const key = identityKey();
     const site = currentSite();
     if (!key || key !== loadedKey || !site || !hasBusinessEdit()) return true;
     const modules = businessModulesFromState(store.getState());
     const snapshot = JSON.stringify(modules);
-    if (snapshot === lastSavedSnapshot) return true;
+
+    if (saveInFlight && saveInFlightKey === key) {
+      if (saveInFlightSnapshot === snapshot) return saveInFlight;
+      const activeSave = saveInFlight;
+      return activeSave.then(() => save());
+    }
+
+    if (snapshot === lastSavedSnapshot) {
+      clearTimeout(saveTimer);
+      saveTimer = 0;
+      return true;
+    }
     if (document.documentElement.dataset.vpsAuthReady !== "true" || navigator.onLine === false) {
       const error = navigator.onLine === false ? "BUSINESS_STATE_OFFLINE" : "BUSINESS_STATE_NOT_READY";
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error } }));
       return false;
     }
-    try {
-      const saved = await vpsSaveBusinessState(site, modules);
-      lastSavedSnapshot = snapshot;
-      const revision = Number(saved?.revision);
-      if (Number.isFinite(revision)) {
-        loadedRevisionKey = key;
-        loadedRevision = revision;
+
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    const request = (async () => {
+      try {
+        const saved = await vpsSaveBusinessState(site, modules);
+        if (key === loadedKey) {
+          lastSavedSnapshot = snapshot;
+          const revision = Number(saved?.revision);
+          if (Number.isFinite(revision)) {
+            loadedRevisionKey = key;
+            loadedRevision = revision;
+          }
+        }
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
+        const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
+        return key === identityKey() && currentSnapshot === snapshot;
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
+        return false;
       }
-      window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
-      const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
-      return currentSnapshot === snapshot;
-    } catch (error) {
-      window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
-      return false;
-    }
+    })();
+    let trackedSave;
+    trackedSave = request.finally(() => {
+      if (saveInFlight === trackedSave) {
+        saveInFlight = null;
+        saveInFlightKey = "";
+        saveInFlightSnapshot = "";
+      }
+    });
+    saveInFlight = trackedSave;
+    saveInFlightKey = key;
+    saveInFlightSnapshot = snapshot;
+    return trackedSave;
   }
 
   function scheduleSave() {
