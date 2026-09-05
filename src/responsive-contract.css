@@ -25,6 +25,12 @@ textarea {
   font-size: max(var(--kitchen-control-font-min), 0.75rem);
 }
 
+/* Select typography is a cross-module accessibility contract. Several legacy
+   forms use higher-specificity 10-11.5px rules, so the final contract must win. */
+select {
+  font-size: var(--kitchen-control-font-min) !important;
+}
+
 /* Desktop form controls are interactive targets too. Legacy inventory rules
    used 19-27px inputs and 11.5px selects; keep every visible form control at
    the same readable baseline as buttons. */
@@ -203,6 +209,7 @@ button > span,
     font-size: 16px;
   }
 
+  select,
   .inventory-select,
   .quantity-input,
   .minimum-input {
