@@ -109,6 +109,8 @@ export function attachBusinessStateSync(store) {
   };
 
   async function save() {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
     const key = identityKey();
     const site = currentSite();
     if (!key || key !== loadedKey || !site || !hasBusinessEdit()) return true;
@@ -231,13 +233,7 @@ export function attachBusinessStateSync(store) {
 
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
-  const saveThenReload = () => {
-    clearTimeout(saveTimer);
-    void (async () => {
-      const saved = await save();
-      if (saved !== false) await load();
-    })();
-  };
+  const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   window.addEventListener("shitu:auth-synced", saveThenReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
