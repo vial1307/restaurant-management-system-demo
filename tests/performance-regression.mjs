@@ -6,6 +6,7 @@ const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 const api = read("src/vps-api.js");
+const inventoryCloud = read("src/inventory-cloud.js");
 const businessSync = read("src/business-state-sync.js");
 const uiRefresh = read("src/ui-refresh.js");
 const app = read("src/app.js");
@@ -20,6 +21,13 @@ assert.match(api, /vpsSetReceiveDefault[\s\S]{0,300}invalidateVpsReceiveDefaults
 assert.match(api, /vpsArchiveCatalogItem[\s\S]{0,400}invalidateVpsReceiveDefaultsCache\(\)/, "archiving catalog data must invalidate receive-default cache");
 assert.match(api, /clearRuntimeCaches\(\)[\s\S]{0,250}api\/auth\/login/, "login must not inherit another session's API cache");
 assert.match(api, /vpsLogout[\s\S]{0,300}clearRuntimeCaches\(\)/, "logout must clear API caches");
+
+const receiveDefaultSave = inventoryCloud.match(/export async function cloudSetReceiveDefault\([\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
+assert.match(receiveDefaultSave, /navigator\?\.onLine===false\) return \{ok:false/, "offline receive-default saves must fail instead of reporting local fallback success");
+assert.match(receiveDefaultSave, /!\(await verifyMigration\(\)\)\) return \{ok:false/, "receive-default saves must fail while the VPS schema is unavailable");
+assert.match(receiveDefaultSave, /await vpsSetReceiveDefault\([\s\S]{0,220}saveLocalReceiveDefault\(/, "receive-default local mirror must only update after the VPS confirms the write");
+assert.doesNotMatch(receiveDefaultSave, /saveLocalReceiveDefault[\s\S]{0,220}await vpsSetReceiveDefault/, "receive-default saves must never write local state before PostgreSQL");
+assert.doesNotMatch(receiveDefaultSave, /ok:true,fallback:true/, "receive-default writes must never report fallback success");
 
 assert.match(businessSync, /loadedRevisionKey === key && loadedRevision === revision/, "unchanged business-state focus refresh must remain a no-op merge");
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
