@@ -22,6 +22,18 @@ function legacySession() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
 }
 
+function ensureLoginScreen() {
+  if (legacySession()?.id || document.querySelector("#auth-login-form")) return;
+  document.body.classList.add("auth-locked");
+  let host = document.querySelector("#auth-layer");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "auth-layer";
+    document.body.append(host);
+  }
+  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚、復興店或永吉店帳號登入。</p><form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">VPS Auth · 帳號與權限由 VPS 管理</div></section></div>`;
+}
+
 function permissionsFromForm(data) {
   return Object.fromEntries(PERMISSION_MODULES.map((key) => {
     const view = data.has(`perm:${key}:view`);
@@ -107,6 +119,7 @@ async function boot() {
     }
   } finally {
     document.documentElement.dataset.vpsAuthReady = "true";
+    if (!legacySession()?.id) ensureLoginScreen();
     window.dispatchEvent(new CustomEvent("shitu:vps-auth-ready"));
   }
 }
@@ -242,6 +255,7 @@ document.addEventListener("click", async (event) => {
     invalidateCurrentVpsUser();
     localStorage.removeItem(AUTH_KEY);
     history.replaceState(null, "", `${location.pathname}#dashboard`);
+    ensureLoginScreen();
     window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
     return;
   }
@@ -265,7 +279,9 @@ window.addEventListener("shitu:logout", async () => {
   try { await vpsLogout(); } catch {}
   invalidateCurrentVpsUser();
   localStorage.removeItem(AUTH_KEY);
+  ensureLoginScreen();
 });
+window.addEventListener("shitu:auth-expired", ensureLoginScreen);
 window.addEventListener("pageshow", () => { void refreshProfile(); });
 window.addEventListener("focus", () => { void refreshProfile(); });
 document.addEventListener("visibilitychange", () => { void refreshProfile(); });
