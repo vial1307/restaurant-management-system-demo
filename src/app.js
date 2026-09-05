@@ -1800,11 +1800,15 @@ root.addEventListener("submit", async (event) => {
       store.updateIngredient(stockKey, item);
       const result = await cloudSyncBranchCatalogItem(stockKey, site);
       if (result.ok) {
-        await cloudSetReceiveDefault({
+        const receiveResult = await cloudSetReceiveDefault({
           site,
           catalogKey,
           locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
         });
+        await syncInventoryNow(site, { reloadBranch: false });
+        if (!receiveResult.ok) {
+          window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
+        }
       } else {
         const message = result.error?.message === "LOCATION_HAS_STOCK"
           ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
@@ -1818,11 +1822,15 @@ root.addEventListener("submit", async (event) => {
         ? await cloudSyncBranchCatalogItem(createdStockKey,site)
         : {ok:false,fallback:false};
       if(result.ok){
-        await cloudSetReceiveDefault({
+        const receiveResult = await cloudSetReceiveDefault({
           site,
           catalogKey,
           locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
         });
+        await syncInventoryNow(site, { reloadBranch: false });
+        if (!receiveResult.ok) {
+          window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
+        }
       }else{
         if(createdStockKey) store.removeIngredient(createdStockKey);
         window.alert("Không thể lưu sản phẩm vào database; dữ liệu tạm đã được hoàn tác. · 無法儲存品項至資料庫，暫存資料已還原。");

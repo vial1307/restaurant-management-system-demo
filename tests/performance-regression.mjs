@@ -40,6 +40,9 @@ assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must 
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not trigger a whole-app render");
 assert.doesNotMatch(app, /function applyInventorySearchDom[\s\S]{0,2500}render\(\)/, "inventory search must remain local-DOM filtered");
 
+assert.equal((app.match(/const receiveResult = await cloudSetReceiveDefault/g) || []).length, 2, "both product create/edit flows must verify receive-default persistence");
+assert.match(app, /if \(!receiveResult\.ok\) \{[\s\S]{0,500}window\.alert/, "receive-default persistence failures must be visible instead of silently reporting a complete save");
+
 assert.match(deploy, /KITCHEN_EXACT_TARGET_V1/, "deploy must enforce the exact-target contract");
 assert.match(deploy, /DEPLOY_TARGET_REQUIRED/, "deploy must refuse an unpinned main-branch release");
 assert.match(deploy, /merge-base --is-ancestor/, "deploy target must be verified as a main-branch commit");
