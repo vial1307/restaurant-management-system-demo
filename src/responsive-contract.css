@@ -260,6 +260,23 @@ button > span,
     line-height: 1.2;
   }
 
+  /* SOP page actions were still overridden by an older compact mobile rule to
+     32px/9px. They are primary operational controls, so keep them readable and
+     tappable at the same mobile baseline as the rest of the application. */
+  button[data-action="sop-qr"],
+  button[data-action="sop-add"] {
+    max-width: 100%;
+    height: auto !important;
+    min-height: var(--kitchen-touch-height) !important;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 12px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    line-height: 1.2;
+  }
+
   .account-admin-card button,
   .account-modal button,
   .account-self-card button {
