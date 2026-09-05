@@ -6,6 +6,7 @@ const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 const api = read("src/vps-api.js");
+const inventoryCloud = read("src/inventory-cloud.js");
 const businessSync = read("src/business-state-sync.js");
 const uiRefresh = read("src/ui-refresh.js");
 const app = read("src/app.js");
@@ -20,6 +21,13 @@ assert.match(api, /vpsSetReceiveDefault[\s\S]{0,300}invalidateVpsReceiveDefaults
 assert.match(api, /vpsArchiveCatalogItem[\s\S]{0,400}invalidateVpsReceiveDefaultsCache\(\)/, "archiving catalog data must invalidate receive-default cache");
 assert.match(api, /clearRuntimeCaches\(\)[\s\S]{0,250}api\/auth\/login/, "login must not inherit another session's API cache");
 assert.match(api, /vpsLogout[\s\S]{0,300}clearRuntimeCaches\(\)/, "logout must clear API caches");
+
+const receiveMutation = inventoryCloud.match(/export async function cloudSetReceiveDefault[\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
+assert(receiveMutation, "receive-default mutation implementation must remain discoverable");
+assert.match(receiveMutation, /INVENTORY_OFFLINE/, "offline receive-default writes must fail instead of falling back locally");
+assert.match(receiveMutation, /INVENTORY_VPS_NOT_READY/, "receive-default writes must fail when the VPS schema is unavailable");
+assert.doesNotMatch(receiveMutation, /ok:true\s*,\s*fallback:true/, "receive-default writes must never report local fallback as success");
+assert(receiveMutation.indexOf("vpsSetReceiveDefault") < receiveMutation.indexOf("saveLocalReceiveDefault"), "receive-default cache may update only after the VPS accepts the mutation");
 
 assert.match(businessSync, /loadedRevisionKey === key && loadedRevision === revision/, "unchanged business-state focus refresh must remain a no-op merge");
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
