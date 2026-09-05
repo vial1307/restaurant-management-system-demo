@@ -53,8 +53,11 @@ assert.match(businessSync, /const guardSiteSwitch = \(event\) => \{[\s\S]{0,900}
 assert.match(businessSync, /document\.addEventListener\("click", guardSiteSwitch, true\)[\s\S]{0,700}document\.removeEventListener\("click", guardSiteSwitch, true\)/, "warehouse switch guard must attach and clean up in capture phase");
 
 const adminAccountSync = deviceSync.match(/async function syncAdminAccounts\([\s\S]*?\n}\n\nasync function syncNow/)?.[0] || "";
-assert.match(adminAccountSync, /const result = await vpsListUsers\(\);[\s\S]{0,100}lastAdminAccountsAt = Date\.now\(\);/, "admin account retry throttle must start only after the VPS request succeeds");
+assert.match(adminAccountSync, /try \{[\s\S]{0,120}result = await vpsListUsers\(\);[\s\S]{0,160}catch \{[\s\S]{0,220}return false;[\s\S]{0,100}lastAdminAccountsAt = Date\.now\(\);/, "admin account failures must stay isolated and leave retry throttle untouched");
 assert.doesNotMatch(adminAccountSync, /lastAdminAccountsAt\s*=\s*now[\s\S]{0,160}await vpsListUsers\(\)/, "failed admin account requests must not poison the five-minute retry throttle");
+const profileSync = deviceSync.match(/async function syncNow\([\s\S]*?\n}\n\nasync function persistLanguage/)?.[0] || "";
+assert.match(profileSync, /const result = await vpsMe\(\);[\s\S]{0,500}lastSyncAt = Date\.now\(\);/, "normal profile sync throttle must start only after a validated VPS profile response");
+assert.doesNotMatch(profileSync, /lastSyncAt\s*=\s*now[\s\S]{0,260}await vpsMe\(\)/, "transient profile failures must not poison the ten-second retry throttle");
 
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
 assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must discard self-generated records");
