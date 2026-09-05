@@ -11,7 +11,7 @@ const ADMIN_ACCOUNTS_INTERVAL = 300000;
 let running = false;
 let lastSyncAt = 0;
 let lastAdminAccountsAt = 0;
-let preferenceGeneration = 0;
+let preferenceWriteInFlight = null;
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
@@ -36,10 +36,9 @@ function pendingLanguageFor(userId = "") {
 }
 
 function setPendingLanguage(userId, preferredLanguage) {
-  if (!userId || !["vi", "zh-TW"].includes(preferredLanguage)) return 0;
-  preferenceGeneration += 1;
+  if (!userId || !["vi", "zh-TW"].includes(preferredLanguage)) return false;
   localStorage.setItem(PENDING_LANGUAGE_KEY, JSON.stringify({ userId, preferredLanguage }));
-  return preferenceGeneration;
+  return true;
 }
 
 function clearPendingLanguage(userId, preferredLanguage = "") {
@@ -108,29 +107,43 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
   return true;
 }
 
-async function retryPendingLanguage(user) {
-  const requestedLanguage = pendingLanguageFor(user?.id);
-  const serverLanguage = user?.preferredLanguage || user?.preferred_language || "vi";
-  if (!requestedLanguage || serverLanguage === requestedLanguage) {
-    if (requestedLanguage) clearPendingLanguage(user.id, requestedLanguage);
-    return { user, preferredLanguage: requestedLanguage || serverLanguage };
-  }
+async function drainPendingLanguage(user) {
+  let currentUser = user;
+  const userId = currentUser?.id;
+  if (!userId) return { user: currentUser, preferredLanguage: "vi", confirmed: false };
 
-  const generation = preferenceGeneration;
-  try {
-    const result = await vpsUpdatePreferences(requestedLanguage);
-    const nextUser = result?.user?.id ? result.user : user;
-    if (generation !== preferenceGeneration) {
-      return { user: nextUser, preferredLanguage: pendingLanguageFor(user.id) || requestedLanguage };
+  while (true) {
+    const requestedLanguage = pendingLanguageFor(userId);
+    const serverLanguage = currentUser?.preferredLanguage || currentUser?.preferred_language || "vi";
+    if (!requestedLanguage) return { user: currentUser, preferredLanguage: serverLanguage, confirmed: true };
+    if (serverLanguage === requestedLanguage) {
+      clearPendingLanguage(userId, requestedLanguage);
+      return { user: currentUser, preferredLanguage: requestedLanguage, confirmed: true };
     }
-    clearPendingLanguage(user.id, requestedLanguage);
-    return { user: nextUser, preferredLanguage: requestedLanguage };
-  } catch {
-    window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
-      detail: { preferredLanguage: pendingLanguageFor(user.id) || requestedLanguage },
-    }));
-    return { user, preferredLanguage: pendingLanguageFor(user.id) || requestedLanguage };
+
+    try {
+      const result = await vpsUpdatePreferences(requestedLanguage);
+      if (result?.user?.id) currentUser = result.user;
+      const latestLanguage = pendingLanguageFor(userId);
+      if (latestLanguage && latestLanguage !== requestedLanguage) continue;
+      clearPendingLanguage(userId, requestedLanguage);
+      return { user: currentUser, preferredLanguage: requestedLanguage, confirmed: true };
+    } catch {
+      const latestLanguage = pendingLanguageFor(userId) || requestedLanguage;
+      window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
+        detail: { preferredLanguage: latestLanguage },
+      }));
+      return { user: currentUser, preferredLanguage: latestLanguage, confirmed: false };
+    }
   }
+}
+
+function retryPendingLanguage(user) {
+  if (preferenceWriteInFlight) return preferenceWriteInFlight;
+  preferenceWriteInFlight = drainPendingLanguage(user).finally(() => {
+    preferenceWriteInFlight = null;
+  });
+  return preferenceWriteInFlight;
 }
 
 async function syncNow({ force = false, forceAccounts = false } = {}) {
@@ -183,20 +196,12 @@ async function persistLanguage(appLang) {
   const preferredLanguage = apiLanguage(appLang);
   const profile = readJson(AUTH_KEY);
   if (!profile?.id) return false;
-  const generation = setPendingLanguage(profile.id, preferredLanguage);
-  try {
-    const result = await vpsUpdatePreferences(preferredLanguage);
-    if (generation !== preferenceGeneration) return true;
-    const next = sessionSnapshot(result?.user || {}, preferredLanguage);
-    if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
-    clearPendingLanguage(profile.id, preferredLanguage);
-    return true;
-  } catch {
-    window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
-      detail: { preferredLanguage: pendingLanguageFor(profile.id) || preferredLanguage },
-    }));
-    return false;
-  }
+  setPendingLanguage(profile.id, preferredLanguage);
+  const preference = await retryPendingLanguage(profile);
+  if (!preference.confirmed) return false;
+  const next = sessionSnapshot(preference.user || profile, preference.preferredLanguage);
+  if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
+  return true;
 }
 
 document.addEventListener("click", (event) => {
