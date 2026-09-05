@@ -3,6 +3,7 @@ import { vpsListUsers, vpsMe, vpsUpdatePreferences } from "./vps-api.js";
 const APP_KEY = "shitu-kitchen-os-v1";
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
+const PENDING_LANGUAGE_KEY = "shitu-kitchen-pending-language-v1";
 const SYNC_INTERVAL = 60000;
 const MIN_SYNC_GAP = 10000;
 const ADMIN_ACCOUNTS_INTERVAL = 300000;
@@ -10,7 +11,6 @@ const ADMIN_ACCOUNTS_INTERVAL = 300000;
 let running = false;
 let lastSyncAt = 0;
 let lastAdminAccountsAt = 0;
-let pendingLanguage = "";
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
@@ -26,6 +26,26 @@ function appLanguage(profileLanguage) {
 
 function apiLanguage(appLang) {
   return appLang === "zh" ? "zh-TW" : "vi";
+}
+
+function pendingLanguageFor(userId = "") {
+  const pending = readJson(PENDING_LANGUAGE_KEY);
+  if (!userId || pending?.userId !== userId) return "";
+  return ["vi", "zh-TW"].includes(pending?.preferredLanguage) ? pending.preferredLanguage : "";
+}
+
+function setPendingLanguage(userId, preferredLanguage) {
+  if (!userId || !["vi", "zh-TW"].includes(preferredLanguage)) return false;
+  localStorage.setItem(PENDING_LANGUAGE_KEY, JSON.stringify({ userId, preferredLanguage }));
+  return true;
+}
+
+function clearPendingLanguage(userId, preferredLanguage = "") {
+  const pending = readJson(PENDING_LANGUAGE_KEY);
+  if (!pending?.userId || pending.userId !== userId) return false;
+  if (preferredLanguage && pending.preferredLanguage !== preferredLanguage) return false;
+  localStorage.removeItem(PENDING_LANGUAGE_KEY);
+  return true;
 }
 
 function applyLanguageToLocalState(profileLanguage) {
@@ -87,19 +107,18 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
 }
 
 async function retryPendingLanguage(user) {
-  if (!pendingLanguage) return { user, preferredLanguage: user?.preferredLanguage || user?.preferred_language || "vi" };
+  const requestedLanguage = pendingLanguageFor(user?.id);
+  if (!requestedLanguage) return { user, preferredLanguage: user?.preferredLanguage || user?.preferred_language || "vi" };
   const serverLanguage = user?.preferredLanguage || user?.preferred_language || "vi";
-  if (serverLanguage === pendingLanguage) {
-    const preferredLanguage = pendingLanguage;
-    pendingLanguage = "";
-    return { user, preferredLanguage };
+  if (serverLanguage === requestedLanguage) {
+    clearPendingLanguage(user.id, requestedLanguage);
+    return { user, preferredLanguage: requestedLanguage };
   }
 
-  const requestedLanguage = pendingLanguage;
   try {
     const result = await vpsUpdatePreferences(requestedLanguage);
     const nextUser = result?.user?.id ? result.user : user;
-    if (pendingLanguage === requestedLanguage) pendingLanguage = "";
+    clearPendingLanguage(user.id, requestedLanguage);
     return { user: nextUser, preferredLanguage: requestedLanguage };
   } catch {
     window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
@@ -157,12 +176,14 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
 
 async function persistLanguage(appLang) {
   const preferredLanguage = apiLanguage(appLang);
-  pendingLanguage = preferredLanguage;
+  const profile = readJson(AUTH_KEY);
+  if (!profile?.id) return false;
+  setPendingLanguage(profile.id, preferredLanguage);
   try {
     const result = await vpsUpdatePreferences(preferredLanguage);
     const next = sessionSnapshot(result?.user || {}, preferredLanguage);
     if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
-    if (pendingLanguage === preferredLanguage) pendingLanguage = "";
+    clearPendingLanguage(profile.id, preferredLanguage);
     return true;
   } catch {
     window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
