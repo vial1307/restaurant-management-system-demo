@@ -95,6 +95,32 @@ async function assertGeometry(page, label) {
         }));
       }
     }
+
+    const overflowNodes = [];
+    if (horizontalOverflow > 3) {
+      for (const node of [...document.querySelectorAll("body *")]) {
+        const style = getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "hidden") continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        const rightOverflow = rect.right - viewportWidth;
+        const leftOverflow = -rect.left;
+        if (rightOverflow > 3 || leftOverflow > 3) {
+          overflowNodes.push(describe(node, rect, {
+            left:Math.round(rect.left),
+            right:Math.round(rect.right),
+            rightOverflow:Math.round(rightOverflow),
+            leftOverflow:Math.round(leftOverflow),
+            position:style.position,
+            overflowX:style.overflowX,
+            scrollWidth:node.scrollWidth,
+            clientWidth:node.clientWidth,
+          }));
+          if (overflowNodes.length >= 20) break;
+        }
+      }
+    }
+
     const visibleModal = [...document.querySelectorAll('.modal,.account-modal,.central-editor-modal,.modal-card')]
       .find((node) => {
         const style = getComputedStyle(node);
@@ -114,7 +140,7 @@ async function assertGeometry(page, label) {
         viewportHeight,
       };
     }
-    return { horizontalOverflow, viewportWidth, viewportHeight, tooSmall, clippedText, modal };
+    return { horizontalOverflow, viewportWidth, viewportHeight, tooSmall, clippedText, overflowNodes, modal };
   });
 
   const modalOut = Boolean(result.modal && (
@@ -126,7 +152,7 @@ async function assertGeometry(page, label) {
     console.error("FULL_DEVICE_GEOMETRY_FAILURE", JSON.stringify({ label, ...result }));
   }
 
-  assert(result.horizontalOverflow <= 3, `${label}: page horizontally overflows by ${result.horizontalOverflow}px`);
+  assert(result.horizontalOverflow <= 3, `${label}: page horizontally overflows by ${result.horizontalOverflow}px; offenders=${JSON.stringify(result.overflowNodes.slice(0,8))}`);
   assert.deepEqual(result.tooSmall, [], `${label}: undersized interactive targets: ${JSON.stringify(result.tooSmall.slice(0,8))}`);
   assert.deepEqual(result.clippedText, [], `${label}: clipped interactive text: ${JSON.stringify(result.clippedText.slice(0,8))}`);
   if (result.modal) {
