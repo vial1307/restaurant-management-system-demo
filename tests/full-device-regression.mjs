@@ -27,7 +27,50 @@ function safeName(value) {
   return String(value).replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
 }
 
-async function login(page) {
+async function collectLoginDiagnostic(page, context, label) {
+  const pageState = await page.evaluate(async () => {
+    let localAuth = null;
+    try { localAuth = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
+    let me = { status:0, body:"" };
+    try {
+      const response = await fetch("/api/auth/me", { credentials:"include", cache:"no-store" });
+      me.status = response.status;
+      me.body = (await response.text()).slice(0,500);
+    } catch (error) {
+      me.body = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      url:location.href,
+      hash:location.hash,
+      vpsAuthReady:document.documentElement.dataset.vpsAuthReady || "",
+      localAuth,
+      authLayer:Boolean(document.querySelector("#auth-layer")),
+      loginForm:Boolean(document.querySelector("#auth-login-form")),
+      authLocked:document.body.classList.contains("auth-locked"),
+      authError:(document.querySelector(".auth-error")?.textContent || "").trim(),
+      appShell:Boolean(document.querySelector(".app-shell")),
+      me,
+    };
+  }).catch((error) => ({ pageEvaluationError:error?.message || String(error) }));
+  const cookies = await context.cookies().catch(() => []);
+  const diagnostic = {
+    label,
+    pageState,
+    cookies:cookies.map((cookie) => ({
+      name:cookie.name,
+      domain:cookie.domain,
+      path:cookie.path,
+      expires:cookie.expires,
+      httpOnly:cookie.httpOnly,
+      secure:cookie.secure,
+      sameSite:cookie.sameSite,
+    })),
+  };
+  console.error("FULL_DEVICE_LOGIN_DIAGNOSTIC", JSON.stringify(diagnostic));
+  return diagnostic;
+}
+
+async function login(page, context, label) {
   await page.goto(BASE + "/", { waitUntil:"domcontentloaded", timeout:30000 });
   await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
   const existing = await page.evaluate(() => {
@@ -39,8 +82,13 @@ async function login(page) {
     await page.locator('#auth-login-form input[name="password"]').fill(PASSWORD);
     await page.locator('#auth-login-form button[type="submit"]').click();
   }
-  await page.waitForSelector(".app-shell", { timeout:30000 });
-  await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:30000 });
+  try {
+    await page.waitForSelector(".app-shell", { state:"visible", timeout:12000 });
+    await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:12000 });
+  } catch (error) {
+    const diagnostic = await collectLoginDiagnostic(page, context, label);
+    throw new Error(`${label}: login did not enter app; diagnostic=${JSON.stringify(diagnostic)}; cause=${error?.message || error}`);
+  }
 }
 
 async function gotoRoute(page, route) {
@@ -242,7 +290,7 @@ async function runProfile(profile) {
 
   try {
     console.log("FULL_DEVICE_PROFILE_START", profile.name);
-    await login(page);
+    await login(page, context, profile.name);
     const routes = profile.allRoutes ? ACCOUNT_MODULES : CRITICAL_ROUTES;
     for (const route of routes) {
       console.log("FULL_DEVICE_ROUTE", profile.name, route);
