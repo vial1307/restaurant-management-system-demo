@@ -20,6 +20,10 @@ assert.match(api, /receiveDefaultsCache\.set\(key, \{ at: now, promise \}\)/, "c
 assert.match(api, /vpsSetReceiveDefault[\s\S]{0,300}invalidateVpsReceiveDefaultsCache\(\)/, "saving a receive default must invalidate cached routing data");
 assert.match(api, /vpsArchiveCatalogItem[\s\S]{0,400}invalidateVpsReceiveDefaultsCache\(\)/, "archiving catalog data must invalidate receive-default cache");
 assert.match(api, /clearRuntimeCaches\(\)[\s\S]{0,250}api\/auth\/login/, "login must not inherit another session's API cache");
+assert.match(api, /let authMeInFlight = null/, "auth profile requests must share one in-flight request across startup/focus sync layers");
+assert.match(api, /vpsMe\(\)[\s\S]{0,260}if \(authMeInFlight\) return authMeInFlight/, "concurrent auth profile refreshes must be deduplicated");
+assert.match(api, /let adminUsersInFlight = null/, "admin user-list refreshes must share one in-flight request");
+assert.match(api, /vpsListUsers\(\)[\s\S]{0,300}if \(adminUsersInFlight\) return adminUsersInFlight/, "concurrent admin account refreshes must be deduplicated");
 assert.match(api, /vpsLogout[\s\S]{0,300}clearRuntimeCaches\(\)/, "logout must clear API caches");
 assert.match(api, /vpsInventoryHistory[\s\S]{0,220}\/transactions\?limit=/, "inventory history must use the backend transactions route");
 assert.doesNotMatch(api, /vpsInventoryHistory[\s\S]{0,220}\/history\?limit=/, "inventory history must not call the removed history route");
