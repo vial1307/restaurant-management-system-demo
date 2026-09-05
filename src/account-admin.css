@@ -21,3 +21,19 @@
   .permission-toggle-ui{width:24px;height:24px}
   .account-switch{min-height:44px}
 }
+
+/* Full-device account action contract: account management actions must remain
+   comfortably clickable on desktop and touch layouts. Keep this scoped to the
+   account surfaces so inventory density is unaffected. */
+.account-admin-card button,
+.account-self-card button,
+.account-modal button{min-height:42px}
+.account-admin-card .icon-button,
+.account-modal .icon-button{min-width:42px}
+@media(max-width:900px){
+  .account-admin-card button,
+  .account-self-card button,
+  .account-modal button{min-height:44px}
+  .account-admin-card .icon-button,
+  .account-modal .icon-button{min-width:44px}
+}
