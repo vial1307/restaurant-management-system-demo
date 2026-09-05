@@ -101,6 +101,7 @@ export function attachBusinessStateSync(store) {
   let loadedRevision = -1;
   let replayingSiteSwitch = false;
   let siteSwitchPending = false;
+  let safeReloadPending = false;
 
   const identityKey = () => {
     const user = readSession();
@@ -231,12 +232,31 @@ export function attachBusinessStateSync(store) {
     })();
   };
 
+  const guardSafeReload = (event) => {
+    event.preventDefault?.();
+    if (safeReloadPending) return;
+    safeReloadPending = true;
+    void (async () => {
+      const saved = await save();
+      if (saved === false) {
+        safeReloadPending = false;
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+          detail:{ status:"reload-blocked", site:currentSite(), reason:event.detail?.reason || "reload" },
+        }));
+        return;
+      }
+      safeReloadPending = false;
+      location.reload();
+    })();
+  };
+
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
   const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   window.addEventListener("shitu:auth-synced", saveThenReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
+  window.addEventListener("shitu:safe-reload-requested", guardSafeReload);
   window.addEventListener("online", saveThenReload);
   window.addEventListener("focus", saveThenReload);
   document.addEventListener("click", guardSiteSwitch, true);
@@ -247,6 +267,7 @@ export function attachBusinessStateSync(store) {
     window.removeEventListener("shitu:auth-synced", saveThenReload);
     window.removeEventListener("shitu:vps-auth-ready", saveThenReload);
     window.removeEventListener("shitu:active-site-changed", reload);
+    window.removeEventListener("shitu:safe-reload-requested", guardSafeReload);
     window.removeEventListener("online", saveThenReload);
     window.removeEventListener("focus", saveThenReload);
     document.removeEventListener("click", guardSiteSwitch, true);
