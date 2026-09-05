@@ -20,7 +20,7 @@ const vpsSaveUser = async () => ({});
 const ACCOUNT_MODULES = [];
 const normalizeAccountPermissions = (_role, permissions) => permissions || {};
 `)
-  .replace(/\nvoid boot\(\);\s*$/, '\nexport { currentVpsUser, invalidateCurrentVpsUser };\n');
+  .replace(/\nvoid boot\(\);\s*$/, '\nexport { currentVpsUser, invalidateCurrentVpsUser, refreshProfile };\n');
 assert.notEqual(injected, source, "auth generation test could not inject VPS API mocks");
 
 const storage = new Map();
@@ -60,7 +60,7 @@ globalThis.document = {
 const requests = [];
 globalThis.__authGenerationVpsMe = () => new Promise((resolve) => requests.push(resolve));
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(injected).toString("base64")}`;
-const { currentVpsUser, invalidateCurrentVpsUser } = await import(moduleUrl);
+const { currentVpsUser, invalidateCurrentVpsUser, refreshProfile } = await import(moduleUrl);
 
 const first = currentVpsUser();
 assert.equal(requests.length, 1, "first auth profile request did not start");
@@ -73,5 +73,16 @@ await assert.rejects(first, (error) => error?.code === "STALE_AUTH_CHECK", "stal
 requests[1]({ user: { id: "user-b" } });
 const fresh = await second;
 assert.equal(fresh?.user?.id, "user-b", "fresh auth generation did not return the current profile");
+
+let refreshAttempts = 0;
+globalThis.__authGenerationVpsMe = async () => {
+  refreshAttempts += 1;
+  if (refreshAttempts === 1) throw new Error("TRANSIENT_AUTH_REFRESH_FAILURE");
+  return { user: null };
+};
+document.documentElement.dataset.vpsAuthReady = "true";
+await refreshProfile();
+await refreshProfile();
+assert.equal(refreshAttempts, 2, "failed auth refresh poisoned the 30-second retry throttle");
 
 console.log("VPS_AUTH_STALE_RESPONSE_OK");
