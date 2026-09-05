@@ -10,6 +10,7 @@ const ADMIN_ACCOUNTS_INTERVAL = 300000;
 let running = false;
 let lastSyncAt = 0;
 let lastAdminAccountsAt = 0;
+let pendingLanguage = "";
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
@@ -36,7 +37,7 @@ function applyLanguageToLocalState(profileLanguage) {
   return true;
 }
 
-function sessionSnapshot(user) {
+function sessionSnapshot(user, preferredLanguageOverride = "") {
   const role = user.role || "employee";
   return {
     id: user.id,
@@ -46,7 +47,7 @@ function sessionSnapshot(user) {
     accountRole: role,
     location: role === "admin" ? "all" : (user.location || "fuxing"),
     permissions: user.permissions || {},
-    preferredLanguage: user.preferredLanguage || user.preferred_language || "vi",
+    preferredLanguage: preferredLanguageOverride || user.preferredLanguage || user.preferred_language || "vi",
     provider: "vps",
   };
 }
@@ -85,6 +86,29 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
   return true;
 }
 
+async function retryPendingLanguage(user) {
+  if (!pendingLanguage) return { user, preferredLanguage: user?.preferredLanguage || user?.preferred_language || "vi" };
+  const serverLanguage = user?.preferredLanguage || user?.preferred_language || "vi";
+  if (serverLanguage === pendingLanguage) {
+    const preferredLanguage = pendingLanguage;
+    pendingLanguage = "";
+    return { user, preferredLanguage };
+  }
+
+  const requestedLanguage = pendingLanguage;
+  try {
+    const result = await vpsUpdatePreferences(requestedLanguage);
+    const nextUser = result?.user?.id ? result.user : user;
+    if (pendingLanguage === requestedLanguage) pendingLanguage = "";
+    return { user: nextUser, preferredLanguage: requestedLanguage };
+  } catch {
+    window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
+      detail: { preferredLanguage: requestedLanguage },
+    }));
+    return { user, preferredLanguage: requestedLanguage };
+  }
+}
+
 async function syncNow({ force = false, forceAccounts = false } = {}) {
   if (document.documentElement.dataset.vpsAuthReady !== "true" || running) return;
   const now = Date.now();
@@ -93,7 +117,7 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
 
   try {
     const result = await vpsMe();
-    const user = result?.user;
+    let user = result?.user;
     if (!user?.id || user.active === false) {
       localStorage.removeItem(AUTH_KEY);
       window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
@@ -103,8 +127,10 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
     // A transient network failure must remain immediately retryable on focus.
     lastSyncAt = Date.now();
 
+    const preference = await retryPendingLanguage(user);
+    user = preference.user;
     const previous = readJson(AUTH_KEY);
-    const next = sessionSnapshot(user);
+    const next = sessionSnapshot(user, preference.preferredLanguage);
     const securityChanged = Boolean(previous) && (
       previous.accountRole !== next.accountRole ||
       previous.location !== next.location ||
@@ -131,11 +157,19 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
 
 async function persistLanguage(appLang) {
   const preferredLanguage = apiLanguage(appLang);
+  pendingLanguage = preferredLanguage;
   try {
     const result = await vpsUpdatePreferences(preferredLanguage);
-    const next = sessionSnapshot(result?.user || {});
+    const next = sessionSnapshot(result?.user || {}, preferredLanguage);
     if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
-  } catch {}
+    if (pendingLanguage === preferredLanguage) pendingLanguage = "";
+    return true;
+  } catch {
+    window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
+      detail: { preferredLanguage },
+    }));
+    return false;
+  }
 }
 
 document.addEventListener("click", (event) => {
