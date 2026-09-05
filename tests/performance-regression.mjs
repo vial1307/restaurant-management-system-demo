@@ -59,12 +59,16 @@ const profileSync = deviceSync.match(/async function syncNow\([\s\S]*?\n}\n\nasy
 assert.match(profileSync, /const result = await vpsMe\(\);[\s\S]{0,700}lastSyncAt = Date\.now\(\);/, "normal profile sync throttle must start only after a validated VPS profile response");
 assert.doesNotMatch(profileSync, /lastSyncAt\s*=\s*now[\s\S]{0,260}await vpsMe\(\)/, "transient profile failures must not poison the ten-second retry throttle");
 const pendingPreferenceSync = deviceSync.match(/async function retryPendingLanguage\([\s\S]*?\n}\n\nasync function syncNow/)?.[0] || "";
-assert.match(deviceSync, /let pendingLanguage = "";/, "language preference writes must keep an explicit pending state until VPS confirmation");
-assert.match(pendingPreferenceSync, /await vpsUpdatePreferences\(requestedLanguage\)[\s\S]{0,260}pendingLanguage = ""/, "pending language must clear only after the VPS preference write succeeds");
+assert.match(deviceSync, /const PENDING_LANGUAGE_KEY = "shitu-kitchen-pending-language-v1";/, "pending language must have a durable localStorage key");
+assert.match(deviceSync, /function pendingLanguageFor\(userId = ""\)[\s\S]{0,260}pending\?\.userId !== userId[\s\S]{0,160}preferredLanguage/, "pending language must be scoped to the authenticated user");
+assert.match(deviceSync, /function setPendingLanguage\([\s\S]{0,280}localStorage\.setItem\(PENDING_LANGUAGE_KEY, JSON\.stringify\(\{ userId, preferredLanguage \}\)\)/, "failed preference writes must persist user-scoped pending state across reloads");
+assert.match(deviceSync, /function clearPendingLanguage\([\s\S]{0,300}localStorage\.removeItem\(PENDING_LANGUAGE_KEY\)/, "confirmed preference writes must clear durable pending state");
+assert.match(pendingPreferenceSync, /const requestedLanguage = pendingLanguageFor\(user\?\.id\);[\s\S]{0,360}await vpsUpdatePreferences\(requestedLanguage\)[\s\S]{0,220}clearPendingLanguage\(user\.id, requestedLanguage\)/, "pending language retry must clear only after VPS confirmation");
 assert.match(pendingPreferenceSync, /catch \{[\s\S]{0,260}preferences-sync-pending[\s\S]{0,220}preferredLanguage: requestedLanguage/, "failed language retries must remain visible and preserve the requested preference");
 assert.match(profileSync, /const preference = await retryPendingLanguage\(user\);[\s\S]{0,220}sessionSnapshot\(user, preference\.preferredLanguage\)/, "profile sync must preserve a pending local language instead of applying stale server preference");
 const persistPreference = deviceSync.match(/async function persistLanguage\([\s\S]*?\n}\n\ndocument\.addEventListener/)?.[0] || "";
-assert.match(persistPreference, /pendingLanguage = preferredLanguage;[\s\S]{0,220}await vpsUpdatePreferences\(preferredLanguage\)/, "language clicks must mark the preference pending before the VPS write starts");
+assert.match(persistPreference, /const profile = readJson\(AUTH_KEY\);[\s\S]{0,180}setPendingLanguage\(profile\.id, preferredLanguage\);[\s\S]{0,220}await vpsUpdatePreferences\(preferredLanguage\)/, "language clicks must persist pending state before the VPS write starts");
+assert.match(persistPreference, /clearPendingLanguage\(profile\.id, preferredLanguage\)[\s\S]{0,160}return true;/, "successful language preference writes must clear the durable pending cache");
 assert.match(persistPreference, /catch \{[\s\S]{0,260}preferences-sync-pending[\s\S]{0,160}return false;/, "language preference failures must not be silently swallowed");
 
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
