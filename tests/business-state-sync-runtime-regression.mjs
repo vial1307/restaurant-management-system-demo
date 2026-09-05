@@ -193,6 +193,44 @@ await delay(20);
 assert.equal(mergeCount, mergesBeforeInFlightLoad, "stale server read merged over an in-flight local edit");
 assert.equal(state.settings.reservationBuffer, 12, "in-flight local edit was overwritten by server state");
 
+// Auth/profile refresh must flush the pending debounce before it reloads VPS state.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 16 } };
+subscriber();
+const authSyncOrder = [];
+globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
+  saveCalls += 1;
+  authSyncOrder.push(`save:${modules.settings?.reservationBuffer}`);
+  return { revision: 5 };
+};
+globalThis.__testVpsBusinessState = async () => {
+  readCalls += 1;
+  authSyncOrder.push("load");
+  return { revision: 5, modules: { settings: { reservationBuffer: 16 } } };
+};
+window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+await delay(20);
+assert.deepEqual(authSyncOrder.slice(0, 2), ["save:16", "load"], "auth sync reloaded before flushing the pending business edit");
+assert.equal(state.settings.reservationBuffer, 16, "auth sync lost the pending business edit");
+
+// VPS-auth readiness refresh uses the same save-before-load contract after bootstrap.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 17 } };
+subscriber();
+const authReadyOrder = [];
+globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
+  saveCalls += 1;
+  authReadyOrder.push(`save:${modules.settings?.reservationBuffer}`);
+  return { revision: 6 };
+};
+globalThis.__testVpsBusinessState = async () => {
+  readCalls += 1;
+  authReadyOrder.push("load");
+  return { revision: 6, modules: { settings: { reservationBuffer: 17 } } };
+};
+window.dispatchEvent(new CustomEvent("shitu:vps-auth-ready"));
+await delay(20);
+assert.deepEqual(authReadyOrder.slice(0, 2), ["save:17", "load"], "VPS auth readiness reloaded before flushing the pending business edit");
+assert.equal(state.settings.reservationBuffer, 17, "VPS auth readiness lost the pending business edit");
+
 // Admin warehouse switching must not discard an unsaved business-state edit.
 storage.set(AUTH_KEY, JSON.stringify({
   id: "business-sync-user",
@@ -216,11 +254,11 @@ globalThis.__testVpsSaveBusinessState = async (site, modules) => {
   saveCalls += 1;
   switchSaveSite = site;
   switchSaveBuffer = modules.settings?.reservationBuffer;
-  return { revision: 5 };
+  return { revision: 7 };
 };
 globalThis.__testVpsBusinessState = async (site) => {
   readCalls += 1;
-  return { revision: 6, modules: { settings: { reservationBuffer: site === "yongji" ? 6 : 13 } } };
+  return { revision: 8, modules: { settings: { reservationBuffer: site === "yongji" ? 6 : 13 } } };
 };
 emitWarehouseClick("yongji");
 await delay(20);
@@ -236,7 +274,7 @@ let resolveSwitchSave = null;
 globalThis.__testVpsSaveBusinessState = async () => {
   saveCalls += 1;
   return new Promise((resolve) => {
-    resolveSwitchSave = () => resolve({ revision: 7 });
+    resolveSwitchSave = () => resolve({ revision: 9 });
   });
 };
 emitWarehouseClick("fuxing");
@@ -252,7 +290,7 @@ assert.equal(state.settings.reservationBuffer, 15, "newer local edit was lost wh
 
 // Keep the subscriber reachable so the test also verifies attach/cleanup wiring.
 assert.equal(typeof subscriber, "function");
-assert(saveCalls >= 4, "expected failed, in-flight, and warehouse-switch save attempts");
+assert(saveCalls >= 6, "expected failed, in-flight, auth-refresh, and warehouse-switch save attempts");
 detach();
 
 console.log("BUSINESS_STATE_SYNC_RUNTIME_OK");
