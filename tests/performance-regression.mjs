@@ -64,5 +64,9 @@ assert.match(workflow, /EXPECTED_RELEASE/, "workflow must compare the active VPS
 assert.match(workflow, /full-device-regression\.mjs/, "workflow must gate deployment on full-device regression");
 assert.match(workflow, /concurrency-regression\.mjs/, "workflow must gate deployment on multi-user concurrency regression");
 assert.match(workflow, /TEST_WEB_BASE:\s*"http:\/\/localhost:3000"/, "browser regressions must use a hostname origin rather than an IP-literal cookie origin");
+assert.match(workflow, /actions\/checkout@v7/, "CI checkout action must use the current Node 24 generation");
+assert.match(workflow, /actions\/setup-node@v7/, "CI setup-node action must use the current Node 24 generation");
+assert.match(workflow, /actions\/upload-artifact@v7/, "CI artifact upload action must use the current Node 24 generation");
+assert.doesNotMatch(workflow, /actions\/(?:checkout@v5|setup-node@v4|upload-artifact@v4)/, "deprecated Node 20-generation CI actions must not return");
 
 console.log("PERFORMANCE_REGRESSION_OK");
