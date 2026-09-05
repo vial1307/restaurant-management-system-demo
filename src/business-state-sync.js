@@ -123,7 +123,8 @@ export function attachBusinessStateSync(store) {
         loadedRevision = revision;
       }
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
-      return true;
+      const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
+      return currentSnapshot === snapshot;
     } catch (error) {
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
       return false;
@@ -148,9 +149,16 @@ export function attachBusinessStateSync(store) {
       lastSavedSnapshot = "";
     }
     if (!key || !site || !hasBusinessView() || navigator.onLine === false) return;
+    const localSnapshotBeforeLoad = identityChanged
+      ? ""
+      : JSON.stringify(businessModulesFromState(store.getState()));
     try {
       const result = await vpsBusinessState(site);
       if (token !== loadToken || key !== identityKey()) return;
+      if (!identityChanged && localSnapshotBeforeLoad !== JSON.stringify(businessModulesFromState(store.getState()))) {
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, deferred:true } }));
+        return;
+      }
       loadedKey = key;
       const revision = Math.max(0, Number(result?.revision) || 0);
       if (loadedRevisionKey === key && loadedRevision === revision) {
