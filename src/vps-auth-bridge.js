@@ -165,9 +165,9 @@ async function refreshProfile() {
   if (document.visibilityState === "hidden") return;
   const now = Date.now();
   if (now - lastProfileRefresh < 30000) return;
-  lastProfileRefresh = now;
   try {
     const profile = mirrorVpsSession((await currentVpsUser())?.user);
+    lastProfileRefresh = Date.now();
     if (profile) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
   } catch {}
 }
