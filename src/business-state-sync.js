@@ -253,7 +253,11 @@ export function attachBusinessStateSync(store) {
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
   const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
-  window.addEventListener("shitu:auth-synced", saveThenReload);
+  const authReload = (event) => {
+    if (event.detail?.safeReloadRequested) return;
+    saveThenReload();
+  };
+  window.addEventListener("shitu:auth-synced", authReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
   window.addEventListener("shitu:safe-reload-requested", guardSafeReload);
@@ -264,7 +268,7 @@ export function attachBusinessStateSync(store) {
   return () => {
     unsubscribe();
     clearTimeout(saveTimer);
-    window.removeEventListener("shitu:auth-synced", saveThenReload);
+    window.removeEventListener("shitu:auth-synced", authReload);
     window.removeEventListener("shitu:vps-auth-ready", saveThenReload);
     window.removeEventListener("shitu:active-site-changed", reload);
     window.removeEventListener("shitu:safe-reload-requested", guardSafeReload);
