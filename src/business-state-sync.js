@@ -231,10 +231,16 @@ export function attachBusinessStateSync(store) {
 
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
-  window.addEventListener("shitu:auth-synced", reload);
-  window.addEventListener("shitu:vps-auth-ready", reload);
+  const saveThenReload = () => {
+    clearTimeout(saveTimer);
+    void (async () => {
+      const saved = await save();
+      if (saved !== false) await load();
+    })();
+  };
+  window.addEventListener("shitu:auth-synced", saveThenReload);
+  window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
-  const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   window.addEventListener("online", saveThenReload);
   window.addEventListener("focus", saveThenReload);
   document.addEventListener("click", guardSiteSwitch, true);
@@ -242,8 +248,8 @@ export function attachBusinessStateSync(store) {
   return () => {
     unsubscribe();
     clearTimeout(saveTimer);
-    window.removeEventListener("shitu:auth-synced", reload);
-    window.removeEventListener("shitu:vps-auth-ready", reload);
+    window.removeEventListener("shitu:auth-synced", saveThenReload);
+    window.removeEventListener("shitu:vps-auth-ready", saveThenReload);
     window.removeEventListener("shitu:active-site-changed", reload);
     window.removeEventListener("online", saveThenReload);
     window.removeEventListener("focus", saveThenReload);
