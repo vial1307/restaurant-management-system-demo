@@ -80,11 +80,17 @@ async function syncProfiles(profile = null) {
 
 let authCheckPromise = null;
 
+function invalidateCurrentVpsUser() {
+  authCheckPromise = null;
+}
+
 function currentVpsUser() {
   if (!authCheckPromise) {
-    authCheckPromise = vpsMe().finally(() => {
-      authCheckPromise = null;
+    let pending;
+    pending = vpsMe().finally(() => {
+      if (authCheckPromise === pending) authCheckPromise = null;
     });
+    authCheckPromise = pending;
   }
   return authCheckPromise;
 }
@@ -140,8 +146,14 @@ document.addEventListener("submit", async (event) => {
     const username = String(data.get("username") || "").trim().toLowerCase();
     const password = String(data.get("password") || "");
     try {
+      // Drop any pre-login /auth/me promise. WebKit tablet can keep that request
+      // alive across the submit and deliver its stale 401 after POST /login has
+      // already succeeded.
+      invalidateCurrentVpsUser();
       const profile = mirrorVpsSession((await vpsLogin(username, password))?.user);
       if (!profile) throw new Error("ACCOUNT_DISABLED");
+      invalidateCurrentVpsUser();
+      lastProfileRefresh = Date.now();
 
       // Authentication is the gate for entering the application. Admin account
       // list synchronization is secondary data and must never keep a successful
@@ -227,6 +239,7 @@ document.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopImmediatePropagation();
     try { await vpsLogout(); } catch {}
+    invalidateCurrentVpsUser();
     localStorage.removeItem(AUTH_KEY);
     history.replaceState(null, "", `${location.pathname}#dashboard`);
     window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
@@ -250,6 +263,7 @@ document.addEventListener("click", async (event) => {
 
 window.addEventListener("shitu:logout", async () => {
   try { await vpsLogout(); } catch {}
+  invalidateCurrentVpsUser();
   localStorage.removeItem(AUTH_KEY);
 });
 window.addEventListener("pageshow", () => { void refreshProfile(); });
