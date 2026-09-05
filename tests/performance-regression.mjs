@@ -42,6 +42,8 @@ assert.doesNotMatch(inventoryCloud, /return \{ ok: false, fallback: true \}/, "i
 assert.match(inventoryCloud, /fallback: false, error: new Error\("INVENTORY_BACKEND_NOT_READY"\)/, "inventory mutation backend failures must be explicit so optimistic UI can roll back");
 
 assert.match(businessSync, /loadedRevisionKey === key && loadedRevision === revision/, "unchanged business-state focus refresh must remain a no-op merge");
+assert.match(businessSync, /catch \(error\) \{[\s\S]{0,260}status:"error"[\s\S]{0,140}return false;/, "failed business-state saves must report failure to the focus\/online sync chain");
+assert.match(businessSync, /const saveThenReload = \(\) => \{ void \(async \(\) => \{ const saved = await save\(\); if \(saved !== false\) await load\(\); \}\)\(\); \};/, "focus\/online sync must not reload stale server state after a failed save");
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
 assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must discard self-generated records");
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not trigger a whole-app render");
