@@ -257,12 +257,16 @@ export function attachBusinessStateSync(store) {
     if (event.detail?.safeReloadRequested) return;
     saveThenReload();
   };
+  const resumeVisible = () => {
+    if (document.visibilityState === "visible") saveThenReload();
+  };
   window.addEventListener("shitu:auth-synced", authReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
   window.addEventListener("shitu:safe-reload-requested", guardSafeReload);
   window.addEventListener("online", saveThenReload);
   window.addEventListener("focus", saveThenReload);
+  document.addEventListener("visibilitychange", resumeVisible);
   document.addEventListener("click", guardSiteSwitch, true);
   window.setTimeout(reload, 0);
   return () => {
@@ -274,6 +278,7 @@ export function attachBusinessStateSync(store) {
     window.removeEventListener("shitu:safe-reload-requested", guardSafeReload);
     window.removeEventListener("online", saveThenReload);
     window.removeEventListener("focus", saveThenReload);
+    document.removeEventListener("visibilitychange", resumeVisible);
     document.removeEventListener("click", guardSiteSwitch, true);
   };
 }
