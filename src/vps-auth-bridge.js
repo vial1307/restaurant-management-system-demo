@@ -86,9 +86,17 @@ function initialRoute(profile) {
 }
 
 async function syncProfiles(profile = null) {
-  const current = profile || mirrorVpsSession((await vpsMe())?.user);
-  if (!current || current.accountRole !== "admin") return;
+  let current = profile;
+  if (!current) {
+    const result = await currentVpsUser();
+    const normalized = normalizeVpsUser(result?.user);
+    if (!normalized || legacySession()?.id !== normalized.id) return;
+    current = mirrorVpsSession(result?.user);
+  }
+  if (!current || current.accountRole !== "admin" || legacySession()?.id !== current.id) return;
+  const expectedUserId = current.id;
   const result = await vpsListUsers();
+  if (legacySession()?.id !== expectedUserId) return;
   const accounts = (result?.users || []).map((user) => ({
     id: user.id,
     username: user.username,
@@ -106,17 +114,29 @@ async function syncProfiles(profile = null) {
 }
 
 let authCheckPromise = null;
+let authCheckGeneration = 0;
 
 function invalidateCurrentVpsUser() {
+  authCheckGeneration += 1;
   authCheckPromise = null;
 }
 
 function currentVpsUser() {
   if (!authCheckPromise) {
+    const generation = authCheckGeneration;
     let pending;
-    pending = vpsMe().finally(() => {
-      if (authCheckPromise === pending) authCheckPromise = null;
-    });
+    pending = vpsMe()
+      .then((result) => {
+        if (generation !== authCheckGeneration) {
+          const error = new Error("STALE_AUTH_CHECK");
+          error.code = "STALE_AUTH_CHECK";
+          throw error;
+        }
+        return result;
+      })
+      .finally(() => {
+        if (authCheckPromise === pending) authCheckPromise = null;
+      });
     authCheckPromise = pending;
   }
   return authCheckPromise;
