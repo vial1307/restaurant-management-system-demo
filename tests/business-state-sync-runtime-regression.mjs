@@ -39,6 +39,7 @@ Object.defineProperty(globalThis, "navigator", {
 const documentListeners = new Map();
 globalThis.document = {
   documentElement: { dataset: { vpsAuthReady: "true" } },
+  visibilityState: "visible",
   addEventListener(type, listener) {
     if (!documentListeners.has(type)) documentListeners.set(type, new Set());
     documentListeners.get(type).add(listener);
@@ -84,6 +85,10 @@ let reloadCalls = 0;
 globalThis.location = { reload() { reloadCalls += 1; } };
 
 const delay = (ms = 0) => new Promise((resolve) => nativeSetTimeout(resolve, ms));
+function emitDocumentEvent(type) {
+  const event = new CustomEvent(type);
+  for (const listener of documentListeners.get(type) || []) listener(event);
+}
 
 let acceptedWarehouseClicks = 0;
 function emitWarehouseClick(site) {
@@ -239,6 +244,30 @@ await delay(20);
 assert.deepEqual(authReadyOrder.slice(0, 2), ["save:17", "load"], "VPS auth readiness reloaded before flushing the pending business edit");
 assert.equal(state.settings.reservationBuffer, 17, "VPS auth readiness lost the pending business edit");
 
+// Mobile/PWA resume must use the same safe save-before-load contract.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 20 } };
+subscriber();
+const visibilityOrder = [];
+globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
+  saveCalls += 1;
+  visibilityOrder.push(`save:${modules.settings?.reservationBuffer}`);
+  return { revision: 7 };
+};
+globalThis.__testVpsBusinessState = async () => {
+  readCalls += 1;
+  visibilityOrder.push("load");
+  return { revision: 7, modules: { settings: { reservationBuffer: 20 } } };
+};
+document.visibilityState = "hidden";
+emitDocumentEvent("visibilitychange");
+await delay(20);
+assert.deepEqual(visibilityOrder, [], "hidden visibility transition unexpectedly synchronized business state");
+document.visibilityState = "visible";
+emitDocumentEvent("visibilitychange");
+await delay(20);
+assert.deepEqual(visibilityOrder.slice(0, 2), ["save:20", "load"], "visible resume did not save before refreshing business state");
+assert.equal(state.settings.reservationBuffer, 20, "visible resume lost the pending business edit");
+
 // A combined profile/language update must have exactly one persistence owner:
 // auth sync yields, then the guarded reload saves the pending edit once.
 state = { ...state, settings: { ...state.settings, reservationBuffer: 18 } };
@@ -247,7 +276,7 @@ let safeReloadBuffer = -1;
 globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
   saveCalls += 1;
   safeReloadBuffer = modules.settings?.reservationBuffer;
-  return { revision: 7 };
+  return { revision: 8 };
 };
 const savesBeforeCombinedReload = saveCalls;
 window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
@@ -302,11 +331,11 @@ globalThis.__testVpsSaveBusinessState = async (site, modules) => {
   saveCalls += 1;
   switchSaveSite = site;
   switchSaveBuffer = modules.settings?.reservationBuffer;
-  return { revision: 8 };
+  return { revision: 9 };
 };
 globalThis.__testVpsBusinessState = async (site) => {
   readCalls += 1;
-  return { revision: 9, modules: { settings: { reservationBuffer: site === "yongji" ? 6 : 13 } } };
+  return { revision: 10, modules: { settings: { reservationBuffer: site === "yongji" ? 6 : 13 } } };
 };
 emitWarehouseClick("yongji");
 await delay(20);
@@ -322,7 +351,7 @@ let resolveSwitchSave = null;
 globalThis.__testVpsSaveBusinessState = async () => {
   saveCalls += 1;
   return new Promise((resolve) => {
-    resolveSwitchSave = () => resolve({ revision: 10 });
+    resolveSwitchSave = () => resolve({ revision: 11 });
   });
 };
 emitWarehouseClick("fuxing");
@@ -338,7 +367,7 @@ assert.equal(state.settings.reservationBuffer, 15, "newer local edit was lost wh
 
 // Keep the subscriber reachable so the test also verifies attach/cleanup wiring.
 assert.equal(typeof subscriber, "function");
-assert(saveCalls >= 8, "expected failed, in-flight, auth-refresh, safe-reload, and warehouse-switch save attempts");
+assert(saveCalls >= 9, "expected failed, in-flight, auth-refresh, visibility-resume, safe-reload, and warehouse-switch save attempts");
 detach();
 
 console.log("BUSINESS_STATE_SYNC_RUNTIME_OK");
