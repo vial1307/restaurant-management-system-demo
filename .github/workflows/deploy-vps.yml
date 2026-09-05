@@ -159,6 +159,7 @@ jobs:
         run: node tests/browser-regression.mjs
 
       - name: Full-device cross-browser regression
+        shell: bash
         run: |
           set -o pipefail
           mkdir -p tests/artifacts/full-device
