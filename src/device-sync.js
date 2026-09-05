@@ -12,6 +12,7 @@ let running = false;
 let lastSyncAt = 0;
 let lastAdminAccountsAt = 0;
 let preferenceWriteInFlight = null;
+let preferenceWriteUserId = "";
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
@@ -139,9 +140,18 @@ async function drainPendingLanguage(user) {
 }
 
 function retryPendingLanguage(user) {
-  if (preferenceWriteInFlight) return preferenceWriteInFlight;
+  const userId = user?.id || "";
+  if (preferenceWriteInFlight) {
+    if (preferenceWriteUserId === userId) return preferenceWriteInFlight;
+    const priorWrite = preferenceWriteInFlight;
+    return priorWrite.catch(() => null).then(() => retryPendingLanguage(user));
+  }
+  preferenceWriteUserId = userId;
   preferenceWriteInFlight = drainPendingLanguage(user).finally(() => {
-    preferenceWriteInFlight = null;
+    if (preferenceWriteUserId === userId) {
+      preferenceWriteInFlight = null;
+      preferenceWriteUserId = "";
+    }
   });
   return preferenceWriteInFlight;
 }
@@ -164,9 +174,12 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
     // A transient network failure must remain immediately retryable on focus.
     lastSyncAt = Date.now();
 
+    const expectedUserId = user.id;
     const preference = await retryPendingLanguage(user);
     user = preference.user;
-    const previous = readJson(AUTH_KEY);
+    const activeSession = readJson(AUTH_KEY);
+    if (user?.id !== expectedUserId || activeSession?.id !== expectedUserId) return;
+    const previous = activeSession;
     const next = sessionSnapshot(user, preference.preferredLanguage);
     const securityChanged = Boolean(previous) && (
       previous.accountRole !== next.accountRole ||
@@ -199,6 +212,8 @@ async function persistLanguage(appLang) {
   setPendingLanguage(profile.id, preferredLanguage);
   const preference = await retryPendingLanguage(profile);
   if (!preference.confirmed) return false;
+  const activeProfile = readJson(AUTH_KEY);
+  if (activeProfile?.id !== profile.id || (preference.user?.id && preference.user.id !== profile.id)) return false;
   const next = sessionSnapshot(preference.user || profile, preference.preferredLanguage);
   if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
   return true;
