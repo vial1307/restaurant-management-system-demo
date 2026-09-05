@@ -81,12 +81,6 @@ export async function apiRequest(path, {
     if (response.status === 401 && code === "AUTH_REQUIRED" && sessionAtStart?.id && !insideLoginGrace) {
       let currentSession = null;
       try { currentSession = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
-      // A request started before a successful login must never remove the new
-      // session when its stale 401 response arrives later. WebKit can also fire
-      // focus/pageshow immediately after login before its cookie jar is visible
-      // to the next request, so a short post-login grace protects that fresh
-      // authenticated profile; the next normal auth check still expires it if
-      // the server session is genuinely invalid.
       if (currentSession?.id === sessionAtStart.id) {
         try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
         clearRuntimeCaches();
@@ -216,6 +210,12 @@ export function vpsAdjustInventory(body) {
 
 export function vpsTransferInventory(body) {
   return apiRequest("/api/inventory/transfer", { method: "POST", body });
+}
+
+export async function vpsDirectTransfer(body) {
+  const result = await apiRequest("/api/inventory/direct-transfer", { method: "POST", body });
+  invalidateVpsInventoryCache("");
+  return result;
 }
 
 export function vpsShipInventory(body) {
