@@ -166,12 +166,19 @@ export function vpsBusinessState(site) {
   return apiRequest(`/api/business-state/${encodeURIComponent(site)}`);
 }
 
-export function vpsSaveBusinessState(site, modules) {
-  return apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
+export async function vpsSaveBusinessState(site, modules) {
+  const result = await apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
     method: "POST",
     body: { modules },
     timeoutMs: 30000,
   });
+  if (result?.ok !== true || !Array.isArray(result?.savedModules)) {
+    const error = new Error("BUSINESS_STATE_SAVE_CONFIRMATION_MISSING");
+    error.code = "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING";
+    error.payload = result;
+    throw error;
+  }
+  return result;
 }
 
 export function vpsSchemaVersion() {
