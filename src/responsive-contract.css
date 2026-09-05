@@ -115,18 +115,18 @@ button:not(.icon-button),
   font-size: max(12px, 0.8rem);
 }
 
-/* The ingredient modal scrolls vertically only. Its sticky submit footer must
-   stay inside the modal's content box; the legacy negative inline margins made
-   the footer 1484px wide in a 1440px viewport and caused document overflow. */
+/* Product dialogs scroll vertically only. The legacy sticky submit footer used
+   negative inline margins and expanded to 1484px in a 1440px viewport. Keep
+   every submit bar inside its own containing block regardless of modal markup. */
 .ingredient-modal {
   overflow-x: clip;
 }
 
-.ingredient-modal .modal-submit-bar {
-  width: 100%;
-  max-width: 100%;
-  margin-left: 0;
-  margin-right: 0;
+.modal-submit-bar {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   box-sizing: border-box;
 }
 
