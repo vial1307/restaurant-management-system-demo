@@ -141,17 +141,17 @@ async function drainPendingLanguage(user) {
 
 function retryPendingLanguage(user) {
   const userId = user?.id || "";
+  if (preferenceWriteInFlight && preferenceWriteUserId === userId) {
+    if (preferenceWriteInFlight) return preferenceWriteInFlight;
+  }
   if (preferenceWriteInFlight) {
-    if (preferenceWriteUserId === userId) return preferenceWriteInFlight;
     const priorWrite = preferenceWriteInFlight;
     return priorWrite.catch(() => null).then(() => retryPendingLanguage(user));
   }
   preferenceWriteUserId = userId;
   preferenceWriteInFlight = drainPendingLanguage(user).finally(() => {
-    if (preferenceWriteUserId === userId) {
-      preferenceWriteInFlight = null;
-      preferenceWriteUserId = "";
-    }
+    preferenceWriteInFlight = null;
+    preferenceWriteUserId = "";
   });
   return preferenceWriteInFlight;
 }
