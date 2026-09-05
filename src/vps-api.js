@@ -7,6 +7,8 @@ const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
 const AUTH_LOGIN_GRACE_MS = 5000;
 let lastSuccessfulLoginAt = 0;
+let authMeInFlight = null;
+let adminUsersInFlight = null;
 
 export function invalidateVpsInventoryCache(site = "") {
   if (site) inventoryCache.delete(site);
@@ -20,6 +22,8 @@ export function invalidateVpsReceiveDefaultsCache() {
 function clearRuntimeCaches() {
   invalidateVpsInventoryCache("");
   invalidateVpsReceiveDefaultsCache();
+  authMeInFlight = null;
+  adminUsersInFlight = null;
 }
 
 export function isVpsApiConfigured() {
@@ -108,7 +112,13 @@ export async function vpsLogin(username, password) {
 }
 
 export function vpsMe() {
-  return apiRequest("/api/auth/me");
+  if (authMeInFlight) return authMeInFlight;
+  let pending;
+  pending = apiRequest("/api/auth/me").finally(() => {
+    if (authMeInFlight === pending) authMeInFlight = null;
+  });
+  authMeInFlight = pending;
+  return pending;
 }
 
 export async function vpsLogout() {
@@ -135,7 +145,13 @@ export function vpsUpdatePreferences(preferredLanguage) {
 }
 
 export function vpsListUsers() {
-  return apiRequest("/api/admin/users");
+  if (adminUsersInFlight) return adminUsersInFlight;
+  let pending;
+  pending = apiRequest("/api/admin/users").finally(() => {
+    if (adminUsersInFlight === pending) adminUsersInFlight = null;
+  });
+  adminUsersInFlight = pending;
+  return pending;
 }
 
 export function vpsSaveUser(body) {
