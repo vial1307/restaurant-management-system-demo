@@ -13,6 +13,21 @@ const AUTH_KEY = "shitu-kitchen-auth-v1";
 document.documentElement.dataset.vpsAuthReady = "checking";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
 const PERMISSION_MODULES = ["dashboard", ...ACCOUNT_MODULES.filter((key) => key !== "dashboard")];
+const localRuntimeErrors = new Set();
+
+function reportLocalRuntimeError(value) {
+  if (!["127.0.0.1", "localhost"].includes(location.hostname) || localRuntimeErrors.size >= 5) return;
+  const message = String(value?.message || value || "UNKNOWN_FRONTEND_ERROR").slice(0, 500);
+  if (!message || localRuntimeErrors.has(message)) return;
+  localRuntimeErrors.add(message);
+  void fetch(`/api/health?frontendError=${encodeURIComponent(message)}`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  }).catch(() => {});
+}
+
+window.addEventListener("error", (event) => reportLocalRuntimeError(event.error || event.message));
+window.addEventListener("unhandledrejection", (event) => reportLocalRuntimeError(event.reason));
 
 function esc(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
@@ -159,18 +174,12 @@ document.addEventListener("submit", async (event) => {
     const username = String(data.get("username") || "").trim().toLowerCase();
     const password = String(data.get("password") || "");
     try {
-      // Drop any pre-login /auth/me promise. WebKit tablet can keep that request
-      // alive across the submit and deliver its stale 401 after POST /login has
-      // already succeeded.
       invalidateCurrentVpsUser();
       const profile = mirrorVpsSession((await vpsLogin(username, password))?.user);
       if (!profile) throw new Error("ACCOUNT_DISABLED");
       invalidateCurrentVpsUser();
       lastProfileRefresh = Date.now();
 
-      // Authentication is the gate for entering the application. Admin account
-      // list synchronization is secondary data and must never keep a successful
-      // login stuck behind the auth screen on a slow device/browser.
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
       history.replaceState(null, "", `${location.pathname}${initialRoute(profile)}`);
