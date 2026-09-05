@@ -201,7 +201,11 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
     const languageChanged = applyLanguageToLocalState(next.preferredLanguage);
     await syncAdminAccounts(next, { force: forceAccounts });
 
-    if (securityChanged) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+    if (securityChanged) {
+      window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
+        detail: { safeReloadRequested: languageChanged },
+      }));
+    }
     if (languageChanged) requestSafeReload("language-sync");
   } catch (error) {
     if ([401, 403].includes(Number(error?.status))) {
