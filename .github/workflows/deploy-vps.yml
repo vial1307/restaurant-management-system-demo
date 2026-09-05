@@ -159,7 +159,10 @@ jobs:
         run: node tests/browser-regression.mjs
 
       - name: Full-device cross-browser regression
-        run: node tests/full-device-regression.mjs
+        run: |
+          set -o pipefail
+          mkdir -p tests/artifacts/full-device
+          node tests/full-device-regression.mjs 2>&1 | tee tests/artifacts/full-device/run.log
 
       - name: Upload full-device screenshots
         if: always()
