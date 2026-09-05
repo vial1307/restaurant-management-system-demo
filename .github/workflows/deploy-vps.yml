@@ -81,6 +81,9 @@ jobs:
   regression:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    container:
+      image: mcr.microsoft.com/playwright:v1.55.0-noble
+      options: --ipc=host
     services:
       postgres:
         image: postgres:16-alpine
@@ -88,15 +91,13 @@ jobs:
           POSTGRES_USER: kitchen_test
           POSTGRES_PASSWORD: kitchen_test
           POSTGRES_DB: kitchen_test
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DB_HOST: 127.0.0.1
+      DB_HOST: postgres
       DB_PORT: 5432
       POSTGRES_DB: kitchen_test
       POSTGRES_USER: kitchen_test
@@ -108,6 +109,7 @@ jobs:
       TEST_WEB_PORT: "3000"
       TEST_API_BASE: "http://127.0.0.1:8080"
       TEST_WEB_BASE: "http://127.0.0.1:3000"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -117,11 +119,10 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install backend and browser test dependencies
+      - name: Install backend and browser test packages
         run: |
           npm install --prefix vps/backend
           npm install --prefix tests
-          ./tests/node_modules/.bin/playwright install --with-deps chromium firefox webkit
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs
@@ -224,6 +225,11 @@ jobs:
       - deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.55.0-noble
+      options: --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -233,10 +239,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install clean browser
-        run: |
-          npm install --prefix tests
-          ./tests/node_modules/.bin/playwright install --with-deps chromium
+      - name: Install browser test package
+        run: npm install --prefix tests
 
       - name: Verify production permission modal
         env:
