@@ -239,7 +239,8 @@ await delay(20);
 assert.deepEqual(authReadyOrder.slice(0, 2), ["save:17", "load"], "VPS auth readiness reloaded before flushing the pending business edit");
 assert.equal(state.settings.reservationBuffer, 17, "VPS auth readiness lost the pending business edit");
 
-// A page reload requested by device sync must save business state first.
+// A combined profile/language update must have exactly one persistence owner:
+// auth sync yields, then the guarded reload saves the pending edit once.
 state = { ...state, settings: { ...state.settings, reservationBuffer: 18 } };
 subscriber();
 let safeReloadBuffer = -1;
@@ -248,12 +249,17 @@ globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
   safeReloadBuffer = modules.settings?.reservationBuffer;
   return { revision: 7 };
 };
+const savesBeforeCombinedReload = saveCalls;
+window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
+  detail: { safeReloadRequested: true },
+}));
 const safeReloadEvent = new CustomEvent("shitu:safe-reload-requested", {
   cancelable: true,
   detail: { reason: "language-sync" },
 });
 assert.equal(window.dispatchEvent(safeReloadEvent), false, "business sync did not take ownership of the safe reload");
 await delay(20);
+assert.equal(saveCalls, savesBeforeCombinedReload + 1, "combined auth/language sync created duplicate business-state writes");
 assert.equal(safeReloadBuffer, 18, "safe reload did not persist the latest business edit");
 assert.equal(reloadCalls, 1, "safe reload did not continue after a successful VPS save");
 
