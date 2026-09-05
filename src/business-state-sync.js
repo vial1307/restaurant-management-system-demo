@@ -151,7 +151,8 @@ export function attachBusinessStateSync(store) {
         }
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
         const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
-        return key === identityKey() && currentSnapshot === snapshot;
+        if (key !== identityKey()) return false;
+        return currentSnapshot === snapshot;
       } catch (error) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
         return false;
