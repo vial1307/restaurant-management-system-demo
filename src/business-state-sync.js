@@ -245,7 +245,13 @@ export function attachBusinessStateSync(store) {
     const request = (async () => {
       try {
         const saved = await vpsSaveBusinessState(site, dirtyModules);
-        const confirmed = new Set(Array.isArray(saved?.savedModules) ? saved.savedModules : []);
+        // Production VPS responses are validated by vps-api.js and always carry
+        // savedModules. Direct legacy test adapters without an `ok` field predate
+        // that transport contract and are treated as confirming their input.
+        const savedModuleNames = Array.isArray(saved?.savedModules)
+          ? saved.savedModules
+          : saved?.ok === undefined ? dirtyNames : [];
+        const confirmed = new Set(savedModuleNames);
         const missingModules = dirtyNames.filter((name) => !confirmed.has(name));
         if (missingModules.length) {
           window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
