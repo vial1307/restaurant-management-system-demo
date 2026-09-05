@@ -179,4 +179,5 @@ await delay(20);
 assert.equal(saveCalls, savesAfterConfirmed, "confirmed unchanged snapshot was written again");
 
 detach();
+await import("./business-state-dirty-merge-regression.mjs");
 console.log("BUSINESS_STATE_PARTIAL_SAVE_OK");
