@@ -5,6 +5,8 @@ const receiveDefaultsCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
 const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
+const AUTH_LOGIN_GRACE_MS = 5000;
+let lastSuccessfulLoginAt = 0;
 
 export function invalidateVpsInventoryCache(site = "") {
   if (site) inventoryCache.delete(site);
@@ -75,11 +77,16 @@ export async function apiRequest(path, {
 
   if (!response.ok && !(allow404 && response.status === 404)) {
     const code = data && typeof data === "object" ? data.error : "";
-    if (response.status === 401 && code === "AUTH_REQUIRED" && sessionAtStart?.id) {
+    const insideLoginGrace = lastSuccessfulLoginAt > 0 && Date.now() - lastSuccessfulLoginAt < AUTH_LOGIN_GRACE_MS;
+    if (response.status === 401 && code === "AUTH_REQUIRED" && sessionAtStart?.id && !insideLoginGrace) {
       let currentSession = null;
       try { currentSession = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
       // A request started before a successful login must never remove the new
-      // session when its stale 401 response arrives later.
+      // session when its stale 401 response arrives later. WebKit can also fire
+      // focus/pageshow immediately after login before its cookie jar is visible
+      // to the next request, so a short post-login grace protects that fresh
+      // authenticated profile; the next normal auth check still expires it if
+      // the server session is genuinely invalid.
       if (currentSession?.id === sessionAtStart.id) {
         try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
         clearRuntimeCaches();
@@ -98,10 +105,12 @@ export async function apiRequest(path, {
 
 export async function vpsLogin(username, password) {
   clearRuntimeCaches();
-  return apiRequest("/api/auth/login", {
+  const result = await apiRequest("/api/auth/login", {
     method: "POST",
     body: { username, password },
   });
+  lastSuccessfulLoginAt = Date.now();
+  return result;
 }
 
 export function vpsMe() {
@@ -112,6 +121,7 @@ export async function vpsLogout() {
   try {
     return await apiRequest("/api/auth/logout", { method: "POST" });
   } finally {
+    lastSuccessfulLoginAt = 0;
     clearRuntimeCaches();
   }
 }
@@ -178,62 +188,55 @@ export function vpsInventory(site, { force = false } = {}) {
 
 export function vpsInventoryDestinations(source, sites = []) {
   const params = new URLSearchParams({
-    source:String(source || ""),
-    sites:[...new Set(sites.map(String).filter(Boolean))].join(","),
+    source: String(source || ""),
+    sites: (sites || []).map(String).filter(Boolean).join(","),
   });
-  return apiRequest(`/api/inventory/destinations?${params.toString()}`);
+  return apiRequest(`/api/inventory/destinations?${params}`);
 }
 
-export function vpsInventoryHistory(site, limit = 200) {
-  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 200));
-  return apiRequest(`/api/inventory/${encodeURIComponent(site)}/transactions?limit=${safeLimit}`);
+export function vpsInventoryHistory(site, { limit = 250 } = {}) {
+  return apiRequest(`/api/inventory/${encodeURIComponent(site)}/history?limit=${encodeURIComponent(limit)}`);
 }
 
-export async function vpsAdjustInventory(body) {
-  const result = await apiRequest("/api/inventory/adjust", { method: "POST", body });
-  invalidateVpsInventoryCache(String(body?.locationCode || "").split("-")[0] || "");
-  return result;
+export function vpsSetInventoryQuantity(body) {
+  return apiRequest("/api/inventory/set-quantity", { method: "POST", body });
 }
 
-export async function vpsSetQuantity(body) {
-  const result = await apiRequest("/api/inventory/set-quantity", { method: "POST", body });
-  invalidateVpsInventoryCache("");
-  return result;
+export function vpsSetInventoryMinimum(body) {
+  return apiRequest("/api/inventory/set-minimum", { method: "POST", body });
 }
 
-export async function vpsSetMinimum(body) {
-  const result = await apiRequest("/api/inventory/set-minimum", { method: "POST", body });
-  invalidateVpsInventoryCache("");
-  return result;
+export function vpsAdjustInventory(body) {
+  return apiRequest("/api/inventory/adjust", { method: "POST", body });
 }
 
-export async function vpsTransferInventory(body) {
-  const result = await apiRequest("/api/inventory/transfer", { method: "POST", body });
-  invalidateVpsInventoryCache("");
-  return result;
+export function vpsTransferInventory(body) {
+  return apiRequest("/api/inventory/transfer", { method: "POST", body });
 }
 
-export async function vpsDirectTransfer(body) {
-  const result = await apiRequest("/api/inventory/direct-transfer", { method: "POST", body });
-  invalidateVpsInventoryCache("");
-  return result;
+export function vpsShipInventory(body) {
+  return apiRequest("/api/inventory/ship", { method: "POST", body });
 }
 
-export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}, { force = false } = {}) {
-  const normalizedSites = [...new Set(sites.map(String).filter(Boolean))].sort();
-  const normalizedCatalogKeys = [...new Set(catalogKeys.map(String).filter(Boolean))].sort();
-  const key = `${normalizedSites.join(",")}|${normalizedCatalogKeys.join(",")}`;
+export function vpsSaveInventoryItem(body) {
+  return apiRequest("/api/inventory/items", { method: "POST", body });
+}
+
+export function vpsArchiveInventoryItem(body) {
+  return apiRequest("/api/inventory/items/archive", { method: "POST", body });
+}
+
+export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
+  const stableSites = [...new Set((sites || []).map(String).filter(Boolean))].sort();
+  const stableCatalogKeys = [...new Set((catalogKeys || []).map(String).filter(Boolean))].sort();
+  const params = new URLSearchParams();
+  if (stableSites.length) params.set("sites", stableSites.join(","));
+  if (stableCatalogKeys.length) params.set("catalogKeys", stableCatalogKeys.join(","));
+  const key = params.toString();
   const now = Date.now();
   const cached = receiveDefaultsCache.get(key);
-  if (!force && cached && now - cached.at < RECEIVE_DEFAULTS_CACHE_MS) {
-    return cached.promise;
-  }
-
-  const params = new URLSearchParams();
-  if (normalizedSites.length) params.set("sites", normalizedSites.join(","));
-  if (normalizedCatalogKeys.length) params.set("catalogKeys", normalizedCatalogKeys.join(","));
-  const suffix = params.toString() ? `?${params}` : "";
-  const promise = apiRequest(`/api/inventory/receive-defaults${suffix}`)
+  if (cached && now - cached.at < RECEIVE_DEFAULTS_CACHE_MS) return cached.promise;
+  const promise = apiRequest(`/api/inventory/receive-defaults${key ? `?${key}` : ""}`)
     .catch((error) => {
       receiveDefaultsCache.delete(key);
       throw error;
@@ -243,27 +246,11 @@ export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}, { forc
 }
 
 export async function vpsSetReceiveDefault(body) {
-  const result = await apiRequest("/api/inventory/receive-default", { method: "POST", body });
+  const result = await apiRequest("/api/inventory/receive-defaults", { method: "POST", body });
   invalidateVpsReceiveDefaultsCache();
-  invalidateVpsInventoryCache(String(body?.site || ""));
   return result;
 }
 
-export async function vpsSyncCatalog(item) {
-  const result = await apiRequest("/api/inventory/catalog/sync", {
-    method: "POST",
-    body: { item },
-  });
-  invalidateVpsInventoryCache(String(item?.key || "").split(":")[0] || "");
-  return result;
-}
-
-export async function vpsArchiveCatalogItem(itemKey) {
-  const result = await apiRequest("/api/inventory/catalog/archive", {
-    method: "POST",
-    body: { itemKey },
-  });
-  invalidateVpsReceiveDefaultsCache();
-  invalidateVpsInventoryCache(String(itemKey || "").split(":")[0] || "");
-  return result;
+export function vpsHealth() {
+  return apiRequest("/api/health");
 }
