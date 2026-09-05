@@ -56,7 +56,15 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
   const now = Date.now();
   if (!force && lastAdminAccountsAt && now - lastAdminAccountsAt < ADMIN_ACCOUNTS_INTERVAL) return false;
 
-  const result = await vpsListUsers();
+  let result;
+  try {
+    result = await vpsListUsers();
+  } catch {
+    // Account-list availability must not block the already validated profile
+    // from applying security or language changes. Leave the throttle untouched
+    // so a later forced recovery can retry immediately.
+    return false;
+  }
   lastAdminAccountsAt = Date.now();
   const next = (result?.users || []).map((user) => ({
     id: user.id,
@@ -82,7 +90,6 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
   const now = Date.now();
   if (!force && lastSyncAt && now - lastSyncAt < MIN_SYNC_GAP) return;
   running = true;
-  lastSyncAt = now;
 
   try {
     const result = await vpsMe();
@@ -92,6 +99,9 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
       window.dispatchEvent(new CustomEvent("shitu:auth-expired"));
       return;
     }
+    // Only a validated profile response should start the normal sync throttle.
+    // A transient network failure must remain immediately retryable on focus.
+    lastSyncAt = Date.now();
 
     const previous = readJson(AUTH_KEY);
     const next = sessionSnapshot(user);
