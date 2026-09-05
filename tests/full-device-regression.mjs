@@ -226,6 +226,9 @@ async function assertLanguage(page, label) {
 
 async function runProfile(profile) {
   const browserType = ENGINES[profile.engine];
+  if (profile.engine === "firefox" && typeof process.getuid === "function" && process.getuid() === 0) {
+    process.env.HOME = "/root";
+  }
   const browser = await browserType.launch({ headless:true });
   const context = await browser.newContext({
     viewport:{ width:profile.width, height:profile.height },
