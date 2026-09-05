@@ -11,6 +11,7 @@ const ADMIN_ACCOUNTS_INTERVAL = 300000;
 let running = false;
 let lastSyncAt = 0;
 let lastAdminAccountsAt = 0;
+let preferenceGeneration = 0;
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; }
@@ -35,9 +36,10 @@ function pendingLanguageFor(userId = "") {
 }
 
 function setPendingLanguage(userId, preferredLanguage) {
-  if (!userId || !["vi", "zh-TW"].includes(preferredLanguage)) return false;
+  if (!userId || !["vi", "zh-TW"].includes(preferredLanguage)) return 0;
+  preferenceGeneration += 1;
   localStorage.setItem(PENDING_LANGUAGE_KEY, JSON.stringify({ userId, preferredLanguage }));
-  return true;
+  return preferenceGeneration;
 }
 
 function clearPendingLanguage(userId, preferredLanguage = "") {
@@ -114,18 +116,18 @@ async function retryPendingLanguage(user) {
     return { user, preferredLanguage: requestedLanguage || serverLanguage };
   }
 
+  const generation = preferenceGeneration;
   try {
     const result = await vpsUpdatePreferences(requestedLanguage);
     const nextUser = result?.user?.id ? result.user : user;
-    const latestLanguage = pendingLanguageFor(user.id);
-    if (latestLanguage && latestLanguage !== requestedLanguage) {
-      return { user: nextUser, preferredLanguage: latestLanguage };
+    if (generation !== preferenceGeneration) {
+      return { user: nextUser, preferredLanguage: pendingLanguageFor(user.id) || requestedLanguage };
     }
     clearPendingLanguage(user.id, requestedLanguage);
     return { user: nextUser, preferredLanguage: requestedLanguage };
   } catch {
     window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
-      detail: { preferredLanguage: requestedLanguage },
+      detail: { preferredLanguage: pendingLanguageFor(user.id) || requestedLanguage },
     }));
     return { user, preferredLanguage: pendingLanguageFor(user.id) || requestedLanguage };
   }
@@ -181,11 +183,10 @@ async function persistLanguage(appLang) {
   const preferredLanguage = apiLanguage(appLang);
   const profile = readJson(AUTH_KEY);
   if (!profile?.id) return false;
-  setPendingLanguage(profile.id, preferredLanguage);
+  const generation = setPendingLanguage(profile.id, preferredLanguage);
   try {
     const result = await vpsUpdatePreferences(preferredLanguage);
-    const latestLanguage = pendingLanguageFor(profile.id);
-    if (latestLanguage && latestLanguage !== preferredLanguage) return true;
+    if (generation !== preferenceGeneration) return true;
     const next = sessionSnapshot(result?.user || {}, preferredLanguage);
     if (next.id) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
     clearPendingLanguage(profile.id, preferredLanguage);
