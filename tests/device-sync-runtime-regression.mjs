@@ -15,6 +15,7 @@ assert.notEqual(injected, source, "device sync test could not inject VPS API moc
 const APP_KEY = "shitu-kitchen-os-v1";
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
+const PENDING_LANGUAGE_KEY = "shitu-kitchen-pending-language-v1";
 const storage = new Map([
   [APP_KEY, JSON.stringify({ settings: { language: "vi" } })],
   [AUTH_KEY, JSON.stringify({
@@ -176,6 +177,9 @@ assert.equal(preferenceCalls, 1, "language click did not attempt to persist the 
 assert.equal(serverPreferredLanguage, "zh-TW", "failed preference write unexpectedly changed the server state");
 assert.equal(JSON.parse(storage.get(APP_KEY)).settings.language, "vi", "failed preference write reverted the local language immediately");
 assert.equal(preferencePendingEvents, 1, "failed preference write did not expose pending sync state");
+const durablePending = JSON.parse(storage.get(PENDING_LANGUAGE_KEY) || "null");
+assert.equal(durablePending?.userId, "admin-1", "pending language was not bound to the current user");
+assert.equal(durablePending?.preferredLanguage, "vi", "pending language was not persisted for reload recovery");
 const reloadsBeforePreferenceRecovery = reloadCalls;
 
 window.dispatchEvent(new CustomEvent("online"));
@@ -185,6 +189,15 @@ assert.equal(preferenceCalls, 2, "pending language preference was not retried af
 assert.equal(serverPreferredLanguage, "vi", "preference retry did not update the server language");
 assert.equal(JSON.parse(storage.get(APP_KEY)).settings.language, "vi", "stale server language overwrote the pending local preference");
 assert.equal(JSON.parse(storage.get(AUTH_KEY)).preferredLanguage, "vi", "mirrored session did not adopt the confirmed preference");
+assert.equal(storage.has(PENDING_LANGUAGE_KEY), false, "confirmed language preference left a stale pending cache behind");
 assert.equal(reloadCalls, reloadsBeforePreferenceRecovery, "preference recovery caused an unnecessary language rollback reload");
+
+// A pending preference owned by another account must never be applied.
+storage.set(PENDING_LANGUAGE_KEY, JSON.stringify({ userId: "other-user", preferredLanguage: "zh-TW" }));
+serverPreferredLanguage = "vi";
+window.dispatchEvent(new CustomEvent("online"));
+await delay(20);
+assert.equal(preferenceCalls, 2, "foreign-account pending language leaked into the current session");
+assert.equal(JSON.parse(storage.get(AUTH_KEY)).preferredLanguage, "vi", "foreign-account pending language changed the current profile mirror");
 
 console.log("DEVICE_SYNC_RUNTIME_OK");
