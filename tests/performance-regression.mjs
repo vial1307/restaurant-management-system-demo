@@ -8,6 +8,7 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const api = read("src/vps-api.js");
 const inventoryCloud = read("src/inventory-cloud.js");
 const businessSync = read("src/business-state-sync.js");
+const deviceSync = read("src/device-sync.js");
 const uiRefresh = read("src/ui-refresh.js");
 const app = read("src/app.js");
 const deploy = read("vps/scripts/deploy-api.sh");
@@ -33,7 +34,7 @@ assert.doesNotMatch(api, /vpsInventoryHistory[\s\S]{0,220}\/history\?limit=/, "i
 
 const receiveDefaultSave = inventoryCloud.match(/export async function cloudSetReceiveDefault\([\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
 assert.match(receiveDefaultSave, /navigator\?\.onLine===false\) return \{ok:false/, "offline receive-default saves must fail instead of reporting local fallback success");
-assert.match(receiveDefaultSave, /!\(await verifyMigration\(\)\)\) return \{ok:false/, "receive-default saves must fail while the VPS schema is unavailable");
+assert.match(receiveDefaultSave, /!\(await verifyMigration\(\)\) return \{ok:false/, "receive-default saves must fail while the VPS schema is unavailable");
 assert.match(receiveDefaultSave, /await vpsSetReceiveDefault\([\s\S]{0,220}saveLocalReceiveDefault\(/, "receive-default local mirror must only update after the VPS confirms the write");
 assert.doesNotMatch(receiveDefaultSave, /saveLocalReceiveDefault[\s\S]{0,220}await vpsSetReceiveDefault/, "receive-default saves must never write local state before PostgreSQL");
 assert.doesNotMatch(receiveDefaultSave, /ok:true,fallback:true/, "receive-default writes must never report fallback success");
@@ -47,6 +48,11 @@ assert.match(businessSync, /const saveThenReload = \(\) => \{ void \(async \(\) 
 assert.match(businessSync, /const currentSnapshot = JSON\.stringify\(businessModulesFromState\(store\.getState\(\)\)\);[\s\S]{0,100}return currentSnapshot === snapshot;/, "business-state save must suppress refresh when a newer local edit appears during the write");
 assert.match(businessSync, /const localSnapshotBeforeLoad = identityChanged[\s\S]{0,180}businessModulesFromState\(store\.getState\(\)\)/, "business-state refresh must snapshot local state before an in-flight read");
 assert.match(businessSync, /!identityChanged && localSnapshotBeforeLoad !== JSON\.stringify\(businessModulesFromState\(store\.getState\(\)\)\)[\s\S]{0,260}deferred:true[\s\S]{0,80}return;/, "business-state refresh must defer stale server merges after an in-flight local edit");
+
+const adminAccountSync = deviceSync.match(/async function syncAdminAccounts\([\s\S]*?\n}\n\nasync function syncNow/)?.[0] || "";
+assert.match(adminAccountSync, /const result = await vpsListUsers\(\);[\s\S]{0,100}lastAdminAccountsAt = Date\.now\(\);/, "admin account retry throttle must start only after the VPS request succeeds");
+assert.doesNotMatch(adminAccountSync, /lastAdminAccountsAt\s*=\s*now[\s\S]{0,160}await vpsListUsers\(\)/, "failed admin account requests must not poison the five-minute retry throttle");
+
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
 assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must discard self-generated records");
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not trigger a whole-app render");
@@ -93,4 +99,5 @@ assert.match(backendDockerignore, /(?:^|\n)node_modules(?:\n|$)/, "Docker build 
 assert.match(backendDockerignore, /(?:^|\n)\.env(?:\n|$)/, "Docker build context must exclude local environment secrets");
 
 await import("./business-state-sync-runtime-regression.mjs");
+await import("./device-sync-runtime-regression.mjs");
 console.log("PERFORMANCE_REGRESSION_OK");
