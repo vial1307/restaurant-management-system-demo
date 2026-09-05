@@ -115,6 +115,13 @@ button:not(.icon-button),
   font-size: max(12px, 0.8rem);
 }
 
+/* The ingredient modal has a sticky submit bar that intentionally bleeds to
+   the card padding with negative inline margins. The card scrolls vertically;
+   horizontal scrolling is never meaningful and must not escape to the page. */
+.ingredient-modal {
+  overflow-x: clip;
+}
+
 .bilingual-control-label,
 .bilingual-control-label > span,
 .label-primary,
