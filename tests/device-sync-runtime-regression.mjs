@@ -41,6 +41,11 @@ class TestCustomEvent {
   constructor(type, options = {}) {
     this.type = type;
     this.detail = options.detail;
+    this.cancelable = Boolean(options.cancelable);
+    this.defaultPrevented = false;
+  }
+  preventDefault() {
+    if (this.cancelable) this.defaultPrevented = true;
   }
 }
 globalThis.CustomEvent = TestCustomEvent;
@@ -55,7 +60,7 @@ globalThis.window = {
   },
   dispatchEvent(event) {
     for (const listener of windowListeners.get(event.type) || []) listener(event);
-    return true;
+    return !event.defaultPrevented;
   },
   setInterval() { return 1; },
 };
@@ -133,9 +138,18 @@ const moduleUrl = `data:text/javascript;base64,${Buffer.from(injected).toString(
 await import(moduleUrl);
 
 let authSyncedEvents = 0;
+let authSafeReloadRequested = false;
 let preferencePendingEvents = 0;
-window.addEventListener("shitu:auth-synced", () => { authSyncedEvents += 1; });
+let safeReloadRequests = 0;
+window.addEventListener("shitu:auth-synced", (event) => {
+  authSyncedEvents += 1;
+  authSafeReloadRequested = Boolean(event.detail?.safeReloadRequested);
+});
 window.addEventListener("shitu:preferences-sync-pending", () => { preferencePendingEvents += 1; });
+window.addEventListener("shitu:safe-reload-requested", (event) => {
+  safeReloadRequests += 1;
+  event.preventDefault();
+});
 
 const delay = (ms = 0) => new Promise((resolve) => nativeSetTimeout(resolve, ms));
 function emitLanguageClick(language) {
@@ -169,7 +183,9 @@ assert.equal(profileAfterAccountFailure.permissions.settings.view, true, "profil
 assert.equal(profileAfterAccountFailure.preferredLanguage, "zh-TW", "profile language update was blocked by account-list failure");
 assert.equal(JSON.parse(storage.get(APP_KEY)).settings.language, "zh", "app language did not follow the validated profile");
 assert.equal(authSyncedEvents, 1, "security-change event was suppressed by account-list failure");
-assert.equal(reloadCalls, 1, "language reload was suppressed by account-list failure");
+assert.equal(authSafeReloadRequested, true, "combined security/language sync did not mark safe reload ownership");
+assert.equal(safeReloadRequests, 1, "language change did not request a guarded reload");
+assert.equal(reloadCalls, 0, "language sync bypassed the guarded reload contract");
 
 // Forced online recovery must retry the unthrottled admin account list.
 window.dispatchEvent(new CustomEvent("online"));

@@ -52,6 +52,11 @@ class TestCustomEvent {
   constructor(type, options = {}) {
     this.type = type;
     this.detail = options.detail;
+    this.cancelable = Boolean(options.cancelable);
+    this.defaultPrevented = false;
+  }
+  preventDefault() {
+    if (this.cancelable) this.defaultPrevented = true;
   }
 }
 globalThis.CustomEvent = TestCustomEvent;
@@ -69,11 +74,14 @@ globalThis.window = {
   },
   dispatchEvent(event) {
     for (const listener of listeners.get(event.type) || []) listener(event);
-    return true;
+    return !event.defaultPrevented;
   },
   setTimeout: nativeSetTimeout,
   clearTimeout: nativeClearTimeout,
 };
+
+let reloadCalls = 0;
+globalThis.location = { reload() { reloadCalls += 1; } };
 
 const delay = (ms = 0) => new Promise((resolve) => nativeSetTimeout(resolve, ms));
 
@@ -231,6 +239,46 @@ await delay(20);
 assert.deepEqual(authReadyOrder.slice(0, 2), ["save:17", "load"], "VPS auth readiness reloaded before flushing the pending business edit");
 assert.equal(state.settings.reservationBuffer, 17, "VPS auth readiness lost the pending business edit");
 
+// A combined profile/language update must have exactly one persistence owner:
+// auth sync yields, then the guarded reload saves the pending edit once.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 18 } };
+subscriber();
+let safeReloadBuffer = -1;
+globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
+  saveCalls += 1;
+  safeReloadBuffer = modules.settings?.reservationBuffer;
+  return { revision: 7 };
+};
+const savesBeforeCombinedReload = saveCalls;
+window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
+  detail: { safeReloadRequested: true },
+}));
+const safeReloadEvent = new CustomEvent("shitu:safe-reload-requested", {
+  cancelable: true,
+  detail: { reason: "language-sync" },
+});
+assert.equal(window.dispatchEvent(safeReloadEvent), false, "business sync did not take ownership of the safe reload");
+await delay(20);
+assert.equal(saveCalls, savesBeforeCombinedReload + 1, "combined auth/language sync created duplicate business-state writes");
+assert.equal(safeReloadBuffer, 18, "safe reload did not persist the latest business edit");
+assert.equal(reloadCalls, 1, "safe reload did not continue after a successful VPS save");
+
+// A failed business-state save must block the reload completely.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 19 } };
+subscriber();
+globalThis.__testVpsSaveBusinessState = async () => {
+  saveCalls += 1;
+  throw new Error("SAFE_RELOAD_SAVE_FAILURE");
+};
+const blockedReloadEvent = new CustomEvent("shitu:safe-reload-requested", {
+  cancelable: true,
+  detail: { reason: "language-sync" },
+});
+assert.equal(window.dispatchEvent(blockedReloadEvent), false, "failed safe reload was not intercepted");
+await delay(20);
+assert.equal(reloadCalls, 1, "failed business save still reloaded the page");
+assert.equal(state.settings.reservationBuffer, 19, "failed safe reload discarded the local business edit");
+
 // Admin warehouse switching must not discard an unsaved business-state edit.
 storage.set(AUTH_KEY, JSON.stringify({
   id: "business-sync-user",
@@ -254,11 +302,11 @@ globalThis.__testVpsSaveBusinessState = async (site, modules) => {
   saveCalls += 1;
   switchSaveSite = site;
   switchSaveBuffer = modules.settings?.reservationBuffer;
-  return { revision: 7 };
+  return { revision: 8 };
 };
 globalThis.__testVpsBusinessState = async (site) => {
   readCalls += 1;
-  return { revision: 8, modules: { settings: { reservationBuffer: site === "yongji" ? 6 : 13 } } };
+  return { revision: 9, modules: { settings: { reservationBuffer: site === "yongji" ? 6 : 13 } } };
 };
 emitWarehouseClick("yongji");
 await delay(20);
@@ -274,7 +322,7 @@ let resolveSwitchSave = null;
 globalThis.__testVpsSaveBusinessState = async () => {
   saveCalls += 1;
   return new Promise((resolve) => {
-    resolveSwitchSave = () => resolve({ revision: 9 });
+    resolveSwitchSave = () => resolve({ revision: 10 });
   });
 };
 emitWarehouseClick("fuxing");
@@ -290,7 +338,7 @@ assert.equal(state.settings.reservationBuffer, 15, "newer local edit was lost wh
 
 // Keep the subscriber reachable so the test also verifies attach/cleanup wiring.
 assert.equal(typeof subscriber, "function");
-assert(saveCalls >= 6, "expected failed, in-flight, auth-refresh, and warehouse-switch save attempts");
+assert(saveCalls >= 8, "expected failed, in-flight, auth-refresh, safe-reload, and warehouse-switch save attempts");
 detach();
 
 console.log("BUSINESS_STATE_SYNC_RUNTIME_OK");
