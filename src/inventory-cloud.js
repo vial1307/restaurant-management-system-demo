@@ -292,12 +292,15 @@ export async function getInventoryReceiveDefaults({sites=[],catalogKeys=[]}={}) 
 export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,locationCode=""}) {
   const key=String(catalogKeyValue||"").trim();
   const code=String(locationCode||"").trim();
-  if(!["central","fuxing","yongji"].includes(site)||!key) return {ok:false,error:new Error("INVALID_RECEIVE_DEFAULT")};
-  saveLocalReceiveDefault(site,key,code);
-  if(!(await verifyMigration()) || globalThis.navigator?.onLine===false) return {ok:true,fallback:true};
+  if(!["central","fuxing","yongji"].includes(site)||!key) return {ok:false,fallback:false,error:new Error("INVALID_RECEIVE_DEFAULT")};
   if(!hasInventoryPermission("edit")) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
+  if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
+  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_VPS_NOT_READY")};
   try{
     await vpsSetReceiveDefault({site,catalogKey:key,locationCode:code});
+    // PostgreSQL is authoritative. Cache only the value the VPS has accepted;
+    // never make an offline/failed mutation appear persisted on this device.
+    saveLocalReceiveDefault(site,key,code);
     return {ok:true,fallback:false};
   }catch(error){
     dispatchStatus("error",{error:error.message,stage:"receive-default"});
