@@ -2,10 +2,21 @@ import { isVpsApiConfigured, vpsBusinessState, vpsSaveBusinessState } from "./vp
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
+const RECOVERY_KEY = "shitu-business-recovery-v1";
+const MAX_RECOVERY_DRAFTS = 12;
+
+function readJson(key) {
+  try { return JSON.parse(localStorage.getItem(key) || "null"); }
+  catch { return null; }
+}
 
 function readSession() {
-  try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); }
-  catch { return null; }
+  return readJson(AUTH_KEY);
+}
+
+function sameJson(a, b) {
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch { return false; }
 }
 
 function currentSite() {
@@ -90,6 +101,50 @@ export function businessModulesFromState(state) {
   };
 }
 
+function snapshotModules(snapshot = "") {
+  if (!snapshot) return {};
+  try {
+    const parsed = JSON.parse(snapshot);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function dirtyBusinessModules(modules, baselineSnapshot) {
+  const baseline = snapshotModules(baselineSnapshot);
+  return Object.fromEntries(
+    Object.entries(modules || {}).filter(([name, value]) => !sameJson(value, baseline[name]))
+  );
+}
+
+function recoveryState() {
+  const stored = readJson(RECOVERY_KEY);
+  const drafts = stored?.drafts && typeof stored.drafts === "object" && !Array.isArray(stored.drafts)
+    ? stored.drafts
+    : {};
+  return { version: 1, drafts: { ...drafts } };
+}
+
+function writeRecoveryDraft(draft) {
+  try {
+    const state = recoveryState();
+    const key = `${draft.userId}:${draft.site}`;
+    state.drafts[key] = draft;
+    const entries = Object.entries(state.drafts)
+      .sort((a, b) => String(b[1]?.capturedAt || "").localeCompare(String(a[1]?.capturedAt || "")))
+      .slice(0, MAX_RECOVERY_DRAFTS);
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify({ version: 1, drafts: Object.fromEntries(entries) }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function recoveryDraftForKey(key) {
+  return recoveryState().drafts[key] || null;
+}
+
 export function attachBusinessStateSync(store) {
   if (!isVpsApiConfigured()) return () => {};
   let applyingRemote = false;
@@ -112,6 +167,53 @@ export function attachBusinessStateSync(store) {
     return user?.id && site ? `${user.id}:${site}` : "";
   };
 
+  const surfaceRecovery = (key = identityKey()) => {
+    const draft = key ? recoveryDraftForKey(key) : null;
+    if (!draft) return false;
+    window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+      detail: {
+        status: "recovery-pending",
+        site: draft.site,
+        modules: draft.changedModules || Object.keys(draft.modules || {}),
+        capturedAt: draft.capturedAt || null,
+      },
+    }));
+    return true;
+  };
+
+  const captureAuthorizationRecovery = (event) => {
+    if (!event.detail?.authorizationChanged) return;
+    const previous = event.detail?.previous;
+    const site = currentSite();
+    const key = previous?.id && site ? `${previous.id}:${site}` : "";
+    if (!key || key !== loadedKey || !lastSavedSnapshot) return;
+    const modules = businessModulesFromState(store.getState());
+    const snapshot = JSON.stringify(modules);
+    if (snapshot === lastSavedSnapshot) return;
+    const dirtyModules = dirtyBusinessModules(modules, lastSavedSnapshot);
+    const changedModules = Object.keys(dirtyModules);
+    if (!changedModules.length) return;
+
+    const draft = {
+      userId: previous.id,
+      site,
+      capturedAt: new Date().toISOString(),
+      baseRevision: loadedRevisionKey === key && Number.isFinite(loadedRevision) ? loadedRevision : null,
+      changedModules,
+      modules: dirtyModules,
+      reason: "authorization-transition",
+    };
+    if (!writeRecoveryDraft(draft)) {
+      window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+        detail: { status: "error", site, error: "BUSINESS_STATE_RECOVERY_WRITE_FAILED" },
+      }));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+      detail: { status: "recovery-pending", site, modules: changedModules, capturedAt: draft.capturedAt },
+    }));
+  };
+
   async function save() {
     const key = identityKey();
     const site = currentSite();
@@ -125,7 +227,9 @@ export function attachBusinessStateSync(store) {
       return activeSave.then(() => save());
     }
 
-    if (snapshot === lastSavedSnapshot) {
+    const dirtyModules = dirtyBusinessModules(modules, lastSavedSnapshot);
+    const dirtyNames = Object.keys(dirtyModules);
+    if (!dirtyNames.length) {
       clearTimeout(saveTimer);
       saveTimer = 0;
       return true;
@@ -140,7 +244,15 @@ export function attachBusinessStateSync(store) {
     saveTimer = 0;
     const request = (async () => {
       try {
-        const saved = await vpsSaveBusinessState(site, modules);
+        const saved = await vpsSaveBusinessState(site, dirtyModules);
+        const confirmed = new Set(Array.isArray(saved?.savedModules) ? saved.savedModules : []);
+        const missingModules = dirtyNames.filter((name) => !confirmed.has(name));
+        if (missingModules.length) {
+          window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+            detail: { status:"error", site, error:"BUSINESS_STATE_PARTIAL_SAVE", modules:missingModules },
+          }));
+          return false;
+        }
         if (key === loadedKey) {
           lastSavedSnapshot = snapshot;
           const revision = Number(saved?.revision);
@@ -149,7 +261,7 @@ export function attachBusinessStateSync(store) {
             loadedRevision = revision;
           }
         }
-        window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site, modules:dirtyNames } }));
         const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
         if (key !== identityKey()) return false;
         return currentSnapshot === snapshot;
@@ -189,7 +301,10 @@ export function attachBusinessStateSync(store) {
       loadedKey = "";
       lastSavedSnapshot = "";
     }
-    if (!key || !site || !hasBusinessView() || navigator.onLine === false) return;
+    if (!key || !site || !hasBusinessView() || navigator.onLine === false) {
+      if (key) surfaceRecovery(key);
+      return;
+    }
     const localSnapshotBeforeLoad = identityChanged
       ? ""
       : JSON.stringify(businessModulesFromState(store.getState()));
@@ -198,12 +313,14 @@ export function attachBusinessStateSync(store) {
       if (token !== loadToken || key !== identityKey()) return;
       if (!identityChanged && localSnapshotBeforeLoad !== JSON.stringify(businessModulesFromState(store.getState()))) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, deferred:true } }));
+        surfaceRecovery(key);
         return;
       }
       loadedKey = key;
       const revision = Math.max(0, Number(result?.revision) || 0);
       if (loadedRevisionKey === key && loadedRevision === revision) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, unchanged:true } }));
+        surfaceRecovery(key);
         return;
       }
 
@@ -225,9 +342,11 @@ export function attachBusinessStateSync(store) {
       loadedRevisionKey = key;
       loadedRevision = revision;
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site } }));
+      surfaceRecovery(key);
     } catch (error) {
       if (token !== loadToken) return;
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
+      surfaceRecovery(key);
     } finally {
       applyingRemote = false;
     }
@@ -287,11 +406,16 @@ export function attachBusinessStateSync(store) {
   const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   const authReload = (event) => {
     if (event.detail?.safeReloadRequested) return;
+    if (event.detail?.authorizationChanged) {
+      void load();
+      return;
+    }
     saveThenReload();
   };
   const resumeVisible = () => {
     if (document.visibilityState === "visible") saveThenReload();
   };
+  window.addEventListener("shitu:auth-transition-preparing", captureAuthorizationRecovery);
   window.addEventListener("shitu:auth-synced", authReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
@@ -304,6 +428,7 @@ export function attachBusinessStateSync(store) {
   return () => {
     unsubscribe();
     clearTimeout(saveTimer);
+    window.removeEventListener("shitu:auth-transition-preparing", captureAuthorizationRecovery);
     window.removeEventListener("shitu:auth-synced", authReload);
     window.removeEventListener("shitu:vps-auth-ready", saveThenReload);
     window.removeEventListener("shitu:active-site-changed", reload);
