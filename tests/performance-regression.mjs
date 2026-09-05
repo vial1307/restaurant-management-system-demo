@@ -31,6 +31,9 @@ assert.match(receiveDefaultSave, /await vpsSetReceiveDefault\([\s\S]{0,220}saveL
 assert.doesNotMatch(receiveDefaultSave, /saveLocalReceiveDefault[\s\S]{0,220}await vpsSetReceiveDefault/, "receive-default saves must never write local state before PostgreSQL");
 assert.doesNotMatch(receiveDefaultSave, /ok:true,fallback:true/, "receive-default writes must never report fallback success");
 
+assert.doesNotMatch(inventoryCloud, /return \{ ok: false, fallback: true \}/, "inventory mutations must never fall back to local-only success when PostgreSQL is unavailable");
+assert.match(inventoryCloud, /fallback: false, error: new Error\("INVENTORY_BACKEND_NOT_READY"\)/, "inventory mutation backend failures must be explicit so optimistic UI can roll back");
+
 assert.match(businessSync, /loadedRevisionKey === key && loadedRevision === revision/, "unchanged business-state focus refresh must remain a no-op merge");
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
 assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must discard self-generated records");

@@ -664,10 +664,10 @@ export async function cloudAdjustQuantity({
   amount,
   note = "",
 }) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
-  if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
+  if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
   try {
@@ -694,10 +694,10 @@ export async function cloudSetQuantity({
   sync = true,
   allowInventoryEditor = false,
 }) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust() && !(allowInventoryEditor && canInventoryEdit())) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
-  if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
+  if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   try {
     await vpsSetQuantity({
       itemId: resolved.item.id,
@@ -719,10 +719,10 @@ export async function cloudSetMinimum({
   minimum,
   sync = true,
 }) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
-  if (!resolved.item || !resolved.location) return { ok: false, fallback: true };
+  if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   try {
     await vpsSetMinimum({
       itemId: resolved.item.id,
@@ -745,12 +745,12 @@ export async function cloudTransferInventory({
   amount,
   note = "庫存轉撥 / Chuyển kho",
 }) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
 
   const source = await resolveIds(itemKey, sourceLocationCode);
   const destination = await resolveIds(itemKey, destinationLocationCode);
-  if (!source.item || !source.location || !destination.location) return { ok: false, fallback: true };
+  if (!source.item || !source.location || !destination.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
 
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
@@ -773,11 +773,11 @@ export async function cloudTransferInventory({
 }
 
 export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
   const rows = await fetchSite("fuxing");
   const { record } = selectedBranchRecord();
-  if (!record) return { ok: false, fallback: true };
+  if (!record) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
 
   const local = new Map();
   for (const entry of record.inventory || []) {
@@ -829,7 +829,7 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
 }
 
 export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite()) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
@@ -848,7 +848,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
 }
 
 export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, [])) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageCentralCatalog()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   const catalog = buildCentralCatalog(items);
   const item = catalog.find((entry) => entry.key === itemKey);
@@ -865,7 +865,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
 }
 
 export async function cloudArchiveCentralItem(itemKey) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
   try {
@@ -879,7 +879,7 @@ export async function cloudArchiveCentralItem(itemKey) {
 }
 
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
-  if (!(await verifyMigration())) return { ok: false, fallback: true };
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
