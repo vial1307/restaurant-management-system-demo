@@ -140,4 +140,5 @@ assert.equal(finalSession.id, "user-b", "user B session was replaced after prefe
 assert.equal(finalSession.preferredLanguage, "zh-TW", "user B confirmed preference was not mirrored");
 assert.equal(storage.has(PENDING_LANGUAGE_KEY), false, "user B confirmed preference left stale pending state");
 
+await import("./vps-auth-stale-response-regression.mjs");
 console.log("DEVICE_SYNC_USER_SCOPE_OK");
