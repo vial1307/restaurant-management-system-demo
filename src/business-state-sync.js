@@ -107,13 +107,13 @@ export function attachBusinessStateSync(store) {
   };
 
   async function save() {
-    if (document.documentElement.dataset.vpsAuthReady !== "true") return;
+    if (document.documentElement.dataset.vpsAuthReady !== "true") return true;
     const key = identityKey();
     const site = currentSite();
-    if (!key || key !== loadedKey || !site || !hasBusinessEdit() || navigator.onLine === false) return;
+    if (!key || key !== loadedKey || !site || !hasBusinessEdit() || navigator.onLine === false) return true;
     const modules = businessModulesFromState(store.getState());
     const snapshot = JSON.stringify(modules);
-    if (snapshot === lastSavedSnapshot) return;
+    if (snapshot === lastSavedSnapshot) return true;
     try {
       const saved = await vpsSaveBusinessState(site, modules);
       lastSavedSnapshot = snapshot;
@@ -123,8 +123,10 @@ export function attachBusinessStateSync(store) {
         loadedRevision = revision;
       }
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site } }));
+      return true;
     } catch (error) {
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
+      return false;
     }
   }
 
@@ -187,7 +189,7 @@ export function attachBusinessStateSync(store) {
   window.addEventListener("shitu:auth-synced", reload);
   window.addEventListener("shitu:vps-auth-ready", reload);
   window.addEventListener("shitu:active-site-changed", reload);
-  const saveThenReload = () => { void (async () => { await save(); await load(); })(); };
+  const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   window.addEventListener("online", saveThenReload);
   window.addEventListener("focus", saveThenReload);
   window.setTimeout(reload, 0);
