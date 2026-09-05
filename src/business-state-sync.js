@@ -99,6 +99,8 @@ export function attachBusinessStateSync(store) {
   let lastSavedSnapshot = "";
   let loadedRevisionKey = "";
   let loadedRevision = -1;
+  let replayingSiteSwitch = false;
+  let siteSwitchPending = false;
 
   const identityKey = () => {
     const user = readSession();
@@ -107,13 +109,17 @@ export function attachBusinessStateSync(store) {
   };
 
   async function save() {
-    if (document.documentElement.dataset.vpsAuthReady !== "true") return true;
     const key = identityKey();
     const site = currentSite();
-    if (!key || key !== loadedKey || !site || !hasBusinessEdit() || navigator.onLine === false) return true;
+    if (!key || key !== loadedKey || !site || !hasBusinessEdit()) return true;
     const modules = businessModulesFromState(store.getState());
     const snapshot = JSON.stringify(modules);
     if (snapshot === lastSavedSnapshot) return true;
+    if (document.documentElement.dataset.vpsAuthReady !== "true" || navigator.onLine === false) {
+      const error = navigator.onLine === false ? "BUSINESS_STATE_OFFLINE" : "BUSINESS_STATE_NOT_READY";
+      window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error } }));
+      return false;
+    }
     try {
       const saved = await vpsSaveBusinessState(site, modules);
       lastSavedSnapshot = snapshot;
@@ -192,6 +198,37 @@ export function attachBusinessStateSync(store) {
     }
   }
 
+  const guardSiteSwitch = (event) => {
+    if (replayingSiteSwitch) return;
+    const button = event.target?.closest?.("[data-warehouse]");
+    const targetSite = String(button?.dataset?.warehouse || "");
+    const sourceSite = currentSite();
+    const user = readSession();
+    if (!button || user?.location !== "all" || !["central", "fuxing", "yongji"].includes(targetSite) || !sourceSite || targetSite === sourceSite) return;
+    event.preventDefault?.();
+    event.stopImmediatePropagation?.();
+    if (siteSwitchPending) return;
+    siteSwitchPending = true;
+    clearTimeout(saveTimer);
+    void (async () => {
+      const saved = await save();
+      if (saved === false) {
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+          detail:{ status:"switch-blocked", site:sourceSite, targetSite },
+        }));
+        siteSwitchPending = false;
+        return;
+      }
+      replayingSiteSwitch = true;
+      try {
+        button.click();
+      } finally {
+        replayingSiteSwitch = false;
+        siteSwitchPending = false;
+      }
+    })();
+  };
+
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
   window.addEventListener("shitu:auth-synced", reload);
@@ -200,6 +237,7 @@ export function attachBusinessStateSync(store) {
   const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   window.addEventListener("online", saveThenReload);
   window.addEventListener("focus", saveThenReload);
+  document.addEventListener("click", guardSiteSwitch, true);
   window.setTimeout(reload, 0);
   return () => {
     unsubscribe();
@@ -209,5 +247,6 @@ export function attachBusinessStateSync(store) {
     window.removeEventListener("shitu:active-site-changed", reload);
     window.removeEventListener("online", saveThenReload);
     window.removeEventListener("focus", saveThenReload);
+    document.removeEventListener("click", guardSiteSwitch, true);
   };
 }
