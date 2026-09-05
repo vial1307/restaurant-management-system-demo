@@ -238,4 +238,5 @@ assert.equal(serverPreferredLanguage, "vi", "serialized preference writes did no
 assert.equal(JSON.parse(storage.get(AUTH_KEY)).preferredLanguage, "vi", "session mirror did not end on the latest language");
 assert.equal(storage.has(PENDING_LANGUAGE_KEY), false, "latest confirmed language left stale pending state");
 
+await import("./device-sync-user-scope-regression.mjs");
 console.log("DEVICE_SYNC_RUNTIME_OK");
