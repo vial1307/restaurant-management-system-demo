@@ -260,12 +260,11 @@ export function attachBusinessStateSync(store) {
           return false;
         }
         if (key === loadedKey) {
+          // The write revision cannot be used as a read/merge shortcut because
+          // another device may have changed an unrelated module since this
+          // browser's baseline. Keep the last loaded revision so the next GET
+          // still merges the authoritative post-write server snapshot.
           lastSavedSnapshot = snapshot;
-          const revision = Number(saved?.revision);
-          if (Number.isFinite(revision)) {
-            loadedRevisionKey = key;
-            loadedRevision = revision;
-          }
         }
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site, modules:dirtyNames } }));
         const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
