@@ -82,3 +82,11 @@ window.visualViewport?.addEventListener("resize", () => {
     keepFocusedModalControlVisible(active);
   }
 }, { passive: true });
+
+window.addEventListener("shitu:business-state-status", (event) => {
+  if (event.detail?.status !== "switch-blocked") return;
+  window.alert?.(
+    "無法切換分店：目前變更尚未儲存至伺服器。請確認網路後再試。\n" +
+    "Không thể đổi chi nhánh: thay đổi hiện tại chưa được lưu lên máy chủ. Hãy kiểm tra mạng và thử lại."
+  );
+});
