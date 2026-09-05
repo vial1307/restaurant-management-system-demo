@@ -52,12 +52,20 @@ assert.match(businessSync, /navigator\.onLine === false[\s\S]{0,260}BUSINESS_STA
 assert.match(businessSync, /const guardSiteSwitch = \(event\) => \{[\s\S]{0,900}closest\?\.\("\[data-warehouse\]"\)[\s\S]{0,1200}const saved = await save\(\)[\s\S]{0,700}button\.click\(\)/, "warehouse switching must save the source business state before replaying the click");
 assert.match(businessSync, /document\.addEventListener\("click", guardSiteSwitch, true\)[\s\S]{0,700}document\.removeEventListener\("click", guardSiteSwitch, true\)/, "warehouse switch guard must attach and clean up in capture phase");
 
-const adminAccountSync = deviceSync.match(/async function syncAdminAccounts\([\s\S]*?\n}\n\nasync function syncNow/)?.[0] || "";
+const adminAccountSync = deviceSync.match(/async function syncAdminAccounts\([\s\S]*?\n}\n\nasync function retryPendingLanguage/)?.[0] || deviceSync.match(/async function syncAdminAccounts\([\s\S]*?\n}\n\nasync function syncNow/)?.[0] || "";
 assert.match(adminAccountSync, /try \{[\s\S]{0,120}result = await vpsListUsers\(\);[\s\S]{0,160}catch \{[\s\S]{0,220}return false;[\s\S]{0,100}lastAdminAccountsAt = Date\.now\(\);/, "admin account failures must stay isolated and leave retry throttle untouched");
 assert.doesNotMatch(adminAccountSync, /lastAdminAccountsAt\s*=\s*now[\s\S]{0,160}await vpsListUsers\(\)/, "failed admin account requests must not poison the five-minute retry throttle");
 const profileSync = deviceSync.match(/async function syncNow\([\s\S]*?\n}\n\nasync function persistLanguage/)?.[0] || "";
-assert.match(profileSync, /const result = await vpsMe\(\);[\s\S]{0,500}lastSyncAt = Date\.now\(\);/, "normal profile sync throttle must start only after a validated VPS profile response");
+assert.match(profileSync, /const result = await vpsMe\(\);[\s\S]{0,700}lastSyncAt = Date\.now\(\);/, "normal profile sync throttle must start only after a validated VPS profile response");
 assert.doesNotMatch(profileSync, /lastSyncAt\s*=\s*now[\s\S]{0,260}await vpsMe\(\)/, "transient profile failures must not poison the ten-second retry throttle");
+const pendingPreferenceSync = deviceSync.match(/async function retryPendingLanguage\([\s\S]*?\n}\n\nasync function syncNow/)?.[0] || "";
+assert.match(deviceSync, /let pendingLanguage = "";/, "language preference writes must keep an explicit pending state until VPS confirmation");
+assert.match(pendingPreferenceSync, /await vpsUpdatePreferences\(requestedLanguage\)[\s\S]{0,260}pendingLanguage = ""/, "pending language must clear only after the VPS preference write succeeds");
+assert.match(pendingPreferenceSync, /catch \{[\s\S]{0,260}preferences-sync-pending[\s\S]{0,220}preferredLanguage: requestedLanguage/, "failed language retries must remain visible and preserve the requested preference");
+assert.match(profileSync, /const preference = await retryPendingLanguage\(user\);[\s\S]{0,220}sessionSnapshot\(user, preference\.preferredLanguage\)/, "profile sync must preserve a pending local language instead of applying stale server preference");
+const persistPreference = deviceSync.match(/async function persistLanguage\([\s\S]*?\n}\n\ndocument\.addEventListener/)?.[0] || "";
+assert.match(persistPreference, /pendingLanguage = preferredLanguage;[\s\S]{0,220}await vpsUpdatePreferences\(preferredLanguage\)/, "language clicks must mark the preference pending before the VPS write starts");
+assert.match(persistPreference, /catch \{[\s\S]{0,260}preferences-sync-pending[\s\S]{0,160}return false;/, "language preference failures must not be silently swallowed");
 
 assert.match(uiRefresh, /observer\?\.disconnect\(\)/, "DOM patch observer must not observe its own mutations");
 assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must discard self-generated records");
