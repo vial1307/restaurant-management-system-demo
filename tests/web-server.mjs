@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const port = Number(process.env.TEST_WEB_PORT || 3000);
 const apiPort = Number(process.env.TEST_API_PORT || 8080);
+const cookieDomain = process.env.TEST_COOKIE_DOMAIN || "127.0.0.1";
 
 const MIME = {
   ".html":"text/html; charset=utf-8",
@@ -16,6 +17,20 @@ const MIME = {
   ".webmanifest":"application/manifest+json; charset=utf-8",
 };
 
+function normalizeProxyHeaders(headers) {
+  const normalized = { ...headers };
+  const setCookie = normalized["set-cookie"];
+  if (!setCookie) return normalized;
+
+  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+  normalized["set-cookie"] = cookies.map((value) => {
+    const cookie = String(value || "");
+    if (!cookie || /;\s*domain=/i.test(cookie)) return cookie;
+    return `${cookie}; Domain=${cookieDomain}`;
+  });
+  return normalized;
+}
+
 const server = http.createServer((req,res) => {
   if (req.url?.startsWith("/api/")) {
     const proxy = http.request({
@@ -25,7 +40,7 @@ const server = http.createServer((req,res) => {
       method:req.method,
       headers:{...req.headers,host:`127.0.0.1:${apiPort}`},
     }, (upstream) => {
-      res.writeHead(upstream.statusCode || 500, upstream.headers);
+      res.writeHead(upstream.statusCode || 500, normalizeProxyHeaders(upstream.headers));
       upstream.pipe(res);
     });
     proxy.on("error", (error) => {
