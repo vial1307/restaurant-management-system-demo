@@ -189,7 +189,7 @@ export function vpsInventoryDestinations(source, sites = []) {
 }
 
 export function vpsInventoryHistory(site, { limit = 250 } = {}) {
-  return apiRequest(`/api/inventory/${encodeURIComponent(site)}/history?limit=${encodeURIComponent(limit)}`);
+  return apiRequest(`/api/inventory/${encodeURIComponent(site)}/transactions?limit=${encodeURIComponent(limit)}`);
 }
 
 export function vpsSetQuantity(body) {
