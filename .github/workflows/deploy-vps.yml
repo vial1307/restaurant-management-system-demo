@@ -75,6 +75,8 @@ jobs:
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh
           test -f vps/backend/scripts/concurrency-regression.mjs
+          test -f vps/backend/package-lock.json
+          test -f tests/package-lock.json
           test -f vps/database/migrations/004_restore_primary_admin.sql
           test -f vps/database/migrations/005_business_state.sql
 
@@ -121,8 +123,8 @@ jobs:
 
       - name: Install backend and browser test packages
         run: |
-          npm install --prefix vps/backend
-          npm install --prefix tests
+          npm ci --prefix vps/backend
+          npm ci --prefix tests
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs
@@ -244,7 +246,7 @@ jobs:
           node-version: "22"
 
       - name: Install browser test package
-        run: npm install --prefix tests
+        run: npm ci --prefix tests
 
       - name: Verify production permission modal
         env:

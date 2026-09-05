@@ -12,6 +12,7 @@ const uiRefresh = read("src/ui-refresh.js");
 const app = read("src/app.js");
 const deploy = read("vps/scripts/deploy-api.sh");
 const workflow = read(".github/workflows/deploy-vps.yml");
+const backendDocker = read("vps/backend/Dockerfile");
 
 assert.match(api, /const receiveDefaultsCache = new Map\(\)/, "receive-default requests must have a shared request cache");
 assert.match(api, /RECEIVE_DEFAULTS_CACHE_MS\s*=\s*5000/, "receive-default burst cache window changed unexpectedly");
@@ -68,5 +69,13 @@ assert.match(workflow, /actions\/checkout@v7/, "CI checkout action must use the 
 assert.match(workflow, /actions\/setup-node@v7/, "CI setup-node action must use the current Node 24 generation");
 assert.match(workflow, /actions\/upload-artifact@v7/, "CI artifact upload action must use the current Node 24 generation");
 assert.doesNotMatch(workflow, /actions\/(?:checkout@v5|setup-node@v4|upload-artifact@v4)/, "deprecated Node 20-generation CI actions must not return");
+
+assert.equal(fs.existsSync(path.join(ROOT, "vps/backend/package-lock.json")), true, "backend dependencies must be lockfile-pinned");
+assert.equal(fs.existsSync(path.join(ROOT, "tests/package-lock.json")), true, "browser test dependencies must be lockfile-pinned");
+assert.match(backendDocker, /COPY package\.json package-lock\.json \.\/[\s\S]{0,80}RUN npm ci --omit=dev/, "production image must install exactly from the backend lockfile");
+assert.doesNotMatch(backendDocker, /npm install --omit=dev/, "production image must not resolve semver ranges during deployment");
+assert.match(workflow, /npm ci --prefix vps\/backend/, "CI backend install must use the committed lockfile");
+assert.equal((workflow.match(/npm ci --prefix tests/g) || []).length, 2, "both browser regression jobs must use the committed test lockfile");
+assert.doesNotMatch(workflow, /npm install --prefix (?:vps\/backend|tests)/, "CI dependency installs must not bypass committed lockfiles");
 
 console.log("PERFORMANCE_REGRESSION_OK");
