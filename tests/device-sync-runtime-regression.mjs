@@ -71,21 +71,23 @@ globalThis.location = { reload() { reloadCalls += 1; } };
 
 let meCalls = 0;
 let accountCalls = 0;
+let preferenceCalls = 0;
+let failNextPreference = false;
+let serverPreferredLanguage = "zh-TW";
+const profileUser = () => ({
+  id: "admin-1",
+  username: "adminreg",
+  displayName: "Admin Regression",
+  role: "admin",
+  location: "all",
+  permissions: { settings: { view: true, edit: true } },
+  preferredLanguage: serverPreferredLanguage,
+  active: true,
+});
 globalThis.__testVpsMe = async () => {
   meCalls += 1;
   if (meCalls === 1) throw new Error("TRANSIENT_PROFILE_SYNC_FAILURE");
-  return {
-    user: {
-      id: "admin-1",
-      username: "adminreg",
-      displayName: "Admin Regression",
-      role: "admin",
-      location: "all",
-      permissions: { settings: { view: true, edit: true } },
-      preferredLanguage: "zh-TW",
-      active: true,
-    },
-  };
+  return { user: profileUser() };
 };
 globalThis.__testVpsListUsers = async () => {
   accountCalls += 1;
@@ -99,19 +101,41 @@ globalThis.__testVpsListUsers = async () => {
       location: "all",
       active: true,
       permissions: { settings: { view: true, edit: true } },
-      preferred_language: "zh-TW",
+      preferred_language: serverPreferredLanguage,
     }],
   };
 };
-globalThis.__testVpsUpdatePreferences = async () => ({ user: null });
+globalThis.__testVpsUpdatePreferences = async (preferredLanguage) => {
+  preferenceCalls += 1;
+  if (failNextPreference) {
+    failNextPreference = false;
+    throw new Error("TRANSIENT_PREFERENCE_SYNC_FAILURE");
+  }
+  serverPreferredLanguage = preferredLanguage;
+  return { user: profileUser() };
+};
 
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(injected).toString("base64")}`;
 await import(moduleUrl);
 
 let authSyncedEvents = 0;
+let preferencePendingEvents = 0;
 window.addEventListener("shitu:auth-synced", () => { authSyncedEvents += 1; });
+window.addEventListener("shitu:preferences-sync-pending", () => { preferencePendingEvents += 1; });
 
 const delay = (ms = 0) => new Promise((resolve) => nativeSetTimeout(resolve, ms));
+function emitLanguageClick(language) {
+  const button = { dataset: { action: "set-language", language } };
+  const event = {
+    target: {
+      closest(selector) {
+        return selector === '[data-action="set-language"][data-language]' ? button : null;
+      },
+    },
+  };
+  for (const listener of documentListeners.get("click") || []) listener(event);
+}
+
 document.documentElement.dataset.vpsAuthReady = "true";
 window.dispatchEvent(new CustomEvent("shitu:vps-auth-ready"));
 await delay(20);
@@ -141,5 +165,26 @@ assert.equal(accountCalls, 2, "a failed admin account request must not poison th
 const mirroredAccounts = JSON.parse(storage.get(ACCOUNTS_KEY) || "[]");
 assert.equal(mirroredAccounts.length, 1, "successful retry did not update the admin account mirror");
 assert.equal(mirroredAccounts[0].username, "adminreg");
+
+// A failed language preference write must remain pending and must not be
+// overwritten by the stale server preference on the next profile refresh.
+storage.set(APP_KEY, JSON.stringify({ settings: { language: "vi" } }));
+failNextPreference = true;
+emitLanguageClick("vi");
+await delay(20);
+assert.equal(preferenceCalls, 1, "language click did not attempt to persist the preference");
+assert.equal(serverPreferredLanguage, "zh-TW", "failed preference write unexpectedly changed the server state");
+assert.equal(JSON.parse(storage.get(APP_KEY)).settings.language, "vi", "failed preference write reverted the local language immediately");
+assert.equal(preferencePendingEvents, 1, "failed preference write did not expose pending sync state");
+const reloadsBeforePreferenceRecovery = reloadCalls;
+
+window.dispatchEvent(new CustomEvent("online"));
+await delay(20);
+assert.equal(meCalls, 4, "online recovery did not refresh the profile before retrying preference sync");
+assert.equal(preferenceCalls, 2, "pending language preference was not retried after connectivity recovery");
+assert.equal(serverPreferredLanguage, "vi", "preference retry did not update the server language");
+assert.equal(JSON.parse(storage.get(APP_KEY)).settings.language, "vi", "stale server language overwrote the pending local preference");
+assert.equal(JSON.parse(storage.get(AUTH_KEY)).preferredLanguage, "vi", "mirrored session did not adopt the confirmed preference");
+assert.equal(reloadCalls, reloadsBeforePreferenceRecovery, "preference recovery caused an unnecessary language rollback reload");
 
 console.log("DEVICE_SYNC_RUNTIME_OK");
