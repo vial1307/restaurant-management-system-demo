@@ -244,6 +244,22 @@ button > span,
     min-height: var(--kitchen-touch-height) !important;
   }
 
+  /* Schedule labels are bilingual and can exceed the compact action width at
+     320px. A legacy page-action rule uses nowrap/hidden, which clipped the
+     Vietnamese "Xếp thêm người" label. Allow this action to wrap instead of
+     truncating a primary operation. */
+  button[data-action="schedule-add"] {
+    max-width: 100%;
+    height: auto !important;
+    min-height: var(--kitchen-touch-height) !important;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    line-height: 1.2;
+  }
+
   .account-admin-card button,
   .account-modal button,
   .account-self-card button {
