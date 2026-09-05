@@ -99,18 +99,25 @@ const store = {
 };
 
 let readCalls = 0;
+let serverRevision = 1;
+let serverBuffer = 3;
 globalThis.__testVpsBusinessState = async () => {
   readCalls += 1;
-  return { revision: 1, modules: { settings: { reservationBuffer: 3 } } };
+  return { revision: serverRevision, modules: { settings: { reservationBuffer: serverBuffer } } };
 };
 let saveCalls = 0;
 const deferredSaves = [];
 globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
   saveCalls += 1;
+  const buffer = modules.settings?.reservationBuffer;
   return new Promise((resolve) => {
     deferredSaves.push({
-      buffer: modules.settings?.reservationBuffer,
-      resolve,
+      buffer,
+      resolve(revision) {
+        serverRevision = revision;
+        serverBuffer = buffer;
+        resolve({ revision });
+      },
     });
   });
 };
@@ -131,9 +138,10 @@ await delay(0);
 assert.equal(deferredSaves.length, 1, "visible-resume plus focus created duplicate writes for one snapshot");
 assert.equal(deferredSaves[0].buffer, 30, "coalesced save did not capture the intended snapshot");
 
-deferredSaves[0].resolve({ revision: 2 });
+deferredSaves[0].resolve(2);
 await delay(20);
 assert.equal(saveCalls, 1, "same-snapshot triggers advanced the business revision more than once");
+assert.equal(state.settings.reservationBuffer, 30, "confirmed coalesced save was overwritten by refresh");
 
 // A newer edit arriving during an in-flight save must serialize behind it,
 // not start a parallel write and not get lost when the first write completes.
@@ -151,13 +159,14 @@ window.dispatchEvent(new CustomEvent("focus"));
 await delay(0);
 assert.equal(deferredSaves.length, 2, "newer snapshot started a parallel write while the prior save was in flight");
 
-deferredSaves[1].resolve({ revision: 3 });
+deferredSaves[1].resolve(3);
 await delay(0);
 assert.equal(deferredSaves.length, 3, "newer edit was not queued after the in-flight save settled");
 assert.equal(deferredSaves[2].buffer, 32, "queued follow-up save did not use the latest local snapshot");
-deferredSaves[2].resolve({ revision: 4 });
+deferredSaves[2].resolve(4);
 await delay(20);
 assert.equal(state.settings.reservationBuffer, 32, "latest local edit was lost during serialized persistence");
+assert.equal(serverBuffer, 32, "latest local edit was not confirmed by the simulated VPS");
 assert.equal(saveCalls, 3, "serialized persistence wrote an unexpected number of revisions");
 
 detach();
