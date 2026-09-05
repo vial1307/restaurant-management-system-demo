@@ -74,6 +74,8 @@ let meCalls = 0;
 let accountCalls = 0;
 let preferenceCalls = 0;
 let failNextPreference = false;
+let deferPreferenceWrites = false;
+const deferredPreferenceWrites = [];
 let serverPreferredLanguage = "zh-TW";
 const profileUser = () => ({
   id: "admin-1",
@@ -111,6 +113,17 @@ globalThis.__testVpsUpdatePreferences = async (preferredLanguage) => {
   if (failNextPreference) {
     failNextPreference = false;
     throw new Error("TRANSIENT_PREFERENCE_SYNC_FAILURE");
+  }
+  if (deferPreferenceWrites) {
+    return new Promise((resolve) => {
+      deferredPreferenceWrites.push({
+        preferredLanguage,
+        resolve() {
+          serverPreferredLanguage = preferredLanguage;
+          resolve({ user: profileUser() });
+        },
+      });
+    });
   }
   serverPreferredLanguage = preferredLanguage;
   return { user: profileUser() };
@@ -199,5 +212,30 @@ window.dispatchEvent(new CustomEvent("online"));
 await delay(20);
 assert.equal(preferenceCalls, 2, "foreign-account pending language leaked into the current session");
 assert.equal(JSON.parse(storage.get(AUTH_KEY)).preferredLanguage, "vi", "foreign-account pending language changed the current profile mirror");
+storage.delete(PENDING_LANGUAGE_KEY);
+
+// Rapid language changes must serialize writes. The second intent must not be
+// sent until the first response settles, and the server must end on the latest
+// requested language rather than whichever response happens to finish last.
+deferPreferenceWrites = true;
+emitLanguageClick("vi");
+await delay(0);
+emitLanguageClick("zh");
+await delay(0);
+assert.equal(deferredPreferenceWrites.length, 1, "concurrent language clicks started parallel VPS writes");
+assert.equal(deferredPreferenceWrites[0].preferredLanguage, "vi");
+assert.equal(JSON.parse(storage.get(PENDING_LANGUAGE_KEY) || "null")?.preferredLanguage, "zh-TW", "latest language intent did not replace the older pending value");
+
+deferredPreferenceWrites[0].resolve();
+await delay(0);
+assert.equal(deferredPreferenceWrites.length, 2, "latest language intent was not flushed after the first write settled");
+assert.equal(deferredPreferenceWrites[1].preferredLanguage, "zh-TW", "coalesced follow-up write did not use the latest language intent");
+assert.equal(storage.has(PENDING_LANGUAGE_KEY), true, "pending latest language cleared before its VPS write completed");
+
+deferredPreferenceWrites[1].resolve();
+await delay(20);
+assert.equal(serverPreferredLanguage, "zh-TW", "serialized preference writes did not leave the server on the latest language");
+assert.equal(JSON.parse(storage.get(AUTH_KEY)).preferredLanguage, "zh-TW", "session mirror did not end on the latest language");
+assert.equal(storage.has(PENDING_LANGUAGE_KEY), false, "latest confirmed language left stale pending state");
 
 console.log("DEVICE_SYNC_RUNTIME_OK");
