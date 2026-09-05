@@ -34,7 +34,7 @@ assert.doesNotMatch(api, /vpsInventoryHistory[\s\S]{0,220}\/history\?limit=/, "i
 
 const receiveDefaultSave = inventoryCloud.match(/export async function cloudSetReceiveDefault\([\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
 assert.match(receiveDefaultSave, /navigator\?\.onLine===false\) return \{ok:false/, "offline receive-default saves must fail instead of reporting local fallback success");
-assert.match(receiveDefaultSave, /!\(await verifyMigration\(\)\) return \{ok:false/, "receive-default saves must fail while the VPS schema is unavailable");
+assert.match(receiveDefaultSave, /!\(await verifyMigration\(\)\)\) return \{ok:false/, "receive-default saves must fail while the VPS schema is unavailable");
 assert.match(receiveDefaultSave, /await vpsSetReceiveDefault\([\s\S]{0,220}saveLocalReceiveDefault\(/, "receive-default local mirror must only update after the VPS confirms the write");
 assert.doesNotMatch(receiveDefaultSave, /saveLocalReceiveDefault[\s\S]{0,220}await vpsSetReceiveDefault/, "receive-default saves must never write local state before PostgreSQL");
 assert.doesNotMatch(receiveDefaultSave, /ok:true,fallback:true/, "receive-default writes must never report fallback success");
