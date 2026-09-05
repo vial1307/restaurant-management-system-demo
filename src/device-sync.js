@@ -59,6 +59,14 @@ function applyLanguageToLocalState(profileLanguage) {
   return true;
 }
 
+function requestSafeReload(reason = "device-sync") {
+  const event = new CustomEvent("shitu:safe-reload-requested", {
+    cancelable: true,
+    detail: { reason },
+  });
+  if (window.dispatchEvent(event)) location.reload();
+}
+
 function sessionSnapshot(user, preferredLanguageOverride = "") {
   const role = user.role || "employee";
   return {
@@ -194,7 +202,7 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
     await syncAdminAccounts(next, { force: forceAccounts });
 
     if (securityChanged) window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
-    if (languageChanged) location.reload();
+    if (languageChanged) requestSafeReload("language-sync");
   } catch (error) {
     if ([401, 403].includes(Number(error?.status))) {
       localStorage.removeItem(AUTH_KEY);
