@@ -21,6 +21,8 @@ assert.match(api, /vpsSetReceiveDefault[\s\S]{0,300}invalidateVpsReceiveDefaults
 assert.match(api, /vpsArchiveCatalogItem[\s\S]{0,400}invalidateVpsReceiveDefaultsCache\(\)/, "archiving catalog data must invalidate receive-default cache");
 assert.match(api, /clearRuntimeCaches\(\)[\s\S]{0,250}api\/auth\/login/, "login must not inherit another session's API cache");
 assert.match(api, /vpsLogout[\s\S]{0,300}clearRuntimeCaches\(\)/, "logout must clear API caches");
+assert.match(api, /vpsInventoryHistory[\s\S]{0,220}\/transactions\?limit=/, "inventory history must use the backend transactions route");
+assert.doesNotMatch(api, /vpsInventoryHistory[\s\S]{0,220}\/history\?limit=/, "inventory history must not call the removed history route");
 
 const receiveDefaultSave = inventoryCloud.match(/export async function cloudSetReceiveDefault\([\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
 assert.match(receiveDefaultSave, /navigator\?\.onLine===false\) return \{ok:false/, "offline receive-default saves must fail instead of reporting local fallback success");
@@ -51,5 +53,6 @@ assert.match(workflow, /kitchen-os-deploy-target/, "workflow must transfer the t
 assert.match(workflow, /EXPECTED_RELEASE/, "workflow must compare the active VPS release with the tested commit");
 assert.match(workflow, /full-device-regression\.mjs/, "workflow must gate deployment on full-device regression");
 assert.match(workflow, /concurrency-regression\.mjs/, "workflow must gate deployment on multi-user concurrency regression");
+assert.match(workflow, /TEST_WEB_BASE:\s*"http:\/\/localhost:3000"/, "browser regressions must use a hostname origin rather than an IP-literal cookie origin");
 
 console.log("PERFORMANCE_REGRESSION_OK");
