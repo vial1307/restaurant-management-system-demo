@@ -115,11 +115,19 @@ button:not(.icon-button),
   font-size: max(12px, 0.8rem);
 }
 
-/* The ingredient modal has a sticky submit bar that intentionally bleeds to
-   the card padding with negative inline margins. The card scrolls vertically;
-   horizontal scrolling is never meaningful and must not escape to the page. */
+/* The ingredient modal scrolls vertically only. Its sticky submit footer must
+   stay inside the modal's content box; the legacy negative inline margins made
+   the footer 1484px wide in a 1440px viewport and caused document overflow. */
 .ingredient-modal {
   overflow-x: clip;
+}
+
+.ingredient-modal .modal-submit-bar {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  box-sizing: border-box;
 }
 
 .bilingual-control-label,
