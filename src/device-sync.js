@@ -108,18 +108,16 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
 
 async function retryPendingLanguage(user) {
   const requestedLanguage = pendingLanguageFor(user?.id);
-  if (!requestedLanguage) return { user, preferredLanguage: user?.preferredLanguage || user?.preferred_language || "vi" };
   const serverLanguage = user?.preferredLanguage || user?.preferred_language || "vi";
-  if (serverLanguage === requestedLanguage) {
-    clearPendingLanguage(user.id, requestedLanguage);
-    return { user, preferredLanguage: requestedLanguage };
+  if (!requestedLanguage || serverLanguage === requestedLanguage) {
+    if (requestedLanguage) clearPendingLanguage(user.id, requestedLanguage);
+    return { user, preferredLanguage: requestedLanguage || serverLanguage };
   }
 
   try {
     const result = await vpsUpdatePreferences(requestedLanguage);
-    const nextUser = result?.user?.id ? result.user : user;
     clearPendingLanguage(user.id, requestedLanguage);
-    return { user: nextUser, preferredLanguage: requestedLanguage };
+    return { user: result?.user?.id ? result.user : user, preferredLanguage: requestedLanguage };
   } catch {
     window.dispatchEvent(new CustomEvent("shitu:preferences-sync-pending", {
       detail: { preferredLanguage: requestedLanguage },
