@@ -55,9 +55,9 @@ async function syncAdminAccounts(profile, { force = false } = {}) {
   if (profile.accountRole !== "admin") return false;
   const now = Date.now();
   if (!force && lastAdminAccountsAt && now - lastAdminAccountsAt < ADMIN_ACCOUNTS_INTERVAL) return false;
-  lastAdminAccountsAt = now;
 
   const result = await vpsListUsers();
+  lastAdminAccountsAt = Date.now();
   const next = (result?.users || []).map((user) => ({
     id: user.id,
     username: user.username,
