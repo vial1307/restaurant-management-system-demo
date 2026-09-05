@@ -142,11 +142,15 @@ document.addEventListener("submit", async (event) => {
     try {
       const profile = mirrorVpsSession((await vpsLogin(username, password))?.user);
       if (!profile) throw new Error("ACCOUNT_DISABLED");
-      await syncProfiles(profile);
+
+      // Authentication is the gate for entering the application. Admin account
+      // list synchronization is secondary data and must never keep a successful
+      // login stuck behind the auth screen on a slow device/browser.
       document.body.classList.remove("auth-locked");
       document.querySelector("#auth-layer")?.remove();
       history.replaceState(null, "", `${location.pathname}${initialRoute(profile)}`);
       window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+      void syncProfiles(profile).catch(() => {});
     } catch (error) {
       const code = error instanceof Error ? (error.code || error.message) : "";
       showLoginError(code === "USERNAME_FORMAT"
