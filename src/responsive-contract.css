@@ -232,6 +232,18 @@ button > span,
     font-size: 16px !important;
   }
 
+  /* Numeric inventory fields are frequently operated one-handed on phones.
+     Grid shrinkage used to collapse minimum inputs to 15-17px wide at 320px,
+     making them effectively untappable. Keep a compact but real touch target. */
+  .quantity-input,
+  .minimum-input {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    height: var(--kitchen-touch-height) !important;
+    min-height: var(--kitchen-touch-height) !important;
+  }
+
   .account-admin-card button,
   .account-modal button,
   .account-self-card button {
