@@ -198,13 +198,17 @@ export function vpsInventoryHistory(site, { limit = 250 } = {}) {
   return apiRequest(`/api/inventory/${encodeURIComponent(site)}/history?limit=${encodeURIComponent(limit)}`);
 }
 
-export function vpsSetInventoryQuantity(body) {
+export function vpsSetQuantity(body) {
   return apiRequest("/api/inventory/set-quantity", { method: "POST", body });
 }
 
-export function vpsSetInventoryMinimum(body) {
+export const vpsSetInventoryQuantity = vpsSetQuantity;
+
+export function vpsSetMinimum(body) {
   return apiRequest("/api/inventory/set-minimum", { method: "POST", body });
 }
+
+export const vpsSetInventoryMinimum = vpsSetMinimum;
 
 export function vpsAdjustInventory(body) {
   return apiRequest("/api/inventory/adjust", { method: "POST", body });
@@ -218,12 +222,33 @@ export function vpsShipInventory(body) {
   return apiRequest("/api/inventory/ship", { method: "POST", body });
 }
 
+export async function vpsSyncCatalog(item) {
+  const result = await apiRequest("/api/inventory/catalog/sync", {
+    method: "POST",
+    body: { item },
+  });
+  invalidateVpsInventoryCache("");
+  invalidateVpsReceiveDefaultsCache();
+  return result;
+}
+
 export function vpsSaveInventoryItem(body) {
-  return apiRequest("/api/inventory/items", { method: "POST", body });
+  const item = body?.item || body;
+  return vpsSyncCatalog(item);
+}
+
+export async function vpsArchiveCatalogItem(itemKey) {
+  const result = await apiRequest("/api/inventory/catalog/archive", {
+    method: "POST",
+    body: { itemKey: String(itemKey || "") },
+  });
+  invalidateVpsInventoryCache("");
+  invalidateVpsReceiveDefaultsCache();
+  return result;
 }
 
 export function vpsArchiveInventoryItem(body) {
-  return apiRequest("/api/inventory/items/archive", { method: "POST", body });
+  return vpsArchiveCatalogItem(body?.itemKey || body);
 }
 
 export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
@@ -246,7 +271,7 @@ export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
 }
 
 export async function vpsSetReceiveDefault(body) {
-  const result = await apiRequest("/api/inventory/receive-defaults", { method: "POST", body });
+  const result = await apiRequest("/api/inventory/receive-default", { method: "POST", body });
   invalidateVpsReceiveDefaultsCache();
   return result;
 }
