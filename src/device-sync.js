@@ -189,13 +189,25 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
     if (user?.id !== expectedUserId || activeSession?.id !== expectedUserId) return;
     const previous = activeSession;
     const next = sessionSnapshot(user, preference.preferredLanguage);
-    const securityChanged = Boolean(previous) && (
+    const authorizationChanged = Boolean(previous) && (
       previous.accountRole !== next.accountRole ||
       previous.location !== next.location ||
-      previous.name !== next.name ||
-      previous.username !== next.username ||
       !sameJson(previous.permissions || {}, next.permissions || {})
     );
+    const securityChanged = Boolean(previous) && (
+      authorizationChanged ||
+      previous.name !== next.name ||
+      previous.username !== next.username
+    );
+
+    // Recovery listeners must see the previous authenticated scope before the
+    // validated VPS profile replaces it. This event is synchronous by design:
+    // it captures local dirty state only and never keeps revoked authorization.
+    if (authorizationChanged) {
+      window.dispatchEvent(new CustomEvent("shitu:auth-transition-preparing", {
+        detail: { authorizationChanged: true, previous, next },
+      }));
+    }
 
     if (!sameJson(previous, next)) localStorage.setItem(AUTH_KEY, JSON.stringify(next));
     const languageChanged = applyLanguageToLocalState(next.preferredLanguage);
@@ -203,7 +215,7 @@ async function syncNow({ force = false, forceAccounts = false } = {}) {
 
     if (securityChanged) {
       window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
-        detail: { safeReloadRequested: languageChanged },
+        detail: { safeReloadRequested: languageChanged, authorizationChanged },
       }));
     }
     if (languageChanged) requestSafeReload("language-sync");

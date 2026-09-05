@@ -53,9 +53,13 @@ jobs:
           set -euo pipefail
           node tests/business-state-sync-runtime-regression.mjs
           node tests/business-state-sync-coalescing-regression.mjs
+          node tests/business-state-auth-recovery-regression.mjs
+          node tests/business-state-partial-save-regression.mjs
           node tests/device-sync-runtime-regression.mjs
+          node tests/device-sync-auth-transition-regression.mjs
           node tests/device-sync-user-scope-regression.mjs
           node tests/vps-auth-stale-response-regression.mjs
+          node tests/vps-business-state-contract-regression.mjs
 
       - name: Validate backend JavaScript
         run: |
