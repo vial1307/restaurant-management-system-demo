@@ -227,11 +227,11 @@ export function vpsArchiveInventoryItem(body) {
 }
 
 export function vpsReceiveDefaults({ sites = [], catalogKeys = [] } = {}) {
-  const stableSites = [...new Set((sites || []).map(String).filter(Boolean))].sort();
-  const stableCatalogKeys = [...new Set((catalogKeys || []).map(String).filter(Boolean))].sort();
+  const normalizedSites = [...new Set((sites || []).map(String).filter(Boolean))].sort();
+  const normalizedCatalogKeys = [...new Set((catalogKeys || []).map(String).filter(Boolean))].sort();
   const params = new URLSearchParams();
-  if (stableSites.length) params.set("sites", stableSites.join(","));
-  if (stableCatalogKeys.length) params.set("catalogKeys", stableCatalogKeys.join(","));
+  if (normalizedSites.length) params.set("sites", normalizedSites.join(","));
+  if (normalizedCatalogKeys.length) params.set("catalogKeys", normalizedCatalogKeys.join(","));
   const key = params.toString();
   const now = Date.now();
   const cached = receiveDefaultsCache.get(key);
