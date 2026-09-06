@@ -1,4 +1,5 @@
 name: One-shot inventory render search bypass patch
+# retry after optional-chaining regression fix
 
 on:
   push:
