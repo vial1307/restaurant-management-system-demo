@@ -42,7 +42,8 @@ const before = await request("/api/inventory/fuxing", { cookie: admin });
 assert.equal(before.response.status, 200);
 const beef = before.data.items.find((item) => item.catalog_key === "beef");
 const freezer = before.data.locations.find((location) => location.code === "fuxing-freezer");
-assert(beef && freezer, "fuxing beef/freezer fixture missing");
+const workNoodles = before.data.locations.find((location) => location.code === "fuxing-work-noodles");
+assert(beef && freezer && workNoodles, "fuxing beef/freezer/work fixture missing");
 
 const supervisorQuantity = await request("/api/inventory/set-quantity", {
   method: "POST",
@@ -56,6 +57,12 @@ const supervisorMinimum = await request("/api/inventory/set-minimum", {
   body: { itemId: beef.id, locationId: freezer.id, minimum: 5 },
 });
 assert.equal(supervisorMinimum.response.status, 200);
+const supervisorWorkMinimum = await request("/api/inventory/set-minimum", {
+  method: "POST",
+  cookie: supervisor,
+  body: { itemId: beef.id, locationId: workNoodles.id, minimum: 7 },
+});
+assert.equal(supervisorWorkMinimum.response.status, 200);
 
 const seeded = await request("/api/inventory/fuxing", { cookie: admin });
 const locations = seeded.data.stock
@@ -65,10 +72,13 @@ const locations = seeded.data.stock
     return {
       code: location.code,
       quantity: row.location_id === freezer.id ? 999 : Number(row.quantity),
-      minimum: row.location_id === freezer.id ? 999 : Number(row.minimum_quantity),
+      minimum: row.location_id === freezer.id || row.location_id === workNoodles.id
+        ? 999
+        : Number(row.minimum_quantity),
     };
   });
 assert(locations.some((entry) => entry.code === freezer.code));
+assert(locations.some((entry) => entry.code === workNoodles.code));
 
 const catalogEdit = await request("/api/inventory/catalog/sync", {
   method: "POST",
@@ -94,6 +104,9 @@ const protectedStock = after.data.stock.find((row) => row.item_id === beef.id &&
 assert(protectedStock, "protected beef stock row missing after catalog sync");
 assert.equal(Number(protectedStock.quantity), 13, "catalog sync bypassed stocktake quantity permission");
 assert.equal(Number(protectedStock.minimum_quantity), 5, "catalog sync bypassed stocktake minimum permission");
+const protectedWorkStock = after.data.stock.find((row) => row.item_id === beef.id && row.location_id === workNoodles.id);
+assert(protectedWorkStock, "protected beef work stock row missing after catalog sync");
+assert.equal(Number(protectedWorkStock.minimum_quantity), 7, "catalog sync bypassed work minimum stocktake permission");
 
 // Central-kitchen accounts keep inventory/catalog operational access, but they
 // are not a stocktake role. Seed one Central row as admin, prove direct stocktake
