@@ -29,9 +29,9 @@ async function login(page) {
   await page.waitForSelector(".app-shell", { state: "visible", timeout: 30000 });
 }
 
-function emitStatus(page, detail) {
+function emitPersistenceStatus(page, detail) {
   return page.evaluate((next) => {
-    window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail: next }));
+    window.dispatchEvent(new CustomEvent("shitu:business-persistence-status", { detail: next }));
   }, detail);
 }
 
@@ -49,38 +49,42 @@ try {
 
   const status = page.locator("[data-business-persistence-status]");
 
-  await emitStatus(page, { status: "pending", userId, site: "fuxing", modules: ["settings"] });
+  await emitPersistenceStatus(page, { status: "pending", userId, site: "fuxing", modules: ["settings"] });
   await status.waitFor({ state: "visible", timeout: 5000 });
   assert.equal(await status.getAttribute("role"), "status", "pending persistence notice must use status semantics");
   assert.match(await status.innerText(), /chưa.*xác nhận|尚未.*確認|VPS/i, "pending persistence notice is not operationally clear");
 
-  await emitStatus(page, { status: "saving", userId, site: "fuxing", modules: ["settings"] });
+  await emitPersistenceStatus(page, { status: "saving", userId, site: "fuxing", modules: ["settings"] });
   assert.match(await status.innerText(), /Đang lưu|正在.*儲存|saving/i, "saving persistence notice is missing");
   assert.equal(await status.getAttribute("role"), "status");
 
   // Unknown internal error strings must not be copied into the visible DOM.
-  await emitStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: SECRET_ERROR });
+  await emitPersistenceStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: SECRET_ERROR });
   assert.equal(await status.getAttribute("role"), "alert", "persistence failure must use alert semantics");
   assert.match(await status.innerText(), /Chưa lưu|尚未.*儲存|PostgreSQL|VPS/i, "persistence failure does not clearly state that the database write is unconfirmed");
   assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(SECRET_ERROR), "raw persistence error text leaked into the UI");
   const errorText = await status.innerText();
 
-  // A read-only ready event must not falsely clear a write failure.
-  await emitStatus(page, { status: "ready", userId, site: "fuxing" });
-  assert.equal(await status.innerText(), errorText, "ready/read event cleared an unresolved persistence error");
+  // A read-only state event must not falsely clear a write failure.
+  await page.evaluate(({ userId: currentUserId }) => {
+    window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+      detail: { status: "ready", userId: currentUserId, site: "fuxing" },
+    }));
+  }, { userId });
+  assert.equal(await status.innerText(), errorText, "read/ready event cleared an unresolved persistence error");
   assert.equal(await status.getAttribute("role"), "alert");
 
   // Foreign account status must be ignored on a shared browser.
-  await emitStatus(page, { status: "saved", userId: "other-user", site: "fuxing", modules: ["settings"] });
+  await emitPersistenceStatus(page, { status: "saved", userId: "other-user", site: "fuxing", modules: ["settings"] });
   assert.equal(await status.innerText(), errorText, "foreign user's persistence event changed current user's status");
 
   // Only a confirmed save for the current exact scope resolves the error.
-  await emitStatus(page, { status: "saved", userId, site: "fuxing", modules: ["settings"] });
+  await emitPersistenceStatus(page, { status: "saved", userId, site: "fuxing", modules: ["settings"] });
   assert.match(await status.innerText(), /Đã lưu|已儲存|saved/i, "confirmed persistence success is not visible");
   assert.equal(await status.getAttribute("role"), "status");
 
   // The notice is global and survives whole-shell route rerenders while its state is unresolved/current.
-  await emitStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: "BUSINESS_STATE_OFFLINE" });
+  await emitPersistenceStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: "BUSINESS_STATE_OFFLINE" });
   for (const route of ROUTES) {
     await page.evaluate((nextRoute) => { window.location.hash = nextRoute; }, route);
     await page.waitForFunction((nextRoute) => window.location.hash === `#${nextRoute}`, route, { timeout: 5000 });
