@@ -5,6 +5,7 @@ const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const PASSWORD = "KitchenTest!123";
 const RECOVERY_KEY = "shitu-business-recovery-v1";
 const SECRET_MARKER = "RECOVERY_PAYLOAD_MUST_NOT_RENDER_7f3d";
+const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "menu", "sop", "skills", "attendance", "schedule", "reports", "remote", "settings"];
 
 async function login(page) {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -63,6 +64,17 @@ try {
   assert.match(bannerText, /Fuxing|復興|fuxing/i, "recovery notice does not identify the original Fuxing site");
   assert.match(bannerText, /settings/i, "recovery notice does not identify the dirty module");
   assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(SECRET_MARKER), "recovery notice leaked recovery payload content into the UI");
+  assert.equal(await banner.locator("button,a").count(), 0, "recovery notice must not expose a restore/apply action across an authorization boundary");
+
+  // The banner is global: every authenticated route must keep the durable notice in page-content.
+  for (const route of ROUTES) {
+    await page.evaluate((nextRoute) => { window.location.hash = nextRoute; }, route);
+    await page.waitForFunction((nextRoute) => window.location.hash === `#${nextRoute}`, route, { timeout: 5000 });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const routeBanner = page.locator(".page-content > [data-business-recovery-banner]");
+    await routeBanner.waitFor({ state: "visible", timeout: 5000 });
+    assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(SECRET_MARKER), `recovery payload leaked while rendering #${route}`);
+  }
 
   // The notice is derived from durable local recovery state, not one ephemeral event.
   await page.reload({ waitUntil: "domcontentloaded", timeout: 30000 });
