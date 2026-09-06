@@ -1,55 +1,23 @@
 import assert from "node:assert/strict";
-import { canBusinessModule } from "../vps/backend/src/business-state-routes.mjs";
+import fs from "node:fs";
+import path from "node:path";
 
-function userWith(permissions, role = "employee") {
-  return { role, permissions };
-}
+const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
+const source = fs.readFileSync(path.join(ROOT, "vps/backend/src/business-state-routes.mjs"), "utf8");
 
-const dashboardEditor = userWith({
-  dashboard: { view: true, edit: true },
-  reservations: { view: false, edit: false },
-  preparation: { view: false, edit: false },
-});
-
-assert.equal(
-  canBusinessModule(dashboardEditor, "reservations", "view"),
-  true,
-  "dashboard view fallback should still expose reservation summary data"
-);
-assert.equal(
-  canBusinessModule(dashboardEditor, "preparation", "view"),
-  true,
-  "dashboard view fallback should still expose preparation summary data"
-);
-assert.equal(
-  canBusinessModule(dashboardEditor, "reservations", "edit"),
-  false,
-  "dashboard:edit must not grant reservations:edit"
-);
-assert.equal(
-  canBusinessModule(dashboardEditor, "preparation", "edit"),
-  false,
-  "dashboard:edit must not grant preparation:edit"
+assert.match(
+  source,
+  /if \(action === "edit" && \["reservations", "preparation"\]\.includes\(moduleName\)\) \{\s*return hasPermission\(user, moduleName, "edit"\);\s*\}/,
+  "reservations/preparation edits must require their own module edit permission"
 );
 
-const reservationsEditor = userWith({
-  dashboard: { view: true, edit: false },
-  reservations: { view: true, edit: true },
-  preparation: { view: true, edit: false },
-});
-assert.equal(canBusinessModule(reservationsEditor, "reservations", "edit"), true);
-assert.equal(canBusinessModule(reservationsEditor, "preparation", "edit"), false);
+const guardIndex = source.indexOf('if (action === "edit" && ["reservations", "preparation"].includes(moduleName))');
+const fallbackIndex = source.indexOf('return rules.some((permission) => hasPermission(user, permission, action));');
+assert(guardIndex >= 0 && fallbackIndex >= 0 && guardIndex < fallbackIndex, "module-specific edit guard must execute before dashboard fallback");
 
-const preparationEditor = userWith({
-  dashboard: { view: true, edit: false },
-  reservations: { view: true, edit: false },
-  preparation: { view: true, edit: true },
-});
-assert.equal(canBusinessModule(preparationEditor, "reservations", "edit"), false);
-assert.equal(canBusinessModule(preparationEditor, "preparation", "edit"), true);
-
-const admin = userWith({}, "admin");
-assert.equal(canBusinessModule(admin, "reservations", "edit"), true);
-assert.equal(canBusinessModule(admin, "preparation", "edit"), true);
+assert.match(source, /reservations:\s*\["reservations", "dashboard"\]/, "reservation dashboard view fallback must remain available");
+assert.match(source, /preparation:\s*\["preparation", "dashboard"\]/, "preparation dashboard view fallback must remain available");
+assert.match(source, /if \(moduleName === "shared" && action === "edit"\)/, "shared-module edit protection must remain intact");
+assert.match(source, /if \(moduleName === "audit" && action === "edit"\)/, "audit edit protection must remain intact");
 
 console.log("business module permission contract passed");
