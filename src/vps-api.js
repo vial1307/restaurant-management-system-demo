@@ -208,7 +208,7 @@ export async function vpsSaveBusinessState(site, modules, expectedModuleRevision
     : null;
   const cached = cacheKey ? businessModuleRevisionCache.get(cacheKey) : null;
   const expected = explicit || (cached
-    ? Object.fromEntries(moduleNames.map((name) => [name, Number.isInteger(cached[name]) ? cached[name] : 0]))
+    ? Object.fromEntries(moduleNames.flatMap((name) => Number.isInteger(cached[name]) ? [[name, cached[name]]] : []))
     : {});
   const result = await apiRequest(`/api/business-state/${encodeURIComponent(siteKey)}`, {
     method: "POST",
