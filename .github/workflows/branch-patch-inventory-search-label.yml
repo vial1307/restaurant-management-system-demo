@@ -1,0 +1,60 @@
+name: One-shot inventory search label patch
+
+on:
+  push:
+    branches:
+      - perf-inventory-search-label-context-20260906
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf-inventory-search-label-context-20260906
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Patch inventory search label context only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("src/app.js")
+          text = path.read_text()
+
+          table_anchor = '''  const table = page.querySelector(".inventory-table");
+          if (!table) return;
+
+          let visibleTotal = 0;
+          '''
+          table_replacement = '''  const table = page.querySelector(".inventory-table");
+          if (!table) return;
+          const itemsLabel = currentContext().text.items;
+
+          let visibleTotal = 0;
+          '''
+          assert text.count(table_anchor) == 1, "inventory search table anchor changed"
+          text = text.replace(table_anchor, table_replacement, 1)
+
+          count_anchor = '    if (count) count.textContent = `${visibleInGroup} ${currentContext().text.items}`;\n'
+          count_replacement = '    if (count) count.textContent = `${visibleInGroup} ${itemsLabel}`;\n'
+          assert text.count(count_anchor) == 1, "inventory group count anchor changed"
+          text = text.replace(count_anchor, count_replacement, 1)
+
+          path.write_text(text)
+          PY
+
+          node tests/performance-regression.mjs
+
+          git rm .github/workflows/branch-patch-inventory-search-label.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app.js
+          git commit -m "Reuse inventory search label context"
+          git push origin HEAD:perf-inventory-search-label-context-20260906
