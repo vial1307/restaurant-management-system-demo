@@ -1372,7 +1372,9 @@ function renderWhenAuthorized() {
 }
 
 function selectServiceDate(date) {
+  const sameDate = store.getState().selectedDate === date;
   store.selectDate(date);
+  if (sameDate) renderWhenAuthorized();
   if (date === formatDateKey() && route() === "inventory") {
     void syncInventoryNow(activeInventorySite(), { reloadBranch: false });
   }
