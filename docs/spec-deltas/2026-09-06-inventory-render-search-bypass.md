@@ -20,6 +20,9 @@ Frontend render performance only. No database, API, auth/permission, business pe
 - Existing desktop/mobile Chromium and Firefox/WebKit regressions remain mandatory before merge.
 - Production still requires exact-SHA deploy health and production UI smoke.
 
+## Implementation boundary
+The optimization is intentionally limited to the post-render reapply call. `applyInventorySearchDom()` itself is not weakened or delayed, so direct user input remains immediate and deterministic.
+
 ## Non-goals
 - No debounce or delayed typing feedback.
 - No changes to inventory rendering structure.
