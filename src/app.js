@@ -324,7 +324,9 @@ function currentContext() {
 }
 
 function navItem(key, active, text) {
-  return `<a class="nav-item ${active === key ? "active" : ""}" href="#${key}" aria-current="${active === key ? "page" : "false"}">${icon(key)}<span>${escapeHtml(text[key])}</span></a>`;
+  const allowed = accountCan(key, "view");
+  const accessAttributes = allowed ? "" : ' hidden aria-hidden="true" tabindex="-1"';
+  return `<a class="nav-item ${active === key ? "active" : ""}" href="#${key}" aria-current="${active === key ? "page" : "false"}"${accessAttributes}>${icon(key)}<span>${escapeHtml(text[key])}</span></a>`;
 }
 
 function sidebar(context, active) {
