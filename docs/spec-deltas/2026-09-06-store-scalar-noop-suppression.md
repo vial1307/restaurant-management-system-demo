@@ -50,6 +50,9 @@ No generic deep comparison is added to `update()`. No action/audit mutation (`to
 ## Regression correction
 The first browser failure showed that suppressing same-date selection without moving the view lifecycle left `view.calendarOpen = false` unrendered. A first correction kept the same-date store write solely to obtain a subscriber notification, but Chromium still exposed the coupling around Central/branch switching. The final contract separates concerns: same-date selection is a true store no-op, while the app explicitly renders the view-only calendar close. This removes persisted churn and makes the UI lifecycle deterministic.
 
+## Merge-candidate rerun
+The scalar no-op subset excluding `selectDate` is already production-certified at `bb034dcc7866fe339efc535c0b3df56406863aed`. This follow-up must therefore be tested as a merge candidate on top of that exact behavior, with the additional same-date store no-op and explicit app-level view render. The previously failing calendar → Fuxing warehouse click is a mandatory Chromium acceptance path before this follow-up can merge.
+
 ## Non-goals
 - No deep equality check inside generic `update()`.
 - No change to audit/action semantics.
