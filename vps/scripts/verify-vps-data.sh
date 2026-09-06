@@ -120,8 +120,12 @@ check_zero "stored business modules missing revision tokens" "
   cross join lateral jsonb_object_keys(b.modules) as keys(module_name)
   where not (b.module_revisions ? keys.module_name)
      or jsonb_typeof(b.module_revisions -> keys.module_name)<>'number'
-     or (b.module_revisions ->> keys.module_name)::numeric < 0
-     or (b.module_revisions ->> keys.module_name)::numeric <> trunc((b.module_revisions ->> keys.module_name)::numeric)
+     or case
+          when jsonb_typeof(b.module_revisions -> keys.module_name)='number'
+          then (b.module_revisions ->> keys.module_name)::numeric < 0
+            or (b.module_revisions ->> keys.module_name)::numeric <> trunc((b.module_revisions ->> keys.module_name)::numeric)
+          else false
+        end
 "
 
 FULL_ADMIN_KEYS="dashboard inventory procurement reservations preparation menu sop skills attendance schedule reports remote settings"
