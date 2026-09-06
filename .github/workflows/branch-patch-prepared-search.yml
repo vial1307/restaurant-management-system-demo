@@ -1,0 +1,70 @@
+name: One-shot prepared inventory search patch
+
+on:
+  push:
+    branches:
+      - perf-inventory-search-prepared-corpus-20260906
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf-inventory-search-prepared-corpus-20260906
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Patch prepared inventory search only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("src/app.js")
+          text = path.read_text()
+
+          import_anchor = 'import { searchMatches } from "./search-utils.js";'
+          import_replacement = 'import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";'
+          assert text.count(import_anchor) == 1, "search-utils import anchor changed"
+          text = text.replace(import_anchor, import_replacement, 1)
+
+          function_anchor = 'function applyInventorySearchDom(input) {'
+          function_replacement = '''const inventorySearchCorpusCache = new WeakMap();
+
+          function inventoryRowSearchCorpus(row) {
+            if (inventorySearchCorpusCache.has(row)) return inventorySearchCorpusCache.get(row);
+            const corpus = prepareSearchCorpus(row.textContent || "");
+            inventorySearchCorpusCache.set(row, corpus);
+            return corpus;
+          }
+
+          function applyInventorySearchDom(input) {'''
+          assert text.count(function_anchor) == 1, "inventory search function anchor changed"
+          text = text.replace(function_anchor, function_replacement, 1)
+
+          query_anchor = '  const query = input.value || "";\n  view.search = query;'
+          query_replacement = '  const query = input.value || "";\n  const needle = prepareSearchNeedle(query);\n  view.search = query;'
+          assert text.count(query_anchor) == 1, "inventory query anchor changed"
+          text = text.replace(query_anchor, query_replacement, 1)
+
+          row_anchor = 'const visible = searchMatches(row.textContent || "", query);'
+          row_replacement = 'const visible = preparedSearchMatches(inventoryRowSearchCorpus(row), needle);'
+          assert text.count(row_anchor) == 2, "expected exactly two inventory row search calls"
+          text = text.replace(row_anchor, row_replacement)
+
+          path.write_text(text)
+          PY
+
+          node tests/performance-regression.mjs
+
+          git rm .github/workflows/branch-patch-prepared-search.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app.js
+          git commit -m "Cache prepared inventory search corpus"
+          git push origin HEAD:perf-inventory-search-prepared-corpus-20260906
