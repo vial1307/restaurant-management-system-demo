@@ -117,10 +117,11 @@ globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
 };
 
 const statuses = [];
-window.addEventListener("shitu:business-state-status", (event) => statuses.push(event.detail));
+window.addEventListener("shitu:business-persistence-status", (event) => statuses.push(event.detail));
 const detach = attachBusinessStateSync(store);
 await delay(20);
 assert.equal(state.settings.reservationBuffer, 3, "initial business baseline did not load");
+assert.equal(statuses.length, 0, "initial read emitted a false business persistence lifecycle");
 
 // Local mutation must immediately become visibly pending before the debounce POST fires.
 state = { ...state, settings: { ...state.settings, reservationBuffer: 9 } };
@@ -149,16 +150,12 @@ assert.deepEqual(saved?.modules, ["settings"], "saved status lost confirmed modu
 
 // A no-op focus refresh after a confirmed snapshot must not claim another save.
 heldSaveResolve = false;
-const lifecycleBeforeNoop = statuses.filter((entry) => ["saving", "saved"].includes(entry?.status)).length;
+const lifecycleBeforeNoop = statuses.length;
 const savesBeforeNoop = saveCalls;
 window.dispatchEvent(new CustomEvent("focus"));
 await delay(20);
 assert.equal(saveCalls, savesBeforeNoop, "clean focus refresh created a false VPS business write");
-assert.equal(
-  statuses.filter((entry) => ["saving", "saved"].includes(entry?.status)).length,
-  lifecycleBeforeNoop,
-  "clean focus refresh emitted a false saving/saved lifecycle"
-);
+assert.equal(statuses.length, lifecycleBeforeNoop, "clean focus refresh emitted a false persistence lifecycle");
 
 // Failed persistence must be scoped and must never be followed by a false saved event.
 state = { ...state, settings: { ...state.settings, reservationBuffer: 10 } };
