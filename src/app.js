@@ -1715,6 +1715,7 @@ function applyInventorySearchDom(input) {
   const page = input.closest(".page-content") || root;
   const table = page.querySelector(".inventory-table");
   if (!table) return;
+  const itemsLabel = currentContext().text.items;
 
   let visibleTotal = 0;
   table.querySelectorAll(".inventory-group").forEach((group) => {
@@ -1728,7 +1729,7 @@ function applyInventorySearchDom(input) {
     visibleTotal += visibleInGroup;
 
     const count = group.querySelector(".inventory-group-heading span");
-    if (count) count.textContent = `${visibleInGroup} ${currentContext().text.items}`;
+    if (count) count.textContent = `${visibleInGroup} ${itemsLabel}`;
   });
 
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
