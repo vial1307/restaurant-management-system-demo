@@ -4,6 +4,7 @@ await import("./inventory-search-context-cache-regression.mjs");
 await import("./inventory-search-label-context-regression.mjs");
 await import("./prepared-search-utils-regression.mjs");
 await import("./inventory-search-prepared-corpus-contract-regression.mjs");
+await import("./store-scalar-noop-regression.mjs");
 await import("./stable-shell-static-regression.mjs");
 await import("./lazy-derived-context-regression.mjs");
 await import("./lazy-render-context-contract-regression.mjs");
