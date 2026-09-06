@@ -28,14 +28,11 @@ jobs:
           from pathlib import Path
           path = Path('src/app.js')
           source = path.read_text()
-          old = '''  const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
-          if (inventorySearchInput) applyInventorySearchDom(inventorySearchInput);'''
-          new = '''  const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
-          const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");
-          if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);'''
+          old = '  if (inventorySearchInput) applyInventorySearchDom(inventorySearchInput);'
+          new = '  const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");\n  if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);'
           count = source.count(old)
           if count != 1:
-              raise SystemExit(f'expected exactly one render search block, found {count}')
+              raise SystemExit(f'expected exactly one render search apply line, found {count}')
           path.write_text(source.replace(old, new, 1))
           PY
           node tests/performance-regression.mjs
