@@ -15,7 +15,7 @@ assert.match(
 );
 assert.match(
   renderSource,
-  /prepareSearchNeedle\s*\(\s*inventorySearchInput(?:\?\.)?\.value\s*\|\|\s*["']["']\s*\)/,
+  /prepareSearchNeedle\s*\(\s*inventorySearchInput\?\.value\s*\|\|\s*["']["']\s*\)/,
   "render-time search reapply must normalize the current input value",
 );
 assert.match(
