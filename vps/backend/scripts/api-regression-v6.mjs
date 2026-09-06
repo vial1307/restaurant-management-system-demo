@@ -7,7 +7,17 @@ import "./business-state-regression-client.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const file = path.join(__dirname, "api-regression.mjs");
 const source = fs.readFileSync(file, "utf8");
-const oldAssertion = 'assert.equal(health.data.schema,"005");';
-assert(source.includes(oldAssertion), "legacy API regression schema assertion changed; update v6 runner explicitly");
-const migrated = source.replace(oldAssertion, 'assert.equal(health.data.schema,"006");');
+const oldSchemaAssertion = 'assert.equal(health.data.schema,"005");';
+assert(source.includes(oldSchemaAssertion), "legacy API regression schema assertion changed; update v6 runner explicitly");
+
+const oldEmployeeStocktakeAssertion = `assert.equal(employeeSet.response.status,200);\nassert.equal(Number(employeeSet.data.after),99);`;
+assert(source.includes(oldEmployeeStocktakeAssertion), "employee stocktake regression changed; update v6 runner explicitly");
+
+const migrated = source
+  .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"006");')
+  .replace(
+    oldEmployeeStocktakeAssertion,
+    `assert.equal(employeeSet.response.status,403);\nassert.equal(employeeSet.data.error,"STOCKTAKE_ROLE_REQUIRED");`
+  );
+
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
