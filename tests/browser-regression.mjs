@@ -360,6 +360,19 @@ async function roleDesktop(browser, username, checks) {
       if(checks.stocktake === false){
         assert.equal(manageQuantityControls,0,`${username} must not receive stocktake quantity controls`);
       }
+      const editItem=page.locator('[data-action="open-edit-item"]').first();
+      await editItem.waitFor({state:"visible"});
+      await editItem.click();
+      const workMinimum=page.locator('input[name="workMinimum"]');
+      await workMinimum.waitFor({state:"visible"});
+      if(checks.stocktake === true){
+        assert.equal(await workMinimum.getAttribute("readonly"),null,`${username} work minimum unexpectedly read-only`);
+      }
+      if(checks.stocktake === false){
+        assert.equal(await workMinimum.getAttribute("readonly"),"",`${username} can edit work minimum without stocktake authority`);
+      }
+      await page.locator('button[data-action="close-modal"]').first().click();
+      await page.locator(".modal-backdrop").waitFor({state:"detached"});
     }
     if(checks.operations === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count(),0);
@@ -411,6 +424,7 @@ async function responsiveAdmin(browser, viewport) {
       const branchSave=page.locator('.modal-header-save[data-save-item]');
       await branchSave.waitFor({state:"visible"});
       assert.match(await branchSave.innerText(),/Lưu sản phẩm|儲存品項/,`${site} mobile product save action missing`);
+      assert.equal(await page.locator('input[name="workMinimum"]').getAttribute("readonly"),null,`${site} admin work minimum must remain editable on mobile`);
       await page.locator('button[data-action="close-modal"]').first().click();
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
     }
