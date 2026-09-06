@@ -29,35 +29,18 @@ jobs:
 
           store_path = Path('src/store-core.js')
           store = store_path.read_text()
-          old_store = '''    selectDate(date) {
-                return update((draft) => {
-                  ensureRecord(draft, date);
-                  draft.selectedDate = date;
-                });
-              },'''.replace('        ', '')
-          new_store = '''    selectDate(date) {
-                if (state.selectedDate === date) return state;
-                return update((draft) => {
-                  ensureRecord(draft, date);
-                  draft.selectedDate = date;
-                });
-              },'''.replace('        ', '')
+          old_store = '    selectDate(date) {\n      return update((draft) => {'
+          new_store = '    selectDate(date) {\n      if (state.selectedDate === date) return state;\n      return update((draft) => {'
           if store.count(old_store) != 1:
-              raise SystemExit(f'expected one selectDate block, found {store.count(old_store)}')
+              raise SystemExit(f'expected one selectDate anchor, found {store.count(old_store)}')
           store_path.write_text(store.replace(old_store, new_store, 1))
 
           app_path = Path('src/app.js')
           app = app_path.read_text()
-          old_app = '''function selectServiceDate(date) {
-            store.selectDate(date);
-            if (date === formatDateKey() && route() === "inventory") {'''.replace('    ', '')
-          new_app = '''function selectServiceDate(date) {
-            const sameDate = store.getState().selectedDate === date;
-            store.selectDate(date);
-            if (sameDate) renderWhenAuthorized();
-            if (date === formatDateKey() && route() === "inventory") {'''.replace('    ', '')
+          old_app = 'function selectServiceDate(date) {\n  store.selectDate(date);'
+          new_app = 'function selectServiceDate(date) {\n  const sameDate = store.getState().selectedDate === date;\n  store.selectDate(date);\n  if (sameDate) renderWhenAuthorized();'
           if app.count(old_app) != 1:
-              raise SystemExit(f'expected one selectServiceDate block, found {app.count(old_app)}')
+              raise SystemExit(f'expected one selectServiceDate anchor, found {app.count(old_app)}')
           app_path.write_text(app.replace(old_app, new_app, 1))
           PY
           node tests/performance-regression.mjs
