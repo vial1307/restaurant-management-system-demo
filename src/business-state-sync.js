@@ -300,10 +300,11 @@ export function attachBusinessStateSync(store) {
           lastSavedSnapshot = snapshot;
         }
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site, modules:dirtyNames } }));
+        const persistenceCurrent = key === identityKey()
+          && JSON.stringify(businessModulesFromState(store.getState())) === snapshot;
+        if (persistenceCurrent) emitPersistenceStatus("saved", { userId, site, modules: dirtyNames });
         const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
         if (key !== identityKey()) return false;
-        if (currentSnapshot !== snapshot) return false;
-        emitPersistenceStatus("saved", { userId, site, modules: dirtyNames });
         return currentSnapshot === snapshot;
       } catch (error) {
         emitPersistenceStatus("error", { userId, site, modules: dirtyNames, error:error.message });
