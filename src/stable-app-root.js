@@ -17,6 +17,15 @@ function nativeReplace(host, markup) {
   nativeSetInnerHtml.call(host, markup);
 }
 
+function signalRootChildMutation(host) {
+  // auth-layer intentionally observes direct #app child mutations as its
+  // render lifecycle signal. Stable-shell patching keeps .app-shell alive,
+  // so reproduce that signal without widening the observer to subtree=true.
+  const marker = document.createComment("shitu-render");
+  host.append(marker);
+  marker.remove();
+}
+
 function patchStableShell(host, markup) {
   const currentShell = directChild(host, ".app-shell");
   const currentMain = directChild(currentShell, ".main-shell");
@@ -53,6 +62,7 @@ function patchStableShell(host, markup) {
   for (const node of [...template.content.childNodes]) {
     if (node !== nextShell) host.append(node);
   }
+  signalRootChildMutation(host);
   return true;
 }
 
