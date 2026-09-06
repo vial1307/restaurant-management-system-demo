@@ -1,0 +1,52 @@
+name: One-shot same-date no-op lifecycle patch
+
+on:
+  push:
+    branches:
+      - perf-select-date-noop-lifecycle-20260906
+    paths:
+      - ".github/workflows/branch-patch-select-date-noop-lifecycle.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf-select-date-noop-lifecycle-20260906
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Patch same-date store no-op and explicit UI render
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          store_path = Path('src/store-core.js')
+          store = store_path.read_text()
+          old_store = '    selectDate(date) {\n      return update((draft) => {'
+          new_store = '    selectDate(date) {\n      if (state.selectedDate === date) return state;\n      return update((draft) => {'
+          if store.count(old_store) != 1:
+              raise SystemExit(f'expected one selectDate anchor, found {store.count(old_store)}')
+          store_path.write_text(store.replace(old_store, new_store, 1))
+
+          app_path = Path('src/app.js')
+          app = app_path.read_text()
+          old_app = 'function selectServiceDate(date) {\n  store.selectDate(date);'
+          new_app = 'function selectServiceDate(date) {\n  const sameDate = store.getState().selectedDate === date;\n  store.selectDate(date);\n  if (sameDate) renderWhenAuthorized();'
+          if app.count(old_app) != 1:
+              raise SystemExit(f'expected one selectServiceDate anchor, found {app.count(old_app)}')
+          app_path.write_text(app.replace(old_app, new_app, 1))
+          PY
+          node tests/performance-regression.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/branch-patch-select-date-noop-lifecycle.yml
+          git add src/store-core.js src/app.js tests docs
+          git commit -m "Decouple same-date UI render from store persistence"
+          git push origin HEAD:perf-select-date-noop-lifecycle-20260906
