@@ -111,10 +111,22 @@ function snapshotModules(snapshot = "") {
   }
 }
 
+function comparableBusinessModule(name, value) {
+  const comparable = structuredClone(value || {});
+  if (["reservations", "procurement", "preparation"].includes(name) && comparable.records) {
+    for (const record of Object.values(comparable.records)) {
+      if (record && typeof record === "object") delete record.updatedAt;
+    }
+  }
+  return comparable;
+}
+
 function dirtyBusinessModules(modules, baselineSnapshot) {
   const baseline = snapshotModules(baselineSnapshot);
   return Object.fromEntries(
-    Object.entries(modules || {}).filter(([name, value]) => !sameJson(value, baseline[name]))
+    Object.entries(modules || {}).filter(([name, value]) => (
+      !sameJson(comparableBusinessModule(name, value), comparableBusinessModule(name, baseline[name]))
+    ))
   );
 }
 
