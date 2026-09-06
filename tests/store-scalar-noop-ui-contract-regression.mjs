@@ -19,4 +19,11 @@ assert.match(serviceDateSource, /const\s+(?:sameDate|unchanged|alreadySelected)\
 assert.match(serviceDateSource, /store\.selectDate\(date\)/, "selectServiceDate must retain normal store date selection");
 assert.match(serviceDateSource, /if\s*\(\s*(?:sameDate|unchanged|alreadySelected)\s*\)\s*renderWhenAuthorized\s*\(\s*\)/, "same-date calendar close must explicitly render without a fake store notification");
 
+const detectionIndex = serviceDateSource.search(/const\s+(?:sameDate|unchanged|alreadySelected)\s*=/);
+const storeSelectIndex = serviceDateSource.indexOf("store.selectDate(date)");
+const explicitRenderIndex = serviceDateSource.search(/if\s*\(\s*(?:sameDate|unchanged|alreadySelected)\s*\)\s*renderWhenAuthorized\s*\(\s*\)/);
+assert.ok(detectionIndex >= 0 && detectionIndex < storeSelectIndex, "same-date state must be captured before store.selectDate runs");
+assert.ok(storeSelectIndex >= 0 && storeSelectIndex < explicitRenderIndex, "explicit same-date render must occur after store.selectDate, never before it");
+assert.equal((serviceDateSource.match(/renderWhenAuthorized\s*\(\s*\)/g) || []).length, 1, "selectServiceDate must have exactly one explicit render path so real date changes do not render twice");
+
 console.log("STORE_SCALAR_NOOP_UI_CONTRACT_OK");
