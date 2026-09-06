@@ -34,6 +34,8 @@ function can(user, moduleName, action) {
   return rules.some((permission) => hasPermission(user, permission, action));
 }
 
+export { can as canBusinessModule };
+
 function filteredModules(user, modules) {
   return Object.fromEntries(
     Object.entries(modules || {}).filter(([moduleName]) => can(user, moduleName, "view"))
@@ -52,9 +54,6 @@ function filteredModuleRevisions(user, modules, revisions) {
       if (!can(user, moduleName, "view")) return [];
       const revision = validStoredRevision(storedRevisions[moduleName]);
       if (revision !== null) return [[moduleName, revision]];
-      // Revision 0 is safe only when the module itself does not yet exist. If a
-      // stored module is missing/has invalid revision metadata, omit the token so
-      // writes are rejected instead of guessing around a corrupted baseline.
       return Object.hasOwn(storedModules, moduleName) ? [] : [[moduleName, 0]];
     })
   );
@@ -87,8 +86,6 @@ function mergeAuditModule(before, incoming) {
   const incomingEntries = Array.isArray(incoming?.audit) ? incoming.audit : [];
   const seen = new Set();
   const merged = [];
-  // Existing server entries win duplicate ids so this log is truly append-only:
-  // a client may add a new id but cannot rewrite an already persisted event.
   for (const entry of [...serverEntries, ...incomingEntries]) {
     if (!entry || typeof entry !== "object") continue;
     const id = String(entry.id || "");
@@ -140,8 +137,6 @@ export async function registerBusinessStateRoutes(app) {
       return reply.code(403).send({ error: "BUSINESS_STATE_EDIT_NOT_ALLOWED" });
     }
 
-    // Audit is an append-only operational log. It is merged by unique entry id
-    // inside the row lock, so it never blocks a primary business module write.
     const guardedNames = editableNames.filter((moduleName) => moduleName !== "audit");
     const expectedInput = requestedModuleRevisions(request.body);
     const expected = Object.fromEntries(
