@@ -12,6 +12,9 @@ assert.match(rootModule, /directChild\(host, "\.app-shell"\)/, "stable path must
 assert.match(rootModule, /directChild\(currentShell, "\.main-shell"\)/, "stable path must preserve the existing main shell");
 assert.match(rootModule, /current\.outerHTML === next\.outerHTML/, "unchanged shell sections should not be replaced unnecessarily");
 assert.match(rootModule, /current\.replaceWith\(next\)/, "changed shell sections must still update with current markup");
+assert.match(rootModule, /document\.createComment\("shitu-render"\)/, "stable updates must preserve the direct-root child mutation lifecycle used by auth-layer");
+assert.match(rootModule, /host\.append\(marker\);\s*marker\.remove\(\);/, "render lifecycle signal must be transient and must not leave DOM content behind");
+assert.doesNotMatch(rootModule, /subtree\s*:\s*true/, "stable shell must not widen the auth render observer into a subtree loop");
 assert.match(rootModule, /if \(!patchStableShell\(this, markup\)\) nativeReplace\(this, markup\)/, "corrupt or first render must fall back safely");
 
 for (const [name, html] of [["index", indexHtml], ["vps", vpsHtml]]) {
