@@ -18,8 +18,24 @@ assert.doesNotMatch(api, /businessModuleRevisionCache/, "transport must not own 
 assert.match(saveFunction, /return \{ \.\.\.result, moduleRevisions \};/, "validated business-state save response must return normalized module revisions");
 
 assert.match(sync, /let loadedModuleRevisionKey = "";[\s\S]{0,80}let loadedModuleRevisions = \{\};/, "business sync must own the accepted per-scope module revision baseline");
-assert.match(sync, /const expectedModuleRevisions = loadedModuleRevisionKey === key[\s\S]{0,260}loadedModuleRevisions\[name\]/, "dirty business writes must derive expected revisions from the accepted sync baseline");
+const acceptedRevisionHelper = sync.match(/const acceptedRevisionsFor = \(names, key = identityKey\(\)\) => \([\s\S]*?\n  \);/)?.[0] || "";
+assert(acceptedRevisionHelper, "business sync must centralize accepted module revision lookup");
+assert.match(acceptedRevisionHelper, /loadedModuleRevisionKey === key/, "accepted revision lookup must be scoped to the loaded identity");
+assert.match(acceptedRevisionHelper, /Number\.isInteger\(loadedModuleRevisions\[name\]\)[\s\S]{0,100}loadedModuleRevisions\[name\]/, "accepted revision lookup must use only validated tokens from the sync baseline");
+assert.match(sync, /const expectedModuleRevisions = acceptedRevisionsFor\(dirtyNames, key\)/, "dirty business writes must derive expected revisions from the accepted sync baseline helper");
 assert.match(sync, /vpsSaveBusinessState\(site, dirtyModules, expectedModuleRevisions\)/, "business sync must pass its accepted revision baseline explicitly to transport");
-assert.match(sync, /deferred:true[\s\S]{0,100}return;[\s\S]{0,180}loadedModuleRevisionKey = key;[\s\S]{0,120}normalizedModuleRevisions\(result\?\.moduleRevisions\)/, "deferred remote reads must return before advancing the local concurrency baseline");
+
+const loadFunction = sync.match(/async function load\(\) \{[\s\S]*?\n  \}\n\n  const guardSiteSwitch/)?.[0] || "";
+assert(loadFunction, "business sync load function must remain identifiable for concurrency contract guards");
+const deferredMarkerIndex = loadFunction.indexOf('detail:{ status:"ready", site, deferred:true }');
+const deferredReturnIndex = deferredMarkerIndex >= 0 ? loadFunction.indexOf("return;", deferredMarkerIndex) : -1;
+const normalizeServerRevisionsIndex = loadFunction.indexOf("const serverModuleRevisions = normalizedModuleRevisions(result?.moduleRevisions);");
+const adoptRevisionBaselineIndex = normalizeServerRevisionsIndex >= 0
+  ? loadFunction.indexOf("loadedModuleRevisionKey = key;", normalizeServerRevisionsIndex)
+  : -1;
+assert(deferredMarkerIndex >= 0, "business sync must surface a deferred read when local state changes during GET");
+assert(deferredReturnIndex > deferredMarkerIndex, "deferred business read must return from the load path");
+assert(normalizeServerRevisionsIndex > deferredReturnIndex, "deferred read must return before normalizing a newer server revision baseline");
+assert(adoptRevisionBaselineIndex > normalizeServerRevisionsIndex, "business sync must adopt module revision baseline only after an accepted read");
 
 console.log("VPS_BUSINESS_STATE_CONTRACT_OK");

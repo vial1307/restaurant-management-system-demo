@@ -15,6 +15,7 @@ const moduleUrl = `data:text/javascript;base64,${Buffer.from(injected).toString(
 const { attachBusinessStateSync } = await import(moduleUrl);
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
+const PENDING_KEY = "shitu-business-pending-v1";
 const storage = new Map([[AUTH_KEY, JSON.stringify({
   id: "timestamp-user",
   username: "timestamp-user",
@@ -104,6 +105,7 @@ const detach = attachBusinessStateSync(store);
 await delay(20);
 assert.equal(saveCalls, 0, "initial business baseline unexpectedly wrote to VPS");
 assert.equal(persistenceStatuses.length, 0, "initial business baseline emitted persistence lifecycle");
+assert.equal(storage.has(PENDING_KEY), false, "initial business baseline created a durable pending draft");
 
 // Store.update() refreshes this shared timestamp for every mutation, including
 // inventory-only mutations. Timestamp-only movement must not dirty business modules.
@@ -116,9 +118,11 @@ state = {
 };
 subscriber();
 assert.equal(persistenceStatuses.length, 0, "shared record timestamp emitted false business pending status");
+assert.equal(storage.has(PENDING_KEY), false, "shared record timestamp created a false durable pending draft");
 await delay(480);
 assert.equal(saveCalls, 0, "shared record timestamp triggered an unnecessary business-state VPS write");
 assert.equal(persistenceStatuses.length, 0, "timestamp-only change emitted a false business persistence lifecycle");
+assert.equal(storage.has(PENDING_KEY), false, "timestamp-only change left a false durable pending draft");
 
 detach();
 console.log("BUSINESS_STATE_TIMESTAMP_DIRTY_OK");
