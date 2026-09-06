@@ -1,0 +1,130 @@
+.business-persistence-status {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.business-persistence-marker {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.business-persistence-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.business-persistence-copy strong,
+.business-persistence-copy span,
+.business-persistence-copy small {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.business-persistence-copy strong {
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.business-persistence-copy span,
+.business-persistence-copy small {
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.business-persistence-copy small {
+  margin-top: 2px;
+  opacity: 0.84;
+}
+
+.business-persistence-pending,
+.business-persistence-saving {
+  border-color: rgba(2, 132, 199, 0.24);
+  background: rgba(240, 249, 255, 0.96);
+  color: #075985;
+}
+
+.business-persistence-pending .business-persistence-marker,
+.business-persistence-saving .business-persistence-marker {
+  background: #0369a1;
+  color: #fff;
+}
+
+.business-persistence-saved {
+  border-color: rgba(22, 163, 74, 0.22);
+  background: rgba(240, 253, 244, 0.96);
+  color: #166534;
+}
+
+.business-persistence-saved .business-persistence-marker {
+  background: #15803d;
+  color: #fff;
+}
+
+.business-persistence-error {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(254, 242, 242, 0.98);
+  color: #991b1b;
+}
+
+.business-persistence-error .business-persistence-marker {
+  background: #b91c1c;
+  color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .business-persistence-pending,
+  .business-persistence-saving {
+    border-color: rgba(56, 189, 248, 0.32);
+    background: rgba(8, 47, 73, 0.95);
+    color: #bae6fd;
+  }
+
+  .business-persistence-saved {
+    border-color: rgba(74, 222, 128, 0.28);
+    background: rgba(20, 83, 45, 0.94);
+    color: #bbf7d0;
+  }
+
+  .business-persistence-error {
+    border-color: rgba(248, 113, 113, 0.34);
+    background: rgba(69, 10, 10, 0.96);
+    color: #fecaca;
+  }
+}
+
+@media (max-width: 760px) {
+  .business-persistence-status {
+    gap: 9px;
+    padding: 10px;
+    border-radius: 11px;
+  }
+
+  .business-persistence-copy strong {
+    font-size: 0.82rem;
+  }
+
+  .business-persistence-copy span,
+  .business-persistence-copy small {
+    font-size: 0.72rem;
+  }
+}

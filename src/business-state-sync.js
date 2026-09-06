@@ -111,10 +111,22 @@ function snapshotModules(snapshot = "") {
   }
 }
 
+function comparableBusinessModule(name, value) {
+  const comparable = structuredClone(value || {});
+  if (["reservations", "procurement", "preparation"].includes(name) && comparable.records) {
+    for (const record of Object.values(comparable.records)) {
+      if (record && typeof record === "object") delete record.updatedAt;
+    }
+  }
+  return comparable;
+}
+
 function dirtyBusinessModules(modules, baselineSnapshot) {
   const baseline = snapshotModules(baselineSnapshot);
   return Object.fromEntries(
-    Object.entries(modules || {}).filter(([name, value]) => !sameJson(value, baseline[name]))
+    Object.entries(modules || {}).filter(([name, value]) => (
+      !sameJson(comparableBusinessModule(name, value), comparableBusinessModule(name, baseline[name]))
+    ))
   );
 }
 
@@ -186,6 +198,16 @@ export function attachBusinessStateSync(store) {
     return user?.id && site ? `${user.id}:${site}` : "";
   };
 
+  const emitPersistenceStatus = (status, { userId = "", site = "", modules = [], error = "" } = {}) => {
+    const scopedUserId = String(userId || "");
+    const scopedSite = String(site || "");
+    if (!scopedUserId || !scopedSite) return;
+    const detail = { status, userId: scopedUserId, site: scopedSite };
+    if (Array.isArray(modules) && modules.length) detail.modules = [...modules].map(String).filter(Boolean);
+    if (error) detail.error = String(error);
+    window.dispatchEvent(new CustomEvent("shitu:business-persistence-status", { detail }));
+  };
+
   const surfaceRecovery = (key = identityKey()) => {
     const draft = key ? recoveryDraftForKey(key) : null;
     if (!draft) return false;
@@ -236,6 +258,7 @@ export function attachBusinessStateSync(store) {
   async function save() {
     const key = identityKey();
     const site = currentSite();
+    const userId = readSession()?.id || "";
     if (!key || key !== loadedKey || !site || !hasBusinessEdit()) return true;
     const modules = businessModulesFromState(store.getState());
     const snapshot = JSON.stringify(modules);
@@ -255,12 +278,14 @@ export function attachBusinessStateSync(store) {
     }
     if (document.documentElement.dataset.vpsAuthReady !== "true" || navigator.onLine === false) {
       const error = navigator.onLine === false ? "BUSINESS_STATE_OFFLINE" : "BUSINESS_STATE_NOT_READY";
+      emitPersistenceStatus("error", { userId, site, modules: dirtyNames, error });
       window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error } }));
       return false;
     }
 
     clearTimeout(saveTimer);
     saveTimer = 0;
+    emitPersistenceStatus("saving", { userId, site, modules: dirtyNames });
     const request = (async () => {
       try {
         const saved = await vpsSaveBusinessState(site, dirtyModules);
@@ -273,6 +298,7 @@ export function attachBusinessStateSync(store) {
         const confirmed = new Set(savedModuleNames);
         const missingModules = dirtyNames.filter((name) => !confirmed.has(name));
         if (missingModules.length) {
+          emitPersistenceStatus("error", { userId, site, modules: missingModules, error: "BUSINESS_STATE_PARTIAL_SAVE" });
           window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
             detail: { status:"error", site, error:"BUSINESS_STATE_PARTIAL_SAVE", modules:missingModules },
           }));
@@ -286,10 +312,14 @@ export function attachBusinessStateSync(store) {
           lastSavedSnapshot = snapshot;
         }
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site, modules:dirtyNames } }));
+        const persistenceCurrent = key === identityKey()
+          && JSON.stringify(businessModulesFromState(store.getState())) === snapshot;
+        if (persistenceCurrent) emitPersistenceStatus("saved", { userId, site, modules: dirtyNames });
         const currentSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
         if (key !== identityKey()) return false;
         return currentSnapshot === snapshot;
       } catch (error) {
+        emitPersistenceStatus("error", { userId, site, modules: dirtyNames, error:error.message });
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
         return false;
       }
@@ -310,6 +340,16 @@ export function attachBusinessStateSync(store) {
 
   function scheduleSave() {
     if (applyingRemote || !loadedKey || !hasBusinessEdit()) return;
+    const userId = readSession()?.id || "";
+    const site = currentSite();
+    const modules = businessModulesFromState(store.getState());
+    const dirtyNames = Object.keys(dirtyBusinessModules(modules, lastSavedSnapshot));
+    if (!userId || !site || !dirtyNames.length) {
+      clearTimeout(saveTimer);
+      saveTimer = 0;
+      return;
+    }
+    emitPersistenceStatus("pending", { userId, site, modules: dirtyNames });
     clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => { void save(); }, 450);
   }

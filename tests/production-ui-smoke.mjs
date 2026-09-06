@@ -66,6 +66,7 @@ try {
       preferredLanguage: "vi",
       provider: "production-smoke",
     }));
+    localStorage.setItem("shitu-admin-active-site-v1", "fuxing");
     localStorage.setItem("shitu-central-kitchen-stock-v1", JSON.stringify([{
       id: "smoke-beef@central-freezer",
       baseId: "smoke-beef",
@@ -104,6 +105,29 @@ try {
   assert.match(await recoveryBanner.innerText(), /Fuxing|復興|fuxing/i, "Production recovery banner does not identify the source site");
   assert.match(await recoveryBanner.innerText(), /settings/i, "Production recovery banner does not identify changed module metadata");
   assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(RECOVERY_SECRET), "Production recovery banner leaked stored business payload");
+
+  // Production persistence UI is smoke-tested with a local browser event only;
+  // this must never POST synthetic smoke data into the production database.
+  await page.evaluate((userId) => {
+    window.dispatchEvent(new CustomEvent("shitu:business-persistence-status", {
+      detail: {
+        status: "error",
+        userId,
+        site: "fuxing",
+        modules: ["settings"],
+        error: "BUSINESS_STATE_OFFLINE",
+      },
+    }));
+  }, admin.id);
+  const persistenceStatus = page.locator("[data-business-persistence-status]");
+  await persistenceStatus.waitFor({ state: "visible", timeout: 10000 });
+  assert.equal(await persistenceStatus.getAttribute("role"), "alert", "Production persistence failure is not exposed as an alert");
+  assert.match(await persistenceStatus.innerText(), /Chưa lưu|PostgreSQL|VPS/i, "Production persistence warning is not operationally clear");
+  assert.equal(
+    await recoveryBanner.evaluate((node) => node.nextElementSibling?.matches("[data-business-persistence-status]") || false),
+    true,
+    "Production persistence warning displaced the higher-priority recovery banner"
+  );
 
   const canonical = new URL(page.url());
   assert.equal(canonical.pathname, "/", "Production did not stay on the canonical root URL");
@@ -160,6 +184,7 @@ try {
 
   console.log("PRODUCTION_PERMISSION_ROWS", JSON.stringify(modules));
   console.log("PRODUCTION_RECOVERY_NOTICE_OK");
+  console.log("PRODUCTION_PERSISTENCE_STATUS_OK");
   console.log("PRODUCTION_MOBILE_FUNCTIONS_OK", release);
   console.log("PRODUCTION_UI_SMOKE_OK", await page.url());
   await context.close();
