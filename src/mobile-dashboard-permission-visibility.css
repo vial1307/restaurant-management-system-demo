@@ -1,0 +1,13 @@
+/* Mobile permission-editor safety: keep Dashboard/Tổng quan visible while the
+   permission matrix scrolls under the sticky account/header rows. The first
+   permission row is constrained by .permission-grid, so it releases when the
+   permission matrix ends and does not cover the account form actions. */
+@media (max-width: 760px) {
+  .permission-row[data-permission-module="dashboard"] {
+    position: sticky;
+    top: 96px;
+    z-index: 6;
+    background: #fff;
+    box-shadow: 0 1px 0 var(--line, #dfe7e2);
+  }
+}
