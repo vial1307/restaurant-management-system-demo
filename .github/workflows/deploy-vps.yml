@@ -56,6 +56,7 @@ jobs:
           node tests/business-state-auth-recovery-regression.mjs
           node tests/business-state-partial-save-regression.mjs
           node tests/business-state-persistence-status-regression.mjs
+          node tests/business-state-timestamp-dirty-regression.mjs
           node tests/business-recovery-metadata-regression.mjs
           node tests/device-sync-runtime-regression.mjs
           node tests/device-sync-auth-transition-regression.mjs
