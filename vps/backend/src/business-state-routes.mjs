@@ -72,7 +72,9 @@ function mergeAuditModule(before, incoming) {
   const incomingEntries = Array.isArray(incoming?.audit) ? incoming.audit : [];
   const seen = new Set();
   const merged = [];
-  for (const entry of [...incomingEntries, ...serverEntries]) {
+  // Existing server entries win duplicate ids so this log is truly append-only:
+  // a client may add a new id but cannot rewrite an already persisted event.
+  for (const entry of [...serverEntries, ...incomingEntries]) {
     if (!entry || typeof entry !== "object") continue;
     const id = String(entry.id || "");
     if (!id || seen.has(id)) continue;
