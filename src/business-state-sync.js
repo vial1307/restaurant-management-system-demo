@@ -3,7 +3,9 @@ import { isVpsApiConfigured, vpsBusinessState, vpsSaveBusinessState } from "./vp
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const RECOVERY_KEY = "shitu-business-recovery-v1";
+const PENDING_KEY = "shitu-business-pending-v1";
 const MAX_RECOVERY_DRAFTS = 12;
+const MAX_PENDING_DRAFTS = 12;
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); }
@@ -185,6 +187,50 @@ function recoveryDraftForKey(key) {
   return recoveryState().drafts[key] || null;
 }
 
+function pendingState() {
+  const stored = readJson(PENDING_KEY);
+  const drafts = stored?.drafts && typeof stored.drafts === "object" && !Array.isArray(stored.drafts)
+    ? stored.drafts
+    : {};
+  return { version: 1, drafts: { ...drafts } };
+}
+
+function pendingDraftForKey(key) {
+  const draft = pendingState().drafts[key];
+  return draft && typeof draft === "object" && !Array.isArray(draft) ? draft : null;
+}
+
+function writePendingDraft(draft) {
+  try {
+    const state = pendingState();
+    const key = `${draft.userId}:${draft.site}`;
+    state.drafts[key] = draft;
+    const entries = Object.entries(state.drafts)
+      .sort((a, b) => String(b[1]?.capturedAt || "").localeCompare(String(a[1]?.capturedAt || "")))
+      .slice(0, MAX_PENDING_DRAFTS);
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ version: 1, drafts: Object.fromEntries(entries) }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removePendingDraft(key) {
+  try {
+    const state = pendingState();
+    if (!Object.hasOwn(state.drafts, key)) return true;
+    delete state.drafts[key];
+    if (Object.keys(state.drafts).length) {
+      localStorage.setItem(PENDING_KEY, JSON.stringify(state));
+    } else {
+      localStorage.removeItem(PENDING_KEY);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function attachBusinessStateSync(store) {
   if (!isVpsApiConfigured()) return () => {};
   let applyingRemote = false;
@@ -266,6 +312,55 @@ export function attachBusinessStateSync(store) {
     }));
   };
 
+  const acceptedRevisionsFor = (names, key = identityKey()) => (
+    loadedModuleRevisionKey === key
+      ? Object.fromEntries(names.flatMap((name) => Number.isInteger(loadedModuleRevisions[name]) ? [[name, loadedModuleRevisions[name]]] : []))
+      : {}
+  );
+
+  const writeCurrentPendingDraft = (key, userId, site, dirtyModules) => {
+    const existing = pendingDraftForKey(key);
+    const existingModules = existing?.modules && typeof existing.modules === "object" && !Array.isArray(existing.modules)
+      ? existing.modules
+      : {};
+    const existingExpected = normalizedModuleRevisions(existing?.expectedModuleRevisions);
+    const dormantNames = loadedModuleRevisionKey === key
+      ? Object.keys(existingModules).filter((name) => !Object.hasOwn(loadedModuleRevisions, name))
+      : [];
+    const dormantModules = Object.fromEntries(dormantNames.map((name) => [name, structuredClone(existingModules[name])]));
+    const dormantExpected = Object.fromEntries(dormantNames.flatMap((name) => Number.isInteger(existingExpected[name]) ? [[name, existingExpected[name]]] : []));
+    const changedModules = { ...dormantModules, ...structuredClone(dirtyModules || {}) };
+    const changedNames = Object.keys(changedModules);
+    if (!changedNames.length) return removePendingDraft(key);
+    const dirtyNames = Object.keys(dirtyModules || {});
+    const expectedModuleRevisions = {
+      ...dormantExpected,
+      ...acceptedRevisionsFor(dirtyNames, key),
+    };
+    return writePendingDraft({
+      userId,
+      site,
+      capturedAt: new Date().toISOString(),
+      changedModules: changedNames,
+      modules: changedModules,
+      expectedModuleRevisions,
+    });
+  };
+
+  const capturePendingOrError = (key, userId, site, dirtyModules) => {
+    const ok = writeCurrentPendingDraft(key, userId, site, dirtyModules);
+    if (!ok) {
+      const names = Object.keys(dirtyModules || {});
+      emitPersistenceStatus("error", {
+        userId,
+        site,
+        modules: names,
+        error: "BUSINESS_STATE_PENDING_DRAFT_WRITE_FAILED",
+      });
+    }
+    return ok;
+  };
+
   async function save() {
     const key = identityKey();
     const site = currentSite();
@@ -285,8 +380,10 @@ export function attachBusinessStateSync(store) {
     if (!dirtyNames.length) {
       clearTimeout(saveTimer);
       saveTimer = 0;
+      capturePendingOrError(key, userId, site, {});
       return true;
     }
+    capturePendingOrError(key, userId, site, dirtyModules);
     if (document.documentElement.dataset.vpsAuthReady !== "true" || navigator.onLine === false) {
       const error = navigator.onLine === false ? "BUSINESS_STATE_OFFLINE" : "BUSINESS_STATE_NOT_READY";
       emitPersistenceStatus("error", { userId, site, modules: dirtyNames, error });
@@ -294,9 +391,7 @@ export function attachBusinessStateSync(store) {
       return false;
     }
 
-    const expectedModuleRevisions = loadedModuleRevisionKey === key
-      ? Object.fromEntries(dirtyNames.flatMap((name) => Number.isInteger(loadedModuleRevisions[name]) ? [[name, loadedModuleRevisions[name]]] : []))
-      : {};
+    const expectedModuleRevisions = acceptedRevisionsFor(dirtyNames, key);
     clearTimeout(saveTimer);
     saveTimer = 0;
     emitPersistenceStatus("saving", { userId, site, modules: dirtyNames });
@@ -330,6 +425,9 @@ export function attachBusinessStateSync(store) {
           // browser's baseline. Keep the last loaded revision so the next GET
           // still merges the authoritative post-write server snapshot.
           lastSavedSnapshot = snapshot;
+          const currentModules = businessModulesFromState(store.getState());
+          const currentDirty = dirtyBusinessModules(currentModules, lastSavedSnapshot);
+          capturePendingOrError(key, userId, site, currentDirty);
         }
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"saved", site, modules:dirtyNames } }));
         const persistenceCurrent = key === identityKey()
@@ -360,16 +458,20 @@ export function attachBusinessStateSync(store) {
 
   function scheduleSave() {
     if (applyingRemote || !loadedKey || !hasBusinessEdit()) return;
+    const key = identityKey();
     const userId = readSession()?.id || "";
     const site = currentSite();
     const modules = businessModulesFromState(store.getState());
-    const dirtyNames = Object.keys(dirtyBusinessModules(modules, lastSavedSnapshot));
-    if (!userId || !site || !dirtyNames.length) {
+    const dirtyModules = dirtyBusinessModules(modules, lastSavedSnapshot);
+    const dirtyNames = Object.keys(dirtyModules);
+    if (!key || !userId || !site || !dirtyNames.length) {
       clearTimeout(saveTimer);
       saveTimer = 0;
+      if (key && userId && site) capturePendingOrError(key, userId, site, {});
       return;
     }
-    emitPersistenceStatus("pending", { userId, site, modules: dirtyNames });
+    const captured = capturePendingOrError(key, userId, site, dirtyModules);
+    if (captured) emitPersistenceStatus("pending", { userId, site, modules: dirtyNames });
     clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => { void save(); }, 450);
   }
@@ -378,6 +480,8 @@ export function attachBusinessStateSync(store) {
     if (document.documentElement.dataset.vpsAuthReady !== "true") return;
     const key = identityKey();
     const site = currentSite();
+    const userId = readSession()?.id || "";
+    const pending = key ? pendingDraftForKey(key) : null;
     const token = ++loadToken;
     clearTimeout(saveTimer);
     const identityChanged = key !== loadedKey;
@@ -389,6 +493,9 @@ export function attachBusinessStateSync(store) {
     }
     if (!key || !site || !hasBusinessView() || navigator.onLine === false) {
       if (key) surfaceRecovery(key);
+      if (key && site && pending && navigator.onLine === false) {
+        emitPersistenceStatus("error", { userId, site, error: "BUSINESS_STATE_OFFLINE" });
+      }
       return;
     }
     const localSnapshotBeforeLoad = identityChanged
@@ -397,28 +504,65 @@ export function attachBusinessStateSync(store) {
     try {
       const result = await vpsBusinessState(site);
       if (token !== loadToken || key !== identityKey()) return;
-      if (!identityChanged && localSnapshotBeforeLoad !== JSON.stringify(businessModulesFromState(store.getState()))) {
+      if (!pending && !identityChanged && localSnapshotBeforeLoad !== JSON.stringify(businessModulesFromState(store.getState()))) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, deferred:true } }));
         surfaceRecovery(key);
         return;
       }
+
+      const revision = Math.max(0, Number(result?.revision) || 0);
+      const serverModules = result?.modules || {};
+      const serverModuleRevisions = normalizedModuleRevisions(result?.moduleRevisions);
       loadedKey = key;
       loadedModuleRevisionKey = key;
-      loadedModuleRevisions = normalizedModuleRevisions(result?.moduleRevisions);
-      const revision = Math.max(0, Number(result?.revision) || 0);
+      loadedModuleRevisions = { ...serverModuleRevisions };
+
+      if (pending) {
+        const pendingModules = pending.modules && typeof pending.modules === "object" && !Array.isArray(pending.modules)
+          ? pending.modules
+          : {};
+        const pendingExpected = normalizedModuleRevisions(pending.expectedModuleRevisions);
+        const recoverableNames = Object.keys(pendingModules).filter((name) => Object.hasOwn(serverModuleRevisions, name));
+        const recoverableModules = Object.fromEntries(recoverableNames.map((name) => [name, structuredClone(pendingModules[name])]));
+
+        applyingRemote = true;
+        if (revision > 0) store.mergeBusinessModules(serverModules);
+        const serverBaselineModules = businessModulesFromState(store.getState());
+        for (const name of recoverableNames) {
+          serverBaselineModules[name] = Object.hasOwn(serverModules, name)
+            ? structuredClone(serverModules[name])
+            : {};
+        }
+        if (recoverableNames.length) store.mergeBusinessModules(recoverableModules);
+        applyingRemote = false;
+        lastSavedSnapshot = JSON.stringify(serverBaselineModules);
+
+        for (const name of recoverableNames) {
+          if (Number.isInteger(pendingExpected[name])) loadedModuleRevisions[name] = pendingExpected[name];
+          else delete loadedModuleRevisions[name];
+        }
+        loadedRevisionKey = key;
+        loadedRevision = revision;
+        window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+          detail:{ status:"ready", site, recoveredPending:true },
+        }));
+        surfaceRecovery(key);
+        if (recoverableNames.length && hasBusinessEdit()) scheduleSave();
+        return;
+      }
+
       if (loadedRevisionKey === key && loadedRevision === revision) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, unchanged:true } }));
         surfaceRecovery(key);
         return;
       }
 
-      const modules = result?.modules || {};
       if (revision > 0) {
         applyingRemote = true;
         // Merge only modules that already exist on the server. Modules not yet
         // migrated must keep their device copy until an authorized real edit
         // persists them, especially when the first writer has limited rights.
-        store.mergeBusinessModules(modules);
+        store.mergeBusinessModules(serverModules);
         applyingRemote = false;
         lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
       } else {
