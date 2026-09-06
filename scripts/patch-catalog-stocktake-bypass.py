@@ -1,0 +1,112 @@
+from pathlib import Path
+
+
+def replace_once(path, old, new):
+    file = Path(path)
+    text = file.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{path}: expected one match, found {count}: {old[:120]!r}")
+    file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+replace_once(
+    "src/app.js",
+    'const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage, manageQuantityEdit:catalogManage };',
+    'const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage, manageQuantityEdit:canDirectInventoryAdjust() };',
+)
+replace_once(
+    "src/app.js",
+    'const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(activeInventorySite());',
+    'const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(activeInventorySite()) && canDirectInventoryAdjust();',
+)
+replace_once(
+    "src/app.js",
+    '  const units = ["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"];\n  const locations = ZONES.map((zone) => {',
+    '  const units = ["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"];\n  const stocktakeEditable = canDirectInventoryAdjust();\n  const locations = ZONES.map((zone) => {',
+)
+replace_once(
+    "src/app.js",
+    '<input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" />',
+    '<input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" ${stocktakeEditable ? "" : \'readonly aria-readonly="true"\'} />',
+)
+replace_once(
+    "src/app.js",
+    '<input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? 1}" />',
+    '<input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : \'readonly aria-readonly="true"\'} />',
+)
+replace_once(
+    "src/inventory-cloud.js",
+    '  if (!canDirectInventoryAdjust() && !(allowInventoryEditor && canInventoryEdit())) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };',
+    '  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };',
+)
+
+replace_once(
+    "vps/backend/src/inventory-extra-routes.mjs",
+    '''function requireStocktakeRole(user, site, reply) {
+  if (!requireInventory(user, site, "edit", reply)) return false;
+  if (user.role === "admin") return true;
+  if (["manager","supervisor"].includes(user.role) && siteAllowed(user, site)) return true;
+  reply.code(403).send({ error: "STOCKTAKE_ROLE_REQUIRED" });
+  return false;
+}''',
+    '''function canStocktakeRole(user, site) {
+  return siteAllowed(user, site)
+    && hasPermission(user, "inventory", "edit")
+    && (user.role === "admin" || ["manager","supervisor"].includes(user.role));
+}
+
+function requireStocktakeRole(user, site, reply) {
+  if (!requireInventory(user, site, "edit", reply)) return false;
+  if (canStocktakeRole(user, site)) return true;
+  reply.code(403).send({ error: "STOCKTAKE_ROLE_REQUIRED" });
+  return false;
+}''',
+)
+replace_once(
+    "vps/backend/src/inventory-extra-routes.mjs",
+    '    if (!requireCatalogManager(user,site,reply)) return;\n\n    try {\n      const saved = await withTransaction(async (client) => {',
+    '    if (!requireCatalogManager(user,site,reply)) return;\n    const stocktakeWrite = canStocktakeRole(user,site);\n\n    try {\n      const saved = await withTransaction(async (client) => {',
+)
+replace_once(
+    "vps/backend/src/inventory-extra-routes.mjs",
+    '''          await client.query(
+            `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+             values($1,$2,$3,$4,now())
+             on conflict(item_id,location_id) do update set
+               quantity=excluded.quantity,
+               minimum_quantity=excluded.minimum_quantity,
+               updated_at=now()`,
+            [
+              savedItem.id,locationId,
+              Math.max(0,Number(loc.quantity) || 0),
+              Math.max(0,Number(loc.minimum) || 0),
+            ]
+          );''',
+    '''          if (stocktakeWrite) {
+            await client.query(
+              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+               values($1,$2,$3,$4,now())
+               on conflict(item_id,location_id) do update set
+                 quantity=excluded.quantity,
+                 minimum_quantity=excluded.minimum_quantity,
+                 updated_at=now()`,
+              [
+                savedItem.id,locationId,
+                Math.max(0,Number(loc.quantity) || 0),
+                Math.max(0,Number(loc.minimum) || 0),
+              ]
+            );
+          } else {
+            // Catalog editors may configure item/location metadata but must not
+            // use catalog sync as an alternate stocktake write path.
+            await client.query(
+              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+               values($1,$2,0,0,now())
+               on conflict(item_id,location_id) do nothing`,
+              [savedItem.id,locationId]
+            );
+          }''',
+)
+
+print("catalog stocktake boundary patch applied")
