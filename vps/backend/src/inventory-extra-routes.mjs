@@ -29,6 +29,19 @@ function requireCatalogManager(user, site, reply) {
   return requireInventory(user, site, "edit", reply);
 }
 
+function canManageReceiveDefault(user, site) {
+  if (!siteAllowed(user, site) || !hasPermission(user, "inventory", "edit")) return false;
+  if (user.role === "admin") return true;
+  return user.role === "manager" && ["fuxing","yongji"].includes(site);
+}
+
+function requireReceiveDefaultManager(user, site, reply) {
+  if (!requireInventory(user, site, "edit", reply)) return false;
+  if (canManageReceiveDefault(user, site)) return true;
+  reply.code(403).send({ error: "RECEIVE_DEFAULT_MANAGER_REQUIRED" });
+  return false;
+}
+
 export async function registerInventoryExtraRoutes(app) {
   app.get("/api/inventory/schema-version", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -154,7 +167,7 @@ export async function registerInventoryExtraRoutes(app) {
     if (!SITES.has(site) || !catalogKey) {
       return reply.code(400).send({ error: "INVALID_RECEIVE_DEFAULT" });
     }
-    if (!requireCatalogManager(user, site, reply)) return;
+    if (!requireReceiveDefaultManager(user, site, reply)) return;
 
     if (!locationCode) {
       await pool.query(
