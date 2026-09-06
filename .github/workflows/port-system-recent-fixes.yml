@@ -31,7 +31,7 @@ jobs:
           node-version: "22"
 
       - name: Apply SDD-aware port
-        run: python3 scripts/port-system-recent-fixes.py
+        run: python3 scripts/port-system-recent-fixes-v2.py
 
       - name: Validate JavaScript syntax
         run: |
