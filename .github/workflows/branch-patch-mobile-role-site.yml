@@ -27,19 +27,8 @@ jobs:
           from pathlib import Path
           path = Path('.github/workflows/deploy-vps.yml')
           text = path.read_text()
-          anchor = '''      - name: Desktop and mobile Chromium regression
-                run: node tests/browser-regression.mjs
-
-              - name: Business recovery notice browser regression
-          '''
-          replacement = '''      - name: Desktop and mobile Chromium regression
-                run: node tests/browser-regression.mjs
-
-              - name: Mobile role and site certification
-                run: node tests/mobile-role-site-certification.mjs
-
-              - name: Business recovery notice browser regression
-          '''
+          anchor = '      - name: Desktop and mobile Chromium regression\n        run: node tests/browser-regression.mjs\n'
+          replacement = anchor + '\n      - name: Mobile role and site certification\n        run: node tests/mobile-role-site-certification.mjs\n'
           assert text.count(anchor) == 1, 'Chromium regression anchor changed'
           assert 'Mobile role and site certification' not in text, 'mobile certification already wired'
           path.write_text(text.replace(anchor, replacement, 1))
