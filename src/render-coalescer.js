@@ -1,24 +1,15 @@
 function defaultSchedule(callback) {
-  if (typeof globalThis.requestAnimationFrame === "function") {
-    return { kind: "raf", id: globalThis.requestAnimationFrame(callback) };
-  }
-  return { kind: "timeout", id: globalThis.setTimeout(callback, 0) };
-}
-
-function defaultCancel(ticket) {
-  if (!ticket) return;
-  if (ticket.kind === "raf" && typeof globalThis.cancelAnimationFrame === "function") {
-    globalThis.cancelAnimationFrame(ticket.id);
+  if (typeof globalThis.queueMicrotask === "function") {
+    globalThis.queueMicrotask(callback);
     return;
   }
-  globalThis.clearTimeout?.(ticket.id);
+  Promise.resolve().then(callback);
 }
 
-export function createFrameCoalescedListener(listener, scheduler = {}) {
+export function createMicrotaskCoalescedListener(listener, scheduler = {}) {
   if (typeof listener !== "function") throw new TypeError("listener must be a function");
   const schedule = scheduler.schedule || defaultSchedule;
-  const cancel = scheduler.cancel || defaultCancel;
-  let queued = null;
+  let queued = false;
   let active = true;
   let latestArgs = [];
 
@@ -26,8 +17,9 @@ export function createFrameCoalescedListener(listener, scheduler = {}) {
     if (!active) return;
     latestArgs = args;
     if (queued) return;
-    queued = schedule(() => {
-      queued = null;
+    queued = true;
+    schedule(() => {
+      queued = false;
       if (!active) return;
       listener(...latestArgs);
     });
@@ -35,8 +27,7 @@ export function createFrameCoalescedListener(listener, scheduler = {}) {
 
   wrapped.cancel = () => {
     active = false;
-    if (queued) cancel(queued);
-    queued = null;
+    queued = false;
     latestArgs = [];
   };
 
