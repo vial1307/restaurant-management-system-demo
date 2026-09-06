@@ -60,3 +60,4 @@ assert.match(source("docs/SYSTEM_SPECIFICATION.md"), /successful shared save onl
 
 await import("./business-module-permission-contract.mjs");
 await import("./catalog-stocktake-boundary-regression.mjs");
+await import("./central-stocktake-boundary-regression.mjs");
