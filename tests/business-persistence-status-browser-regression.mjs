@@ -84,13 +84,20 @@ try {
   assert.match(await status.innerText(), /Đã lưu|已儲存|saved/i, "confirmed persistence success is not visible");
   assert.equal(await status.getAttribute("role"), "status");
 
-  // The notice is global and survives whole-shell route rerenders while its state is unresolved/current.
-  await emitPersistenceStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: "BUSINESS_STATE_OFFLINE" });
+  // A stale same-module write must explain that overwrite was blocked, not look like a generic network failure.
+  await emitPersistenceStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: "BUSINESS_STATE_CONFLICT" });
+  const conflictText = await status.innerText();
+  assert.match(conflictText, /thiết bị|người dùng khác|chặn ghi đè|其他裝置|其他使用者|阻止覆寫/i, "business conflict warning does not explain the blocked overwrite");
+  assert.match(conflictText, /PostgreSQL/i, "business conflict warning does not state that the current edit is unconfirmed");
+
+  // The conflict notice is global and survives whole-shell route rerenders while unresolved.
   for (const route of ROUTES) {
     await page.evaluate((nextRoute) => { window.location.hash = nextRoute; }, route);
     await page.waitForFunction((nextRoute) => window.location.hash === `#${nextRoute}`, route, { timeout: 5000 });
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await page.locator(".page-content > [data-business-persistence-status]").waitFor({ state: "visible", timeout: 5000 });
+    const routeStatus = page.locator(".page-content > [data-business-persistence-status]");
+    await routeStatus.waitFor({ state: "visible", timeout: 5000 });
+    assert.match(await routeStatus.innerText(), /PostgreSQL/i, `conflict warning disappeared or changed meaning on #${route}`);
   }
 
   // Mandatory responsive contract.

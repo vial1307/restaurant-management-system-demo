@@ -130,6 +130,15 @@ function dirtyBusinessModules(modules, baselineSnapshot) {
   );
 }
 
+function normalizedModuleRevisions(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return Object.fromEntries(
+    Object.entries(input)
+      .map(([name, value]) => [String(name), Number(value)])
+      .filter(([, value]) => Number.isInteger(value) && value >= 0)
+  );
+}
+
 function recoveryState() {
   const stored = readJson(RECOVERY_KEY);
   const drafts = stored?.drafts && typeof stored.drafts === "object" && !Array.isArray(stored.drafts)
@@ -185,6 +194,8 @@ export function attachBusinessStateSync(store) {
   let lastSavedSnapshot = "";
   let loadedRevisionKey = "";
   let loadedRevision = -1;
+  let loadedModuleRevisionKey = "";
+  let loadedModuleRevisions = {};
   let replayingSiteSwitch = false;
   let siteSwitchPending = false;
   let safeReloadPending = false;
@@ -283,12 +294,15 @@ export function attachBusinessStateSync(store) {
       return false;
     }
 
+    const expectedModuleRevisions = loadedModuleRevisionKey === key
+      ? Object.fromEntries(dirtyNames.flatMap((name) => Number.isInteger(loadedModuleRevisions[name]) ? [[name, loadedModuleRevisions[name]]] : []))
+      : {};
     clearTimeout(saveTimer);
     saveTimer = 0;
     emitPersistenceStatus("saving", { userId, site, modules: dirtyNames });
     const request = (async () => {
       try {
-        const saved = await vpsSaveBusinessState(site, dirtyModules);
+        const saved = await vpsSaveBusinessState(site, dirtyModules, expectedModuleRevisions);
         // Production VPS responses are validated by vps-api.js and always carry
         // savedModules. Direct legacy test adapters without an `ok` field predate
         // that transport contract and are treated as confirming their input.
@@ -305,6 +319,12 @@ export function attachBusinessStateSync(store) {
           return false;
         }
         if (key === loadedKey) {
+          const returnedModuleRevisions = normalizedModuleRevisions(saved?.moduleRevisions);
+          if (loadedModuleRevisionKey !== key) loadedModuleRevisions = {};
+          for (const name of savedModuleNames) {
+            if (Number.isInteger(returnedModuleRevisions[name])) loadedModuleRevisions[name] = returnedModuleRevisions[name];
+          }
+          loadedModuleRevisionKey = key;
           // The write revision cannot be used as a read/merge shortcut because
           // another device may have changed an unrelated module since this
           // browser's baseline. Keep the last loaded revision so the next GET
@@ -364,6 +384,8 @@ export function attachBusinessStateSync(store) {
     if (identityChanged) {
       loadedKey = "";
       lastSavedSnapshot = "";
+      loadedModuleRevisionKey = "";
+      loadedModuleRevisions = {};
     }
     if (!key || !site || !hasBusinessView() || navigator.onLine === false) {
       if (key) surfaceRecovery(key);
@@ -381,6 +403,8 @@ export function attachBusinessStateSync(store) {
         return;
       }
       loadedKey = key;
+      loadedModuleRevisionKey = key;
+      loadedModuleRevisions = normalizedModuleRevisions(result?.moduleRevisions);
       const revision = Math.max(0, Number(result?.revision) || 0);
       if (loadedRevisionKey === key && loadedRevision === revision) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, unchanged:true } }));

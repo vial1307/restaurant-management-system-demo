@@ -48,7 +48,7 @@ try {
       return;
     }
     if (/^\/api\/business-state\/(central|fuxing|yongji)$/.test(url.pathname)) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ revision: 0, modules: {} }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ revision: 0, moduleRevisions: {}, modules: {} }) });
       return;
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
@@ -108,8 +108,8 @@ try {
   assert.match(await recoveryBanner.innerText(), /settings/i, "Production recovery banner does not identify changed module metadata");
   assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(RECOVERY_SECRET), "Production recovery banner leaked stored business payload");
 
-  // Production persistence UI is smoke-tested with a local browser event only;
-  // this must never POST synthetic smoke data into the production database.
+  // Conflict UI is smoke-tested with a local browser event only; this must never
+  // POST synthetic smoke data into the production business-state database.
   await page.evaluate((userId) => {
     window.dispatchEvent(new CustomEvent("shitu:business-persistence-status", {
       detail: {
@@ -117,14 +117,14 @@ try {
         userId,
         site: "fuxing",
         modules: ["settings"],
-        error: "BUSINESS_STATE_OFFLINE",
+        error: "BUSINESS_STATE_CONFLICT",
       },
     }));
   }, admin.id);
   const persistenceStatus = page.locator("[data-business-persistence-status]");
   await persistenceStatus.waitFor({ state: "visible", timeout: 10000 });
   assert.equal(await persistenceStatus.getAttribute("role"), "alert", "Production persistence failure is not exposed as an alert");
-  assert.match(await persistenceStatus.innerText(), /Chưa lưu|PostgreSQL|VPS/i, "Production persistence warning is not operationally clear");
+  assert.match(await persistenceStatus.innerText(), /thiết bị|người dùng khác|chặn ghi đè|PostgreSQL/i, "Production conflict warning does not explain the blocked overwrite");
   assert.equal(
     await recoveryBanner.evaluate((node) => node.nextElementSibling?.matches("[data-business-persistence-status]") || false),
     true,
@@ -186,7 +186,7 @@ try {
 
   console.log("PRODUCTION_PERMISSION_ROWS", JSON.stringify(modules));
   console.log("PRODUCTION_RECOVERY_NOTICE_OK");
-  console.log("PRODUCTION_PERSISTENCE_STATUS_OK");
+  console.log("PRODUCTION_BUSINESS_CONFLICT_NOTICE_OK");
   console.log("PRODUCTION_MOBILE_FUNCTIONS_OK", release);
   console.log("PRODUCTION_UI_SMOKE_OK", await page.url());
   await context.close();

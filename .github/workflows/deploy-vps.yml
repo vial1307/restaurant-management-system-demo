@@ -57,12 +57,14 @@ jobs:
           node tests/business-state-partial-save-regression.mjs
           node tests/business-state-persistence-status-regression.mjs
           node tests/business-state-timestamp-dirty-regression.mjs
+          node tests/business-state-module-revision-regression.mjs
           node tests/business-recovery-metadata-regression.mjs
           node tests/device-sync-runtime-regression.mjs
           node tests/device-sync-auth-transition-regression.mjs
           node tests/device-sync-user-scope-regression.mjs
           node tests/vps-auth-stale-response-regression.mjs
           node tests/vps-business-state-contract-regression.mjs
+          node tests/vps-business-module-revision-runtime-regression.mjs
 
       - name: Validate backend JavaScript
         run: |
@@ -95,10 +97,14 @@ jobs:
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh
           test -f vps/backend/scripts/concurrency-regression.mjs
+          test -f vps/backend/scripts/business-module-conflict-regression.mjs
+          test -f vps/backend/scripts/business-state-regression-client.mjs
+          test -f vps/backend/scripts/api-regression-v6.mjs
           test -f vps/backend/package-lock.json
           test -f tests/package-lock.json
           test -f vps/database/migrations/004_restore_primary_admin.sql
           test -f vps/database/migrations/005_business_state.sql
+          test -f vps/database/migrations/006_business_module_revisions.sql
 
   regression:
     runs-on: ubuntu-latest
@@ -161,10 +167,12 @@ jobs:
           exit 1
 
       - name: API role and inventory regression
-        run: node vps/backend/scripts/api-regression.mjs
+        run: node vps/backend/scripts/api-regression-v6.mjs
 
       - name: Multi-user PostgreSQL concurrency regression
-        run: node vps/backend/scripts/concurrency-regression.mjs
+        run: |
+          node --import ./vps/backend/scripts/business-state-regression-client.mjs vps/backend/scripts/concurrency-regression.mjs
+          node vps/backend/scripts/business-module-conflict-regression.mjs
 
       - name: Start frontend test server
         run: |

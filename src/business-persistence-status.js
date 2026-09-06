@@ -7,6 +7,8 @@ const SAFE_ERROR_CODES = new Set([
   "BUSINESS_STATE_NOT_READY",
   "BUSINESS_STATE_PARTIAL_SAVE",
   "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING",
+  "BUSINESS_STATE_CONFLICT",
+  "BUSINESS_STATE_REVISION_REQUIRED",
   "REQUEST_TIMEOUT",
   "API_UNREACHABLE",
   "SITE_NOT_ALLOWED",
@@ -84,6 +86,12 @@ function statusCopy(state, lang) {
     BUSINESS_STATE_NOT_READY: lang === "zh" ? "VPS 驗證尚未就緒；系統稍後會再嘗試。" : "Kết nối/xác thực VPS chưa sẵn sàng; hệ thống sẽ thử lại.",
     BUSINESS_STATE_PARTIAL_SAVE: lang === "zh" ? "VPS 僅確認部分模組，尚未視為完整儲存。" : "VPS mới chỉ xác nhận một phần dữ liệu, chưa được coi là lưu hoàn tất.",
     BUSINESS_STATE_SAVE_CONFIRMATION_MISSING: lang === "zh" ? "VPS 未回傳完整儲存確認。" : "VPS không trả về xác nhận lưu đầy đủ.",
+    BUSINESS_STATE_CONFLICT: lang === "zh"
+      ? "此資料已被其他裝置或使用者更新。系統已阻止覆寫；目前變更尚未儲存至 PostgreSQL。"
+      : "Dữ liệu này đã được thiết bị hoặc người dùng khác cập nhật. Hệ thống đã chặn ghi đè; thay đổi hiện tại chưa được lưu vào PostgreSQL.",
+    BUSINESS_STATE_REVISION_REQUIRED: lang === "zh"
+      ? "目前瀏覽器缺少有效的版本識別，系統已拒絕未受保護的寫入；請勿視為已儲存。"
+      : "Phiên trình duyệt hiện thiếu mã phiên bản hợp lệ. Hệ thống đã chặn ghi không được bảo vệ; dữ liệu chưa được coi là đã lưu.",
     REQUEST_TIMEOUT: lang === "zh" ? "連線逾時，尚未取得儲存確認。" : "Kết nối hết thời gian chờ, chưa có xác nhận lưu.",
     API_UNREACHABLE: lang === "zh" ? "目前無法連線 VPS API。" : "Hiện không kết nối được VPS API.",
     SITE_NOT_ALLOWED: lang === "zh" ? "目前帳號已無此據點的寫入權限。" : "Tài khoản hiện không còn quyền ghi tại cơ sở này.",

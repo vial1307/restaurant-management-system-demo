@@ -101,6 +101,15 @@ export async function apiRequest(path, {
   return data;
 }
 
+function normalizedModuleRevisions(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return Object.fromEntries(
+    Object.entries(input)
+      .map(([name, value]) => [String(name), Number(value)])
+      .filter(([, value]) => Number.isInteger(value) && value >= 0)
+  );
+}
+
 export async function vpsLogin(username, password) {
   clearRuntimeCaches();
   const result = await apiRequest("/api/auth/login", {
@@ -166,19 +175,24 @@ export function vpsBusinessState(site) {
   return apiRequest(`/api/business-state/${encodeURIComponent(site)}`);
 }
 
-export async function vpsSaveBusinessState(site, modules) {
+export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions = {}) {
+  const expected = normalizedModuleRevisions(expectedModuleRevisions);
   const result = await apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
     method: "POST",
-    body: { modules },
+    body: { modules, expectedModuleRevisions: expected },
     timeoutMs: 30000,
   });
-  if (result?.ok !== true || !Array.isArray(result?.savedModules)) {
+  const moduleRevisions = normalizedModuleRevisions(result?.moduleRevisions);
+  const confirmedRevisions = Array.isArray(result?.savedModules)
+    ? result.savedModules.every((name) => Number.isInteger(moduleRevisions[name]) && moduleRevisions[name] >= 0)
+    : false;
+  if (result?.ok !== true || !Array.isArray(result?.savedModules) || !confirmedRevisions) {
     const error = new Error("BUSINESS_STATE_SAVE_CONFIRMATION_MISSING");
     error.code = "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING";
     error.payload = result;
     throw error;
   }
-  return result;
+  return { ...result, moduleRevisions };
 }
 
 export function vpsSchemaVersion() {
