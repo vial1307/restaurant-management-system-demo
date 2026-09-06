@@ -22,6 +22,9 @@ function validSite(site) {
 
 function can(user, moduleName, action) {
   const rules = MODULE_RULES[moduleName] || [];
+  if (action === "edit" && ["reservations", "preparation"].includes(moduleName)) {
+    return hasPermission(user, moduleName, "edit");
+  }
   if (moduleName === "shared" && action === "edit") {
     return user.role === "admin" || hasPermission(user, "settings", "edit");
   }
