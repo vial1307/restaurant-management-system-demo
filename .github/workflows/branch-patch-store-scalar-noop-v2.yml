@@ -34,14 +34,6 @@ jobs:
           candidate = Path('/tmp/store-candidate.js').read_text()
           start = candidate.index("    selectDate(date) {")
           end = candidate.index("    updateSetting", start)
-          production_select_date = '''    selectDate(date) {
-            return update((draft) => {
-              ensureRecord(draft, date);
-              draft.selectedDate = date;
-            });
-          },
-'''.replace('        ', '  ')
-          # Keep exact source indentation while replacing the entire method boundary.
           production_select_date = "    selectDate(date) {\n      return update((draft) => {\n        ensureRecord(draft, date);\n        draft.selectedDate = date;\n      });\n    },\n"
           candidate = candidate[:start] + production_select_date + candidate[end:]
           if "if (state.selectedDate === date) return state;" in candidate:
