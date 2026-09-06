@@ -60,7 +60,13 @@ try {
   const rice = store.getState().records[store.getState().selectedDate].riceRemaining;
   assertNoop("same normalized rice", () => store.updateRice(String(rice)));
 
-  assertNoop("same selected date", () => store.selectDate(store.getState().selectedDate));
+  const beforeSameDate = snapshotSignals();
+  store.selectDate(store.getState().selectedDate);
+  const afterSameDate = snapshotSignals();
+  assert.equal(afterSameDate.writes, beforeSameDate.writes + 1, "same selected date must retain the existing persistence lifecycle");
+  assert.equal(afterSameDate.notifications, beforeSameDate.notifications + 1, "same selected date must still notify subscribers so view-only calendar state can render closed");
+  assert.equal(afterSameDate.pendingSync, beforeSameDate.pendingSync + 1, "same selected date keeps the existing offline lifecycle in this slice");
+
   assertNoop("same language setting", () => store.updateSetting("language", store.getState().settings.language));
 
   const record = store.getState().records[store.getState().selectedDate];
