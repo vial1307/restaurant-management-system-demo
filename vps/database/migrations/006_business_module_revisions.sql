@@ -6,7 +6,7 @@ alter table public.business_state
 update public.business_state b
 set module_revisions = coalesce((
   select jsonb_object_agg(module_name, to_jsonb(greatest(b.revision, 0)))
-  from jsonb_object_keys(b.modules) as module_name
+  from jsonb_object_keys(b.modules) as module_keys(module_name)
 ), '{}'::jsonb);
 
 do $$
