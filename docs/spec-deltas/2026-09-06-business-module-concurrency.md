@@ -58,9 +58,9 @@ Migration backfill assigns every already-stored top-level module a non-negative 
 - global `revision`;
 - `updatedAt`.
 
-It additionally returns `moduleRevisions`, filtered to normal modules the caller may view.
+It additionally returns `moduleRevisions` for modules the caller may view.
 
-A normal module absent from `moduleRevisions` is treated as revision `0` only after an authoritative GET established that the module is not currently stored/visible for that client scope.
+For a viewable module that is not currently stored on the server, GET returns an explicit revision token `0`. If a module is stored but its revision metadata is absent/invalid, GET must not invent `0`; the token is omitted so subsequent writes are rejected and production integrity checks can surface the corrupted baseline.
 
 ## POST API contract
 
@@ -124,7 +124,7 @@ Requiring a normal read token for `audit` would create two bad outcomes:
 Therefore `audit` uses conflict-free append semantics inside the same row lock:
 
 - incoming and current audit arrays are unioned by unique entry `id`;
-- duplicate IDs are kept once;
+- an already persisted server entry wins if an incoming entry reuses the same `id`, so prior audit content is immutable;
 - entries are sorted newest-first by `at`;
 - at most 500 entries are retained;
 - audit append does not require an expected module revision;
@@ -146,23 +146,23 @@ A successful POST requires:
 
 A frontend write is not confirmed unless every `savedModules` entry has a valid returned module revision.
 
-## Frontend transport ownership
+## Frontend revision ownership
 
-To minimize regression risk in the already hardened save-before-load/coalescing synchronization layer, per-module token ownership lives in `src/vps-api.js`, the single transport boundary for business GET/POST.
+The accepted concurrency baseline belongs to `business-state-sync.js`, not the transport layer.
 
 Contract:
 
-- every successful business GET caches the authoritative permission-filtered `moduleRevisions` for that site;
-- `vpsSaveBusinessState` sends only expected revisions for modules in the current dirty POST;
-- explicit expected revisions remain supported for focused callers/tests;
-- if no authoritative GET cache exists, the transport sends no invented token and the backend rejects the unguarded write;
-- a module absent from an established GET cache can use expected revision `0`;
-- successful POST confirmation advances cached tokens only from returned `moduleRevisions`;
+- `vps-api.js` is stateless for business revision ownership; GET returns revision metadata but does not cache/adopt it;
+- sync records `moduleRevisions` only after a GET is accepted for the exact current user/site and is allowed to become the local authoritative baseline;
+- if a local edit appears while GET is in flight, the existing deferred-read guard returns before adopting that GET's module revisions;
+- dirty saves send expected revisions only from the accepted sync baseline and only for dirty modules with a known token;
+- a missing token is omitted rather than guessed as `0`, causing the backend to return `BUSINESS_STATE_REVISION_REQUIRED` unless GET explicitly established an absent module token `0`;
+- confirmed POST responses advance only the saved modules' accepted revision tokens;
 - failed/conflicting POSTs do not advance local tokens;
-- login/logout/auth-expiry runtime cache clearing also clears business module tokens;
+- identity/site changes reset the accepted module-revision baseline with the rest of loaded business scope;
 - global site revision is never used as a module concurrency token.
 
-`business-state-sync.js` remains responsible for dirty-module selection, save serialization, stale-read suppression and preserving local edits after failed writes. It must not perform an automatic GET after a conflicting save failure.
+The existing save-before-load and save coalescing rules remain in force. A failed/conflicting save prevents the normal focus/online refresh chain from issuing a GET that could overwrite the unresolved local edit.
 
 ## Conflict behavior in the browser
 
@@ -200,21 +200,21 @@ For `BUSINESS_STATE_REVISION_REQUIRED`, the UI explains that the browser lacks a
 - Normal deployment creates the pre-deploy PostgreSQL backup before applying migration.
 - Production data integrity requires schema `006` or newer.
 - `business_state.module_revisions` must be a non-null JSON object.
-- Every already-stored top-level module must have a non-negative numeric revision token after migration.
+- Every already-stored top-level module must have a non-negative integer revision token after migration.
 - Old cached normal-module POST clients are rejected instead of bypassing concurrency protection.
 
 ## Acceptance criteria
 
 1. Migration preserves existing `business_state.modules` and backfills revision tokens.
-2. GET returns permission-filtered `moduleRevisions` and does not expose protected module payloads.
+2. GET returns permission-filtered `moduleRevisions`, returns explicit `0` only for viewable absent modules, and does not expose protected module payloads.
 3. Two clients reading the same normal module revision: first save succeeds; second stale save returns `409 BUSINESS_STATE_CONFLICT`; the first payload remains authoritative.
 4. Two clients saving different normal modules from one initial site snapshot both succeed; global row revision creates no false conflict.
 5. POST without a required normal-module expected revision returns `409 BUSINESS_STATE_REVISION_REQUIRED` and does not modify business payloads.
 6. Unauthorized module writes remain blocked/omitted by existing permission rules; revision metadata cannot bypass permissions.
-7. Transport derives dirty-module expected revisions from the latest authoritative GET cache and advances them only from confirmed POST responses.
-8. A save response missing a revision for any reported saved module is treated as missing confirmation.
+7. Sync derives dirty-module expected revisions only from the last accepted GET/confirmed POST baseline; a deferred GET must not advance tokens.
+8. Transport has no hidden revision cache and a save response missing a revision for any reported saved module is treated as missing confirmation.
 9. Client conflict preserves the current local edit, emits persistence error and does not stale-reload afterward.
-10. Concurrent audit appends from users with edit capability retain both unique entries and do not expose audit history to a user without audit view permission.
+10. Concurrent audit appends retain unique entries, duplicate IDs cannot rewrite existing audit content, and audit history remains hidden from users without audit view permission.
 11. No-op focus/resume with no dirty business module performs no write and creates no conflict lifecycle.
 12. Existing inventory concurrency, authorization-boundary recovery, persistence-status, desktop/mobile and full-device regressions remain green.
 13. Production deploy applies migration 006 with backup, data-integrity verification, exact-SHA health/release check and production UI smoke before this phase is marked DONE.
