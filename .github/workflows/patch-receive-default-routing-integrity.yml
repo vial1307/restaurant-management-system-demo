@@ -1,0 +1,43 @@
+name: Patch receiving-default routing integrity
+
+on:
+  push:
+    branches:
+      - fix-receive-default-routing-integrity-20260907
+    paths:
+      - scripts/patch-receive-default-routing-integrity.mjs
+      - .github/workflows/patch-receive-default-routing-integrity.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix-receive-default-routing-integrity-20260907
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Apply deterministic patch
+        run: node scripts/patch-receive-default-routing-integrity.mjs
+      - name: Syntax check
+        run: node --check vps/backend/src/inventory-extra-routes.mjs
+      - name: Verify routing guards
+        run: |
+          grep -F 'RECEIVE_DEFAULT_LOCATION_NOT_CONFIGURED' vps/backend/src/inventory-extra-routes.mjs
+          grep -F 'DESTINATION_RECEIVE_DEFAULT_NOT_CONFIGURED' vps/backend/src/inventory-extra-routes.mjs
+      - name: Commit patched source
+        run: |
+          if git diff --quiet -- vps/backend/src/inventory-extra-routes.mjs; then
+            echo "No source change required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vps/backend/src/inventory-extra-routes.mjs
+          git commit -m "Validate receiving-default routing integrity"
+          git push origin HEAD:fix-receive-default-routing-integrity-20260907
