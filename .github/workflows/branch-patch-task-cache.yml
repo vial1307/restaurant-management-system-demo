@@ -70,6 +70,6 @@ jobs:
           git rm .github/workflows/branch-patch-task-cache.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/app.js .github/workflows/branch-patch-task-cache.yml
+          git add src/app.js
           git commit -m "Reuse task derivation across unrelated renders"
           git push origin HEAD:perf-task-derivation-cache-20260906
