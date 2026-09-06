@@ -54,7 +54,7 @@ export async function apiRequest(path, {
   try {
     response = await fetch(path, {
       method,
-      credentials = "same-origin",
+      credentials: "same-origin",
       cache: "no-store",
       signal: controller.signal,
       headers: {
