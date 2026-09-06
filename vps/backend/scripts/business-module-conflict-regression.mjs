@@ -20,11 +20,17 @@ async function login(username) {
   return result.cookie;
 }
 
+const health = await call("/api/health");
+assert.equal(health.response.status, 200);
+assert.equal(health.data.schema, "006", "module revision migration is not active");
+
 const admin = await login("yangchuadmin");
 const employee = await login("employeefx");
 const initial = await call("/api/business-state/fuxing", { cookie: admin });
 assert.equal(initial.response.status, 200);
 assert.equal(typeof initial.data.moduleRevisions, "object", "GET must expose module revisions");
+const employeeRead = await call("/api/business-state/fuxing", { cookie: employee });
+assert.equal(employeeRead.data.moduleRevisions?.settings, undefined, "revision metadata leaked non-viewable settings state");
 
 const originalAttendance = structuredClone(initial.data.modules.attendance || { attendance: [], payroll: {} });
 const originalSettings = structuredClone(initial.data.modules.settings || {});
