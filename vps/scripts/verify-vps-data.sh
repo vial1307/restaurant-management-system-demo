@@ -110,6 +110,18 @@ check_zero "active catalog rows missing required fields" "
 check_zero "business state rows outside known sites" "
   select count(*) from public.business_state where site not in ('central','fuxing','yongji')
 "
+check_zero "business state module revision maps invalid" "
+  select count(*) from public.business_state
+  where module_revisions is null or jsonb_typeof(module_revisions)<>'object'
+"
+check_zero "stored business modules missing revision tokens" "
+  select count(*)
+  from public.business_state b
+  cross join lateral jsonb_object_keys(b.modules) as module_name
+  where not (b.module_revisions ? module_name)
+     or jsonb_typeof(b.module_revisions->module_name)<>'number'
+     or (b.module_revisions->>module_name)::numeric < 0
+"
 
 FULL_ADMIN_KEYS="dashboard inventory procurement reservations preparation menu sop skills attendance schedule reports remote settings"
 missing_admin=0
@@ -148,8 +160,8 @@ warn_nonzero "duplicate active catalog keys inside the same site" "
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "005" ]]; then
-  echo "ERROR: schema version ${schema} is older than 005"
+if [[ "${schema}" < "006" ]]; then
+  echo "ERROR: schema version ${schema} is older than 006"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
