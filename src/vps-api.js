@@ -112,6 +112,20 @@ function normalizedModuleRevisions(input) {
   );
 }
 
+function currentSessionUserId() {
+  try {
+    return String(JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null")?.id || "");
+  } catch {
+    return "";
+  }
+}
+
+function businessRevisionCacheKey(site, userId = currentSessionUserId()) {
+  const normalizedSite = String(site || "");
+  const normalizedUserId = String(userId || "");
+  return normalizedUserId && normalizedSite ? `${normalizedUserId}:${normalizedSite}` : "";
+}
+
 export async function vpsLogin(username, password) {
   clearRuntimeCaches();
   const result = await apiRequest("/api/auth/login", {
@@ -174,23 +188,29 @@ export function vpsDeleteUser(id) {
 }
 
 export async function vpsBusinessState(site) {
-  const key = String(site || "");
-  const result = await apiRequest(`/api/business-state/${encodeURIComponent(key)}`);
-  businessModuleRevisionCache.set(key, normalizedModuleRevisions(result?.moduleRevisions));
+  const siteKey = String(site || "");
+  const userId = currentSessionUserId();
+  const cacheKey = businessRevisionCacheKey(siteKey, userId);
+  const result = await apiRequest(`/api/business-state/${encodeURIComponent(siteKey)}`);
+  if (cacheKey && currentSessionUserId() === userId) {
+    businessModuleRevisionCache.set(cacheKey, normalizedModuleRevisions(result?.moduleRevisions));
+  }
   return result;
 }
 
 export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions = null) {
-  const key = String(site || "");
+  const siteKey = String(site || "");
+  const userId = currentSessionUserId();
+  const cacheKey = businessRevisionCacheKey(siteKey, userId);
   const moduleNames = Object.keys(modules || {});
   const explicit = expectedModuleRevisions && typeof expectedModuleRevisions === "object" && !Array.isArray(expectedModuleRevisions)
     ? normalizedModuleRevisions(expectedModuleRevisions)
     : null;
-  const cached = businessModuleRevisionCache.get(key);
+  const cached = cacheKey ? businessModuleRevisionCache.get(cacheKey) : null;
   const expected = explicit || (cached
     ? Object.fromEntries(moduleNames.map((name) => [name, Number.isInteger(cached[name]) ? cached[name] : 0]))
     : {});
-  const result = await apiRequest(`/api/business-state/${encodeURIComponent(key)}`, {
+  const result = await apiRequest(`/api/business-state/${encodeURIComponent(siteKey)}`, {
     method: "POST",
     body: { modules, expectedModuleRevisions: expected },
     timeoutMs: 30000,
@@ -205,7 +225,9 @@ export async function vpsSaveBusinessState(site, modules, expectedModuleRevision
     error.payload = result;
     throw error;
   }
-  businessModuleRevisionCache.set(key, { ...(cached || {}), ...moduleRevisions });
+  if (cacheKey && currentSessionUserId() === userId) {
+    businessModuleRevisionCache.set(cacheKey, { ...(cached || {}), ...moduleRevisions });
+  }
   return { ...result, moduleRevisions };
 }
 
