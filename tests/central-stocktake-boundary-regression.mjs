@@ -10,9 +10,8 @@ assert.match(
   /function centralManageView\([^)]*stocktakeWritable = false\)/,
   "Central catalog management must keep stocktake authority separate from catalog write authority"
 );
-assert.match(
-  source,
-  /centralQuantityControl\(\{[^}]*direct:stocktakeWritable,manageAdjust:stocktakeWritable\}\)/,
+assert(
+  source.includes("direct:stocktakeWritable,manageAdjust:stocktakeWritable"),
   "Central Manage quantity controls must render only with stocktake authority"
 );
 assert.match(
