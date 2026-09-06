@@ -362,7 +362,7 @@ async function responsiveAdmin(browser, viewport) {
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
 
-  if(viewport.width <= 390 && viewport.height >= 700){
+  if(viewport.width <= 440 && viewport.height >= 700){
     const mobileRoutes=page.locator(".mobile-nav .nav-item");
     assert.equal(await mobileRoutes.count(),ACCOUNT_MODULES.length,"mobile navigation does not contain every desktop module");
     for(const route of ACCOUNT_MODULES){
@@ -411,6 +411,19 @@ async function responsiveAdmin(browser, viewport) {
     await mobileAccountModal.waitFor({state:"visible"});
     assert.equal(await mobileAccountModal.locator(".permission-row").count(),ACCOUNT_MODULES.length,"mobile permission editor does not contain every module");
     assert.equal(await mobileAccountModal.locator(".permission-row").first().getAttribute("data-permission-module"),"dashboard","mobile permission editor does not begin with dashboard");
+    await mobileAccountModal.evaluate((modal)=>{ modal.scrollTop=Math.min(260,modal.scrollHeight); });
+    await page.waitForTimeout(60);
+    const mobileDashboardRow=mobileAccountModal.locator('.permission-row[data-permission-module="dashboard"]');
+    const mobilePermissionHead=mobileAccountModal.locator('.permission-head');
+    const [dashboardBox,permissionHeadBox,modalBox]=await Promise.all([
+      mobileDashboardRow.boundingBox(),
+      mobilePermissionHead.boundingBox(),
+      mobileAccountModal.boundingBox(),
+    ]);
+    assert(dashboardBox && permissionHeadBox && modalBox,"mobile dashboard permission geometry unavailable");
+    assert(dashboardBox.y >= permissionHeadBox.y + permissionHeadBox.height - 1,"mobile dashboard permission row is hidden under sticky permission header");
+    assert(dashboardBox.y + dashboardBox.height <= modalBox.y + modalBox.height,"mobile dashboard permission row falls outside the account modal viewport");
+    assert.equal(await mobileDashboardRow.locator('input[name="perm:dashboard:edit"]').count(),1,"mobile dashboard edit toggle is not reachable");
     await mobileAccountModal.locator("[data-account-close]").first().click();
   }
 
@@ -455,6 +468,7 @@ try{
   await roleDesktop(browser,"centralreg",{central:true,manage:true});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});
+  await responsiveAdmin(browser,{width:440,height:956});
   await responsiveAdmin(browser,{width:844,height:390});
   console.log("BROWSER_REGRESSION_OK");
 } finally {
