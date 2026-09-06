@@ -1,6 +1,6 @@
 import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
-import { searchMatches } from "./search-utils.js";
+import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession, signedInAdmin } from "./account-permissions.js";
 import {
   buildGeneratedTasks,
@@ -1707,9 +1707,19 @@ root.addEventListener("change", (event) => {
   if (field === "task") store.toggleTask(id);
 });
 
+const inventorySearchCorpusCache = new WeakMap();
+
+function inventoryRowSearchCorpus(row) {
+  if (inventorySearchCorpusCache.has(row)) return inventorySearchCorpusCache.get(row);
+  const corpus = prepareSearchCorpus(row.textContent || "");
+  inventorySearchCorpusCache.set(row, corpus);
+  return corpus;
+}
+
 function applyInventorySearchDom(input) {
   if (!input?.isConnected) return;
   const query = input.value || "";
+  const needle = prepareSearchNeedle(query);
   view.search = query;
 
   const page = input.closest(".page-content") || root;
@@ -1721,7 +1731,7 @@ function applyInventorySearchDom(input) {
   table.querySelectorAll(".inventory-group").forEach((group) => {
     let visibleInGroup = 0;
     group.querySelectorAll(".inventory-row").forEach((row) => {
-      const visible = searchMatches(row.textContent || "", query);
+      const visible = preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
       row.hidden = !visible;
       if (visible) visibleInGroup += 1;
     });
@@ -1734,7 +1744,7 @@ function applyInventorySearchDom(input) {
 
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
   looseRows.forEach((row) => {
-    const visible = searchMatches(row.textContent || "", query);
+    const visible = preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
     row.hidden = !visible;
     if (visible) visibleTotal += 1;
   });
