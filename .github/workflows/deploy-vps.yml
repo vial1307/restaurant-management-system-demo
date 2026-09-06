@@ -58,6 +58,8 @@ jobs:
           node tests/business-state-persistence-status-regression.mjs
           node tests/business-state-timestamp-dirty-regression.mjs
           node tests/business-state-module-revision-regression.mjs
+          node tests/business-state-reload-draft-regression.mjs
+          node tests/business-state-reload-draft-scope-regression.mjs
           node tests/business-recovery-metadata-regression.mjs
           node tests/device-sync-runtime-regression.mjs
           node tests/device-sync-auth-transition-regression.mjs
@@ -219,6 +221,7 @@ jobs:
           cat /tmp/kitchen-web.log 2>/dev/null || true
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs:
       - preflight
       - regression
