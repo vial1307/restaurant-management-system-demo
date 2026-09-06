@@ -1,0 +1,89 @@
+name: Port recent system fixes into VPS repo
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/port-system-recent-fixes.yml"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: port-system-recent-fixes
+  cancel-in-progress: false
+
+jobs:
+  port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Apply SDD-aware port
+        run: python3 scripts/port-system-recent-fixes.py
+
+      - name: Validate JavaScript syntax
+        run: |
+          set -euo pipefail
+          for file in src/*.js tests/*.mjs; do
+            node --check "$file"
+          done
+
+      - name: Run static and targeted regression gates
+        run: |
+          set -euo pipefail
+          node tests/system-port-regression.mjs
+          node tests/static-regression.mjs
+          node tests/performance-regression.mjs
+          node tests/business-state-sync-runtime-regression.mjs
+          node tests/business-state-persistence-status-regression.mjs
+          node tests/business-state-module-revision-regression.mjs
+          node tests/business-state-auth-recovery-regression.mjs
+
+      - name: Commit only to system-demo main
+        id: commit
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs src tests; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs src tests
+          git commit -m "Port recent system fixes into VPS production"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch full VPS validation and deployment
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            REMOTE_SHA="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/heads/main | python3 -c 'import json,sys; print(json.load(sys.stdin)["object"]["sha"])')"
+            if [ "$REMOTE_SHA" = "$EXPECTED_SHA" ]; then break; fi
+            sleep 1
+          done
+          test "$REMOTE_SHA" = "$EXPECTED_SHA"
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-vps.yml/dispatches \
+            -d '{"ref":"main"}'
