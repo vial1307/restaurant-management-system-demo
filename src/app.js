@@ -22,6 +22,7 @@ import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
+import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
 import {
   activeInventorySite,
   bootstrapFuxingInventory,
@@ -295,16 +296,18 @@ function currentContext() {
   const record = state.records[state.selectedDate];
   const language = state.settings.language;
   const text = translate(language);
-  const reservations = calculateReservations(record.reservation, state.settings.reservationBuffer);
-  const rice = calculateRice(state.selectedDate, record.riceRemaining, state.settings);
-  const tasks = [...buildGeneratedTasks(state, state.selectedDate), ...record.customTasks];
-  const progress = completionSummary(tasks, record.completedTasks);
-  const reserves = summarizeReserveInventory(record);
-  const alerts = buildInventoryAlerts(record);
-  const workAlerts = alerts.filter((item) => item.kind === "work");
-  const reserveAlerts = alerts.filter((item) => item.kind === "reserve" || item.kind === "storage");
-  const capacity = assessShiftCapacity(state, state.selectedDate, "evening");
-  return { state, record, language, text, reservations, rice, tasks, progress, alerts, reserves, workAlerts, reserveAlerts, capacity };
+  const context = { state, record, language, text };
+  return defineLazyDerivedProperties(context, {
+    reservations:() => calculateReservations(record.reservation, state.settings.reservationBuffer),
+    rice:() => calculateRice(state.selectedDate, record.riceRemaining, state.settings),
+    tasks:() => [...buildGeneratedTasks(state, state.selectedDate), ...record.customTasks],
+    progress:() => completionSummary(context.tasks, record.completedTasks),
+    reserves:() => summarizeReserveInventory(record),
+    alerts:() => buildInventoryAlerts(record),
+    workAlerts:() => context.alerts.filter((item) => item.kind === "work"),
+    reserveAlerts:() => context.alerts.filter((item) => item.kind === "reserve" || item.kind === "storage"),
+    capacity:() => assessShiftCapacity(state, state.selectedDate, "evening"),
+  });
 }
 
 function navItem(key, active, text) {
