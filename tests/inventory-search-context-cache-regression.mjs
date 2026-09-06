@@ -44,6 +44,11 @@ const outsideSecond = calculateReservations(reservation, 2);
 assert.notStrictEqual(outsideFirst, outsideSecond, "rules must preserve fresh-result behavior outside search");
 assert.deepEqual(outsideFirst, outsideSecond, "fresh outside-search results must remain value-equivalent");
 
+assert.equal(searchMatches("牛肉 · Thịt bò", ""), true, "empty search behavior changed");
+const emptySearchFirst = calculateReservations(reservation, 2);
+const emptySearchSecond = calculateReservations(reservation, 2);
+assert.notStrictEqual(emptySearchFirst, emptySearchSecond, "empty search must not activate the computation cache");
+
 assert.equal(searchMatches("牛肉 · Thịt bò", "牛肉"), true, "Chinese search behavior changed");
 assert.equal(searchMatches("牛肉 · Thịt bò", "niu rou"), true, "pinyin search behavior changed");
 assert.equal(searchMatches("牛肉 · Thịt bò", "ㄋㄧㄡㄖㄡ"), true, "zhuyin search behavior changed");
