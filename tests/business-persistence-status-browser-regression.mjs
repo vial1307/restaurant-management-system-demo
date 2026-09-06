@@ -58,11 +58,12 @@ try {
   assert.match(await status.innerText(), /Đang lưu|正在.*儲存|saving/i, "saving persistence notice is missing");
   assert.equal(await status.getAttribute("role"), "status");
 
-  // Unknown internal error strings must not be copied into the visible DOM.
+  // Unknown internal error strings must not be copied into visible text or DOM attributes/markup.
   await emitPersistenceStatus(page, { status: "error", userId, site: "fuxing", modules: ["settings"], error: SECRET_ERROR });
   assert.equal(await status.getAttribute("role"), "alert", "persistence failure must use alert semantics");
   assert.match(await status.innerText(), /Chưa lưu|尚未.*儲存|PostgreSQL|VPS/i, "persistence failure does not clearly state that the database write is unconfirmed");
   assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(SECRET_ERROR), "raw persistence error text leaked into the UI");
+  assert.doesNotMatch(await page.content(), new RegExp(SECRET_ERROR), "raw persistence error text leaked into DOM markup or attributes");
   const errorText = await status.innerText();
 
   // A read-only state event must not falsely clear a write failure.
