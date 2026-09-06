@@ -7,27 +7,30 @@ for (const name of ["prepareSearchNeedle", "prepareSearchCorpus", "preparedSearc
 }
 
 const cases = [
-  { text: "牛肉 大冷凍", query: "牛肉" },
-  { text: "牛肉 大冷凍", query: "niurou" },
-  { text: "牛肉 大冷凍", query: "niu rou" },
-  { text: "牛肉 大冷凍", query: "ㄋㄧㄡㄖㄡ" },
-  { text: "復興店 冷藏", query: "fuxing" },
-  { text: "復興店 冷藏", query: "fu xing" },
-  { text: "復興店 冷藏", query: "ㄈㄨㄒㄧㄥ" },
-  { text: "Thịt bò kho", query: "thit bo" },
-  { text: "Mì sợi nhỏ", query: "mi soi" },
+  { text: "牛肉 大冷凍", query: "牛肉", expected: true },
+  { text: "牛肉 大冷凍", query: "niurou", expected: true },
+  { text: "牛肉 大冷凍", query: "niu rou", expected: true },
+  { text: "牛肉 大冷凍", query: "ㄋㄧㄡㄖㄡ", expected: true },
+  { text: "復興店 冷藏", query: "fuxing", expected: true },
+  { text: "復興店 冷藏", query: "fu xing", expected: true },
+  { text: "復興店 冷藏", query: "ㄈㄨㄒㄧㄥ", expected: true },
+  { text: "Thịt bò kho", query: "thit bo", expected: true },
+  { text: "Mì sợi nhỏ", query: "mi soi", expected: true },
   { text: "鴨舌", query: "yachi", expected: false },
   { text: "牛肉", query: "", expected: true },
 ];
 
 for (const entry of cases) {
-  const legacy = search.searchMatches(entry.text, entry.query);
+  const needle = search.normalizeSearch(entry.query);
+  const legacyReference = !needle || search.normalizeSearch(search.buildSearchText(entry.text)).includes(needle);
+  const legacyPublic = search.searchMatches(entry.text, entry.query);
   const prepared = search.preparedSearchMatches(
     search.prepareSearchCorpus(entry.text),
     search.prepareSearchNeedle(entry.query),
   );
-  assert.equal(prepared, legacy, `prepared search must equal legacy search for ${entry.text} / ${entry.query}`);
-  if (Object.hasOwn(entry, "expected")) assert.equal(prepared, entry.expected);
+  assert.equal(legacyReference, entry.expected, `legacy search contract changed for ${entry.text} / ${entry.query}`);
+  assert.equal(legacyPublic, legacyReference, `public searchMatches must preserve the legacy formula for ${entry.text} / ${entry.query}`);
+  assert.equal(prepared, legacyReference, `prepared search must equal the legacy formula for ${entry.text} / ${entry.query}`);
 }
 
 assert.equal(search.prepareSearchNeedle(" Niu Rou "), search.normalizeSearch(" Niu Rou "), "prepared needle must use the existing normalization contract");
