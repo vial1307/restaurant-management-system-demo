@@ -99,6 +99,13 @@ globalThis.fetch = async (path, options = {}) => {
   if (method === "POST" && String(path) === "/api/business-state/fuxing") {
     const body = JSON.parse(options.body || "{}");
     userScopedPosts.push(body);
+    if (body.modules?.attendance) {
+      return new Response(JSON.stringify({
+        error: "BUSINESS_STATE_REVISION_REQUIRED",
+        site: "fuxing",
+        missingModules: ["attendance"],
+      }), { status: 409, headers: { "content-type": "application/json" } });
+    }
     return new Response(JSON.stringify({
       ok: true,
       site: "fuxing",
@@ -129,5 +136,19 @@ assert.deepEqual(
   "late user A response polluted user B's revision token for the same site"
 );
 
+// If the current user's cache has no token for a dirty module, the client must
+// omit that token instead of guessing revision 0. The server can then return the
+// precise REVISION_REQUIRED response and cannot silently accept an unguarded write.
+await assert.rejects(
+  () => userScopeModule.vpsSaveBusinessState("fuxing", { attendance: { attendance: [], payroll: {} } }),
+  (error) => error?.code === "BUSINESS_STATE_REVISION_REQUIRED" && error?.status === 409
+);
+assert.deepEqual(
+  userScopedPosts.at(-1)?.expectedModuleRevisions,
+  {},
+  "transport guessed revision 0 for a module whose concurrency token was never loaded"
+);
+
 console.log("VPS_BUSINESS_MODULE_REVISION_RUNTIME_OK", requests.length);
 console.log("VPS_BUSINESS_REVISION_USER_SCOPE_OK");
+console.log("VPS_BUSINESS_MISSING_REVISION_TOKEN_OK");
