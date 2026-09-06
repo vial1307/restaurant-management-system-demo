@@ -37,17 +37,21 @@ function filteredModules(user, modules) {
   );
 }
 
+function validStoredRevision(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 function filteredModuleRevisions(user, modules, revisions) {
   const storedModules = modules && typeof modules === "object" ? modules : {};
   const storedRevisions = revisions && typeof revisions === "object" ? revisions : {};
   return Object.fromEntries(
     Object.keys(MODULE_RULES).flatMap((moduleName) => {
       if (!can(user, moduleName, "view")) return [];
-      const revision = Number(storedRevisions[moduleName]);
-      if (Number.isInteger(revision) && revision >= 0) return [[moduleName, revision]];
+      const revision = validStoredRevision(storedRevisions[moduleName]);
+      if (revision !== null) return [[moduleName, revision]];
       // Revision 0 is safe only when the module itself does not yet exist. If a
-      // stored module is missing revision metadata, omit the token so writes are
-      // rejected instead of guessing around a corrupted concurrency baseline.
+      // stored module is missing/has invalid revision metadata, omit the token so
+      // writes are rejected instead of guessing around a corrupted baseline.
       return Object.hasOwn(storedModules, moduleName) ? [] : [[moduleName, 0]];
     })
   );
@@ -72,7 +76,7 @@ function validExpectedRevision(value) {
 }
 
 function currentRevision(revisions, moduleName) {
-  return Math.max(0, Number(revisions?.[moduleName]) || 0);
+  return validStoredRevision(revisions?.[moduleName]) ?? 0;
 }
 
 function mergeAuditModule(before, incoming) {
@@ -158,6 +162,12 @@ export async function registerBusinessStateRoutes(app) {
       );
       const before = current.rows[0]?.modules || {};
       const beforeRevisions = current.rows[0]?.module_revisions || {};
+      const invalidBaselineModules = guardedNames.filter(
+        (moduleName) => Object.hasOwn(before, moduleName) && validStoredRevision(beforeRevisions[moduleName]) === null
+      );
+      if (invalidBaselineModules.length) {
+        return { revisionRequired: true, missingModules: invalidBaselineModules };
+      }
       const conflictingModules = guardedNames.filter(
         (moduleName) => expected[moduleName] !== currentRevision(beforeRevisions, moduleName)
       );
@@ -200,6 +210,13 @@ export async function registerBusinessStateRoutes(app) {
       return { ...saved.rows[0], moduleRevisions: savedModuleRevisions };
     });
 
+    if (result.revisionRequired) {
+      return reply.code(409).send({
+        error: "BUSINESS_STATE_REVISION_REQUIRED",
+        site,
+        missingModules: result.missingModules,
+      });
+    }
     if (result.conflict) {
       return reply.code(409).send({
         error: "BUSINESS_STATE_CONFLICT",

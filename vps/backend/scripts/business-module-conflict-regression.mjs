@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import pg from "pg";
 
+const { Client } = pg;
 const BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const PASSWORD = "KitchenTest!123";
 
@@ -20,17 +22,74 @@ async function login(username) {
   return result.cookie;
 }
 
+async function verifyCorruptedRevisionBaseline(adminCookie) {
+  const client = new Client({
+    host: process.env.DB_HOST || "127.0.0.1",
+    port: Number(process.env.DB_PORT || 5432),
+    database: process.env.POSTGRES_DB || "kitchen_test",
+    user: process.env.POSTGRES_USER || "kitchen_test",
+    password: process.env.POSTGRES_PASSWORD || "kitchen_test",
+  });
+  await client.connect();
+  try {
+    await client.query(
+      `insert into public.business_state(site,modules,module_revisions,revision)
+       values('yongji',$1::jsonb,'{}'::jsonb,5)
+       on conflict (site) do update
+       set modules=excluded.modules,module_revisions='{}'::jsonb,revision=excluded.revision,updated_at=now()`,
+      [JSON.stringify({ settings: { corruptMarker: true } })]
+    );
+
+    const corruptedRead = await call("/api/business-state/yongji", { cookie: adminCookie });
+    assert.equal(corruptedRead.response.status, 200);
+    assert.equal(corruptedRead.data.modules.settings?.corruptMarker, true);
+    assert.equal(
+      corruptedRead.data.moduleRevisions.settings,
+      undefined,
+      "GET invented revision 0 for a stored module whose revision metadata is missing"
+    );
+    assert.equal(
+      corruptedRead.data.moduleRevisions.attendance,
+      0,
+      "GET did not return explicit revision 0 for a viewable module that is truly absent"
+    );
+
+    const guessedZero = await call("/api/business-state/yongji", {
+      method: "POST",
+      cookie: adminCookie,
+      body: {
+        modules: { settings: { corruptMarker: false } },
+        expectedModuleRevisions: { settings: 0 },
+      },
+    });
+    assert.equal(guessedZero.response.status, 409);
+    assert.equal(guessedZero.data.error, "BUSINESS_STATE_REVISION_REQUIRED");
+    assert.deepEqual(guessedZero.data.missingModules, ["settings"]);
+
+    const afterBlockedWrite = await call("/api/business-state/yongji", { cookie: adminCookie });
+    assert.equal(afterBlockedWrite.data.modules.settings?.corruptMarker, true, "guessed revision 0 bypassed a corrupted server baseline");
+  } finally {
+    await client.query("delete from public.business_state where site='yongji'");
+    await client.end();
+  }
+}
+
 const health = await call("/api/health");
 assert.equal(health.response.status, 200);
 assert.equal(health.data.schema, "006", "module revision migration is not active");
 
 const admin = await login("yangchuadmin");
 const employee = await login("employeefx");
+await verifyCorruptedRevisionBaseline(admin);
+
 const initial = await call("/api/business-state/fuxing", { cookie: admin });
 assert.equal(initial.response.status, 200);
 assert.equal(typeof initial.data.moduleRevisions, "object", "GET must expose module revisions");
+assert.equal(initial.data.moduleRevisions.settings, 0, "viewable absent settings module did not receive explicit revision 0");
+assert.equal(initial.data.moduleRevisions.attendance, 0, "viewable absent attendance module did not receive explicit revision 0");
 const employeeRead = await call("/api/business-state/fuxing", { cookie: employee });
 assert.equal(employeeRead.data.moduleRevisions?.settings, undefined, "revision metadata leaked non-viewable settings state");
+assert.equal(employeeRead.data.moduleRevisions?.attendance, 0, "employee did not receive explicit token 0 for viewable absent attendance");
 assert.equal(employeeRead.data.modules?.audit, undefined, "employee unexpectedly received protected audit payload");
 
 const originalAttendance = structuredClone(initial.data.modules.attendance || { attendance: [], payroll: {} });
@@ -129,4 +188,5 @@ const persistedAuditA = (auditAfterTamper.data.modules.audit?.audit || []).find(
 assert.equal(persistedAuditA?.label, "A", "append-only audit entry was rewritten by duplicate id");
 assert.equal(persistedAuditA?.details, "", "append-only audit details were rewritten by duplicate id");
 
+console.log("BUSINESS_MODULE_CORRUPT_BASELINE_BLOCKED_OK");
 console.log("BUSINESS_MODULE_CONFLICT_OK");
