@@ -31,6 +31,7 @@ assert.equal(initial.response.status, 200);
 assert.equal(typeof initial.data.moduleRevisions, "object", "GET must expose module revisions");
 const employeeRead = await call("/api/business-state/fuxing", { cookie: employee });
 assert.equal(employeeRead.data.moduleRevisions?.settings, undefined, "revision metadata leaked non-viewable settings state");
+assert.equal(employeeRead.data.modules?.audit, undefined, "employee unexpectedly received protected audit payload");
 
 const originalAttendance = structuredClone(initial.data.modules.attendance || { attendance: [], payroll: {} });
 const originalSettings = structuredClone(initial.data.modules.settings || {});
@@ -101,4 +102,19 @@ const restore = await call("/api/business-state/fuxing", {
   },
 });
 assert.equal(restore.response.status, 200, JSON.stringify(restore.data));
+
+// Audit entries are append-only and deduplicated by id. They do not require a
+// read token and must not block employee writes merely because audit is hidden.
+const auditA = { id: "concurrency-audit-a", kind: "test", label: "A", details: "", staffId: "a", staffName: "A", at: "2026-09-06T05:00:00.000Z" };
+const auditB = { id: "concurrency-audit-b", kind: "test", label: "B", details: "", staffId: "b", staffName: "B", at: "2026-09-06T05:00:01.000Z" };
+const [auditWriteA, auditWriteB] = await Promise.all([
+  call("/api/business-state/fuxing", { method: "POST", cookie: admin, body: { modules: { audit: { audit: [auditA] } } } }),
+  call("/api/business-state/fuxing", { method: "POST", cookie: employee, body: { modules: { audit: { audit: [auditB] } } } }),
+]);
+assert.equal(auditWriteA.response.status, 200, JSON.stringify(auditWriteA.data));
+assert.equal(auditWriteB.response.status, 200, JSON.stringify(auditWriteB.data));
+const auditRead = await call("/api/business-state/fuxing", { cookie: admin });
+const auditIds = new Set((auditRead.data.modules.audit?.audit || []).map((entry) => entry.id));
+assert(auditIds.has(auditA.id) && auditIds.has(auditB.id), "concurrent audit append lost an entry");
+
 console.log("BUSINESS_MODULE_CONFLICT_OK");
