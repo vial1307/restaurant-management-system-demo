@@ -66,7 +66,9 @@ try {
       preferredLanguage: "vi",
       provider: "production-smoke",
     }));
-    localStorage.setItem("shitu-admin-active-site-v1", "fuxing");
+    if (!localStorage.getItem("shitu-admin-active-site-v1")) {
+      localStorage.setItem("shitu-admin-active-site-v1", "fuxing");
+    }
     localStorage.setItem("shitu-central-kitchen-stock-v1", JSON.stringify([{
       id: "smoke-beef@central-freezer",
       baseId: "smoke-beef",
