@@ -1,3 +1,5 @@
+import { markSearchEvaluation } from "./search-evaluation-cache.js";
+
 const PHONETIC = {
   央:["yang","ㄧㄤ"],廚:["chu","ㄔㄨ"],冷:["leng","ㄌㄥ"],凍:["dong","ㄉㄨㄥ"],藏:["cang","ㄘㄤ"],冰:["bing","ㄅㄧㄥ"],箱:["xiang","ㄒㄧㄤ"],門:["men","ㄇㄣ"],臥:["wo","ㄨㄛ"],櫃:["gui","ㄍㄨㄟ"],
   牛:["niu","ㄋㄧㄡ"],肉:["rou","ㄖㄡ"],豬:["zhu","ㄓㄨ"],羊:["yang","ㄧㄤ"],雞:["ji","ㄐㄧ"],鴨:["ya","ㄧㄚ"],魚:["yu","ㄩ"],蝦:["xia","ㄒㄧㄚ"],海:["hai","ㄏㄞ"],鮮:["xian","ㄒㄧㄢ"],
@@ -70,6 +72,7 @@ export function buildSearchText(text) {
 }
 
 export function searchMatches(text, query) {
+  markSearchEvaluation();
   const needle = normalizeSearch(query);
   if (!needle) return true;
   return normalizeSearch(buildSearchText(text)).includes(needle);
