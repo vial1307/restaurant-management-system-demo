@@ -46,7 +46,6 @@ try {
   const userId = await page.evaluate(() => JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null")?.id || "");
   assert(userId, "persistence-status test user id missing");
   await page.evaluate((key) => localStorage.setItem(key, "fuxing"), ACTIVE_SITE_KEY);
-  window;
 
   const status = page.locator("[data-business-persistence-status]");
 
