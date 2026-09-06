@@ -58,32 +58,102 @@ const store = {
 };
 
 let reads = 0;
+let serverRevision = 20;
+let serverModuleRevision = 11;
+let serverBuffer = 3;
+let holdNextRead = false;
+let resolveHeldRead = null;
 globalThis.__testBusinessRead = async () => {
   reads += 1;
-  return { revision: 20, moduleRevisions: { settings: 11 }, modules: { settings: { reservationBuffer: 3 } } };
+  if (holdNextRead) {
+    holdNextRead = false;
+    return new Promise((resolve) => {
+      resolveHeldRead = () => resolve({
+        revision: 23,
+        moduleRevisions: { settings: 14 },
+        modules: { settings: { reservationBuffer: 99 } },
+      });
+    });
+  }
+  return {
+    revision: serverRevision,
+    moduleRevisions: { settings: serverModuleRevision },
+    modules: { settings: { reservationBuffer: serverBuffer } },
+  };
 };
-let saveCalls = 0;
-globalThis.__testBusinessSave = async () => {
-  saveCalls += 1;
-  const error = new Error("BUSINESS_STATE_CONFLICT");
-  error.code = "BUSINESS_STATE_CONFLICT";
-  error.status = 409;
-  error.payload = { error: "BUSINESS_STATE_CONFLICT", conflictingModules: ["settings"], moduleRevisions: { settings: 12 } };
-  throw error;
+
+const saves = [];
+let conflictNextSave = false;
+globalThis.__testBusinessSave = async (site, modules, expectedModuleRevisions) => {
+  saves.push({ site, modules: structuredClone(modules), expectedModuleRevisions: structuredClone(expectedModuleRevisions) });
+  if (conflictNextSave) {
+    conflictNextSave = false;
+    const error = new Error("BUSINESS_STATE_CONFLICT");
+    error.code = "BUSINESS_STATE_CONFLICT";
+    error.status = 409;
+    error.payload = { error: "BUSINESS_STATE_CONFLICT", conflictingModules: ["settings"], moduleRevisions: { settings: 14 } };
+    throw error;
+  }
+  serverRevision += 1;
+  serverModuleRevision += 1;
+  serverBuffer = Number(modules.settings?.reservationBuffer ?? serverBuffer);
+  return {
+    ok: true,
+    revision: serverRevision,
+    savedModules: ["settings"],
+    moduleRevisions: { settings: serverModuleRevision },
+  };
 };
 
 const persistence = [];
+const stateStatuses = [];
 window.addEventListener("shitu:business-persistence-status", (event) => persistence.push(event.detail));
+window.addEventListener("shitu:business-state-status", (event) => stateStatuses.push(event.detail));
 const detach = attachBusinessStateSync(store);
 await delay(20);
-assert.equal(state.settings.reservationBuffer, 3);
+assert.equal(state.settings.reservationBuffer, 3, "initial authoritative business state did not load");
 
-const readsBeforeConflict = reads;
-state = { ...state, settings: { ...state.settings, reservationBuffer: 6 } };
+// First guarded save must use the exact module revision from the accepted GET.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 4 } };
 subscriber();
 window.dispatchEvent(new CustomEvent("focus"));
+await delay(30);
+assert.equal(saves.length, 1, "first guarded business save did not run");
+assert.deepEqual(saves[0].expectedModuleRevisions, { settings: 11 }, "first save did not use accepted GET token");
+assert.equal(serverModuleRevision, 12);
+assert.equal(state.settings.reservationBuffer, 4);
+
+// Save another edit successfully, then hold the refresh GET. While that GET is
+// in flight another device is represented by token 14, but the local user edits
+// again before the response is accepted. The deferred GET must not advance the
+// local concurrency baseline from the confirmed token 13 to remote token 14.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 5 } };
+subscriber();
+holdNextRead = true;
+window.dispatchEvent(new CustomEvent("focus"));
+for (let attempt = 0; attempt < 20 && typeof resolveHeldRead !== "function"; attempt += 1) await delay(2);
+assert.equal(saves.length, 2, "second guarded business save did not run");
+assert.deepEqual(saves[1].expectedModuleRevisions, { settings: 12 }, "confirmed token was not advanced to 12 for second save");
+assert.equal(serverModuleRevision, 13);
+assert.equal(typeof resolveHeldRead, "function", "post-save refresh did not enter the held GET state");
+
+state = { ...state, settings: { ...state.settings, reservationBuffer: 6 } };
+subscriber();
+resolveHeldRead();
 await delay(20);
-assert.equal(saveCalls, 1, "conflicting dirty edit did not attempt one guarded save");
+assert.equal(state.settings.reservationBuffer, 6, "deferred GET overwrote the in-flight local edit");
+assert(stateStatuses.some((entry) => entry?.status === "ready" && entry?.deferred === true), "in-flight local edit did not defer the remote merge");
+
+const readsBeforeConflict = reads;
+conflictNextSave = true;
+window.dispatchEvent(new CustomEvent("focus"));
+await delay(20);
+assert.equal(saves.length, 3, "newer local edit did not attempt a guarded save");
+assert.deepEqual(
+  saves[2].expectedModuleRevisions,
+  { settings: 13 },
+  "deferred remote token 14 was incorrectly adopted by a local snapshot based on token 13"
+);
 assert.equal(state.settings.reservationBuffer, 6, "conflict overwrote the current local edit");
 assert.equal(reads, readsBeforeConflict, "conflict triggered a stale GET over the local edit");
 const conflictStatus = persistence.findLast((entry) => entry?.status === "error");
@@ -91,4 +161,5 @@ assert.equal(conflictStatus?.error, "BUSINESS_STATE_CONFLICT");
 assert.notEqual(persistence.at(-1)?.status, "saved", "conflicting write emitted false saved status");
 
 detach();
-console.log("BUSINESS_STATE_MODULE_CONFLICT_PRESERVATION_OK");
+console.log("BUSINESS_STATE_MODULE_REVISION_BASELINE_OK");
+console.log("BUSINESS_STATE_DEFERRED_REVISION_CONFLICT_OK");
