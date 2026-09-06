@@ -182,6 +182,8 @@ export function inferWorkArea(item) {
 
 export const DEFAULT_SETTINGS = {
   language: "vi",
+  organizationName: "食徒",
+  branchName: "",
   employeeName: "阿南",
   workstation: "麵台",
   reservationBuffer: 2,
@@ -464,6 +466,24 @@ export function createStore(storage = globalThis.localStorage) {
       const next = ["language", "employeeName", "workstation"].includes(key) ? value : clampNumber(value);
       if (state.settings[key] === next) return state;
       return update((draft) => { draft.settings[key] = next; });
+    },
+    saveGeneralSettings(input = {}) {
+      const next = {
+        organizationName: String(input.organizationName ?? state.settings.organizationName ?? "").trim(),
+        branchName: String(input.branchName ?? state.settings.branchName ?? "").trim(),
+        employeeName: String(input.employeeName ?? state.settings.employeeName ?? "").trim(),
+        workstation: String(input.workstation ?? state.settings.workstation ?? "").trim(),
+        reservationBuffer: clampNumber(input.reservationBuffer ?? state.settings.reservationBuffer),
+        riceWeekday: clampNumber(input.riceWeekday ?? state.settings.riceWeekday),
+        riceWeekend: clampNumber(input.riceWeekend ?? state.settings.riceWeekend),
+        riceSkipAbove: clampNumber(input.riceSkipAbove ?? state.settings.riceSkipAbove),
+      };
+      const keys = Object.keys(next);
+      if (keys.every((key) => state.settings[key] === next[key])) return state;
+      return update((draft) => {
+        for (const key of keys) draft.settings[key] = next[key];
+        audit(draft, "settings-update", next.branchName || "site", next.organizationName);
+      });
     },
     updateReservation(key, value) {
       const next = clampNumber(value);
@@ -901,6 +921,10 @@ export function createStore(storage = globalThis.localStorage) {
           active: input.active !== false,
           pin: String(input.pin ?? existing?.pin ?? ""),
         };
+        if (member.id === "staff-manager") {
+          member.role = "manager";
+          member.active = true;
+        }
         if (existing) Object.assign(existing, member);
         else draft.operations.staff.push(member);
         audit(draft, "staff-save", member.name, member.role);

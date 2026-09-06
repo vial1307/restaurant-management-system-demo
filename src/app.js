@@ -84,6 +84,8 @@ const view = {
   sopDraft: null,
   sopCreating: false,
   managementModal: null,
+  mobileMenuOpen: false,
+  settingsSaveStatus: "",
   editingStaffId: null,
   switchStaffId: null,
   switchError: false,
@@ -133,6 +135,7 @@ const ICONS = {
   clock: "M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   print: "M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2m-12-4h12v8H6z",
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m4-5 5 5 5-5m-5 5V3",
+  menuBars: "M4 6h16M4 12h16M4 18h16",
 };
 
 const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "menu", "sop", "skills", "attendance", "schedule", "reports", "remote", "settings"];
@@ -178,6 +181,7 @@ const FIELD_EDIT_MODULE = {
   task:"preparation",
 };
 const FORM_EDIT_MODULE = {
+  "save-general-settings":"settings",
   "add-task":"preparation",
   "save-skill-assessment":"skills",
   "save-custom-skill":"skills",
@@ -362,7 +366,7 @@ function dateCalendar(context) {
 function topbar(context) {
   const { state, text, language } = context;
   const offline = globalThis.navigator?.onLine === false;
-  return `<header class="topbar"><div class="topbar-mobile-brand"><span class="brand-mark small">食</span><strong>Kitchen OS</strong></div>
+  return `<header class="topbar"><div class="topbar-mobile-brand"><span class="brand-mark small">食</span><strong>Kitchen OS</strong><button class="icon-button mobile-menu-button" data-action="toggle-mobile-menu" aria-expanded="${view.mobileMenuOpen}" aria-label="${escapeHtml(language === "zh" ? "開啟全部功能" : "Mở tất cả chức năng")}">${icon("menuBars")}</button></div>
     <div class="date-switcher"><button class="icon-button" data-action="shift-date" data-offset="-1" aria-label="${escapeHtml(text.yesterday)}">${icon("chevronLeft")}</button>
       <button class="date-label" data-action="toggle-calendar" aria-expanded="${view.calendarOpen}" aria-label="${escapeHtml(text.selectDate)}"><span>${escapeHtml(text.serviceDate)}</span><strong>${escapeHtml(dateLabel(state.selectedDate, language))}</strong></button>
       <button class="icon-button" data-action="shift-date" data-offset="1" aria-label="${escapeHtml(text.tomorrow)}">${icon("chevronRight")}</button>${view.calendarOpen ? dateCalendar(context) : ""}</div>
@@ -1275,14 +1279,31 @@ function preparationPage(context) {
 }
 
 function settingsField(label, value, key, suffix = "", type = "number") {
-  return `<label class="setting-row"><span>${escapeHtml(label)}</span><span class="setting-control"><input type="${type}" ${type === "number" ? 'min="0" inputmode="numeric"' : ""} value="${escapeHtml(value)}" data-field="setting" data-key="${key}" />${suffix ? `<small>${escapeHtml(suffix)}</small>` : ""}</span></label>`;
+  return `<label class="setting-row"><span>${escapeHtml(label)}</span><span class="setting-control"><input name="${escapeHtml(key)}" type="${type}" ${type === "number" ? 'min="0" inputmode="numeric"' : ""} value="${escapeHtml(value)}" />${suffix ? `<small>${escapeHtml(suffix)}</small>` : ""}</span></label>`;
+}
+
+function settingsPersistenceStatus(text) {
+  const status = view.settingsSaveStatus;
+  if (!status) return "";
+  const label = status === "saved" ? text.settingsSavedVps
+    : ["pending", "saving"].includes(status) ? text.settingsSaving
+      : status === "error" ? text.settingsSaveError
+        : status === "local" ? text.settingsLocalSaved
+          : text.settingsNoChanges;
+  return `<span class="settings-save-status settings-save-status-${escapeHtml(status)}" role="status">${status === "saved" ? icon("check") : ""}${escapeHtml(label)}</span>`;
 }
 
 function settingsPage(context) {
   const { state, text, language } = context;
   const history = Object.keys(state.records).sort().reverse();
-  return `${heading(text.settings, text.settingsSubtitle)}<section class="settings-layout"><article class="card settings-card">${cardHeading(text.appearance)}${settingsField(text.employee, state.settings.employeeName, "employeeName", "", "text")}${settingsField(text.workstation, state.settings.workstation, "workstation", "", "text")}<div class="setting-row"><span>${escapeHtml(text.language)}</span><div class="language-switch"><button class="${language === "vi" ? "active" : ""}" data-action="set-language" data-language="vi">Tiếng Việt</button><button class="${language === "zh" ? "active" : ""}" data-action="set-language" data-language="zh">繁體中文</button></div></div></article>
-    <article class="card settings-card">${cardHeading(text.operationalRules)}${settingsField(text.reservationBuffer, state.settings.reservationBuffer, "reservationBuffer", text.tables)}${settingsField(text.weekdaysRice, state.settings.riceWeekday, "riceWeekday", "g")}${settingsField(text.weekendRice, state.settings.riceWeekend, "riceWeekend", "g")}${settingsField(text.skipRiceAbove, state.settings.riceSkipAbove, "riceSkipAbove", "g")}<p class="helper-text">${escapeHtml(text.riceRule)}</p></article>
+  const canManage = accountCan("settings", "edit");
+  const site = activeInventorySite();
+  const defaultBranchName = { central: "央廚", fuxing: "復興店", yongji: "永吉店" }[site] || "";
+  const branchName = state.settings.branchName || defaultBranchName;
+  const general = canManage
+    ? `<form data-form="save-general-settings">${settingsField(text.organizationName, state.settings.organizationName || "食徒", "organizationName", "", "text")}${settingsField(text.branchName, branchName, "branchName", "", "text")}${settingsField(text.employee, state.settings.employeeName, "employeeName", "", "text")}${settingsField(text.workstation, state.settings.workstation, "workstation", "", "text")}<div class="setting-row"><span>${escapeHtml(text.language)}</span><div class="language-switch"><button type="button" class="${language === "vi" ? "active" : ""}" data-action="set-language" data-language="vi">Tiếng Việt</button><button type="button" class="${language === "zh" ? "active" : ""}" data-action="set-language" data-language="zh">繁體中文</button></div></div><div class="settings-section-title">${escapeHtml(text.operationalRules)}</div>${settingsField(text.reservationBuffer, state.settings.reservationBuffer, "reservationBuffer", text.tables)}${settingsField(text.weekdaysRice, state.settings.riceWeekday, "riceWeekday", "g")}${settingsField(text.weekendRice, state.settings.riceWeekend, "riceWeekend", "g")}${settingsField(text.skipRiceAbove, state.settings.riceSkipAbove, "riceSkipAbove", "g")}<p class="helper-text">${escapeHtml(text.riceRule)}</p><div class="settings-save-row"><button class="primary-button" type="submit" data-settings-save>${icon("check")}${escapeHtml(text.saveChanges)}</button>${settingsPersistenceStatus(text)}</div></form>`
+    : `<div class="settings-readonly"><p>${escapeHtml(text.settingsReadOnly)}</p><dl><div><dt>${escapeHtml(text.organizationName)}</dt><dd>${escapeHtml(state.settings.organizationName || "食徒")}</dd></div><div><dt>${escapeHtml(text.branchName)}</dt><dd>${escapeHtml(branchName)}</dd></div><div><dt>${escapeHtml(text.employee)}</dt><dd>${escapeHtml(state.settings.employeeName)}</dd></div><div><dt>${escapeHtml(text.workstation)}</dt><dd>${escapeHtml(state.settings.workstation)}</dd></div></dl></div>`;
+  return `${heading(text.settings, text.settingsSubtitle)}<section class="settings-layout"><article class="card settings-card general-settings-card">${cardHeading(text.generalSettings)}${general}</article>
     <article class="card settings-card">${cardHeading(text.history, `<span class="tag tag-neutral">${history.length} ${escapeHtml(text.savedDays)}</span>`)}<div class="history-list">${history.slice(0, 14).map((date) => `<button class="history-item ${date === state.selectedDate ? "active" : ""}" data-action="select-date" data-date="${date}"><span>${escapeHtml(dateLabel(date, language))}</span>${date === formatDateKey() ? `<small>${escapeHtml(text.today)}</small>` : ""}${icon("chevronRight")}</button>`).join("")}</div></article>
     ${management.staffCard(context)}<article class="card settings-card danger-zone">${cardHeading(text.data)}<p>${escapeHtml(text.autoSaved)}</p><button class="danger-button" data-action="reset">${escapeHtml(text.resetData)}</button></article></section>`;
 }
@@ -1327,7 +1348,8 @@ function render() {
   const pages = { dashboard, inventory, procurement: procurementPage, reservations: reservationsPage, preparation: preparationPage, menu: management.menuPage, sop: management.sopPage, skills: management.skillsPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
-  root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  const mobileMenu = view.mobileMenuOpen ? `<div class="mobile-menu-backdrop" data-action="close-mobile-menu"><nav class="mobile-menu" aria-label="${escapeHtml(context.language === "zh" ? "全部功能" : "Tất cả chức năng")}"><div class="mobile-menu-heading"><strong>${escapeHtml(context.language === "zh" ? "全部功能" : "Tất cả chức năng")}</strong><button class="icon-button" data-action="close-mobile-menu" aria-label="${escapeHtml(context.text.cancel)}">${icon("close")}</button></div><div class="mobile-menu-grid">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</div></nav></div>` : "";
+  root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
@@ -1397,6 +1419,8 @@ root.addEventListener("click", (event) => {
   if (action === "reset" && !accountCan("settings", "edit")) return;
   if (management.handleClick(target, event, currentContext())) return;
 
+  if (action === "toggle-mobile-menu") { view.mobileMenuOpen = !view.mobileMenuOpen; render(); return; }
+  if (action === "close-mobile-menu" && (target === event.target || target.closest(".icon-button"))) { view.mobileMenuOpen = false; render(); return; }
   if (action === "shift-date") { view.calendarOpen = false; selectServiceDate(shiftDate(state.selectedDate, Number(target.dataset.offset))); }
   if (action === "select-date" || action === "calendar-select-day") { view.calendarOpen = false; selectServiceDate(target.dataset.date); }
   if (action === "toggle-calendar") {
@@ -1777,6 +1801,24 @@ root.addEventListener("submit", async (event) => {
   if (requiredEditModule && !accountCan(requiredEditModule, "edit")) return;
   const data = new FormData(form);
   if (management.handleSubmit(form, data)) return;
+  if (form.dataset.form === "save-general-settings") {
+    const current = store.getState().settings;
+    const input = Object.fromEntries(["organizationName", "branchName", "employeeName", "workstation", "reservationBuffer", "riceWeekday", "riceWeekend", "riceSkipAbove"].map((key) => [key, data.get(key)]));
+    const normalizedShared = {
+      organizationName: String(input.organizationName ?? "").trim(),
+      branchName: String(input.branchName ?? "").trim(),
+      reservationBuffer: Math.max(0, Number(input.reservationBuffer) || 0),
+      riceWeekday: Math.max(0, Number(input.riceWeekday) || 0),
+      riceWeekend: Math.max(0, Number(input.riceWeekend) || 0),
+      riceSkipAbove: Math.max(0, Number(input.riceSkipAbove) || 0),
+    };
+    const sharedChanged = Object.entries(normalizedShared).some(([key, value]) => current[key] !== value);
+    const personalChanged = String(input.employeeName ?? "").trim() !== current.employeeName || String(input.workstation ?? "").trim() !== current.workstation;
+    view.settingsSaveStatus = sharedChanged ? "pending" : personalChanged ? "local" : "unchanged";
+    store.saveGeneralSettings(input);
+    if (!sharedChanged) renderWhenAuthorized();
+    return;
+  }
   if (form.dataset.form === "add-task") {
     const title = String(data.get("title") ?? "").trim();
     const assigneeId = String(data.get("assigneeId") ?? "");
@@ -1867,6 +1909,7 @@ root.addEventListener("submit", async (event) => {
 
 window.addEventListener("hashchange", () => {
   view.calendarOpen = false;
+  view.mobileMenuOpen = false;
   const hash = window.location.hash.replace(/^#\/?/, "");
   const [, query = ""] = hash.split("?");
   const params = new URLSearchParams(query);
@@ -1881,6 +1924,15 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && view.modal) { view.modal = null; view.editingStockKey = null; render(); }
   if (event.key === "Escape" && view.managementModal) { view.managementModal = null; render(); }
   if (event.key === "Escape" && view.calendarOpen) { view.calendarOpen = false; render(); }
+  if (event.key === "Escape" && view.mobileMenuOpen) { view.mobileMenuOpen = false; render(); }
+});
+window.addEventListener("shitu:business-persistence-status", (event) => {
+  const modules = Array.isArray(event.detail?.modules) ? event.detail.modules : [];
+  if (!modules.includes("settings")) return;
+  const status = String(event.detail?.status || "");
+  if (!["pending", "saving", "saved", "error"].includes(status)) return;
+  view.settingsSaveStatus = status;
+  if (route() === "settings") renderWhenAuthorized();
 });
 window.addEventListener("offline", renderWhenAuthorized);
 window.addEventListener("online", () => { if (store.getState().operations.pendingSync) store.clearPendingSync(); else renderWhenAuthorized(); });

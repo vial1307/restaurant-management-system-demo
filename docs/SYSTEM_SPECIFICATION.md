@@ -738,6 +738,20 @@ Report permission is separate from normal operational edit permission.
 
 ## 19. Settings and language
 
+General settings are a site-scoped business module. Users with `settings:edit` may edit the complete general-settings form and commit it explicitly with one Save action. Shared restaurant/site rules must be persisted through the VPS API into PostgreSQL; the UI may show a successful shared save only after the VPS confirms the `settings` module write.
+
+Current shared general settings include:
+
+- restaurant/organization name
+- current site/branch display name
+- reservation preparation buffer
+- weekday/weekend rice standards
+- rice skip threshold
+
+Language, current operator display name and workstation selection are local presentation/profile state and must not overwrite another user's shared settings. Users without `settings:edit` receive a read-only general-settings summary.
+
+Mobile navigation must expose every application module that the signed-in account can access, including Settings, without relying on a long horizontal bottom strip as the only discovery mechanism. Desktop and mobile must preserve equivalent module access.
+
 Supported language modes:
 
 - Traditional Chinese (Taiwan)

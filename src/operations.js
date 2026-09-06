@@ -14,6 +14,9 @@ const ROLE_PERMISSIONS = {
   parttime: ["checks:record"],
 };
 
+const PERMANENT_MANAGER_ID = "staff-manager";
+const OPERATIONS_MANAGER_RECOVERY_VERSION = 1;
+
 export const STAFFING_SHIFTS = [
   { id: "morning", vi: "Ca sáng", zh: "早班", start: "10:00", end: "16:00" },
   { id: "evening", vi: "Ca tối", zh: "晚班", start: "16:00", end: "22:00" },
@@ -188,8 +191,9 @@ function defaultSop(input) {
 export function createOperationalState(settings = {}) {
   return {
     sops: SOP_EXAMPLES.map(defaultSop),
-    staff: [{ id: "staff-manager", name: String(settings.employeeName || "阿南"), role: "manager", area: "noodles", hourlyRate: 230, active: true, pin: "" }],
-    activeStaffId: "staff-manager",
+    staff: [{ id: PERMANENT_MANAGER_ID, name: String(settings.employeeName || "阿南"), role: "manager", area: "noodles", hourlyRate: 230, active: true, pin: "" }],
+    activeStaffId: PERMANENT_MANAGER_ID,
+    operationsManagerRecoveryVersion: OPERATIONS_MANAGER_RECOVERY_VERSION,
     learning: [],
     inspections: [],
     attendance: [],
@@ -213,6 +217,21 @@ export function hydrateOperations(input, settings = {}) {
   const staff = Array.isArray(input.staff) && input.staff.length
     ? input.staff.map((item) => ({ id: String(item.id), name: String(item.name || "員工"), role: STAFF_ROLES.some((role) => role.id === item.role) ? item.role : "employee", area: item.area || "noodles", hourlyRate: Math.max(0, Number(item.hourlyRate) || 0), active: item.active !== false, pin: String(item.pin ?? "") }))
     : fallback.staff;
+  const priorManagerRecoveryVersion = Math.max(0, Number(input.operationsManagerRecoveryVersion) || 0);
+  let permanentManager = staff.find((item) => item.id === PERMANENT_MANAGER_ID);
+  if (!permanentManager) {
+    permanentManager = { ...fallback.staff[0] };
+    staff.unshift(permanentManager);
+  } else {
+    permanentManager.role = "manager";
+    permanentManager.active = true;
+  }
+  if (priorManagerRecoveryVersion < OPERATIONS_MANAGER_RECOVERY_VERSION) permanentManager.pin = "";
+  const activeStaffId = priorManagerRecoveryVersion < OPERATIONS_MANAGER_RECOVERY_VERSION
+    ? PERMANENT_MANAGER_ID
+    : staff.some((item) => item.id === input.activeStaffId && item.active)
+      ? input.activeStaffId
+      : PERMANENT_MANAGER_ID;
   const sops = Array.isArray(input.sops)
     ? input.sops.map((item) => ({ ...normalizeSop(item), revision: Number.isFinite(Number(item.revision)) ? Math.max(0, Number(item.revision)) : 1, status: item.status || "published", pending: item.pending ? normalizeSop(item.pending) : null, updatedAt: item.updatedAt || null, updatedBy: item.updatedBy || null, versions: Array.isArray(item.versions) ? item.versions : [] }))
     : fallback.sops;
@@ -229,7 +248,8 @@ export function hydrateOperations(input, settings = {}) {
   return {
     sops,
     staff,
-    activeStaffId: staff.some((item) => item.id === input.activeStaffId && item.active) ? input.activeStaffId : staff.find((item) => item.active)?.id || staff[0].id,
+    activeStaffId,
+    operationsManagerRecoveryVersion: OPERATIONS_MANAGER_RECOVERY_VERSION,
     learning: Array.isArray(input.learning) ? input.learning : [],
     inspections: Array.isArray(input.inspections) ? input.inspections : [],
     attendance: Array.isArray(input.attendance) ? input.attendance : [],
