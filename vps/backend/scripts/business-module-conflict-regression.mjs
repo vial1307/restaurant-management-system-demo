@@ -114,7 +114,19 @@ const [auditWriteA, auditWriteB] = await Promise.all([
 assert.equal(auditWriteA.response.status, 200, JSON.stringify(auditWriteA.data));
 assert.equal(auditWriteB.response.status, 200, JSON.stringify(auditWriteB.data));
 const auditRead = await call("/api/business-state/fuxing", { cookie: admin });
-const auditIds = new Set((auditRead.data.modules.audit?.audit || []).map((entry) => entry.id));
+const auditEntries = auditRead.data.modules.audit?.audit || [];
+const auditIds = new Set(auditEntries.map((entry) => entry.id));
 assert(auditIds.has(auditA.id) && auditIds.has(auditB.id), "concurrent audit append lost an entry");
+
+// Reusing an existing audit id must never mutate the persisted event.
+const auditTamper = { ...auditA, label: "TAMPERED", details: "must-not-replace-server-entry" };
+const auditTamperWrite = await call("/api/business-state/fuxing", {
+  method: "POST", cookie: admin, body: { modules: { audit: { audit: [auditTamper] } } },
+});
+assert.equal(auditTamperWrite.response.status, 200, JSON.stringify(auditTamperWrite.data));
+const auditAfterTamper = await call("/api/business-state/fuxing", { cookie: admin });
+const persistedAuditA = (auditAfterTamper.data.modules.audit?.audit || []).find((entry) => entry.id === auditA.id);
+assert.equal(persistedAuditA?.label, "A", "append-only audit entry was rewritten by duplicate id");
+assert.equal(persistedAuditA?.details, "", "append-only audit details were rewritten by duplicate id");
 
 console.log("BUSINESS_MODULE_CONFLICT_OK");
