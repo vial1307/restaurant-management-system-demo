@@ -126,6 +126,25 @@ function recoveryState() {
   return { version: 1, drafts: { ...drafts } };
 }
 
+export function businessRecoveryMetadataForUser(userId = "") {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return [];
+  return Object.values(recoveryState().drafts)
+    .filter((draft) => draft?.userId === normalizedUserId)
+    .map((draft) => ({
+      userId: draft.userId,
+      site: String(draft.site || ""),
+      capturedAt: draft.capturedAt || null,
+      baseRevision: Number.isFinite(Number(draft.baseRevision)) ? Number(draft.baseRevision) : null,
+      changedModules: Array.isArray(draft.changedModules)
+        ? [...draft.changedModules].map(String).filter(Boolean)
+        : Object.keys(draft.modules || {}),
+      reason: String(draft.reason || "authorization-transition"),
+    }))
+    .filter((draft) => draft.site)
+    .sort((a, b) => String(b.capturedAt || "").localeCompare(String(a.capturedAt || "")));
+}
+
 function writeRecoveryDraft(draft) {
   try {
     const state = recoveryState();

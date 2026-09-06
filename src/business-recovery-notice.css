@@ -1,0 +1,135 @@
+.business-recovery-banner {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(180, 83, 9, 0.32);
+  border-radius: 14px;
+  background: rgba(255, 247, 237, 0.96);
+  color: #7c2d12;
+  box-shadow: 0 8px 24px rgba(120, 53, 15, 0.08);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.business-recovery-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.business-recovery-heading strong {
+  min-width: 0;
+  font-size: 0.94rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.business-recovery-marker {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #b45309;
+  color: #fff;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.business-recovery-copy {
+  margin: 8px 0 0;
+  max-width: 100%;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: #7c2d12;
+  overflow-wrap: anywhere;
+}
+
+.business-recovery-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.business-recovery-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  padding-top: 7px;
+  border-top: 1px solid rgba(180, 83, 9, 0.18);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.business-recovery-site {
+  font-weight: 750;
+}
+
+.business-recovery-site,
+.business-recovery-modules,
+.business-recovery-time {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.business-recovery-time {
+  margin-left: auto;
+  opacity: 0.78;
+}
+
+@media (prefers-color-scheme: dark) {
+  .business-recovery-banner {
+    border-color: rgba(251, 146, 60, 0.42);
+    background: rgba(67, 32, 13, 0.96);
+    color: #fed7aa;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .business-recovery-copy {
+    color: #fed7aa;
+  }
+
+  .business-recovery-row {
+    border-top-color: rgba(251, 146, 60, 0.24);
+  }
+}
+
+@media (max-width: 760px) {
+  .business-recovery-banner {
+    margin-bottom: 14px;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .business-recovery-heading {
+    align-items: flex-start;
+  }
+
+  .business-recovery-heading strong {
+    font-size: 0.9rem;
+  }
+
+  .business-recovery-copy {
+    font-size: 0.79rem;
+    line-height: 1.5;
+  }
+
+  .business-recovery-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .business-recovery-time {
+    margin-left: 0;
+  }
+}

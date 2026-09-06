@@ -3,6 +3,7 @@ import { chromium } from "playwright";
 
 const BASE = process.env.PRODUCTION_BASE || "https://82.47.180.185.nip.io";
 const EXPECTED_RELEASE = String(process.env.EXPECTED_RELEASE || "").trim().slice(0, 7);
+const RECOVERY_SECRET = "PRODUCTION_RECOVERY_PAYLOAD_MUST_NOT_RENDER";
 const admin = {
   id: "production-ui-smoke-admin",
   username: "ui-smoke-admin",
@@ -53,7 +54,7 @@ try {
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
 
-  await page.addInitScript((user) => {
+  await page.addInitScript(({ user, recoverySecret }) => {
     localStorage.setItem("shitu-kitchen-auth-v1", JSON.stringify({
       id: user.id,
       username: user.username,
@@ -78,13 +79,32 @@ try {
       qty: 10,
       minimum: 2,
     }]));
-  }, admin);
+    localStorage.setItem("shitu-business-recovery-v1", JSON.stringify({
+      version: 1,
+      drafts: {
+        [`${user.id}:fuxing`]: {
+          userId: user.id,
+          site: "fuxing",
+          capturedAt: "2026-09-06T04:00:00.000Z",
+          changedModules: ["settings"],
+          reason: "authorization-transition",
+          modules: { settings: { recoverySecret } },
+        },
+      },
+    }));
+  }, { user: admin, recoverySecret: RECOVERY_SECRET });
 
   await page.goto(`${BASE}/#settings`, {
     waitUntil: "domcontentloaded",
     timeout: 30000,
   });
   await page.locator("[data-account-edit]").first().waitFor({ state: "visible", timeout: 30000 });
+  const recoveryBanner = page.locator("[data-business-recovery-banner]");
+  await recoveryBanner.waitFor({ state: "visible", timeout: 10000 });
+  assert.match(await recoveryBanner.innerText(), /Fuxing|復興|fuxing/i, "Production recovery banner does not identify the source site");
+  assert.match(await recoveryBanner.innerText(), /settings/i, "Production recovery banner does not identify changed module metadata");
+  assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(RECOVERY_SECRET), "Production recovery banner leaked stored business payload");
+
   const canonical = new URL(page.url());
   assert.equal(canonical.pathname, "/", "Production did not stay on the canonical root URL");
   assert.equal(canonical.search, "", "Production root still requires a release query parameter");
@@ -139,6 +159,7 @@ try {
   await page.locator('.modal-header-save[data-central-save-item]').waitFor({ state: "visible", timeout: 10000 });
 
   console.log("PRODUCTION_PERMISSION_ROWS", JSON.stringify(modules));
+  console.log("PRODUCTION_RECOVERY_NOTICE_OK");
   console.log("PRODUCTION_MOBILE_FUNCTIONS_OK", release);
   console.log("PRODUCTION_UI_SMOKE_OK", await page.url());
   await context.close();
