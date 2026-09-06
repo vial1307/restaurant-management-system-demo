@@ -504,7 +504,7 @@ export function attachBusinessStateSync(store) {
     try {
       const result = await vpsBusinessState(site);
       if (token !== loadToken || key !== identityKey()) return;
-      if (!pending && !identityChanged && localSnapshotBeforeLoad !== JSON.stringify(businessModulesFromState(store.getState()))) {
+      if (!identityChanged && localSnapshotBeforeLoad !== JSON.stringify(businessModulesFromState(store.getState()))) {
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"ready", site, deferred:true } }));
         surfaceRecovery(key);
         return;
