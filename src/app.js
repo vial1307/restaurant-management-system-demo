@@ -1106,7 +1106,7 @@ function inventory(context) {
   if (opsMode === "manage") {
     const manageEntries = effectiveRecord.inventory;
     const manageFiltered = manageEntries.filter((item) => view.zone === "all" || item.zone === view.zone);
-    const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage, manageQuantityEdit:catalogManage };
+    const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage, manageQuantityEdit:canDirectInventoryAdjust() };
     const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", manageRowContext, storageInventoryRow);
     const manageColumns = [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock];
     const manageSubtitle = language === "zh"
@@ -1316,10 +1316,11 @@ function addItemModal(context) {
   const working = editing ? record.workInventory.find((entry) => entry.stockKey === view.editingStockKey) : null;
   const activeZone = view.zone !== "all" ? view.zone : "large-freezer";
   const units = ["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"];
+  const stocktakeEditable = canDirectInventoryAdjust();
   const locations = ZONES.map((zone) => {
     const stored = existing.find((entry) => entry.zone === zone.id);
     const checked = editing ? Boolean(stored) : zone.id === activeZone;
-    return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? 1}" /></label></div>`;
+    return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label></div>`;
   }).join("");
   const receiveZone=item.receiveZone||"";
   const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／尚未指定":"Tự động nếu chỉ có 1 vị trí · 尚未指定"}</option>`]
@@ -1626,7 +1627,7 @@ root.addEventListener("change", (event) => {
       render();
       return;
     }
-    const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(activeInventorySite());
+    const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(activeInventorySite()) && canDirectInventoryAdjust();
     if (!canDirectInventoryAdjust() && !manageQuantityEdit) { render(); return; }
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === id);
     if (!item) return;

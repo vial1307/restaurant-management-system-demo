@@ -337,7 +337,13 @@ async function roleDesktop(browser, username, checks) {
       const manage=page.locator('[data-action="select-inventory-ops"][data-mode="manage"]');
       await manage.waitFor({state:"visible"});
       await manage.click();
-      assert((await page.locator('[data-manage-adjust="true"]').count()) > 0,`${username} missing management quantity controls`);
+      const manageQuantityControls=await page.locator('[data-manage-adjust="true"]').count();
+      if(checks.stocktake === true){
+        assert(manageQuantityControls > 0,`${username} missing management quantity controls`);
+      }
+      if(checks.stocktake === false){
+        assert.equal(manageQuantityControls,0,`${username} must not receive stocktake quantity controls`);
+      }
     }
     if(checks.operations === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count(),0);
@@ -461,9 +467,9 @@ async function responsiveAdmin(browser, viewport) {
 const browser=await chromium.launch({headless:true});
 try{
   await adminDesktop(browser);
-  await roleDesktop(browser,"managerfx",{manage:true,operations:true,dashboardEdit:true});
+  await roleDesktop(browser,"managerfx",{manage:true,operations:true,stocktake:true,dashboardEdit:true});
   await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,dashboardEdit:false});
-  await roleDesktop(browser,"employeefx",{manage:true,operations:true,dashboardEdit:false});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,dashboardEdit:false});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
   await roleDesktop(browser,"centralreg",{central:true,manage:true});
   await responsiveAdmin(browser,{width:359,height:740});
