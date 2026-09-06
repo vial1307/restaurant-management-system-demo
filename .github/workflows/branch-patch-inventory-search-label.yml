@@ -28,22 +28,13 @@ jobs:
           path = Path("src/app.js")
           text = path.read_text()
 
-          table_anchor = '''  const table = page.querySelector(".inventory-table");
-          if (!table) return;
-
-          let visibleTotal = 0;
-          '''
-          table_replacement = '''  const table = page.querySelector(".inventory-table");
-          if (!table) return;
-          const itemsLabel = currentContext().text.items;
-
-          let visibleTotal = 0;
-          '''
+          table_anchor = 'const table = page.querySelector(".inventory-table");\n  if (!table) return;\n\n  let visibleTotal = 0;'
+          table_replacement = 'const table = page.querySelector(".inventory-table");\n  if (!table) return;\n  const itemsLabel = currentContext().text.items;\n\n  let visibleTotal = 0;'
           assert text.count(table_anchor) == 1, "inventory search table anchor changed"
           text = text.replace(table_anchor, table_replacement, 1)
 
-          count_anchor = '    if (count) count.textContent = `${visibleInGroup} ${currentContext().text.items}`;\n'
-          count_replacement = '    if (count) count.textContent = `${visibleInGroup} ${itemsLabel}`;\n'
+          count_anchor = 'if (count) count.textContent = `${visibleInGroup} ${currentContext().text.items}`;'
+          count_replacement = 'if (count) count.textContent = `${visibleInGroup} ${itemsLabel}`;'
           assert text.count(count_anchor) == 1, "inventory group count anchor changed"
           text = text.replace(count_anchor, count_replacement, 1)
 
