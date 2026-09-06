@@ -71,9 +71,22 @@ export function buildSearchText(text) {
   return `${source} ${phoneticOf(source)}`;
 }
 
-export function searchMatches(text, query) {
-  const needle = normalizeSearch(query);
+export function prepareSearchNeedle(query) {
+  return normalizeSearch(query);
+}
+
+export function prepareSearchCorpus(text) {
+  return normalizeSearch(buildSearchText(text));
+}
+
+export function preparedSearchMatches(corpus, needle) {
   if (!needle) return true;
   markSearchEvaluation();
-  return normalizeSearch(buildSearchText(text)).includes(needle);
+  return String(corpus || "").includes(needle);
+}
+
+export function searchMatches(text, query) {
+  const needle = prepareSearchNeedle(query);
+  if (!needle) return true;
+  return preparedSearchMatches(prepareSearchCorpus(text), needle);
 }
