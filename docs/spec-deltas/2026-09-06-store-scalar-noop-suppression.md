@@ -41,6 +41,9 @@ No generic deep comparison is added to `update()`. No action/audit mutation (`to
 - Selecting the already-active date must continue the existing persistence/subscriber lifecycle so view-only calendar state is rendered closed; the Chromium warehouse-switch flow must remain clickable after same-date selection.
 - Existing full static/runtime, API/Postgres, Chromium mobile/desktop and Firefox/WebKit regressions remain mandatory before merge. Production still requires exact-SHA deploy health and UI smoke.
 
+## Regression correction
+The first PR browser run exposed a lifecycle dependency that the scalar-only test did not model. Suppressing a same-date `selectDate()` call left `view.calendarOpen = false` unrendered; the stale calendar/topbar then intercepted pointer events on `[data-warehouse="fuxing"]` in the admin desktop Chromium flow. `selectDate` is therefore excluded from scalar no-op suppression and remains a subscriber-render lifecycle boundary. The corrected runtime contract now requires a same-date selection to retain its existing write/notification lifecycle, and the browser regression remains the end-to-end acceptance for this dependency.
+
 ## Non-goals
 - No deep equality check inside generic `update()`.
 - No suppression of `selectDate` lifecycle notifications in this slice.
