@@ -6,3 +6,4 @@ await import("./lazy-derived-context-regression.mjs");
 await import("./lazy-render-context-contract-regression.mjs");
 await import("./task-derivation-cache-regression.mjs");
 await import("./task-derivation-cache-contract-regression.mjs");
+await import("./section-render-api-contract-regression.mjs");
