@@ -1331,7 +1331,8 @@ function render() {
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
-  if (inventorySearchInput) applyInventorySearchDom(inventorySearchInput);
+  const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");
+  if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);
   const opsHost=root.querySelector("[data-branch-inventory-operations]");
   const historyHost=root.querySelector("[data-branch-inventory-history]");
   if (historyHost && inventoryCloudState()==="ready") {
