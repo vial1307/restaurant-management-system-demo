@@ -15,13 +15,14 @@ Frontend search performance only. No database, API, auth/permission, business pe
 2. In inventory search, normalize the query once per `applyInventorySearchDom()` call.
 3. Cache each DOM row's prepared corpus in a `WeakMap` keyed by the row element. A rerender creates new row elements and therefore naturally invalidates the cache; detached rows remain collectible.
 4. Both grouped and loose inventory rows use the prepared matcher.
-5. Empty query remains an immediate match without opening a search-evaluation token.
+5. Empty query remains an immediate match without opening a search-evaluation token, and the inventory row call-sites must short-circuit before `inventoryRowSearchCorpus(row)` is evaluated so clearing search does not build row corpora.
 
 ## Acceptance
 - Legacy `searchMatches()` and the prepared path return identical results for direct Chinese, contiguous/spaced pinyin, 注音, Vietnamese accent normalization, empty queries and non-matches.
 - Prepared corpus contains the same phonetic/phrase aliases as the legacy path.
 - Non-empty prepared matching preserves `markSearchEvaluation()` token behavior; empty matching does not create a token.
 - Inventory search uses one prepared needle per event and a `WeakMap` corpus cache per DOM row.
+- Empty inventory search bypasses corpus preparation at the row call-sites.
 - The inventory row loops no longer call `searchMatches(row.textContent, query)`.
 - Existing desktop/mobile Chromium and Firefox/WebKit regression remains mandatory before merge. Production still requires exact-SHA deploy health and UI smoke.
 
