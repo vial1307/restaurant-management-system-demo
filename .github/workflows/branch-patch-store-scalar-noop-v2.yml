@@ -32,36 +32,20 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           candidate = Path('/tmp/store-candidate.js').read_text()
-          bad = '''    selectDate(date) {
-                if (state.selectedDate === date) return state;
-                return update((draft) => {
-                  ensureRecord(draft, date);
-                  draft.selectedDate = date;
-                });
-              },'''.replace('        ', '  ')
-          good = '''    selectDate(date) {
-              return update((draft) => {
-                ensureRecord(draft, date);
-                draft.selectedDate = date;
-              });
-            },'''.replace('      ', '  ')
-          # Use exact literal from source to avoid indentation ambiguity.
-          bad = '''    selectDate(date) {
-              if (state.selectedDate === date) return state;
-              return update((draft) => {
-                ensureRecord(draft, date);
-                draft.selectedDate = date;
-              });
-            },'''.replace('      ', '  ')
-          good = '''    selectDate(date) {
-              return update((draft) => {
-                ensureRecord(draft, date);
-                draft.selectedDate = date;
-              });
-            },'''.replace('      ', '  ')
-          if bad not in candidate:
-              raise SystemExit('reviewed selectDate suppression block not found exactly')
-          candidate = candidate.replace(bad, good, 1)
+          start = candidate.index("    selectDate(date) {")
+          end = candidate.index("    updateSetting", start)
+          production_select_date = '''    selectDate(date) {
+            return update((draft) => {
+              ensureRecord(draft, date);
+              draft.selectedDate = date;
+            });
+          },
+'''.replace('        ', '  ')
+          # Keep exact source indentation while replacing the entire method boundary.
+          production_select_date = "    selectDate(date) {\n      return update((draft) => {\n        ensureRecord(draft, date);\n        draft.selectedDate = date;\n      });\n    },\n"
+          candidate = candidate[:start] + production_select_date + candidate[end:]
+          if "if (state.selectedDate === date) return state;" in candidate:
+              raise SystemExit('selectDate suppression remained after boundary replacement')
           Path('src/store-core.js').write_text(candidate)
           PY
           node tests/performance-regression.mjs
