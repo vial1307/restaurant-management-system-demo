@@ -11,3 +11,4 @@ await import("./lazy-render-context-contract-regression.mjs");
 await import("./task-derivation-cache-regression.mjs");
 await import("./task-derivation-cache-contract-regression.mjs");
 await import("./store-scalar-noop-regression.mjs");
+await import("./select-date-noop-ui-lifecycle-regression.mjs");
