@@ -38,12 +38,14 @@ For a real dirty business-state write lifecycle, `shitu:business-persistence-sta
 
 1. `pending` — a local business edit exists and is waiting for its debounced VPS persistence attempt;
 2. `saving` — a dirty-module POST to VPS has started;
-3. `saved` — every dirty module in that attempt was explicitly confirmed by VPS;
+3. `saved` — every dirty module in that attempt was explicitly confirmed by VPS and that confirmed snapshot is still the current local snapshot;
 4. `error` — persistence could not be confirmed.
 
 Routine reads (`ready`) and recovery metadata (`recovery-pending`) must not be emitted on the dedicated persistence channel.
 
 A no-op snapshot that has no dirty modules must not create a false `pending`, `saving` or `saved` persistence event.
+
+If the user creates a newer local edit while an older write is in flight, confirmation of the older write must not replace the newer `pending` state with `saved`. The later snapshot remains unconfirmed until its own write succeeds.
 
 ## User/site scoping
 
@@ -64,7 +66,7 @@ A status generated for a previous user/site must not remain visible after accoun
 
 Persistence errors must remain visibly actionable until one of these happens:
 
-- the same current `userId + site` later receives a confirmed `saved` event for a business write; or
+- the same current `userId + site` later receives a confirmed `saved` event for the current business snapshot; or
 - the authenticated identity/site changes, in which case the old scoped status is hidden from the current UI.
 
 A later general `ready`/read event must not clear a write error because the persistence UI does not consume read events.
@@ -126,12 +128,13 @@ The persistence notice must:
 
 1. After initial VPS load, mutate one editable business setting and notify the store subscriber; before the debounce fires, a scoped `pending` event exists on `shitu:business-persistence-status`.
 2. When the dirty POST starts, a scoped `saving` event exists on the dedicated write channel.
-3. A fully confirmed VPS response emits scoped `saved` with the changed module list.
-4. A failed save emits scoped `error`; unrelated `shitu:business-state-status` read/ready activity does not clear the error UI.
-5. A later confirmed save for the same user/site clears the failure and shows confirmed success.
-6. Switching authenticated user/site hides status from the previous scope.
-7. A no-op focus refresh with no dirty modules never reports `pending`/`saving`/`saved` on the dedicated write channel.
-8. A read failure without a dirty write never creates a persistence warning.
-9. Real Chromium UI regression verifies pending/saving/error/saved states and no horizontal overflow at mandatory phone breakpoints.
-10. Existing recovery notice, account/permission, inventory, synchronization and full-device regressions remain green.
-11. Production smoke verifies the deployed persistence notice assets and a synthetic dedicated local status event without writing production business data.
+3. A fully confirmed VPS response emits scoped `saved` with the changed module list only when that snapshot is still current.
+4. If a newer local edit appears while a write is in flight, confirmation of the older write does not emit a visible `saved` state over the newer pending edit.
+5. A failed save emits scoped `error`; unrelated `shitu:business-state-status` read/ready activity does not clear the error UI.
+6. A later confirmed save for the same user/site and current snapshot clears the failure and shows confirmed success.
+7. Switching authenticated user/site hides status from the previous scope.
+8. A no-op focus refresh with no dirty modules never reports `pending`/`saving`/`saved` on the dedicated write channel.
+9. A read failure without a dirty write never creates a persistence warning.
+10. Real Chromium UI regression verifies pending/saving/error/saved states and no horizontal overflow at mandatory phone breakpoints.
+11. Existing recovery notice, account/permission, inventory, synchronization and full-device regressions remain green.
+12. Production smoke verifies the deployed persistence notice assets and a synthetic dedicated local status event without writing production business data.
