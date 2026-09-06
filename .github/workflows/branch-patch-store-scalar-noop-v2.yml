@@ -1,0 +1,73 @@
+name: One-shot scalar no-op v2 patch
+
+on:
+  push:
+    branches:
+      - perf-store-scalar-noop-suppression-v2-20260907
+    paths:
+      - ".github/workflows/branch-patch-store-scalar-noop-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf-store-scalar-noop-suppression-v2-20260907
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Port reviewed scalar guards without selectDate suppression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object src/store-core.js)" = "3394cb685c32114c038118fb3983dfc740b7e2ba"
+          git fetch origin perf-store-scalar-noop-suppression-20260906
+          git show origin/perf-store-scalar-noop-suppression-20260906:src/store-core.js > /tmp/store-candidate.js
+          python3 - <<'PY'
+          from pathlib import Path
+          candidate = Path('/tmp/store-candidate.js').read_text()
+          bad = '''    selectDate(date) {
+                if (state.selectedDate === date) return state;
+                return update((draft) => {
+                  ensureRecord(draft, date);
+                  draft.selectedDate = date;
+                });
+              },'''.replace('        ', '  ')
+          good = '''    selectDate(date) {
+              return update((draft) => {
+                ensureRecord(draft, date);
+                draft.selectedDate = date;
+              });
+            },'''.replace('      ', '  ')
+          # Use exact literal from source to avoid indentation ambiguity.
+          bad = '''    selectDate(date) {
+              if (state.selectedDate === date) return state;
+              return update((draft) => {
+                ensureRecord(draft, date);
+                draft.selectedDate = date;
+              });
+            },'''.replace('      ', '  ')
+          good = '''    selectDate(date) {
+              return update((draft) => {
+                ensureRecord(draft, date);
+                draft.selectedDate = date;
+              });
+            },'''.replace('      ', '  ')
+          if bad not in candidate:
+              raise SystemExit('reviewed selectDate suppression block not found exactly')
+          candidate = candidate.replace(bad, good, 1)
+          Path('src/store-core.js').write_text(candidate)
+          PY
+          node tests/performance-regression.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/branch-patch-store-scalar-noop-v2.yml
+          git add src/store-core.js tests docs
+          git commit -m "Suppress safe scalar store no-op mutations"
+          git push origin HEAD:perf-store-scalar-noop-suppression-v2-20260907
