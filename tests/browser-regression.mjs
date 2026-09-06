@@ -178,6 +178,7 @@ async function adminDesktop(browser) {
   const saveProduct=page.locator('.modal-header-save[data-save-item]');
   await saveProduct.waitFor({state:"visible"});
   assert.match(await saveProduct.innerText(),/Lưu sản phẩm/);
+  assert.equal(await page.locator('select[name="receiveZone"]').isDisabled(),false,"admin receiving default unexpectedly disabled");
   const saveBox=await saveProduct.boundingBox();
   const viewport=page.viewportSize();
   assert(saveBox && viewport && saveBox.y >= 0 && saveBox.y + saveBox.height <= viewport.height,"product save button is outside the visible viewport");
@@ -371,6 +372,14 @@ async function roleDesktop(browser, username, checks) {
       if(checks.stocktake === false){
         assert.equal(await workMinimum.getAttribute("readonly"),"",`${username} can edit work minimum without stocktake authority`);
       }
+      const receiveDefault=page.locator('select[name="receiveZone"]');
+      await receiveDefault.waitFor({state:"visible"});
+      if(checks.receiveDefault === true){
+        assert.equal(await receiveDefault.isDisabled(),false,`${username} receiving default unexpectedly disabled`);
+      }
+      if(checks.receiveDefault === false){
+        assert.equal(await receiveDefault.isDisabled(),true,`${username} can edit branch-owned receiving default`);
+      }
       await page.locator('button[data-action="close-modal"]').first().click();
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
     }
@@ -425,6 +434,7 @@ async function responsiveAdmin(browser, viewport) {
       await branchSave.waitFor({state:"visible"});
       assert.match(await branchSave.innerText(),/Lưu sản phẩm|儲存品項/,`${site} mobile product save action missing`);
       assert.equal(await page.locator('input[name="workMinimum"]').getAttribute("readonly"),null,`${site} admin work minimum must remain editable on mobile`);
+      assert.equal(await page.locator('select[name="receiveZone"]').isDisabled(),false,`${site} admin receiving default must remain editable on mobile`);
       await page.locator('button[data-action="close-modal"]').first().click();
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
     }
@@ -499,9 +509,9 @@ async function responsiveAdmin(browser, viewport) {
 const browser=await chromium.launch({headless:true});
 try{
   await adminDesktop(browser);
-  await roleDesktop(browser,"managerfx",{manage:true,operations:true,stocktake:true,dashboardEdit:true});
-  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,dashboardEdit:false});
-  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,dashboardEdit:false});
+  await roleDesktop(browser,"managerfx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:true});
+  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,receiveDefault:false,dashboardEdit:false});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,receiveDefault:false,dashboardEdit:false});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
   await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:false});
   await responsiveAdmin(browser,{width:359,height:740});

@@ -156,6 +156,16 @@ export function canManageBranchCatalog(site = activeInventorySite()) {
   return true;
 }
 
+export function canManageReceiveDefault(site = activeInventorySite()) {
+  const s = session();
+  if (!s || !hasInventoryPermission("edit")) return false;
+  const currentRole = role();
+  if (currentRole === "admin") return ["central","fuxing","yongji"].includes(site);
+  return currentRole === "manager"
+    && ["fuxing","yongji"].includes(site)
+    && (s.location === site || s.location === "all");
+}
+
 export function canDirectInventoryAdjust() {
   if (!canInventoryEdit()) return false;
   const currentRole = role();
@@ -293,7 +303,7 @@ export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,lo
   const key=String(catalogKeyValue||"").trim();
   const code=String(locationCode||"").trim();
   if(!["central","fuxing","yongji"].includes(site)||!key) return {ok:false,fallback:false,error:new Error("INVALID_RECEIVE_DEFAULT")};
-  if(!hasInventoryPermission("edit")) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
+  if(!canManageReceiveDefault(site)) return {ok:false,fallback:false,error:new Error("RECEIVE_DEFAULT_MANAGER_REQUIRED")};
   if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
   if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
   try{

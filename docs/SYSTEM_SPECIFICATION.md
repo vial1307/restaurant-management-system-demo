@@ -343,6 +343,7 @@ If the destination branch already has a product:
 
 - exactly one configured storage location -> shipment must use it automatically
 - multiple configured storage locations -> branch manager must configure `央廚出貨收貨儲位` / default receiving location
+- receiving-default writes are restricted to the receiving site's manager or admin; supervisor/employee/central shipping roles may consume routing metadata but cannot change a branch-owned default
 - multiple locations + no receiving default -> shipment is blocked
 
 Factory/central-kitchen staff may not arbitrarily choose a different location when the branch already owns the configuration.

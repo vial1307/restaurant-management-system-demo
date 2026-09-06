@@ -33,6 +33,7 @@ import {
   branchWorkLocationCode,
   canDirectInventoryAdjust,
   canManageBranchCatalog,
+  canManageReceiveDefault,
   canViewBranchCatalogManagement,
   canInventoryDraftCount,
   canInventoryEdit,
@@ -1317,6 +1318,7 @@ function addItemModal(context) {
   const activeZone = view.zone !== "all" ? view.zone : "large-freezer";
   const units = ["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"];
   const stocktakeEditable = canDirectInventoryAdjust();
+  const receiveDefaultEditable = canManageReceiveDefault(activeInventorySite());
   const locations = ZONES.map((zone) => {
     const stored = existing.find((entry) => entry.zone === zone.id);
     const checked = editing ? Boolean(stored) : zone.id === activeZone;
@@ -1328,7 +1330,7 @@ function addItemModal(context) {
     .join("");
 
   const saveLabel = editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項";
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div><form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}<small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone">${receiveOptions}</select><small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div><form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}<small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
 }
 
 function syncReceiveZoneOptions(form) {
@@ -1868,11 +1870,13 @@ root.addEventListener("submit", async (event) => {
       store.updateIngredient(stockKey, item);
       const result = await cloudSyncBranchCatalogItem(stockKey, site);
       if (result.ok) {
-        const receiveResult = await cloudSetReceiveDefault({
-          site,
-          catalogKey,
-          locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
-        });
+        const receiveResult = canManageReceiveDefault(site)
+          ? await cloudSetReceiveDefault({
+              site,
+              catalogKey,
+              locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
+            })
+          : {ok:true,skipped:true};
         await syncInventoryNow(site, { reloadBranch: false });
         if (!receiveResult.ok) {
           window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
@@ -1890,11 +1894,13 @@ root.addEventListener("submit", async (event) => {
         ? await cloudSyncBranchCatalogItem(createdStockKey,site)
         : {ok:false,fallback:false};
       if(result.ok){
-        const receiveResult = await cloudSetReceiveDefault({
-          site,
-          catalogKey,
-          locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
-        });
+        const receiveResult = canManageReceiveDefault(site)
+          ? await cloudSetReceiveDefault({
+              site,
+              catalogKey,
+              locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
+            })
+          : {ok:true,skipped:true};
         await syncInventoryNow(site, { reloadBranch: false });
         if (!receiveResult.ok) {
           window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
