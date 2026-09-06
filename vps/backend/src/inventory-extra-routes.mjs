@@ -10,10 +10,15 @@ function requireInventory(user, site, action, reply) {
   return false;
 }
 
+function canStocktakeRole(user, site) {
+  return siteAllowed(user, site)
+    && hasPermission(user, "inventory", "edit")
+    && (user.role === "admin" || ["manager","supervisor"].includes(user.role));
+}
+
 function requireStocktakeRole(user, site, reply) {
   if (!requireInventory(user, site, "edit", reply)) return false;
-  if (user.role === "admin") return true;
-  if (["manager","supervisor"].includes(user.role) && siteAllowed(user, site)) return true;
+  if (canStocktakeRole(user, site)) return true;
   reply.code(403).send({ error: "STOCKTAKE_ROLE_REQUIRED" });
   return false;
 }
@@ -300,6 +305,7 @@ export async function registerInventoryExtraRoutes(app) {
       return reply.code(400).send({ error: "INVALID_CATALOG_ITEM" });
     }
     if (!requireCatalogManager(user,site,reply)) return;
+    const stocktakeWrite = canStocktakeRole(user,site);
 
     try {
       const saved = await withTransaction(async (client) => {
@@ -341,19 +347,30 @@ export async function registerInventoryExtraRoutes(app) {
           const locationId = location.rows[0].id;
           wantedLocationIds.push(locationId);
 
-          await client.query(
-            `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
-             values($1,$2,$3,$4,now())
-             on conflict(item_id,location_id) do update set
-               quantity=excluded.quantity,
-               minimum_quantity=excluded.minimum_quantity,
-               updated_at=now()`,
-            [
-              savedItem.id,locationId,
-              Math.max(0,Number(loc.quantity) || 0),
-              Math.max(0,Number(loc.minimum) || 0),
-            ]
-          );
+          if (stocktakeWrite) {
+            await client.query(
+              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+               values($1,$2,$3,$4,now())
+               on conflict(item_id,location_id) do update set
+                 quantity=excluded.quantity,
+                 minimum_quantity=excluded.minimum_quantity,
+                 updated_at=now()`,
+              [
+                savedItem.id,locationId,
+                Math.max(0,Number(loc.quantity) || 0),
+                Math.max(0,Number(loc.minimum) || 0),
+              ]
+            );
+          } else {
+            // Catalog editors may configure item/location metadata but must not
+            // use catalog sync as an alternate stocktake write path.
+            await client.query(
+              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+               values($1,$2,0,0,now())
+               on conflict(item_id,location_id) do nothing`,
+              [savedItem.id,locationId]
+            );
+          }
         }
 
         if (wantedLocationIds.length) {
