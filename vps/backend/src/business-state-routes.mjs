@@ -67,6 +67,22 @@ function currentRevision(revisions, moduleName) {
   return Math.max(0, Number(revisions?.[moduleName]) || 0);
 }
 
+function mergeAuditModule(before, incoming) {
+  const serverEntries = Array.isArray(before?.audit) ? before.audit : [];
+  const incomingEntries = Array.isArray(incoming?.audit) ? incoming.audit : [];
+  const seen = new Set();
+  const merged = [];
+  for (const entry of [...incomingEntries, ...serverEntries]) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = String(entry.id || "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    merged.push(entry);
+  }
+  merged.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  return { audit: merged.slice(0, 500) };
+}
+
 export async function registerBusinessStateRoutes(app) {
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -106,11 +122,14 @@ export async function registerBusinessStateRoutes(app) {
       return reply.code(403).send({ error: "BUSINESS_STATE_EDIT_NOT_ALLOWED" });
     }
 
+    // Audit is an append-only operational log. It is merged by unique entry id
+    // inside the row lock, so it never blocks a primary business module write.
+    const guardedNames = editableNames.filter((moduleName) => moduleName !== "audit");
     const expectedInput = requestedModuleRevisions(request.body);
     const expected = Object.fromEntries(
-      editableNames.map((moduleName) => [moduleName, validExpectedRevision(expectedInput[moduleName])])
+      guardedNames.map((moduleName) => [moduleName, validExpectedRevision(expectedInput[moduleName])])
     );
-    const missingModules = editableNames.filter((moduleName) => expected[moduleName] === null);
+    const missingModules = guardedNames.filter((moduleName) => expected[moduleName] === null);
     if (missingModules.length) {
       return reply.code(409).send({ error: "BUSINESS_STATE_REVISION_REQUIRED", site, missingModules });
     }
@@ -128,7 +147,7 @@ export async function registerBusinessStateRoutes(app) {
       );
       const before = current.rows[0]?.modules || {};
       const beforeRevisions = current.rows[0]?.module_revisions || {};
-      const conflictingModules = editableNames.filter(
+      const conflictingModules = guardedNames.filter(
         (moduleName) => expected[moduleName] !== currentRevision(beforeRevisions, moduleName)
       );
       if (conflictingModules.length) {
@@ -146,6 +165,7 @@ export async function registerBusinessStateRoutes(app) {
       }
 
       const next = { ...before, ...editable };
+      if (editable.audit) next.audit = mergeAuditModule(before.audit, editable.audit);
       const nextRevisions = { ...beforeRevisions };
       for (const moduleName of editableNames) {
         nextRevisions[moduleName] = currentRevision(beforeRevisions, moduleName) + 1;
