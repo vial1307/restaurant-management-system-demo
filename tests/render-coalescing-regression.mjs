@@ -16,9 +16,17 @@ function memoryStorage() {
 }
 
 const originalQueueMicrotask = globalThis.queueMicrotask;
+const originalDocument = globalThis.document;
 const microtasks = [];
 globalThis.queueMicrotask = (callback) => {
   microtasks.push(callback);
+};
+
+const appRoot = { firstElementChild: { id: "shell-a" } };
+globalThis.document = {
+  querySelector(selector) {
+    return selector === "#app" ? appRoot : null;
+  },
 };
 
 function flushMicrotasks() {
@@ -65,16 +73,33 @@ try {
   assert.equal(renderCalls, 2, "a later microtask checkpoint must render normally");
   assert.equal(latestEmployee, "Render C", "later UI render must receive the latest state");
 
+  store.updateSetting("employeeName", "Explicit Render");
+  assert.equal(immediateCalls, 4, "explicit-render scenario must still notify persistence immediately");
+  assert.equal(microtasks.length, 1, "explicit-render scenario must initially queue the UI subscriber");
+  appRoot.firstElementChild = { id: "shell-b" };
+  flushMicrotasks();
+  assert.equal(renderCalls, 2, "replacing the app shell before the checkpoint must suppress the redundant subscribed render");
+  assert.equal(latestEmployee, "Explicit Render", "persistence must still observe the explicit-render mutation");
+
+  store.updateSetting("employeeName", "Render After Explicit");
+  assert.equal(immediateCalls, 5, "a later mutation must still reach persistence after a suppressed UI callback");
+  assert.equal(microtasks.length, 1, "a later mutation must queue a fresh UI microtask after suppression");
+  flushMicrotasks();
+  assert.equal(renderCalls, 3, "a later mutation with an unchanged shell must render normally");
+  assert.equal(latestEmployee, "Render After Explicit", "later subscribed render must receive the latest state");
+
   store.updateSetting("employeeName", "Render D");
   assert.equal(microtasks.length, 1, "queued UI microtask missing before unsubscribe test");
   unsubscribeRender();
   flushMicrotasks();
-  assert.equal(renderCalls, 2, "an inert queued microtask must not render after unsubscribe");
-  assert.equal(immediateCalls, 4, "cancelling UI rendering must not affect persistence subscribers");
+  assert.equal(renderCalls, 3, "an inert queued microtask must not render after unsubscribe");
+  assert.equal(immediateCalls, 6, "cancelling UI rendering must not affect persistence subscribers");
 
   unsubscribeImmediate();
   console.log("RENDER_COALESCING_REGRESSION_OK");
 } finally {
   if (originalQueueMicrotask === undefined) delete globalThis.queueMicrotask;
   else globalThis.queueMicrotask = originalQueueMicrotask;
+  if (originalDocument === undefined) delete globalThis.document;
+  else globalThis.document = originalDocument;
 }
