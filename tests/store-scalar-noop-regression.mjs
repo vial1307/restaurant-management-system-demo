@@ -69,6 +69,9 @@ try {
 
   assertRealChange("new procurement line", () => store.updateProcurementLine("scalar-noop-probe", "planned", 3));
   assertNoop("same normalized procurement line", () => store.updateProcurementLine("scalar-noop-probe", "planned", "3"));
+  assertRealChange("absent zero procurement line", () => store.updateProcurementLine("scalar-zero-probe", "incoming", 0));
+  assert.equal(record.procurement.incoming["scalar-zero-probe"], 0, "absent zero procurement key must be materialized");
+  assertNoop("same zero procurement line", () => store.updateProcurementLine("scalar-zero-probe", "incoming", "0"));
   assertNoop("same procurement order date", () => store.updateProcurementOrderDate("noodles", record.procurement.orderDates.noodles));
   assertNoop("invalid procurement order date", () => store.updateProcurementOrderDate("noodles", "not-a-date"));
 
