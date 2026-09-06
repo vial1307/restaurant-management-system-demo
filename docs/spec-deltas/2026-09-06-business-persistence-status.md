@@ -9,9 +9,11 @@ Non-inventory business modules autosave to VPS/PostgreSQL. The synchronization l
 
 This violates the existing contract that failed VPS writes must surface as failure and must not be presented as successful local saves.
 
+A second issue is that the store updates a shared daily `record.updatedAt` timestamp for every mutation, including inventory-only mutations. Business-state serialization currently includes that same timestamp inside reservations/procurement/preparation records. If dirty detection compares it as business content, an inventory-only change can create a false business dirty state, unnecessary VPS write, and misleading persistence notice.
+
 ## Scope
 
-This phase adds user-visible persistence status for non-inventory business-state writes only.
+This phase adds user-visible persistence status for non-inventory business-state writes only and removes false business dirty detection caused solely by the shared record timestamp.
 
 It does not change:
 
@@ -20,7 +22,18 @@ It does not change:
 - account authorization;
 - recovery draft restore/apply behavior;
 - business-state conflict/concurrency model;
-- whole-app render architecture.
+- whole-app render architecture;
+- the serialized business payload shape when real business content changes.
+
+## Business dirty-comparison contract
+
+Dirty comparison for `reservations`, `procurement`, and `preparation` must ignore the shared per-date `updatedAt` field.
+
+This is a comparison-only rule:
+
+- if only `record.updatedAt` changes, there is no business dirty module, no business autosave, and no persistence lifecycle event;
+- if actual business content changes, the normal business module payload is still sent with its existing serialized shape, including `updatedAt` where already present;
+- recovery draft dirty-module selection uses the same comparison rule, so an inventory-only timestamp change cannot create a fake authorization-recovery draft.
 
 ## Dedicated persistence event
 
@@ -80,7 +93,7 @@ Examples that must be represented as failure rather than success include:
 - missing production save confirmation;
 - authorization/site errors returned by the backend.
 
-The UI should translate known error classes into concise bilingual operational language. Raw payloads, stack traces, credentials or sensitive recovery data must never be rendered.
+The UI should translate known error classes into concise bilingual operational language. Raw payloads, stack traces, credentials or sensitive recovery data must never be rendered or copied into DOM attributes.
 
 ## Visible UI contract
 
@@ -126,15 +139,16 @@ The persistence notice must:
 
 ## Acceptance criteria
 
-1. After initial VPS load, mutate one editable business setting and notify the store subscriber; before the debounce fires, a scoped `pending` event exists on `shitu:business-persistence-status`.
-2. When the dirty POST starts, a scoped `saving` event exists on the dedicated write channel.
-3. A fully confirmed VPS response emits scoped `saved` with the changed module list only when that snapshot is still current.
-4. If a newer local edit appears while a write is in flight, confirmation of the older write does not emit a visible `saved` state over the newer pending edit.
-5. A failed save emits scoped `error`; unrelated `shitu:business-state-status` read/ready activity does not clear the error UI.
-6. A later confirmed save for the same user/site and current snapshot clears the failure and shows confirmed success.
-7. Switching authenticated user/site hides status from the previous scope.
-8. A no-op focus refresh with no dirty modules never reports `pending`/`saving`/`saved` on the dedicated write channel.
-9. A read failure without a dirty write never creates a persistence warning.
-10. Real Chromium UI regression verifies pending/saving/error/saved states and no horizontal overflow at mandatory phone breakpoints.
-11. Existing recovery notice, account/permission, inventory, synchronization and full-device regressions remain green.
-12. Production smoke verifies the deployed persistence notice assets and a synthetic dedicated local status event without writing production business data.
+1. After initial VPS load, changing only a daily record's shared `updatedAt` timestamp emits no business persistence lifecycle and creates no VPS business write.
+2. Mutate one editable business setting and notify the store subscriber; before the debounce fires, a scoped `pending` event exists on `shitu:business-persistence-status`.
+3. When the dirty POST starts, a scoped `saving` event exists on the dedicated write channel.
+4. A fully confirmed VPS response emits scoped `saved` with the changed module list only when that snapshot is still current.
+5. If a newer local edit appears while a write is in flight, confirmation of the older write does not emit a visible `saved` state over the newer pending edit.
+6. A failed save emits scoped `error`; unrelated `shitu:business-state-status` read/ready activity does not clear the error UI.
+7. A later confirmed save for the same user/site and current snapshot clears the failure and shows confirmed success.
+8. Switching authenticated user/site hides status from the previous scope.
+9. A no-op focus refresh with no dirty modules never reports `pending`/`saving`/`saved` on the dedicated write channel.
+10. A read failure without a dirty write never creates a persistence warning.
+11. Real Chromium UI regression verifies pending/saving/error/saved states, raw error non-disclosure, and no horizontal overflow at mandatory phone breakpoints.
+12. Existing recovery notice, account/permission, inventory, synchronization and full-device regressions remain green.
+13. Production smoke verifies the deployed persistence notice assets and a synthetic dedicated local status event without writing production business data.
