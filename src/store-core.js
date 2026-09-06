@@ -454,7 +454,6 @@ export function createStore(storage = globalThis.localStorage) {
     resetBusinessModules,
     update,
     selectDate(date) {
-      if (state.selectedDate === date && state.records[date]) return state;
       return update((draft) => {
         ensureRecord(draft, date);
         draft.selectedDate = date;
