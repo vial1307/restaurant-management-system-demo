@@ -1,0 +1,61 @@
+name: Fix PR47 ingredient modal markup
+
+on:
+  push:
+    branches:
+      - test-mobile-role-site-certification-v2-20260907
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: test-mobile-role-site-certification-v2-20260907
+          fetch-depth: 0
+      - name: Repair workstation select markup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path('src/app.js')
+          text = app.read_text(encoding='utf-8')
+          pattern = re.compile(r'(<select name="workArea">(?:(?!</select>).)*?)(<small class="ingredient-form-guide">)', re.S)
+          updated, count = pattern.subn(r'\1</select>\2', text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one malformed workArea select, found {count}')
+          app.write_text(updated, encoding='utf-8')
+
+          workflow = Path('.github/workflows/fix-pr47-ingredient-modal.yml')
+          workflow.unlink()
+          PY
+      - name: Validate repaired markup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('src/app.js').read_text(encoding='utf-8')
+          needle = 'name="workArea"'
+          pos = text.find(needle)
+          if pos < 0:
+              raise SystemExit('workArea select not found')
+          segment = text[pos:pos + 2000]
+          close = segment.find('</select>')
+          guide = segment.find('<small class="ingredient-form-guide">')
+          if close < 0 or guide < 0 or close > guide:
+              raise SystemExit('workArea select still malformed')
+          print('PR47_INGREDIENT_MODAL_MARKUP_OK')
+          PY
+      - name: Commit repair
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/app.js .github/workflows/fix-pr47-ingredient-modal.yml
+          git commit -m 'Fix ingredient modal workstation markup'
+          git push origin HEAD:test-mobile-role-site-certification-v2-20260907
