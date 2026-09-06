@@ -44,6 +44,7 @@ No generic deep comparison is added to `update()`. No action/audit mutation (`to
 - Invalid procurement order dates and missing item/work-item IDs do not persist or notify.
 - Existing linked-value propagation remains intact when linked copies are inconsistent.
 - Chromium warehouse switching must remain clickable after selecting today; no stale calendar/topbar may intercept pointer events.
+- PR CI must test the merge candidate against the current `main`, including the already-deployed render-time empty-search bypass; passing only the feature-branch files in isolation is insufficient.
 - Existing full static/runtime, API/Postgres, Chromium mobile/desktop and Firefox/WebKit regressions remain mandatory before merge. Production still requires exact-SHA deploy health and UI smoke.
 
 ## Regression correction
