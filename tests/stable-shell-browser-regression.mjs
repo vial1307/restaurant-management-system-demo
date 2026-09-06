@@ -42,11 +42,11 @@ try {
   assert.equal(identity.app, true, "render-only calendar interaction must preserve .app-shell identity");
   assert.equal(identity.main, true, "render-only calendar interaction must preserve .main-shell identity");
 
-  await page.locator('[data-action="toggle-calendar"]').first().click();
+  await page.locator(".calendar-popover .calendar-day.selected").click();
   await page.locator(".calendar-popover").waitFor({ state: "hidden" });
   identity = await shellIdentity();
-  assert.equal(identity.app, true, "closing calendar must preserve .app-shell identity");
-  assert.equal(identity.main, true, "closing calendar must preserve .main-shell identity");
+  assert.equal(identity.app, true, "calendar day selection must preserve .app-shell identity");
+  assert.equal(identity.main, true, "calendar day selection must preserve .main-shell identity");
 
   await page.locator('[data-action="shift-date"][data-offset="1"]').first().click();
   identity = await shellIdentity();
