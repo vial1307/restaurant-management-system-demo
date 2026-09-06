@@ -33,6 +33,7 @@ No-op suppression is limited to these eight scalar setters:
 - A real scalar change persists exactly once and notifies once.
 - Repeating the same normalized value for the eight in-scope setters causes zero additional writes/notifications and leaves `updatedAt`/`pendingSync` unchanged.
 - Same-date `selectDate` still persists once and notifies once; this is a lifecycle requirement, not an optimization target.
+- The existing calendar → same-day selection → warehouse interaction must close the calendar through the normal store notification path; no force-click, synthetic DOM close, or explicit app render compensation is allowed.
 - Numeric strings matching stored numeric values are no-ops for in-scope setters.
 - Absent zero-valued procurement keys still materialize.
 - Invalid procurement order date and missing inventory/work IDs do not persist or notify.
