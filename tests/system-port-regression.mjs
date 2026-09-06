@@ -55,6 +55,11 @@ assert.match(app, /data-action="toggle-mobile-menu"/);
 assert.match(app, /data-form="save-general-settings"/);
 assert.match(app, /shitu:business-persistence-status/);
 assert.match(app, /modules\.includes\("settings"\)/);
+const workAreaSelectStart = app.indexOf('<select name="workArea">');
+const workAreaSelectClose = app.indexOf("</select>", workAreaSelectStart);
+const workAreaGuide = app.indexOf('<small class="ingredient-form-guide">', workAreaSelectStart);
+assert.ok(workAreaSelectStart >= 0, "ingredient modal workstation select must exist");
+assert.ok(workAreaSelectClose > workAreaSelectStart && workAreaSelectClose < workAreaGuide, "ingredient modal workstation select must close before its guide and stocktake fields");
 assert.match(source("src/styles.css"), /\.mobile-menu-grid/);
 assert.match(source("docs/SYSTEM_SPECIFICATION.md"), /successful shared save only after the VPS confirms/);
 
