@@ -35,7 +35,10 @@ globalThis.fetch = async (input, init = {}) => {
     ? current.moduleRevisions
     : {};
   const expectedModuleRevisions = Object.fromEntries(
-    Object.keys(body.modules).map((name) => [name, Number.isInteger(Number(revisions[name])) ? Number(revisions[name]) : 0])
+    Object.keys(body.modules).flatMap((name) => {
+      const revision = Number(revisions[name]);
+      return Number.isInteger(revision) && revision >= 0 ? [[name, revision]] : [];
+    })
   );
 
   return originalFetch(input, {
