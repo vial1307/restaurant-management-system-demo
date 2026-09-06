@@ -21,3 +21,4 @@ const migrated = source
   );
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
+await import("./catalog-stocktake-regression-client.mjs");
