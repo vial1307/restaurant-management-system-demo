@@ -1731,7 +1731,7 @@ function applyInventorySearchDom(input) {
   table.querySelectorAll(".inventory-group").forEach((group) => {
     let visibleInGroup = 0;
     group.querySelectorAll(".inventory-row").forEach((row) => {
-      const visible = preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
       row.hidden = !visible;
       if (visible) visibleInGroup += 1;
     });
@@ -1744,7 +1744,7 @@ function applyInventorySearchDom(input) {
 
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
   looseRows.forEach((row) => {
-    const visible = preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+    const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
     row.hidden = !visible;
     if (visible) visibleTotal += 1;
   });
