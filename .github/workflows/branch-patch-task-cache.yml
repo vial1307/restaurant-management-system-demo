@@ -1,0 +1,75 @@
+name: One-shot task derivation cache patch
+
+on:
+  push:
+    branches:
+      - perf-task-derivation-cache-20260906
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf-task-derivation-cache-20260906
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Patch app task context only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/app.js")
+          text = path.read_text()
+
+          import_anchor = 'import { defineLazyDerivedProperties } from "./lazy-derived-context.js";\n'
+          import_replacement = import_anchor + 'import { createTaskDerivationCache } from "./task-derivation-cache.js";\n'
+          assert text.count(import_anchor) == 1, "lazy-derived import anchor changed"
+          assert 'task-derivation-cache.js' not in text, "task cache import already present"
+          text = text.replace(import_anchor, import_replacement, 1)
+
+          store_anchor = '''const store = createStore();
+          attachBusinessStateSync(store);
+          const root = document.querySelector("#app");
+          '''
+          store_replacement = '''const store = createStore();
+          attachBusinessStateSync(store);
+          const taskDerivationCache = createTaskDerivationCache({
+            deriveTasks: (state, date) => {
+              const record = state.records[date];
+              return [...buildGeneratedTasks(state, date), ...(record.customTasks ?? [])];
+            },
+            summarizeProgress: completionSummary,
+          });
+          const root = document.querySelector("#app");
+          '''
+          assert text.count(store_anchor) == 1, "store/root anchor changed"
+          text = text.replace(store_anchor, store_replacement, 1)
+
+          context_anchor = '''    tasks:() => [...buildGeneratedTasks(state, state.selectedDate), ...record.customTasks],
+              progress:() => completionSummary(context.tasks, record.completedTasks),
+          '''
+          context_replacement = '''    tasks:() => taskDerivationCache.tasks(state, state.selectedDate),
+              progress:() => taskDerivationCache.progress(state, state.selectedDate),
+          '''
+          assert text.count(context_anchor) == 1, "currentContext task/progress anchor changed"
+          text = text.replace(context_anchor, context_replacement, 1)
+
+          path.write_text(text)
+          PY
+
+          node tests/performance-regression.mjs
+
+          git rm .github/workflows/branch-patch-task-cache.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app.js .github/workflows/branch-patch-task-cache.yml
+          git commit -m "Reuse task derivation across unrelated renders"
+          git push origin HEAD:perf-task-derivation-cache-20260906
