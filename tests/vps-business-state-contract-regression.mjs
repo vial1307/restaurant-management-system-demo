@@ -18,8 +18,12 @@ assert.doesNotMatch(api, /businessModuleRevisionCache/, "transport must not own 
 assert.match(saveFunction, /return \{ \.\.\.result, moduleRevisions \};/, "validated business-state save response must return normalized module revisions");
 
 assert.match(sync, /let loadedModuleRevisionKey = "";[\s\S]{0,80}let loadedModuleRevisions = \{\};/, "business sync must own the accepted per-scope module revision baseline");
-assert.match(sync, /const expectedModuleRevisions = loadedModuleRevisionKey === key[\s\S]{0,260}loadedModuleRevisions\[name\]/, "dirty business writes must derive expected revisions from the accepted sync baseline");
+const acceptedRevisionHelper = sync.match(/const acceptedRevisionsFor = \(names, key = identityKey\(\)\) => \([\s\S]*?\n  \);/)?.[0] || "";
+assert(acceptedRevisionHelper, "business sync must centralize accepted module revision lookup");
+assert.match(acceptedRevisionHelper, /loadedModuleRevisionKey === key/, "accepted revision lookup must be scoped to the loaded identity");
+assert.match(acceptedRevisionHelper, /Number\.isInteger\(loadedModuleRevisions\[name\]\)[\s\S]{0,100}loadedModuleRevisions\[name\]/, "accepted revision lookup must use only validated tokens from the sync baseline");
+assert.match(sync, /const expectedModuleRevisions = acceptedRevisionsFor\(dirtyNames, key\)/, "dirty business writes must derive expected revisions from the accepted sync baseline helper");
 assert.match(sync, /vpsSaveBusinessState\(site, dirtyModules, expectedModuleRevisions\)/, "business sync must pass its accepted revision baseline explicitly to transport");
-assert.match(sync, /deferred:true[\s\S]{0,100}return;[\s\S]{0,180}loadedModuleRevisionKey = key;[\s\S]{0,120}normalizedModuleRevisions\(result\?\.moduleRevisions\)/, "deferred remote reads must return before advancing the local concurrency baseline");
+assert.match(sync, /deferred:true[\s\S]{0,100}return;[\s\S]{0,260}loadedModuleRevisionKey = key;[\s\S]{0,160}normalizedModuleRevisions\(result\?\.moduleRevisions\)/, "deferred remote reads must return before advancing the local concurrency baseline");
 
 console.log("VPS_BUSINESS_STATE_CONTRACT_OK");
