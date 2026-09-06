@@ -2,6 +2,7 @@ const VPS_HOSTS = new Set(["82.47.180.185"]);
 const LEGACY_STATIC_HOSTS = new Set(["vial1307.github.io"]);
 const inventoryCache = new Map();
 const receiveDefaultsCache = new Map();
+const businessModuleRevisionCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
 const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
@@ -22,6 +23,7 @@ export function invalidateVpsReceiveDefaultsCache() {
 function clearRuntimeCaches() {
   invalidateVpsInventoryCache("");
   invalidateVpsReceiveDefaultsCache();
+  businessModuleRevisionCache.clear();
   authMeInFlight = null;
   adminUsersInFlight = null;
 }
@@ -52,7 +54,7 @@ export async function apiRequest(path, {
   try {
     response = await fetch(path, {
       method,
-      credentials: "same-origin",
+      credentials = "same-origin",
       cache: "no-store",
       signal: controller.signal,
       headers: {
@@ -99,6 +101,15 @@ export async function apiRequest(path, {
   }
 
   return data;
+}
+
+function normalizedModuleRevisions(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return Object.fromEntries(
+    Object.entries(input)
+      .map(([name, value]) => [String(name), Number(value)])
+      .filter(([, value]) => Number.isInteger(value) && value >= 0)
+  );
 }
 
 export async function vpsLogin(username, password) {
@@ -162,30 +173,40 @@ export function vpsDeleteUser(id) {
   return apiRequest(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function vpsBusinessState(site) {
-  return apiRequest(`/api/business-state/${encodeURIComponent(site)}`);
+export async function vpsBusinessState(site) {
+  const key = String(site || "");
+  const result = await apiRequest(`/api/business-state/${encodeURIComponent(key)}`);
+  businessModuleRevisionCache.set(key, normalizedModuleRevisions(result?.moduleRevisions));
+  return result;
 }
 
-export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions) {
-  const result = await apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
+export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions = null) {
+  const key = String(site || "");
+  const moduleNames = Object.keys(modules || {});
+  const explicit = expectedModuleRevisions && typeof expectedModuleRevisions === "object" && !Array.isArray(expectedModuleRevisions)
+    ? normalizedModuleRevisions(expectedModuleRevisions)
+    : null;
+  const cached = businessModuleRevisionCache.get(key);
+  const expected = explicit || (cached
+    ? Object.fromEntries(moduleNames.map((name) => [name, Number.isInteger(cached[name]) ? cached[name] : 0]))
+    : {});
+  const result = await apiRequest(`/api/business-state/${encodeURIComponent(key)}`, {
     method: "POST",
-    body: { modules, expectedModuleRevisions },
+    body: { modules, expectedModuleRevisions: expected },
     timeoutMs: 30000,
   });
-  const moduleRevisions = result?.moduleRevisions;
-  if (
-    result?.ok !== true
-    || !Array.isArray(result?.savedModules)
-    || !moduleRevisions
-    || typeof moduleRevisions !== "object"
-    || Array.isArray(moduleRevisions)
-  ) {
+  const moduleRevisions = normalizedModuleRevisions(result?.moduleRevisions);
+  const confirmedRevisions = Array.isArray(result?.savedModules)
+    ? result.savedModules.every((name) => Number.isInteger(moduleRevisions[name]) && moduleRevisions[name] >= 0)
+    : false;
+  if (result?.ok !== true || !Array.isArray(result?.savedModules) || !confirmedRevisions) {
     const error = new Error("BUSINESS_STATE_SAVE_CONFIRMATION_MISSING");
     error.code = "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING";
     error.payload = result;
     throw error;
   }
-  return result;
+  businessModuleRevisionCache.set(key, { ...(cached || {}), ...moduleRevisions });
+  return { ...result, moduleRevisions };
 }
 
 export function vpsSchemaVersion() {
