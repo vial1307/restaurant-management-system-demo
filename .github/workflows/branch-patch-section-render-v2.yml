@@ -1,0 +1,50 @@
+name: One-shot section render v2 patch
+on:
+  push:
+    branches: [perf-section-render-api-v2-20260907]
+    paths: [".github/workflows/branch-patch-section-render-v2.yml"]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: perf-section-render-api-v2-20260907
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Port section renderer and wire app
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object src/stable-app-root.js)" = "cdd726f939ec07c7b06e69663f4861319b3c2726"
+          test "$(git hash-object src/app.js)" = "4fb2afe9c684cd95fd5704c3cf7fe73b772eb476"
+          git fetch origin perf-section-render-api-20260906
+          git show origin/perf-section-render-api-20260906:src/stable-app-root.js > src/stable-app-root.js
+          git show origin/perf-section-render-api-20260906:docs/spec-deltas/2026-09-06-section-render-api.md > docs/spec-deltas/2026-09-07-section-render-api-v2.md
+          git show origin/perf-section-render-api-20260906:tests/section-render-api-contract-regression.mjs > tests/section-render-api-contract-regression.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/app.js'); s=p.read_text()
+          old='  root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;'
+          new='''  const sidebarMarkup = sidebar(context, active);\n  const topbarMarkup = topbar(context);\n  const pageMarkup = `<main class="page-content">${pages[active](context)}</main>`;\n  const mobileNavMarkup = `<nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav>`;\n  const overlaysMarkup = `${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;\n  if (typeof root.renderSections === "function") {\n    root.renderSections({ sidebar: sidebarMarkup, topbar: topbarMarkup, page: pageMarkup, mobileNav: mobileNavMarkup, overlays: overlaysMarkup });\n  } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;'''
+          if s.count(old)!=1: raise SystemExit(f'expected one render assignment, got {s.count(old)}')
+          p.write_text(s.replace(old,new,1))
+          perf=Path('tests/performance-regression.mjs'); t=perf.read_text()
+          imp='await import("./section-render-api-contract-regression.mjs");\n'
+          if imp not in t: t += imp
+          perf.write_text(t)
+          spec=Path('docs/spec-deltas/2026-09-07-section-render-api-v2.md'); text=spec.read_text().replace('Date: 2026-09-06','Date: 2026-09-07').replace('Base production: `c7201a65338e5f83f487d3330d15525fbfda1b7a`','Base production: `0d98c785cdb46c7827a8dfe9935f16834385f821`')
+          spec.write_text(text)
+          PY
+          node tests/performance-regression.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/branch-patch-section-render-v2.yml
+          git add src/app.js src/stable-app-root.js tests docs
+          git commit -m "Render stable shell sections independently"
+          git push origin HEAD:perf-section-render-api-v2-20260907
