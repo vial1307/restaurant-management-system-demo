@@ -1,5 +1,5 @@
 import { createStore as createCoreStore } from "./store-core.js";
-import { createFrameCoalescedListener } from "./render-coalescer.js";
+import { createMicrotaskCoalescedListener } from "./render-coalescer.js";
 
 export * from "./store-core.js";
 
@@ -14,7 +14,7 @@ export function createStore(storage = globalThis.localStorage) {
     subscribe(listener) {
       if (listener?.name !== UI_RENDER_LISTENER_NAME) return subscribeCore(listener);
 
-      const coalesced = createFrameCoalescedListener(listener);
+      const coalesced = createMicrotaskCoalescedListener(listener);
       const unsubscribe = subscribeCore(coalesced);
       return () => {
         unsubscribe();
