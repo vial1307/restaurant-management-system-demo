@@ -157,10 +157,59 @@ await delay(20);
 assert.equal(saveCalls, savesBeforeNoop, "clean focus refresh created a false VPS business write");
 assert.equal(statuses.length, lifecycleBeforeNoop, "clean focus refresh emitted a false persistence lifecycle");
 
-// Failed persistence must be scoped and must never be followed by a false saved event.
+// If the user edits again while an older write is in flight, the old confirmation
+// must not replace the newer pending state with a false saved indication.
 state = { ...state, settings: { ...state.settings, reservationBuffer: 10 } };
 subscriber();
+let resolveOlderWrite = null;
+globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
+  saveCalls += 1;
+  return new Promise((resolve) => {
+    resolveOlderWrite = () => {
+      serverRevision += 1;
+      serverBuffer = Number(modules.settings?.reservationBuffer ?? serverBuffer);
+      resolve({ ok: true, revision: serverRevision, savedModules: Object.keys(modules) });
+    };
+  });
+};
+window.dispatchEvent(new CustomEvent("focus"));
+await delay(0);
+assert.equal(typeof resolveOlderWrite, "function", "older write did not enter the in-flight state");
+state = { ...state, settings: { ...state.settings, reservationBuffer: 11 } };
+subscriber();
+const savedBeforeOlderCompletion = statuses.filter((entry) => entry?.status === "saved").length;
+assert.equal(statuses.at(-1)?.status, "pending", "newer edit did not replace saving state with pending");
+resolveOlderWrite();
+await delay(20);
+assert.equal(
+  statuses.filter((entry) => entry?.status === "saved").length,
+  savedBeforeOlderCompletion,
+  "older write confirmation falsely reported the newer local edit as saved"
+);
+assert.equal(statuses.at(-1)?.status, "pending", "older write completion cleared the newer pending status");
+
+globalThis.__testVpsSaveBusinessState = async (_site, modules) => {
+  saveCalls += 1;
+  serverRevision += 1;
+  serverBuffer = Number(modules.settings?.reservationBuffer ?? serverBuffer);
+  return { ok: true, revision: serverRevision, savedModules: Object.keys(modules) };
+};
+window.dispatchEvent(new CustomEvent("focus"));
+await delay(20);
+assert.equal(statuses.at(-1)?.status, "saved", "newer current snapshot did not receive a confirmed saved state");
+
+// Failed persistence must be scoped and must never be followed by a false saved event.
+state = { ...state, settings: { ...state.settings, reservationBuffer: 12 } };
+subscriber();
 failNextSave = true;
+globalThis.__testVpsSaveBusinessState = async () => {
+  saveCalls += 1;
+  if (failNextSave) {
+    failNextSave = false;
+    throw new Error("TEST_PERSISTENCE_FAILURE");
+  }
+  return { ok: true, revision: ++serverRevision, savedModules: ["settings"] };
+};
 const savedCountBeforeFailure = statuses.filter((entry) => entry?.status === "saved").length;
 window.dispatchEvent(new CustomEvent("focus"));
 await delay(20);
