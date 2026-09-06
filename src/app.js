@@ -1327,7 +1327,14 @@ function render() {
   const pages = { dashboard, inventory, procurement: procurementPage, reservations: reservationsPage, preparation: preparationPage, menu: management.menuPage, sop: management.sopPage, skills: management.skillsPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
-  root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  const sidebarMarkup = sidebar(context, active);
+  const topbarMarkup = topbar(context);
+  const pageMarkup = `<main class="page-content">${pages[active](context)}</main>`;
+  const mobileNavMarkup = `<nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav>`;
+  const overlaysMarkup = `${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  if (typeof root.renderSections === "function") {
+    root.renderSections({ sidebar: sidebarMarkup, topbar: topbarMarkup, page: pageMarkup, mobileNav: mobileNavMarkup, overlays: overlaysMarkup });
+  } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
