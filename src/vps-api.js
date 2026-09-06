@@ -2,7 +2,6 @@ const VPS_HOSTS = new Set(["82.47.180.185"]);
 const LEGACY_STATIC_HOSTS = new Set(["vial1307.github.io"]);
 const inventoryCache = new Map();
 const receiveDefaultsCache = new Map();
-const businessModuleRevisionCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
 const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
@@ -23,7 +22,6 @@ export function invalidateVpsReceiveDefaultsCache() {
 function clearRuntimeCaches() {
   invalidateVpsInventoryCache("");
   invalidateVpsReceiveDefaultsCache();
-  businessModuleRevisionCache.clear();
   authMeInFlight = null;
   adminUsersInFlight = null;
 }
@@ -112,20 +110,6 @@ function normalizedModuleRevisions(input) {
   );
 }
 
-function currentSessionUserId() {
-  try {
-    return String(JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null")?.id || "");
-  } catch {
-    return "";
-  }
-}
-
-function businessRevisionCacheKey(site, userId = currentSessionUserId()) {
-  const normalizedSite = String(site || "");
-  const normalizedUserId = String(userId || "");
-  return normalizedUserId && normalizedSite ? `${normalizedUserId}:${normalizedSite}` : "";
-}
-
 export async function vpsLogin(username, password) {
   clearRuntimeCaches();
   const result = await apiRequest("/api/auth/login", {
@@ -187,30 +171,13 @@ export function vpsDeleteUser(id) {
   return apiRequest(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export async function vpsBusinessState(site) {
-  const siteKey = String(site || "");
-  const userId = currentSessionUserId();
-  const cacheKey = businessRevisionCacheKey(siteKey, userId);
-  const result = await apiRequest(`/api/business-state/${encodeURIComponent(siteKey)}`);
-  if (cacheKey && currentSessionUserId() === userId) {
-    businessModuleRevisionCache.set(cacheKey, normalizedModuleRevisions(result?.moduleRevisions));
-  }
-  return result;
+export function vpsBusinessState(site) {
+  return apiRequest(`/api/business-state/${encodeURIComponent(site)}`);
 }
 
-export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions = null) {
-  const siteKey = String(site || "");
-  const userId = currentSessionUserId();
-  const cacheKey = businessRevisionCacheKey(siteKey, userId);
-  const moduleNames = Object.keys(modules || {});
-  const explicit = expectedModuleRevisions && typeof expectedModuleRevisions === "object" && !Array.isArray(expectedModuleRevisions)
-    ? normalizedModuleRevisions(expectedModuleRevisions)
-    : null;
-  const cached = cacheKey ? businessModuleRevisionCache.get(cacheKey) : null;
-  const expected = explicit || (cached
-    ? Object.fromEntries(moduleNames.flatMap((name) => Number.isInteger(cached[name]) ? [[name, cached[name]]] : []))
-    : {});
-  const result = await apiRequest(`/api/business-state/${encodeURIComponent(siteKey)}`, {
+export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions = {}) {
+  const expected = normalizedModuleRevisions(expectedModuleRevisions);
+  const result = await apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
     method: "POST",
     body: { modules, expectedModuleRevisions: expected },
     timeoutMs: 30000,
@@ -224,9 +191,6 @@ export async function vpsSaveBusinessState(site, modules, expectedModuleRevision
     error.code = "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING";
     error.payload = result;
     throw error;
-  }
-  if (cacheKey && currentSessionUserId() === userId) {
-    businessModuleRevisionCache.set(cacheKey, { ...(cached || {}), ...moduleRevisions });
   }
   return { ...result, moduleRevisions };
 }
