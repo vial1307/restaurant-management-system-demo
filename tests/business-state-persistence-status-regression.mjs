@@ -233,5 +233,13 @@ assert.equal(recovered?.userId, "status-user");
 assert.equal(recovered?.site, "fuxing");
 assert.deepEqual(recovered?.modules, ["settings"]);
 
+// A read-only refresh failure on a clean snapshot must stay on the general state
+// channel and must never impersonate a failed persistence attempt.
+statuses.length = 0;
+globalThis.__testVpsBusinessState = async () => { throw new Error("READ_ONLY_REFRESH_FAILURE"); };
+window.dispatchEvent(new CustomEvent("focus"));
+await delay(20);
+assert.equal(statuses.length, 0, "read-only refresh failure emitted a false write-persistence warning");
+
 detach();
 console.log("BUSINESS_STATE_PERSISTENCE_STATUS_OK");
