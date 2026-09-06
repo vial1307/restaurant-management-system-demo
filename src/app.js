@@ -23,6 +23,7 @@ import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operati
 import { createManagement } from "./management.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
 import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
+import { createTaskDerivationCache } from "./task-derivation-cache.js";
 import {
   activeInventorySite,
   bootstrapFuxingInventory,
@@ -51,6 +52,13 @@ import {
 
 const store = createStore();
 attachBusinessStateSync(store);
+const taskDerivationCache = createTaskDerivationCache({
+  deriveTasks: (state, date) => {
+    const record = state.records[date];
+    return [...buildGeneratedTasks(state, date), ...(record.customTasks ?? [])];
+  },
+  summarizeProgress: completionSummary,
+});
 const root = document.querySelector("#app");
 const view = {
   inventoryView: "storage",
@@ -300,8 +308,8 @@ function currentContext() {
   return defineLazyDerivedProperties(context, {
     reservations:() => calculateReservations(record.reservation, state.settings.reservationBuffer),
     rice:() => calculateRice(state.selectedDate, record.riceRemaining, state.settings),
-    tasks:() => [...buildGeneratedTasks(state, state.selectedDate), ...record.customTasks],
-    progress:() => completionSummary(context.tasks, record.completedTasks),
+    tasks:() => taskDerivationCache.tasks(state, state.selectedDate),
+    progress:() => taskDerivationCache.progress(state, state.selectedDate),
     reserves:() => summarizeReserveInventory(record),
     alerts:() => buildInventoryAlerts(record),
     workAlerts:() => context.alerts.filter((item) => item.kind === "work"),
