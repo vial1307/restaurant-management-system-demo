@@ -6,6 +6,13 @@ const PASSWORD = "KitchenTest!123";
 const RECOVERY_KEY = "shitu-business-recovery-v1";
 const SECRET_MARKER = "RECOVERY_PAYLOAD_MUST_NOT_RENDER_7f3d";
 const ROUTES = ["dashboard", "inventory", "procurement", "reservations", "preparation", "menu", "sop", "skills", "attendance", "schedule", "reports", "remote", "settings"];
+const VIEWPORTS = [
+  { width: 320, height: 740, label: "320px phone" },
+  { width: 359, height: 800, label: "359px phone" },
+  { width: 390, height: 844, label: "390px phone" },
+  { width: 412, height: 915, label: "412px Android" },
+  { width: 844, height: 390, label: "phone landscape" },
+];
 
 async function login(page) {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -81,23 +88,25 @@ try {
   await page.waitForSelector(".app-shell", { state: "visible", timeout: 30000 });
   await page.locator("[data-business-recovery-banner]").waitFor({ state: "visible", timeout: 10000 });
 
-  // Mandatory mobile breakpoint: no horizontal overflow and the banner stays inside the viewport.
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(100);
-  const geometry = await page.evaluate(() => {
-    const banner = document.querySelector("[data-business-recovery-banner]");
-    const rect = banner?.getBoundingClientRect();
-    return {
-      overflow: document.documentElement.scrollWidth - window.innerWidth,
-      left: rect?.left ?? -999,
-      right: rect?.right ?? 9999,
-      width: rect?.width ?? 0,
-      viewport: window.innerWidth,
-    };
-  });
-  assert(geometry.overflow <= 3, `recovery notice caused ${geometry.overflow}px horizontal overflow on mobile`);
-  assert(geometry.width > 0, "recovery notice disappeared at 390px mobile width");
-  assert(geometry.left >= -1 && geometry.right <= geometry.viewport + 1, `recovery notice escaped mobile viewport: ${JSON.stringify(geometry)}`);
+  // Mandatory responsive contract: recovery metadata must never widen the document.
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.waitForTimeout(80);
+    const geometry = await page.evaluate(() => {
+      const banner = document.querySelector("[data-business-recovery-banner]");
+      const rect = banner?.getBoundingClientRect();
+      return {
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+        left: rect?.left ?? -999,
+        right: rect?.right ?? 9999,
+        width: rect?.width ?? 0,
+        viewport: window.innerWidth,
+      };
+    });
+    assert(geometry.overflow <= 3, `recovery notice caused ${geometry.overflow}px horizontal overflow at ${viewport.label}`);
+    assert(geometry.width > 0, `recovery notice disappeared at ${viewport.label}`);
+    assert(geometry.left >= -1 && geometry.right <= geometry.viewport + 1, `recovery notice escaped ${viewport.label}: ${JSON.stringify(geometry)}`);
+  }
 
   // Recovery metadata from another account on the same browser must stay hidden.
   await page.evaluate(({ recoveryKey }) => {
