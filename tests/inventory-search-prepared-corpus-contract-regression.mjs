@@ -18,7 +18,8 @@ const source = app.slice(start, end);
 const firstRowLoop = source.indexOf('table.querySelectorAll(".inventory-group").forEach');
 assert.ok(firstRowLoop > 0, "inventory group loop must remain locatable");
 assert.match(source.slice(0, firstRowLoop), /const\s+needle\s*=\s*prepareSearchNeedle\s*\(\s*query\s*\)/, "inventory search must prepare the query once before row loops");
-assert.match(source, /preparedSearchMatches\s*\(\s*inventoryRowSearchCorpus\(row\)\s*,\s*needle\s*\)/, "inventory rows must use prepared corpus matching");
+const preparedMatchPattern = /const\s+visible\s*=\s*!needle\s*\|\|\s*preparedSearchMatches\s*\(\s*inventoryRowSearchCorpus\(row\)\s*,\s*needle\s*\)/g;
+assert.equal([...source.matchAll(preparedMatchPattern)].length, 2, "grouped and loose rows must short-circuit empty queries before preparing row corpus");
 assert.doesNotMatch(source, /searchMatches\s*\(\s*row\.textContent/, "inventory row loops must not rebuild search corpus through searchMatches");
 
 console.log("INVENTORY_SEARCH_PREPARED_CORPUS_CONTRACT_OK");
