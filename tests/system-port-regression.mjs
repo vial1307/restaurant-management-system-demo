@@ -59,3 +59,4 @@ assert.match(source("src/styles.css"), /\.mobile-menu-grid/);
 assert.match(source("docs/SYSTEM_SPECIFICATION.md"), /successful shared save only after the VPS confirms/);
 
 await import("./business-module-permission-contract.mjs");
+await import("./catalog-stocktake-boundary-regression.mjs");
