@@ -55,6 +55,7 @@ jobs:
           node tests/business-state-sync-coalescing-regression.mjs
           node tests/business-state-auth-recovery-regression.mjs
           node tests/business-state-partial-save-regression.mjs
+          node tests/business-state-persistence-status-regression.mjs
           node tests/business-recovery-metadata-regression.mjs
           node tests/device-sync-runtime-regression.mjs
           node tests/device-sync-auth-transition-regression.mjs
@@ -82,6 +83,8 @@ jobs:
           test -f sw.js
           test -f src/business-recovery-notice.js
           test -f src/business-recovery-notice.css
+          test -f src/business-persistence-status.js
+          test -f src/business-persistence-status.css
           test -f vps/docker-compose.yml
           test -f vps/Caddyfile
           test -f src/vps-auth-bridge.js
@@ -178,6 +181,9 @@ jobs:
 
       - name: Business recovery notice browser regression
         run: node tests/business-recovery-notice-browser-regression.mjs
+
+      - name: Business persistence status browser regression
+        run: node tests/business-persistence-status-browser-regression.mjs
 
       - name: Full-device cross-browser regression
         shell: bash
