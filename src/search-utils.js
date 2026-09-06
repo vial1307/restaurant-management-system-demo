@@ -72,8 +72,8 @@ export function buildSearchText(text) {
 }
 
 export function searchMatches(text, query) {
-  markSearchEvaluation();
   const needle = normalizeSearch(query);
   if (!needle) return true;
+  markSearchEvaluation();
   return normalizeSearch(buildSearchText(text)).includes(needle);
 }
