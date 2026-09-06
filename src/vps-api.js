@@ -166,13 +166,20 @@ export function vpsBusinessState(site) {
   return apiRequest(`/api/business-state/${encodeURIComponent(site)}`);
 }
 
-export async function vpsSaveBusinessState(site, modules) {
+export async function vpsSaveBusinessState(site, modules, expectedModuleRevisions) {
   const result = await apiRequest(`/api/business-state/${encodeURIComponent(site)}`, {
     method: "POST",
-    body: { modules },
+    body: { modules, expectedModuleRevisions },
     timeoutMs: 30000,
   });
-  if (result?.ok !== true || !Array.isArray(result?.savedModules)) {
+  const moduleRevisions = result?.moduleRevisions;
+  if (
+    result?.ok !== true
+    || !Array.isArray(result?.savedModules)
+    || !moduleRevisions
+    || typeof moduleRevisions !== "object"
+    || Array.isArray(moduleRevisions)
+  ) {
     const error = new Error("BUSINESS_STATE_SAVE_CONFIRMATION_MISSING");
     error.code = "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING";
     error.payload = result;
