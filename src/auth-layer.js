@@ -632,8 +632,8 @@ function centralPage(user) {
     <div class="central-tabs branch-ops-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${operationsEnabled ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${catalogManageVisible ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
     ${guideHtml}
     ${manageNotice}
-    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && catalogManageVisible ? centralManageView(items, selectedZone, query, language, canViewHistory, canManageCatalog) : mode === "overview" ? stockView(items, selectedZone, query, directAdjust, { inventoryView, canManageCatalog, workMap:readCentralWork() }) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
-    ${mode === "manage" && canManageCatalog ? centralEditorModal(items, editorKey, language) : ""}
+    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && catalogManageVisible ? centralManageView(items, selectedZone, query, language, canViewHistory, canManageCatalog, canDirectInventoryAdjust()) : mode === "overview" ? stockView(items, selectedZone, query, directAdjust, { inventoryView, canManageCatalog, workMap:readCentralWork() }) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
+    ${mode === "manage" && canManageCatalog ? centralEditorModal(items, editorKey, language, canDirectInventoryAdjust()) : ""}
   `;
   bindCentral(user);
   const centralSearchInput = content.querySelector("[data-central-search]");
@@ -739,7 +739,7 @@ function centralWorkAreaLabel(area, language) {
   return found ? (language === "zh" ? found.zh : `${found.vi} · ${found.zh}`) : area || "—";
 }
 
-function centralManageView(items, selectedZone, query, language, allowDelete = false, writable = true) {
+function centralManageView(items, selectedZone, query, language, allowDelete = false, writable = true, stocktakeWritable = false) {
   const groups = centralProductGroups(items).filter(({ rows }) =>
     selectedZone === "all" || rows.some((row) => row.zone === selectedZone)
   );
@@ -753,7 +753,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
       ${centralSearchField(query, language)}
     </div>
     <div class="central-manage-list">${groups.map(({ key, item, rows }) => {
-      const locations = rows.map((row) => `<div class="central-manage-location"><span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>${centralQuantityControl({id:`manage-${row.id}`,itemKey:row.itemKey||key,locationCode:centralLocationCode(row.zone),quantity:row.qty,unit:row.unit||item.unit||"",direct:writable,manageAdjust:true})}</div>`).join("");
+      const locations = rows.map((row) => `<div class="central-manage-location"><span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>${centralQuantityControl({id:`manage-${row.id}`,itemKey:row.itemKey||key,locationCode:centralLocationCode(row.zone),quantity:row.qty,unit:row.unit||item.unit||"",direct:stocktakeWritable,manageAdjust:stocktakeWritable})}</div>`).join("");
       return `<article class="central-manage-row" data-central-product="${esc(key)}">
         <div class="central-manage-product"><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small><span>${esc(centralWorkAreaLabel(item.workArea || "noodles", language))} · ${esc(item.unit || "")}</span></div>
         <div class="op-location-list">${locations}</div>
@@ -763,7 +763,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
   </section>`;
 }
 
-function centralEditorModal(items, editorKey, language) {
+function centralEditorModal(items, editorKey, language, stocktakeEditable = false) {
   if (!editorKey) return "";
   const editing = editorKey !== "new";
   const rows = editing ? items.filter((item) => centralProductKey(item) === editorKey) : [];
@@ -776,8 +776,8 @@ function centralEditorModal(items, editorKey, language) {
     const checked = editing ? Boolean(stored) : zone === "央廚冷凍";
     return `<div class="modal-location-row">
       <label class="modal-location-choice"><input type="checkbox" name="central-zones" value="${esc(zone)}" ${checked ? "checked" : ""}/><span>${esc(centralZoneLabel(zone, language))}</span></label>
-      <label><span>${language === "zh" ? "現有" : "Hiện có"}</span><input type="number" min="0" name="central-quantity:${esc(zone)}" value="${Number(stored?.qty || 0)}"/></label>
-      <label><span>${language === "zh" ? "標準量" : "Định mức"}</span><input type="number" min="0" name="central-minimum:${esc(zone)}" value="${Number(stored?.minimum || 0)}"/></label>
+      <label><span>${language === "zh" ? "現有" : "Hiện có"}</span><input type="number" min="0" name="central-quantity:${esc(zone)}" value="${Number(stored?.qty || 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'}/></label>
+      <label><span>${language === "zh" ? "標準量" : "Định mức"}</span><input type="number" min="0" name="central-minimum:${esc(zone)}" value="${Number(stored?.minimum || 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'}/></label>
     </div>`;
   }).join("");
   return `<div class="modal-backdrop central-editor-backdrop" data-central-editor-close>
@@ -1023,14 +1023,13 @@ function bindCentral(user) {
   });
 
   async function commitCentralQuantity(input) {
-    const manageAdjust=input?.dataset.centralManageAdjust==="true" && canManageCentralCatalog();
-    if (!input || (!canDirectInventoryAdjust() && !manageAdjust && !(canInventoryDraftCount() && user.role === "admin"))) return;
+    if (!input || (!canDirectInventoryAdjust() && !(canInventoryDraftCount() && user.role === "admin"))) return;
     const itemKey=input.dataset.centralItemKey;
     const locationCode=input.dataset.centralLocationCode;
     const next=Math.max(0,Number(input.value)||0);
     if(!itemKey||!locationCode)return;
     input.disabled=true;
-    const result=await cloudSetQuantity({itemKey,locationCode,quantity:next,note:"盤點調整 / Điều chỉnh kiểm kê",allowInventoryEditor:manageAdjust});
+    const result=await cloudSetQuantity({itemKey,locationCode,quantity:next,note:"盤點調整 / Điều chỉnh kiểm kê"});
     if(result.ok){
       await syncInventoryNow("central",{reloadBranch:false});
       centralPage(user);

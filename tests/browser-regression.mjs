@@ -314,11 +314,27 @@ async function roleDesktop(browser, username, checks) {
       await manage.waitFor({state:"visible"});
       await manage.click();
       await page.locator('[data-central-editor-open="new"]').waitFor({state:"visible"});
-      assert((await page.locator('[data-central-manage-adjust="true"]').count()) > 0,"central management quantity controls missing");
+      const centralManageQuantityControls=await page.locator('[data-central-manage-adjust="true"]').count();
+      if(checks.stocktake === true){
+        assert(centralManageQuantityControls > 0,"central stocktake quantity controls missing");
+      }
+      if(checks.stocktake === false){
+        assert.equal(centralManageQuantityControls,0,"central role must not receive direct stocktake quantity controls");
+      }
       await page.locator('[data-central-editor-open="new"]').click();
       const centralSave=page.locator('.modal-header-save[data-central-save-item]');
       await centralSave.waitFor({state:"visible"});
       assert.match(await centralSave.innerText(),/Lưu sản phẩm|儲存品項/,"central product save action missing");
+      const centralQuantityField=page.locator('input[name^="central-quantity:"]').first();
+      const centralMinimumField=page.locator('input[name^="central-minimum:"]').first();
+      if(checks.stocktake === false){
+        assert.equal(await centralQuantityField.getAttribute("readonly"),"","central role quantity field must be read-only");
+        assert.equal(await centralMinimumField.getAttribute("readonly"),"","central role minimum field must be read-only");
+      }
+      if(checks.stocktake === true){
+        assert.equal(await centralQuantityField.getAttribute("readonly"),null,"central stocktake quantity field unexpectedly read-only");
+        assert.equal(await centralMinimumField.getAttribute("readonly"),null,"central stocktake minimum field unexpectedly read-only");
+      }
       await page.locator('button[data-central-editor-close]').click();
     }
   } else {
@@ -409,6 +425,8 @@ async function responsiveAdmin(browser, viewport) {
     const centralSave=page.locator('.modal-header-save[data-central-save-item]');
     await centralSave.waitFor({state:"visible"});
     assert.match(await centralSave.innerText(),/Lưu sản phẩm|儲存品項/,"central mobile product save action missing");
+    assert.equal(await page.locator('input[name^="central-quantity:"]').first().getAttribute("readonly"),null,"admin central quantity field must remain editable on mobile");
+    assert.equal(await page.locator('input[name^="central-minimum:"]').first().getAttribute("readonly"),null,"admin central minimum field must remain editable on mobile");
     await page.locator('button[data-central-editor-close]').click();
 
     await page.goto(BASE + "/#settings",{waitUntil:"domcontentloaded"});
@@ -471,7 +489,7 @@ try{
   await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,dashboardEdit:false});
   await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,dashboardEdit:false});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
-  await roleDesktop(browser,"centralreg",{central:true,manage:true});
+  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:false});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});
   await responsiveAdmin(browser,{width:440,height:956});
