@@ -2,6 +2,16 @@ import { currentAccountSession } from "./account-permissions.js";
 
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const KNOWN_SITES = new Set(["central", "fuxing", "yongji"]);
+const SAFE_ERROR_CODES = new Set([
+  "BUSINESS_STATE_OFFLINE",
+  "BUSINESS_STATE_NOT_READY",
+  "BUSINESS_STATE_PARTIAL_SAVE",
+  "BUSINESS_STATE_SAVE_CONFIRMATION_MISSING",
+  "REQUEST_TIMEOUT",
+  "API_UNREACHABLE",
+  "SITE_NOT_ALLOWED",
+  "BUSINESS_STATE_EDIT_NOT_ALLOWED",
+]);
 const SAVED_VISIBLE_MS = 2800;
 
 const scopeStates = new Map();
@@ -82,13 +92,18 @@ function statusCopy(state, lang) {
   return { ...copy, detail: known[code] || (lang === "zh" ? "系統尚未取得有效的 VPS 儲存確認。" : "Hệ thống chưa nhận được xác nhận lưu hợp lệ từ VPS.") };
 }
 
+function safeErrorSignature(error) {
+  const code = String(error || "");
+  return SAFE_ERROR_CODES.has(code) ? code : "unknown";
+}
+
 function signature(state, lang) {
   return JSON.stringify({
     status: state.status,
     userId: state.userId,
     site: state.site,
     modules: state.modules,
-    error: state.status === "error" ? String(state.error || "") : "",
+    error: state.status === "error" ? safeErrorSignature(state.error) : "",
     lang,
   });
 }
