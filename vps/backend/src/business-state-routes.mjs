@@ -37,11 +37,19 @@ function filteredModules(user, modules) {
   );
 }
 
-function filteredModuleRevisions(user, revisions) {
+function filteredModuleRevisions(user, modules, revisions) {
+  const storedModules = modules && typeof modules === "object" ? modules : {};
+  const storedRevisions = revisions && typeof revisions === "object" ? revisions : {};
   return Object.fromEntries(
-    Object.entries(revisions || {})
-      .filter(([moduleName]) => MODULE_RULES[moduleName] && can(user, moduleName, "view"))
-      .map(([moduleName, revision]) => [moduleName, Math.max(0, Number(revision) || 0)])
+    Object.keys(MODULE_RULES).flatMap((moduleName) => {
+      if (!can(user, moduleName, "view")) return [];
+      const revision = Number(storedRevisions[moduleName]);
+      if (Number.isInteger(revision) && revision >= 0) return [[moduleName, revision]];
+      // Revision 0 is safe only when the module itself does not yet exist. If a
+      // stored module is missing revision metadata, omit the token so writes are
+      // rejected instead of guessing around a corrupted concurrency baseline.
+      return Object.hasOwn(storedModules, moduleName) ? [] : [[moduleName, 0]];
+    })
   );
 }
 
@@ -98,10 +106,11 @@ export async function registerBusinessStateRoutes(app) {
       [site]
     );
     const row = rows[0];
+    const modules = row?.modules || {};
     return {
       site,
-      modules: filteredModules(user, row?.modules || {}),
-      moduleRevisions: filteredModuleRevisions(user, row?.module_revisions || {}),
+      modules: filteredModules(user, modules),
+      moduleRevisions: filteredModuleRevisions(user, modules, row?.module_revisions || {}),
       revision: Number(row?.revision || 0),
       updatedAt: row?.updated_at || null,
     };
