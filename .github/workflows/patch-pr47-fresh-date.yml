@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore: add PR47 fresh-date patch runner'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
