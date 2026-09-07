@@ -71,6 +71,28 @@ async function gotoInventory(page) {
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout:15000 });
 }
 
+async function selectTodayViaUi(page, label) {
+  const toggle = page.locator('[data-action="toggle-calendar"]').first();
+  await toggle.waitFor({ state:"visible", timeout:10000 });
+  await toggle.click();
+
+  const today = page.locator('[data-action="calendar-shortcut"][data-shortcut="today"]').first();
+  await today.waitFor({ state:"visible", timeout:10000 });
+  await today.click();
+
+  await page.waitForFunction(() => {
+    const now = new Date();
+    const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    try {
+      const state = JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null");
+      return state?.selectedDate === key;
+    } catch {
+      return false;
+    }
+  }, null, { timeout:10000 });
+  assert.equal(await page.locator(".calendar-popover").count(), 0, `${label}: calendar did not close after selecting today`);
+}
+
 async function assertNoHorizontalOverflow(page, label) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert(overflow <= 3, `${label}: horizontal overflow ${overflow}px`);
@@ -207,6 +229,7 @@ async function runRoleCase(browser, testCase) {
     assert.equal(session.location, testCase.site, `${label}: wrong scoped site`);
 
     await gotoInventory(page);
+    await selectTodayViaUi(page, label);
     assert.equal(await page.locator(".access-empty-state").count(), 0, `${label}: authorized inventory blocked`);
     const activeSite = await page.evaluate(() => localStorage.getItem("shitu-admin-active-site-v1"));
     assert.equal(activeSite, testCase.site, `${label}: stale active site was not repaired`);
