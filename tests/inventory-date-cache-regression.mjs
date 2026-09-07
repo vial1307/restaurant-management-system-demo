@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { STORAGE_KEY } from "../src/store-core.js";
 
 const values = new Map();
 const storage = {
@@ -55,7 +56,7 @@ try {
     "a fresh browser without persisted UI cache must default inventory permissions to today's service date",
   );
 
-  storage.setItem("餐廳管理系統", JSON.stringify({ selectedDate: "2000-01-01" }));
+  storage.setItem(STORAGE_KEY, JSON.stringify({ selectedDate: "2000-01-01" }));
   assert.equal(
     isCurrentBranchInventoryDate(),
     false,
