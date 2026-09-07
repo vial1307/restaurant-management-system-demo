@@ -10,6 +10,7 @@ import {
 import { ACCOUNT_MODULES, normalizeAccountPermissions } from "./account-permissions.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
+const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 document.documentElement.dataset.vpsAuthReady = "checking";
 const ACCOUNTS_KEY = "shitu-kitchen-accounts-v2";
 const PERMISSION_MODULES = ["dashboard", ...ACCOUNT_MODULES.filter((key) => key !== "dashboard")];
@@ -74,7 +75,15 @@ function normalizeVpsUser(user) {
 
 function mirrorVpsSession(user) {
   const normalized = normalizeVpsUser(user);
-  if (normalized) localStorage.setItem(AUTH_KEY, JSON.stringify(normalized));
+  if (normalized) {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(normalized));
+    // A site-scoped account must repair any stale/tampered admin-site preference
+    // before inventory bootstrap can observe it. Only the all-site administrator
+    // is allowed to preserve and switch the saved active warehouse.
+    if (["central", "fuxing", "yongji"].includes(normalized.location)) {
+      localStorage.setItem(ACTIVE_SITE_KEY, normalized.location);
+    }
+  }
   return normalized;
 }
 
