@@ -85,7 +85,7 @@ async function selectTodayViaUi(page, label) {
   const selectedToday = page.locator(".calendar-day.today.selected");
   await selectedToday.first().waitFor({ state:"visible", timeout:10000 });
   assert.equal(await selectedToday.count(), 1, `${label}: today is not the rendered selected service date`);
-  await toggle.click();
+  await page.keyboard.press("Escape");
   await page.locator(".calendar-popover").waitFor({ state:"detached", timeout:10000 });
 }
 
