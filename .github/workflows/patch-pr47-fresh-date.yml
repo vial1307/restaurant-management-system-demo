@@ -1,0 +1,72 @@
+name: Patch PR47 fresh date semantics
+
+on:
+  push:
+    branches:
+      - test-mobile-role-site-certification-v2-20260907
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'chore: add PR47 fresh-date patch runner'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test-mobile-role-site-certification-v2-20260907
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Update selected-date specification
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/SYSTEM_SPECIFICATION.md')
+          text = path.read_text()
+          old = """It must never become the authoritative shared database for multi-device business data.\n\n---\n"""
+          new = """It must never become the authoritative shared database for multi-device business data.\n\nSelected service-date cache semantics:\n\n- if a persisted `selectedDate` exists, frontend permission/date readers must respect it\n- if no UI/cache state exists on first load, the selected service date defaults to the current local service date\n- permission helpers must derive that fallback and must not force synchronous shared-state `localStorage` persistence merely to initialize the default date\n\n---\n"""
+          if old not in text:
+              raise SystemExit('spec anchor not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git add docs/SYSTEM_SPECIFICATION.md
+          git commit -m "docs: define fresh inventory date cache semantics"
+
+      - name: Fix fresh-browser date permission fallback
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          inv = Path('src/inventory-cloud.js')
+          text = inv.read_text()
+          old = """export function isCurrentBranchInventoryDate() {\n  const state = appState();\n  return Boolean(state?.selectedDate && state.selectedDate === todayKey());\n}\n"""
+          new = """export function isCurrentBranchInventoryDate() {\n  const state = appState();\n  const selectedDate = String(state?.selectedDate || \"\").trim();\n  return (selectedDate || todayKey()) === todayKey();\n}\n"""
+          if old not in text:
+              raise SystemExit('inventory date helper anchor not found')
+          inv.write_text(text.replace(old, new, 1))
+
+          store = Path('src/store.js')
+          text = store.read_text()
+          old_import = 'import { createStore as createCoreStore, STORAGE_KEY } from "./store-core.js";'
+          new_import = 'import { createStore as createCoreStore } from "./store-core.js";'
+          if old_import not in text:
+              raise SystemExit('store import anchor not found')
+          text = text.replace(old_import, new_import, 1)
+          old_block = """export function createStore(storage = globalThis.localStorage) {\n  const hadPersistedState = Boolean(storage.getItem(STORAGE_KEY));\n  const core = createCoreStore(storage);\n\n  // Some inventory permission/date helpers intentionally consume the persisted\n  // UI cache independently from the live store. On a fresh browser there is no\n  // cache yet, even though the hydrated store already has today's service date.\n  // Mirror only that first hydrated snapshot so all frontend readers start from\n  // one coherent state. This is local cache initialization, never VPS success.\n  if (!hadPersistedState) storage.setItem(STORAGE_KEY, JSON.stringify(core.getState()));\n\n  const subscribeCore = core.subscribe.bind(core);\n"""
+          new_block = """export function createStore(storage = globalThis.localStorage) {\n  const core = createCoreStore(storage);\n  const subscribeCore = core.subscribe.bind(core);\n"""
+          if old_block not in text:
+              raise SystemExit('store startup cache block anchor not found')
+          store.write_text(text.replace(old_block, new_block, 1))
+          PY
+          git add src/inventory-cloud.js src/store.js
+          git commit -m "fix: derive current inventory date without startup write"
+
+      - name: Push patch commits
+        run: git push origin HEAD:test-mobile-role-site-certification-v2-20260907
