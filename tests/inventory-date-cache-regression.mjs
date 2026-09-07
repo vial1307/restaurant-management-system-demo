@@ -14,10 +14,35 @@ const storage = {
 };
 
 const previousLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+
 Object.defineProperty(globalThis, "localStorage", {
   configurable: true,
   value: storage,
 });
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: {
+    addEventListener() {},
+    dispatchEvent() { return true; },
+    setInterval() { return 0; },
+  },
+});
+Object.defineProperty(globalThis, "document", {
+  configurable: true,
+  value: {
+    documentElement: { dataset: { vpsAuthReady: "false" } },
+    visibilityState: "visible",
+    addEventListener() {},
+    querySelector() { return null; },
+  },
+});
+
+function restoreGlobal(name, descriptor) {
+  if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+  else delete globalThis[name];
+}
 
 try {
   const { isCurrentBranchInventoryDate } = await import(
@@ -37,9 +62,7 @@ try {
     "an explicitly persisted historical service date must remain read-only",
   );
 } finally {
-  if (previousLocalStorage) {
-    Object.defineProperty(globalThis, "localStorage", previousLocalStorage);
-  } else {
-    delete globalThis.localStorage;
-  }
+  restoreGlobal("localStorage", previousLocalStorage);
+  restoreGlobal("window", previousWindow);
+  restoreGlobal("document", previousDocument);
 }
