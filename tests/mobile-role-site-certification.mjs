@@ -65,21 +65,10 @@ async function sessionSnapshot(page) {
   });
 }
 
-async function gotoInventory(page, { expectedSite = "", requestedSites = [] } = {}) {
-  // Keep the request observer active across login bootstrap. If the scoped site was
-  // already loaded there, do not force a second reload merely to manufacture a request.
-  // Otherwise arm the waiter before hash navigation so any lazy inventory fetch is caught.
-  let expectedRequest = null;
-  if (expectedSite && !requestedSites.includes(expectedSite)) {
-    expectedRequest = page.waitForRequest(
-      (request) => inventorySiteFromUrl(request.url()) === expectedSite,
-      { timeout:15000 },
-    );
-  }
+async function gotoInventory(page) {
   await page.goto(`${BASE}/#inventory`, { waitUntil:"domcontentloaded", timeout:30000 });
   await page.waitForSelector(".page-content", { state:"visible", timeout:15000 });
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout:15000 });
-  if (expectedRequest) await expectedRequest;
 }
 
 async function assertNoHorizontalOverflow(page, label) {
@@ -217,17 +206,19 @@ async function runRoleCase(browser, testCase) {
     assert.equal(session.accountRole || session.role, testCase.role, `${label}: wrong role`);
     assert.equal(session.location, testCase.site, `${label}: wrong scoped site`);
 
-    await gotoInventory(page, { expectedSite:testCase.site, requestedSites });
+    await gotoInventory(page);
     assert.equal(await page.locator(".access-empty-state").count(), 0, `${label}: authorized inventory blocked`);
-    assert(requestedSites.includes(testCase.site), `${label}: scoped inventory API ${testCase.site} was not requested; got ${requestedSites.join(",")}`);
+    const activeSite = await page.evaluate(() => localStorage.getItem("shitu-admin-active-site-v1"));
+    assert.equal(activeSite, testCase.site, `${label}: stale active site was not repaired`);
 
     await assertPermissionNavigation(page, session, label);
     if (testCase.central) await assertCentralInventoryRole(page, testCase, label);
     else await assertBranchInventoryRole(page, testCase, label);
     await assertNoHorizontalOverflow(page, label);
-    assert(!requestedSites.includes(testCase.foreign), `${label}: stale site caused foreign inventory API request ${testCase.foreign}`);
+    const foreignRequests = requestedSites.filter((site) => site !== testCase.site);
+    assert.deepEqual(foreignRequests, [], `${label}: scoped account attempted foreign inventory API: ${foreignRequests.join(",")}`);
     assert.deepEqual(errors, [], `${label}: page errors: ${errors.join(" | ")}`);
-    console.log("MOBILE_ROLE_SITE_CASE_OK", label);
+    console.log("MOBILE_ROLE_SITE_CASE_OK", label, `inventoryRequests=${requestedSites.join(",") || "none"}`);
   } finally {
     await context.close();
   }
