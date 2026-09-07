@@ -68,3 +68,4 @@ await import("./catalog-stocktake-boundary-regression.mjs");
 await import("./central-stocktake-boundary-regression.mjs");
 await import("./branch-work-minimum-stocktake-regression.mjs");
 await import("./receiving-default-permission-contract.mjs");
+await import("./inventory-date-cache-regression.mjs");
