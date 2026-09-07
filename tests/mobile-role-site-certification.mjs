@@ -80,17 +80,13 @@ async function selectTodayViaUi(page, label) {
   await today.waitFor({ state:"visible", timeout:10000 });
   await today.click();
 
-  await page.waitForFunction(() => {
-    const now = new Date();
-    const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    try {
-      const state = JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null");
-      return state?.selectedDate === key;
-    } catch {
-      return false;
-    }
-  }, null, { timeout:10000 });
-  assert.equal(await page.locator(".calendar-popover").count(), 0, `${label}: calendar did not close after selecting today`);
+  await page.locator(".calendar-popover").waitFor({ state:"detached", timeout:10000 });
+  await toggle.click();
+  const selectedToday = page.locator(".calendar-day.today.selected");
+  await selectedToday.first().waitFor({ state:"visible", timeout:10000 });
+  assert.equal(await selectedToday.count(), 1, `${label}: today is not the rendered selected service date`);
+  await toggle.click();
+  await page.locator(".calendar-popover").waitFor({ state:"detached", timeout:10000 });
 }
 
 async function assertNoHorizontalOverflow(page, label) {
