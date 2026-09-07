@@ -65,14 +65,24 @@ async function sessionSnapshot(page) {
   });
 }
 
-async function gotoInventory(page, { forceBootstrap = false } = {}) {
+async function gotoInventory(page, { forceBootstrap = false, expectedSite = "" } = {}) {
   await page.goto(`${BASE}/#inventory`, { waitUntil:"domcontentloaded", timeout:30000 });
   // A hash-only navigation can reuse inventory already fetched during login bootstrap.
-  // Reload when certifying API site scope so request observation cannot race login.
-  if (forceBootstrap) await page.reload({ waitUntil:"domcontentloaded", timeout:30000 });
+  // For scoped API certification, arm the request waiter before the forced reload so
+  // readiness is tied to the actual site request rather than a stale localStorage flag.
+  let expectedRequest = null;
+  if (forceBootstrap) {
+    if (expectedSite) {
+      expectedRequest = page.waitForRequest(
+        (request) => inventorySiteFromUrl(request.url()) === expectedSite,
+        { timeout:15000 },
+      );
+    }
+    await page.reload({ waitUntil:"domcontentloaded", timeout:30000 });
+  }
   await page.waitForSelector(".page-content", { state:"visible", timeout:15000 });
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout:15000 });
-  await page.waitForTimeout(150);
+  if (expectedRequest) await expectedRequest;
 }
 
 async function assertNoHorizontalOverflow(page, label) {
@@ -211,15 +221,15 @@ async function runRoleCase(browser, testCase) {
     assert.equal(session.location, testCase.site, `${label}: wrong scoped site`);
 
     requestedSites.length = 0;
-    await gotoInventory(page, { forceBootstrap:true });
+    await gotoInventory(page, { forceBootstrap:true, expectedSite:testCase.site });
     assert.equal(await page.locator(".access-empty-state").count(), 0, `${label}: authorized inventory blocked`);
     assert(requestedSites.includes(testCase.site), `${label}: scoped inventory API ${testCase.site} was not requested; got ${requestedSites.join(",")}`);
-    assert(!requestedSites.includes(testCase.foreign), `${label}: stale site caused foreign inventory API request ${testCase.foreign}`);
 
     await assertPermissionNavigation(page, session, label);
     if (testCase.central) await assertCentralInventoryRole(page, testCase, label);
     else await assertBranchInventoryRole(page, testCase, label);
     await assertNoHorizontalOverflow(page, label);
+    assert(!requestedSites.includes(testCase.foreign), `${label}: stale site caused foreign inventory API request ${testCase.foreign}`);
     assert.deepEqual(errors, [], `${label}: page errors: ${errors.join(" | ")}`);
     console.log("MOBILE_ROLE_SITE_CASE_OK", label);
   } finally {
