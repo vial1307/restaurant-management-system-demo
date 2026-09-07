@@ -65,21 +65,18 @@ async function sessionSnapshot(page) {
   });
 }
 
-async function gotoInventory(page, { forceBootstrap = false, expectedSite = "" } = {}) {
-  await page.goto(`${BASE}/#inventory`, { waitUntil:"domcontentloaded", timeout:30000 });
-  // A hash-only navigation can reuse inventory already fetched during login bootstrap.
-  // For scoped API certification, arm the request waiter before the forced reload so
-  // readiness is tied to the actual site request rather than a stale localStorage flag.
+async function gotoInventory(page, { expectedSite = "", requestedSites = [] } = {}) {
+  // Keep the request observer active across login bootstrap. If the scoped site was
+  // already loaded there, do not force a second reload merely to manufacture a request.
+  // Otherwise arm the waiter before hash navigation so any lazy inventory fetch is caught.
   let expectedRequest = null;
-  if (forceBootstrap) {
-    if (expectedSite) {
-      expectedRequest = page.waitForRequest(
-        (request) => inventorySiteFromUrl(request.url()) === expectedSite,
-        { timeout:15000 },
-      );
-    }
-    await page.reload({ waitUntil:"domcontentloaded", timeout:30000 });
+  if (expectedSite && !requestedSites.includes(expectedSite)) {
+    expectedRequest = page.waitForRequest(
+      (request) => inventorySiteFromUrl(request.url()) === expectedSite,
+      { timeout:15000 },
+    );
   }
+  await page.goto(`${BASE}/#inventory`, { waitUntil:"domcontentloaded", timeout:30000 });
   await page.waitForSelector(".page-content", { state:"visible", timeout:15000 });
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout:15000 });
   if (expectedRequest) await expectedRequest;
@@ -220,8 +217,7 @@ async function runRoleCase(browser, testCase) {
     assert.equal(session.accountRole || session.role, testCase.role, `${label}: wrong role`);
     assert.equal(session.location, testCase.site, `${label}: wrong scoped site`);
 
-    requestedSites.length = 0;
-    await gotoInventory(page, { forceBootstrap:true, expectedSite:testCase.site });
+    await gotoInventory(page, { expectedSite:testCase.site, requestedSites });
     assert.equal(await page.locator(".access-empty-state").count(), 0, `${label}: authorized inventory blocked`);
     assert(requestedSites.includes(testCase.site), `${label}: scoped inventory API ${testCase.site} was not requested; got ${requestedSites.join(",")}`);
 
