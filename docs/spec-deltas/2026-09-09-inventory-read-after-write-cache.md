@@ -23,4 +23,6 @@ Priority: P1 inventory consistency / immediate UI refresh
 
 A Node runtime regression must seed a cached Fuxing inventory GET, execute each mutation wrapper (`set quantity`, `set minimum`, `adjust`, `transfer`, `ship`, `direct transfer`), and prove the immediate next inventory read performs a fresh GET. It must also prove a failed mutation leaves the existing cache usable.
 
+Targeted runtime and performance regressions passed on the patch branch before PR certification.
+
 Normal static/performance/runtime, API/PostgreSQL concurrency, Chromium desktop/mobile, recovery/persistence, full-device cross-browser, exact-SHA VPS deploy, health/release and production UI smoke remain mandatory.
