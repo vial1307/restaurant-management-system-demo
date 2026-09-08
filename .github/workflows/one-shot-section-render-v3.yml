@@ -1,0 +1,353 @@
+name: One-shot section render v3 patch
+
+on:
+  push:
+    branches:
+      - perf-section-render-api-v3-20260908
+    paths:
+      - ".github/workflows/one-shot-section-render-v3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout performance branch
+        uses: actions/checkout@v7
+        with:
+          ref: perf-section-render-api-v3-20260908
+
+      - name: Apply section-render API v3
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app_path = Path("src/app.js")
+          app = app_path.read_text(encoding="utf-8")
+          lines = app.splitlines()
+          matches = [i for i, line in enumerate(lines) if line.startswith('  root.innerHTML = `<div class="app-shell">${sidebar(context, active)}')]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one app render anchor, found {len(matches)}")
+          i = matches[0]
+          replacement = [
+              '  const sidebarMarkup = sidebar(context, active);',
+              '  const topbarMarkup = topbar(context);',
+              '  const pageMarkup = `<main class="page-content">${pages[active](context)}</main>`;',
+              '  const mobileNavMarkup = `<nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav>`;',
+              '  const overlaysMarkup = `${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;',
+              '  if (typeof root.renderSections === "function") {',
+              '    root.renderSections({ sidebar: sidebarMarkup, topbar: topbarMarkup, page: pageMarkup, mobileNav: mobileNavMarkup, overlays: overlaysMarkup });',
+              '  } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;',
+          ]
+          lines[i:i+1] = replacement
+          app_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          Path("src/stable-app-root.js").write_text(r'''const innerHtmlDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+          const nativeGetInnerHtml = innerHtmlDescriptor?.get;
+          const nativeSetInnerHtml = innerHtmlDescriptor?.set;
+
+          const SECTION_SELECTORS = Object.freeze({
+            sidebar: ".sidebar",
+            topbar: ".topbar",
+            page: ".page-content",
+            mobileNav: ".mobile-nav",
+          });
+
+          function createSectionCache() {
+            return {
+              sidebar: null,
+              topbar: null,
+              page: null,
+              mobileNav: null,
+              overlays: null,
+            };
+          }
+
+          function directChild(parent, selector) {
+            return [...(parent?.children || [])].find((child) => child.matches?.(selector)) || null;
+          }
+
+          function replaceSection(current, next) {
+            if (!current || !next) return false;
+            if (current.outerHTML === next.outerHTML) return true;
+            current.replaceWith(next);
+            return true;
+          }
+
+          function nativeReplace(host, markup) {
+            nativeSetInnerHtml.call(host, markup);
+          }
+
+          function signalRootChildMutation(host) {
+            // auth-layer intentionally observes direct #app child mutations as its
+            // render lifecycle signal. Stable-shell patching keeps .app-shell alive,
+            // so reproduce that signal without widening the observer to subtree=true.
+            const marker = document.createComment("shitu-render");
+            host.append(marker);
+            marker.remove();
+          }
+
+          function patchStableShell(host, markup) {
+            const currentShell = directChild(host, ".app-shell");
+            const currentMain = directChild(currentShell, ".main-shell");
+            if (!currentShell || !currentMain) return false;
+
+            const template = document.createElement("template");
+            nativeSetInnerHtml.call(template, markup);
+            const nextShell = directChild(template.content, ".app-shell");
+            const nextMain = directChild(nextShell, ".main-shell");
+            if (!nextShell || !nextMain) return false;
+
+            const currentSidebar = directChild(currentShell, ".sidebar");
+            const currentTopbar = directChild(currentMain, ".topbar");
+            const currentPage = directChild(currentMain, ".page-content");
+            const currentMobileNav = directChild(currentShell, ".mobile-nav");
+
+            const nextSidebar = directChild(nextShell, ".sidebar");
+            const nextTopbar = directChild(nextMain, ".topbar");
+            const nextPage = directChild(nextMain, ".page-content");
+            const nextMobileNav = directChild(nextShell, ".mobile-nav");
+
+            if (![currentSidebar, currentTopbar, currentPage, currentMobileNav, nextSidebar, nextTopbar, nextPage, nextMobileNav].every(Boolean)) {
+              return false;
+            }
+
+            replaceSection(currentSidebar, nextSidebar);
+            replaceSection(currentTopbar, nextTopbar);
+            replaceSection(currentPage, nextPage);
+            replaceSection(currentMobileNav, nextMobileNav);
+
+            for (const child of [...host.childNodes]) {
+              if (child !== currentShell) child.remove();
+            }
+            for (const node of [...template.content.childNodes]) {
+              if (node !== nextShell) host.append(node);
+            }
+            signalRootChildMutation(host);
+            return true;
+          }
+
+          function normalizeSections(sections = {}) {
+            return {
+              sidebar: String(sections.sidebar ?? ""),
+              topbar: String(sections.topbar ?? ""),
+              page: String(sections.page ?? ""),
+              mobileNav: String(sections.mobileNav ?? ""),
+              overlays: String(sections.overlays ?? ""),
+            };
+          }
+
+          function composeSections(sections) {
+            return `<div class="app-shell">${sections.sidebar}<div class="main-shell">${sections.topbar}${sections.page}</div>${sections.mobileNav}</div>${sections.overlays}`;
+          }
+
+          function parseSection(markup, selector) {
+            const template = document.createElement("template");
+            nativeSetInnerHtml.call(template, markup);
+            const elements = [...template.content.children];
+            if (elements.length !== 1) return null;
+            const next = elements[0];
+            if (!next.matches?.(selector)) return null;
+            return next;
+          }
+
+          function replaceSectionMarkup(current, markup, selector, cache, key) {
+            if (!current) return false;
+            const cached = cache[key];
+            if (cached?.source === markup && current.outerHTML === cached.normalized) return true;
+
+            const next = parseSection(markup, selector);
+            if (!next) return false;
+            const normalized = next.outerHTML;
+            current.replaceWith(next);
+            cache[key] = { source: markup, normalized };
+            return true;
+          }
+
+          function overlayElements(host, shell) {
+            return [...host.children].filter((child) => child !== shell);
+          }
+
+          function normalizedOverlayMarkup(host, shell) {
+            return overlayElements(host, shell).map((child) => child.outerHTML).join("");
+          }
+
+          function syncOverlays(host, shell, markup, cache) {
+            const cached = cache.overlays;
+            const currentNormalized = normalizedOverlayMarkup(host, shell);
+            if (cached?.source === markup && currentNormalized === cached.normalized) return true;
+
+            const template = document.createElement("template");
+            nativeSetInnerHtml.call(template, markup);
+            if (directChild(template.content, ".app-shell")) return false;
+
+            for (const child of [...host.childNodes]) {
+              if (child !== shell) child.remove();
+            }
+            for (const node of [...template.content.childNodes]) host.append(node);
+
+            cache.overlays = {
+              source: markup,
+              normalized: normalizedOverlayMarkup(host, shell),
+            };
+            return true;
+          }
+
+          function seedSectionCache(host, sections, cache) {
+            const shell = directChild(host, ".app-shell");
+            const main = directChild(shell, ".main-shell");
+            const sidebar = directChild(shell, SECTION_SELECTORS.sidebar);
+            const topbar = directChild(main, SECTION_SELECTORS.topbar);
+            const page = directChild(main, SECTION_SELECTORS.page);
+            const mobileNav = directChild(shell, SECTION_SELECTORS.mobileNav);
+            if (![shell, main, sidebar, topbar, page, mobileNav].every(Boolean)) return false;
+
+            cache.sidebar = { source: sections.sidebar, normalized: sidebar.outerHTML };
+            cache.topbar = { source: sections.topbar, normalized: topbar.outerHTML };
+            cache.page = { source: sections.page, normalized: page.outerHTML };
+            cache.mobileNav = { source: sections.mobileNav, normalized: mobileNav.outerHTML };
+            cache.overlays = { source: sections.overlays, normalized: normalizedOverlayMarkup(host, shell) };
+            return true;
+          }
+
+          function patchSubmittedSections(host, sections, cache) {
+            const currentShell = directChild(host, ".app-shell");
+            const currentMain = directChild(currentShell, ".main-shell");
+            if (!currentShell || !currentMain) return false;
+
+            const currentSidebar = directChild(currentShell, SECTION_SELECTORS.sidebar);
+            const currentTopbar = directChild(currentMain, SECTION_SELECTORS.topbar);
+            const currentPage = directChild(currentMain, SECTION_SELECTORS.page);
+            const currentMobileNav = directChild(currentShell, SECTION_SELECTORS.mobileNav);
+            if (![currentSidebar, currentTopbar, currentPage, currentMobileNav].every(Boolean)) return false;
+
+            if (!replaceSectionMarkup(currentSidebar, sections.sidebar, SECTION_SELECTORS.sidebar, cache, "sidebar")) return false;
+            if (!replaceSectionMarkup(currentTopbar, sections.topbar, SECTION_SELECTORS.topbar, cache, "topbar")) return false;
+            if (!replaceSectionMarkup(currentPage, sections.page, SECTION_SELECTORS.page, cache, "page")) return false;
+            if (!replaceSectionMarkup(currentMobileNav, sections.mobileNav, SECTION_SELECTORS.mobileNav, cache, "mobileNav")) return false;
+            if (!syncOverlays(host, currentShell, sections.overlays, cache)) return false;
+
+            signalRootChildMutation(host);
+            return true;
+          }
+
+          class ShituAppRoot extends HTMLElement {
+            connectedCallback() {
+              if (!this.style.display) this.style.display = "block";
+            }
+
+            get innerHTML() {
+              return nativeGetInnerHtml.call(this);
+            }
+
+            set innerHTML(value) {
+              const markup = String(value ?? "");
+              if (!nativeSetInnerHtml || !nativeGetInnerHtml) return;
+              if (!patchStableShell(this, markup)) nativeReplace(this, markup);
+              this.__sectionRenderCache = createSectionCache();
+            }
+
+            renderSections(sections) {
+              if (!nativeSetInnerHtml || !nativeGetInnerHtml) return false;
+              const normalized = normalizeSections(sections);
+              const cache = this.__sectionRenderCache || (this.__sectionRenderCache = createSectionCache());
+              if (!patchSubmittedSections(this, normalized, cache)) {
+                nativeReplace(this, composeSections(normalized));
+                this.__sectionRenderCache = createSectionCache();
+                seedSectionCache(this, normalized, this.__sectionRenderCache);
+              }
+              return true;
+            }
+          }
+
+          if (!customElements.get("shitu-app-root")) {
+            customElements.define("shitu-app-root", ShituAppRoot);
+          }
+          '''.replace("          ", ""), encoding="utf-8")
+
+          Path("tests/section-render-api-contract-regression.mjs").write_text(r'''import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+
+          const rootModule = await readFile(new URL("../src/stable-app-root.js", import.meta.url), "utf8");
+          const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+
+          assert.match(rootModule, /renderSections\(sections\)/, "stable app root must expose the dedicated section render API");
+          assert.match(rootModule, /const SECTION_SELECTORS = Object\.freeze\(\{[\s\S]*sidebar:[\s\S]*topbar:[\s\S]*page:[\s\S]*mobileNav:/, "section API must use fixed named shell slots");
+          assert.match(rootModule, /function createSectionCache\(\)[\s\S]*sidebar:[\s\S]*topbar:[\s\S]*page:[\s\S]*mobileNav:[\s\S]*overlays:/, "section cache must be bounded to fixed slots");
+          assert.doesNotMatch(rootModule, /function createSectionCache\(\)[\s\S]*new Map\s*\(/, "section cache must not grow as an unbounded history map");
+          assert.match(rootModule, /cached\?\.source === markup && current\.outerHTML === cached\.normalized/, "unchanged sections may skip parsing only when source and current normalized DOM both match");
+          assert.match(rootModule, /function parseSection\(markup, selector\)[\s\S]*document\.createElement\("template"\)[\s\S]*matches\?\.\(selector\)/, "changed sections must be parsed independently and validated against their expected root selector");
+          assert.match(rootModule, /function patchSubmittedSections\(host, sections, cache\)/, "normal section rendering must patch submitted fragments rather than full app markup");
+          assert.doesNotMatch(rootModule, /function patchSubmittedSections\(host, sections, cache\)[\s\S]*nativeSetInnerHtml\.call\(template, composeSections\(/, "normal section patching must not parse one complete application template");
+          assert.match(rootModule, /if \(!patchSubmittedSections\(this, normalized, cache\)\)[\s\S]*nativeReplace\(this, composeSections\(normalized\)\)/, "missing or corrupt shell must fall back to a complete native render");
+          assert.match(rootModule, /set innerHTML\(value\)[\s\S]*patchStableShell\(this, markup\)/, "legacy innerHTML stable-shell compatibility path must remain present");
+          assert.match(rootModule, /document\.createComment\("shitu-render"\)/, "auth-layer direct-child lifecycle marker must remain present");
+          assert.doesNotMatch(rootModule, /Element\.prototype\.innerHTML\s*=|Object\.defineProperty\(Element\.prototype/, "section rendering must not monkey-patch native DOM prototypes");
+
+          assert.match(app, /typeof root\.renderSections === "function"/, "app render must prefer the dedicated section API when available");
+          assert.match(app, /root\.renderSections\(\{\s*sidebar:[\s\S]*topbar:[\s\S]*page:[\s\S]*mobileNav:[\s\S]*overlays:/, "app must submit all stable sections independently");
+          assert.match(app, /const overlaysMarkup = `\$\{mobileMenu\}/, "mobile full-menu must stay in the root overlay slot");
+          assert.match(app, /else root\.innerHTML = `<div class="app-shell">/, "app must retain a complete innerHTML fallback path");
+
+          console.log("SECTION_RENDER_API_CONTRACT_OK");
+          '''.replace("          ", ""), encoding="utf-8")
+
+          perf = Path("tests/performance-regression.mjs")
+          perf_text = perf.read_text(encoding="utf-8")
+          line = 'await import("./section-render-api-contract-regression.mjs");\n'
+          if line not in perf_text:
+              perf.write_text(perf_text + line, encoding="utf-8")
+
+          Path("docs/spec-deltas/2026-09-08-section-render-api-v3.md").write_text('''# SDD Delta — Section Render API v3
+
+Date: 2026-09-08
+Base production: `01b58f19a840288da8e5b6b44e46925ac8a32438`
+Priority: P1 render architecture performance
+
+## Problem
+
+The stable shell preserves `.app-shell` and `.main-shell` identity, but every authorized render still builds and parses one complete application markup string before deciding which shell sections changed.
+
+## Required behavior
+
+- render five bounded slots: sidebar, topbar, page, mobileNav and overlays;
+- parse a stable section only when its source or normalized current DOM differs from the cached template;
+- keep cache fixed to the five named slots;
+- keep `mobileMenu`, add-item modal and management modal together in the root overlays slot;
+- preserve complete `innerHTML` stable-shell compatibility and corruption fallback;
+- preserve the auth-layer direct-child lifecycle signal and all existing post-render hooks;
+- do not change auth, permissions, store, business persistence, inventory mutation, API or database semantics;
+- do not monkey-patch native DOM prototypes.
+
+## Acceptance
+
+Static/performance contracts must prove the bounded section API and mobile-menu overlay integration. Normal API/PostgreSQL, desktop/mobile Chromium, recovery/persistence, full-device Firefox/WebKit, exact-SHA deploy, health/release and production UI smoke remain mandatory.
+''', encoding="utf-8")
+
+          Path(".github/workflows/one-shot-section-render-v3.yml").unlink()
+          PY
+
+      - name: Validate targeted contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check src/app.js
+          node --check src/stable-app-root.js
+          node --check tests/section-render-api-contract-regression.mjs
+          node tests/performance-regression.mjs
+          node tests/static-regression.mjs
+
+      - name: Commit section-render v3
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Rebuild section rendering on current production shell"
+          git push origin HEAD:perf-section-render-api-v3-20260908
