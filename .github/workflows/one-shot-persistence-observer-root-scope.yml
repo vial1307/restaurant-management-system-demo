@@ -1,0 +1,54 @@
+name: One-shot persistence observer root scope
+
+on:
+  push:
+    branches:
+      - perf-persistence-observer-root-scope-20260908
+    paths:
+      - ".github/workflows/one-shot-persistence-observer-root-scope.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: perf-persistence-observer-root-scope-20260908
+
+      - name: Narrow persistence observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("src/business-persistence-status.js")
+          source = path.read_text(encoding="utf-8")
+          old = 'observer.observe(appRoot, { childList: true, subtree: true });'
+          new = 'observer.observe(appRoot, { childList: true });'
+          if source.count(old) != 1:
+              raise SystemExit(f"expected one persistence observer anchor, found {source.count(old)}")
+          path.write_text(source.replace(old, new), encoding="utf-8")
+          Path(".github/workflows/one-shot-persistence-observer-root-scope.yml").unlink()
+          PY
+
+      - name: Validate targeted performance contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check src/business-persistence-status.js
+          node tests/business-persistence-observer-contract-regression.mjs
+          node tests/performance-regression.mjs
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/business-persistence-status.js tests/performance-regression.mjs tests/business-persistence-observer-contract-regression.mjs docs/spec-deltas/2026-09-08-persistence-observer-root-scope.md .github/workflows/one-shot-persistence-observer-root-scope.yml
+          git commit -m "Scope persistence observer to app root lifecycle"
+          git push origin HEAD:perf-persistence-observer-root-scope-20260908
