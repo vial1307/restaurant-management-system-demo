@@ -221,7 +221,7 @@ document.addEventListener("visibilitychange", () => {
 const appRoot = document.querySelector("#app");
 if (appRoot) {
   const observer = new MutationObserver(scheduleRender);
-  observer.observe(appRoot, { childList: true, subtree: true });
+  observer.observe(appRoot, { childList: true });
 }
 
 scheduleRender();
