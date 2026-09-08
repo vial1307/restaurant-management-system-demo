@@ -19,3 +19,5 @@ The VPS inventory sync can legitimately persist the authoritative central invent
 ## Acceptance
 
 A contract regression must verify that `loadBaseStock()` returns any persisted array directly, including `[]`, and must reject the old non-empty-only guard. It must run together with the authoritative-empty-snapshot regression so both halves of the flow remain locked: sync may clear the cache, and the UI must not immediately reseed it.
+
+Targeted validation passed together with empty-snapshot, history-limit, sync-serialization and read-after-write cache regressions before PR certification.
