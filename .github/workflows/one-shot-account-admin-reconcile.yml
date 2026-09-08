@@ -30,34 +30,34 @@ jobs:
           source = path.read_text(encoding="utf-8")
 
           old_save = '''    try {
-                await vpsSaveUser(body);
-                await syncProfiles();
-                document.querySelector("[data-account-modal]")?.remove();
-                location.reload();
-              } catch (error) {'''.replace('              ', '')
+      await vpsSaveUser(body);
+      await syncProfiles();
+      document.querySelector("[data-account-modal]")?.remove();
+      location.reload();
+    } catch (error) {'''
           new_save = '''    try {
-                const result = await vpsSaveUser(body);
-                const currentSession = legacySession();
-                if (result?.user?.id === currentSession?.id) {
-                  invalidateCurrentVpsUser();
-                  mirrorVpsSession(result.user);
-                  window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
-                }
-                await syncProfiles();
-                document.querySelector("[data-account-modal]")?.remove();
-              } catch (error) {'''.replace('              ', '')
+      const result = await vpsSaveUser(body);
+      const currentSession = legacySession();
+      if (result?.user?.id === currentSession?.id) {
+        invalidateCurrentVpsUser();
+        mirrorVpsSession(result.user);
+        window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+      }
+      await syncProfiles();
+      document.querySelector("[data-account-modal]")?.remove();
+    } catch (error) {'''
 
           old_delete = '''  try {
-                await vpsDeleteUser(deleteButton.dataset.accountDelete);
-                await syncProfiles();
-                document.querySelector("[data-account-modal]")?.remove();
-                location.reload();
-              } catch (error) {'''.replace('              ', '')
+    await vpsDeleteUser(deleteButton.dataset.accountDelete);
+    await syncProfiles();
+    document.querySelector("[data-account-modal]")?.remove();
+    location.reload();
+  } catch (error) {'''
           new_delete = '''  try {
-                await vpsDeleteUser(deleteButton.dataset.accountDelete);
-                await syncProfiles();
-                document.querySelector("[data-account-modal]")?.remove();
-              } catch (error) {'''.replace('              ', '')
+    await vpsDeleteUser(deleteButton.dataset.accountDelete);
+    await syncProfiles();
+    document.querySelector("[data-account-modal]")?.remove();
+  } catch (error) {'''
 
           if source.count(old_save) != 1:
               raise SystemExit(f"expected one account save lifecycle, found {source.count(old_save)}")
