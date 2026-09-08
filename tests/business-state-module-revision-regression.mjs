@@ -13,9 +13,18 @@ const vpsSaveBusinessState = (...args) => globalThis.__testBusinessSave(...args)
 assert.notEqual(injected, source);
 const { attachBusinessStateSync } = await import(`data:text/javascript;base64,${Buffer.from(injected).toString("base64")}`);
 
-const storage = new Map([["shitu-kitchen-auth-v1", JSON.stringify({
-  id: "revision-user", location: "fuxing", permissions: { settings: { view: true, edit: true } },
-})]]);
+const storage = new Map([
+  ["shitu-kitchen-auth-v1", JSON.stringify({
+    id: "revision-user", location: "fuxing", permissions: { settings: { view: true, edit: true } },
+  })],
+  ["shitu-business-recovery-v1", JSON.stringify({ version:1, drafts:{
+    "revision-user:fuxing": {
+      userId:"revision-user", site:"fuxing", capturedAt:"2026-09-08T00:00:00.000Z",
+      changedModules:["reservations"], reason:"authorization-transition",
+      modules:{ reservations:{ records:{ legacy:true } } },
+    },
+  } })],
+]);
 globalThis.localStorage = {
   getItem(key) { return storage.get(key) || null; },
   setItem(key, value) { storage.set(key, String(value)); },
@@ -91,7 +100,7 @@ globalThis.__testBusinessSave = async (site, modules, expectedModuleRevisions) =
     const error = new Error("BUSINESS_STATE_CONFLICT");
     error.code = "BUSINESS_STATE_CONFLICT";
     error.status = 409;
-    error.payload = { error: "BUSINESS_STATE_CONFLICT", conflictingModules: ["settings"], moduleRevisions: { settings: 14 } };
+    error.payload = { error: "BUSINESS_STATE_CONFLICT", conflictingModules: ["settings"], moduleRevisions: { settings: 14 }, modules: { settings: { reservationBuffer: 99 } } };
     throw error;
   }
   serverRevision += 1;
@@ -154,8 +163,18 @@ assert.deepEqual(
   { settings: 13 },
   "deferred remote token 14 was incorrectly adopted by a local snapshot based on token 13"
 );
-assert.equal(state.settings.reservationBuffer, 6, "conflict overwrote the current local edit");
-assert.equal(reads, readsBeforeConflict, "conflict triggered a stale GET over the local edit");
+assert.equal(state.settings.reservationBuffer, 99, "conflict did not reconcile the visible module to authoritative server state");
+assert.equal(reads, readsBeforeConflict, "conflict triggered an unnecessary GET instead of using the conflict payload");
+const recoveryState = JSON.parse(storage.get("shitu-business-recovery-v1") || "{}");
+const recoveryDraft = recoveryState.drafts?.["revision-user:fuxing"];
+assert(recoveryDraft, "conflicting local edit was not preserved as a recovery draft");
+assert.equal(recoveryDraft.reason, "concurrency-conflict");
+assert.deepEqual(new Set(recoveryDraft.changedModules), new Set(["reservations", "settings"]), "new conflict recovery overwrote an existing recovery module");
+assert.equal(recoveryDraft.modules?.reservations?.records?.legacy, true, "existing recovery payload was lost during conflict capture");
+assert.equal(recoveryDraft.modules?.settings?.reservationBuffer, 6, "conflicting local value was not preserved in recovery storage");
+const pendingState = JSON.parse(storage.get("shitu-business-pending-v1") || "{}");
+assert.equal(pendingState.drafts?.["revision-user:fuxing"], undefined, "stale conflicting pending draft survived conflict reconciliation");
+assert(stateStatuses.some((entry) => entry?.status === "recovery-pending" && entry?.error === "BUSINESS_STATE_CONFLICT"), "conflict did not surface the recovery-pending state");
 const conflictStatus = persistence.findLast((entry) => entry?.status === "error");
 assert.equal(conflictStatus?.error, "BUSINESS_STATE_CONFLICT");
 assert.notEqual(persistence.at(-1)?.status, "saved", "conflicting write emitted false saved status");
