@@ -43,7 +43,9 @@ assert.doesNotMatch(inventoryCloud, /return \{ ok: false, fallback: true \}/, "i
 assert.match(inventoryCloud, /fallback: false, error: new Error\("INVENTORY_BACKEND_NOT_READY"\)/, "inventory mutation backend failures must be explicit so optimistic UI can roll back");
 
 assert.match(businessSync, /loadedRevisionKey === key && loadedRevision === revision/, "unchanged business-state focus refresh must remain a no-op merge");
-assert.match(businessSync, /catch \(error\) \{[\s\S]{0,260}status:"error"[\s\S]{0,140}return false;/, "failed business-state saves must report failure to the focus\/online sync chain");
+const businessSave = businessSync.match(/async function save\(\) \{[\s\S]*?\n  \}\n\n  function scheduleSave\(\)/)?.[0] || "";
+assert.match(businessSave, /catch \(error\) \{/, "business-state save must retain an explicit failure boundary");
+assert.match(businessSave, /emitPersistenceStatus\("error", \{ userId, site, modules: dirtyNames, error:error\.message \}\);[\s\S]*?return false;/, "failed business-state saves must report failure to the focus\/online sync chain");
 assert.match(businessSync, /const saveThenReload = \(\) => \{ void \(async \(\) => \{ const saved = await save\(\); if \(saved !== false\) await load\(\); \}\)\(\); \};/, "focus\/online sync must not reload stale server state after a failed save");
 assert.match(businessSync, /const currentSnapshot = JSON\.stringify\(businessModulesFromState\(store\.getState\(\)\)\);[\s\S]{0,100}return currentSnapshot === snapshot;/, "business-state save must suppress refresh when a newer local edit appears during the write");
 assert.match(businessSync, /const localSnapshotBeforeLoad = identityChanged[\s\S]{0,180}businessModulesFromState\(store\.getState\(\)\)/, "business-state refresh must snapshot local state before an in-flight read");
