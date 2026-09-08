@@ -24,4 +24,6 @@ A second recovery capture for the same user/site also replaced the previous reco
 
 ## Acceptance
 
-The module-revision runtime regression must prove the conflicting local value survives in recovery storage, an existing recovery module remains present, visible state adopts the server snapshot, the stale pending draft is cleared, and no extra GET or false saved status is emitted. Full API/PostgreSQL/browser/full-device gates remain mandatory before merge.
+The module-revision runtime regression must prove the conflicting local value survives in recovery storage, an existing recovery module remains present, visible state adopts the server snapshot, the stale pending draft is cleared, and no extra GET or false saved status is emitted.
+
+The performance guard must validate the `save()` failure boundary semantically—failed saves still emit an error status and return `false`—without relying on a fixed maximum catch-block length. Full API/PostgreSQL/browser/full-device gates remain mandatory before merge.
