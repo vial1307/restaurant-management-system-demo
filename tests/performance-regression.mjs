@@ -19,3 +19,4 @@ await import("./vps-inventory-cache-invalidation-regression.mjs");
 await import("./inventory-sync-serialization-regression.mjs");
 await import("./inventory-empty-snapshot-regression.mjs");
 await import("./inventory-history-limit-contract-regression.mjs");
+await import("./central-empty-cache-reseed-contract-regression.mjs");
