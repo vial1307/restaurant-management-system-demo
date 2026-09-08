@@ -63,7 +63,7 @@ let migrationAvailable = null;
 let migrationCheckedAt = 0;
 let polling = 0;
 let bootedUserId = "";
-let syncing = false;
+let inventorySyncTail = Promise.resolve();
 let lastSite = "";
 const cache = {
   itemsByKey: new Map(),
@@ -637,13 +637,12 @@ function applyBranch(rows, site) {
   return true;
 }
 
-export async function syncInventoryNow(site = currentSite(), { reloadBranch = false } = {}) {
-  if (!site || syncing || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
+async function runInventorySync(site, { reloadBranch = false } = {}) {
+  if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
   if (["fuxing","yongji"].includes(site) && !isCurrentBranchInventoryDate()) {
     dispatchStatus("historical-readonly", { site });
     return false;
   }
-  syncing = true;
   try {
     const rows = await fetchSite(site);
     const changed = site === "central" ? applyCentral(rows) : applyBranch(rows, site);
@@ -653,9 +652,15 @@ export async function syncInventoryNow(site = currentSite(), { reloadBranch = fa
   } catch (error) {
     dispatchStatus("error", { site, error: error?.message || String(error) });
     return false;
-  } finally {
-    syncing = false;
   }
+}
+
+export function syncInventoryNow(site = currentSite(), { reloadBranch = false } = {}) {
+  const requestedSite = site;
+  const requestedOptions = { reloadBranch: Boolean(reloadBranch) };
+  const task = inventorySyncTail.then(() => runInventorySync(requestedSite, requestedOptions));
+  inventorySyncTail = task.catch(() => false);
+  return task;
 }
 
 async function resolveIds(itemKey, locationCode) {
