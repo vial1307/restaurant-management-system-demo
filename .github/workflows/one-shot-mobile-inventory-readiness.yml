@@ -1,0 +1,64 @@
+name: One-shot mobile inventory readiness patch
+
+on:
+  push:
+    paths:
+      - ".github/workflows/one-shot-mobile-inventory-readiness.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wait for a rendered Manage product before stocktake assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("tests/mobile-role-site-certification.mjs")
+          text = path.read_text()
+          old = '''    await manage.waitFor({ state:"visible", timeout:10000 });
+    await manage.click();
+    const directControls = await page.locator('[data-manage-adjust="true"]').count();
+    if (testCase.stocktake) assert(directControls > 0, `${label}: stocktake controls missing`);
+    else assert.equal(directControls, 0, `${label}: unauthorized stocktake controls visible`);
+
+    const edit = page.locator('[data-action="open-edit-item"]').first();
+    await edit.waitFor({ state:"visible", timeout:10000 });
+    await edit.click();
+'''
+          new = '''    await manage.waitFor({ state:"visible", timeout:10000 });
+    await manage.click();
+    // Backend/schema readiness can precede the asynchronous inventory snapshot render,
+    // especially on WebKit. Prove a real Manage row is present before checking whether
+    // that row exposes stocktake controls for the current role.
+    const edit = page.locator('[data-action="open-edit-item"]').first();
+    await edit.waitFor({ state:"visible", timeout:10000 });
+    const directControls = await page.locator('[data-manage-adjust="true"]').count();
+    if (testCase.stocktake) assert(directControls > 0, `${label}: stocktake controls missing`);
+    else assert.equal(directControls, 0, `${label}: unauthorized stocktake controls visible`);
+
+    await edit.click();
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one branch role assertion block, found {text.count(old)}")
+          path.write_text(text.replace(old, new))
+          PY
+      - name: Validate certification source
+        run: node --check tests/mobile-role-site-certification.mjs
+      - name: Commit patch and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-shot-mobile-inventory-readiness.yml
+          git add tests/mobile-role-site-certification.mjs docs/spec-deltas/2026-09-09-mobile-inventory-certification-readiness.md
+          git commit -m "Wait for inventory Manage rows before role assertions"
+          git push origin HEAD:${{ github.ref_name }}
