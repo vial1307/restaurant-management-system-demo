@@ -229,34 +229,38 @@ export function vpsInventoryHistory(site, { limit = 250 } = {}) {
   return apiRequest(`/api/inventory/${encodeURIComponent(site)}/transactions?limit=${encodeURIComponent(limit)}`);
 }
 
+async function vpsInventoryMutation(path, body) {
+  const result = await apiRequest(path, { method: "POST", body });
+  invalidateVpsInventoryCache("");
+  return result;
+}
+
 export function vpsSetQuantity(body) {
-  return apiRequest("/api/inventory/set-quantity", { method: "POST", body });
+  return vpsInventoryMutation("/api/inventory/set-quantity", body);
 }
 
 export const vpsSetInventoryQuantity = vpsSetQuantity;
 
 export function vpsSetMinimum(body) {
-  return apiRequest("/api/inventory/set-minimum", { method: "POST", body });
+  return vpsInventoryMutation("/api/inventory/set-minimum", body);
 }
 
 export const vpsSetInventoryMinimum = vpsSetMinimum;
 
 export function vpsAdjustInventory(body) {
-  return apiRequest("/api/inventory/adjust", { method: "POST", body });
+  return vpsInventoryMutation("/api/inventory/adjust", body);
 }
 
 export function vpsTransferInventory(body) {
-  return apiRequest("/api/inventory/transfer", { method: "POST", body });
+  return vpsInventoryMutation("/api/inventory/transfer", body);
 }
 
-export async function vpsDirectTransfer(body) {
-  const result = await apiRequest("/api/inventory/direct-transfer", { method: "POST", body });
-  invalidateVpsInventoryCache("");
-  return result;
+export function vpsDirectTransfer(body) {
+  return vpsInventoryMutation("/api/inventory/direct-transfer", body);
 }
 
 export function vpsShipInventory(body) {
-  return apiRequest("/api/inventory/ship", { method: "POST", body });
+  return vpsInventoryMutation("/api/inventory/ship", body);
 }
 
 export async function vpsSyncCatalog(item) {

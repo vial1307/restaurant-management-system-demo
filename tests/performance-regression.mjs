@@ -15,3 +15,4 @@ await import("./select-date-noop-ui-lifecycle-regression.mjs");
 await import("./section-render-api-contract-regression.mjs");
 await import("./account-admin-reconcile-regression.mjs");
 await import("./business-persistence-observer-contract-regression.mjs");
+await import("./vps-inventory-cache-invalidation-regression.mjs");
