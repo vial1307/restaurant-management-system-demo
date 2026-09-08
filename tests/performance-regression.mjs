@@ -17,3 +17,4 @@ await import("./account-admin-reconcile-regression.mjs");
 await import("./business-persistence-observer-contract-regression.mjs");
 await import("./vps-inventory-cache-invalidation-regression.mjs");
 await import("./inventory-sync-serialization-regression.mjs");
+await import("./inventory-empty-snapshot-regression.mjs");
