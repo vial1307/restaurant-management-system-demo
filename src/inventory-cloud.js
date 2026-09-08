@@ -105,7 +105,8 @@ function todayKey() {
 
 export function isCurrentBranchInventoryDate() {
   const state = appState();
-  return Boolean(state?.selectedDate && state.selectedDate === todayKey());
+  const selectedDate = String(state?.selectedDate || "").trim();
+  return (selectedDate || todayKey()) === todayKey();
 }
 
 export function inventoryCloudState() {

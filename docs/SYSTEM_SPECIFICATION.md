@@ -86,6 +86,12 @@ PostgreSQL on the VPS is the authoritative shared database.
 
 It must never become the authoritative shared database for multi-device business data.
 
+Selected service-date cache semantics:
+
+- if a persisted `selectedDate` exists, frontend permission/date readers must respect it
+- if no UI/cache state exists on first load, the selected service date defaults to the current local service date
+- permission helpers must derive that fallback and must not force synchronous shared-state `localStorage` persistence merely to initialize the default date
+
 ---
 
 ## 3. Authentication, account roles and workplaces
