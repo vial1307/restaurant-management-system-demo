@@ -172,7 +172,27 @@ function writeRecoveryDraft(draft) {
   try {
     const state = recoveryState();
     const key = `${draft.userId}:${draft.site}`;
-    state.drafts[key] = draft;
+    const previous = state.drafts[key] && typeof state.drafts[key] === "object" ? state.drafts[key] : null;
+    const previousModules = previous?.modules && typeof previous.modules === "object" && !Array.isArray(previous.modules)
+      ? previous.modules
+      : {};
+    const incomingModules = draft?.modules && typeof draft.modules === "object" && !Array.isArray(draft.modules)
+      ? draft.modules
+      : {};
+    const changedModules = [...new Set([
+      ...(Array.isArray(previous?.changedModules) ? previous.changedModules : Object.keys(previousModules)),
+      ...(Array.isArray(draft?.changedModules) ? draft.changedModules : Object.keys(incomingModules)),
+    ].map(String).filter(Boolean))];
+    state.drafts[key] = {
+      ...(previous || {}),
+      ...draft,
+      capturedAt: draft.capturedAt || previous?.capturedAt || new Date().toISOString(),
+      changedModules,
+      modules: {
+        ...structuredClone(previousModules),
+        ...structuredClone(incomingModules),
+      },
+    };
     const entries = Object.entries(state.drafts)
       .sort((a, b) => String(b[1]?.capturedAt || "").localeCompare(String(a[1]?.capturedAt || "")))
       .slice(0, MAX_RECOVERY_DRAFTS);
@@ -437,6 +457,58 @@ export function attachBusinessStateSync(store) {
         if (key !== identityKey()) return false;
         return currentSnapshot === snapshot;
       } catch (error) {
+        if (error?.code === "BUSINESS_STATE_CONFLICT" && error?.payload) {
+          const conflictingNames = [...new Set((error.payload.conflictingModules || [])
+            .map(String)
+            .filter((name) => Object.hasOwn(dirtyModules, name)))];
+          const serverModules = error.payload.modules && typeof error.payload.modules === "object" && !Array.isArray(error.payload.modules)
+            ? error.payload.modules
+            : {};
+          const serverRevisions = normalizedModuleRevisions(error.payload.moduleRevisions);
+          const hasAuthoritativeConflict = conflictingNames.length > 0 && conflictingNames.every((name) => (
+            Object.hasOwn(serverModules, name) && Number.isInteger(serverRevisions[name])
+          ));
+          if (hasAuthoritativeConflict) {
+            const capturedAt = new Date().toISOString();
+            const conflictLocalModules = Object.fromEntries(
+              conflictingNames.map((name) => [name, structuredClone(dirtyModules[name])])
+            );
+            const recoverySaved = writeRecoveryDraft({
+              userId,
+              site,
+              capturedAt,
+              baseRevision: loadedRevisionKey === key && Number.isFinite(loadedRevision) ? loadedRevision : null,
+              changedModules: conflictingNames,
+              modules: conflictLocalModules,
+              reason: "concurrency-conflict",
+            });
+            if (recoverySaved) {
+              const baseline = snapshotModules(lastSavedSnapshot);
+              const authoritativeModules = Object.fromEntries(
+                conflictingNames.map((name) => [name, structuredClone(serverModules[name])])
+              );
+              applyingRemote = true;
+              try {
+                store.mergeBusinessModules(authoritativeModules);
+              } finally {
+                applyingRemote = false;
+              }
+              for (const name of conflictingNames) baseline[name] = structuredClone(authoritativeModules[name]);
+              lastSavedSnapshot = JSON.stringify(baseline);
+              if (loadedModuleRevisionKey !== key) loadedModuleRevisions = {};
+              for (const name of conflictingNames) loadedModuleRevisions[name] = serverRevisions[name];
+              loadedModuleRevisionKey = key;
+              const remainingDirty = dirtyBusinessModules(businessModulesFromState(store.getState()), lastSavedSnapshot);
+              capturePendingOrError(key, userId, site, remainingDirty);
+              emitPersistenceStatus("error", { userId, site, modules: conflictingNames, error:"BUSINESS_STATE_CONFLICT" });
+              window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
+                detail:{ status:"recovery-pending", site, modules:conflictingNames, error:"BUSINESS_STATE_CONFLICT", capturedAt },
+              }));
+              if (Object.keys(remainingDirty).length) scheduleSave();
+              return false;
+            }
+          }
+        }
         emitPersistenceStatus("error", { userId, site, modules: dirtyNames, error:error.message });
         window.dispatchEvent(new CustomEvent("shitu:business-state-status", { detail:{ status:"error", site, error:error.message } }));
         return false;

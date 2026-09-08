@@ -69,8 +69,8 @@ function buildBanner(drafts, lang, signature) {
   const copy = document.createElement("p");
   copy.className = "business-recovery-copy";
   copy.textContent = lang === "zh"
-    ? "因權限或工作據點已變更，仍有資料尚未同步。復原副本已保留在此裝置；管理者處理前請勿清除瀏覽器資料。"
-    : "Có dữ liệu chưa thể đồng bộ do quyền hoặc nơi làm việc đã thay đổi. Bản phục hồi đang được giữ trên thiết bị; không xóa dữ liệu trình duyệt trước khi quản lý xử lý.";
+    ? "因權限、工作據點變更或同時編輯衝突，仍有資料尚未同步。復原副本已保留在此裝置；管理者處理前請勿清除瀏覽器資料。"
+    : "Có dữ liệu chưa thể đồng bộ do quyền, nơi làm việc hoặc xung đột chỉnh sửa đồng thời. Bản phục hồi đang được giữ trên thiết bị; không xóa dữ liệu trình duyệt trước khi quản lý xử lý.";
 
   const list = document.createElement("div");
   list.className = "business-recovery-list";
