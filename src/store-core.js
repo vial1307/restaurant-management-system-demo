@@ -273,17 +273,6 @@ export function hydrateState(raw, date = formatDateKey()) {
         stockKey: stockKeyFor(item),
         workArea: item.workArea || inferWorkArea(item),
       }));
-      for (const item of DEFAULT_ITEMS.filter((entry) => entry.freezerSheet || ["frozen-noodles", "baby-cabbage", "cabbage"].includes(entry.id))) {
-        if (!record.inventory.some((entry) => entry.id === item.id)) record.inventory.push({ ...structuredClone(item), stockKey: stockKeyFor(item), workArea: item.workArea || inferWorkArea(item) });
-      }
-      const frozenNoodles = record.inventory.find((entry) => entry.id === "frozen-noodles");
-      if (frozenNoodles?.minimum === 30) frozenNoodles.minimum = 60;
-      const duckIntestine = record.inventory.find((entry) => entry.id === "duck-intestine-large");
-      if (duckIntestine?.minimum === 10 && duckIntestine?.zone === "large-freezer") {
-        duckIntestine.minimum = 3;
-        duckIntestine.unit = "包";
-        duckIntestine.workArea = "seafood";
-      }
       record.workInventory = Array.isArray(record.workInventory)
         ? record.workInventory.map((item) => ({
             ...item,
@@ -291,9 +280,6 @@ export function hydrateState(raw, date = formatDateKey()) {
             workArea: item.workArea || inferWorkArea(item),
           }))
         : buildWorkInventory(record.inventory);
-      for (const item of buildWorkInventory(record.inventory)) {
-        if (!record.workInventory.some((entry) => entry.stockKey === item.stockKey)) record.workInventory.push(item);
-      }
       record.procurement = record.procurement && typeof record.procurement === "object"
         ? { planned: record.procurement.planned ?? {}, incoming: record.procurement.incoming ?? {}, orderDates: { noodles: record.date, vegetables: record.date, factory: record.date, ...(record.procurement.orderDates ?? {}) } }
         : { planned: {}, incoming: {}, orderDates: { noodles: record.date, vegetables: record.date, factory: record.date } };
