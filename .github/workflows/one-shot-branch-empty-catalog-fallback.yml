@@ -30,14 +30,10 @@ jobs:
           from pathlib import Path
           path = Path('src/inventory-cloud.js')
           source = path.read_text()
-          old = '''  const inventory = Array.isArray(record?.inventory) && record.inventory.length
-            ? record.inventory
-            : DEFAULT_ITEMS;'''
-          new = '''  const inventory = Array.isArray(record?.inventory)
-            ? record.inventory
-            : DEFAULT_ITEMS;'''
-          if old not in source:
-              raise SystemExit('expected branch catalog fallback not found')
+          old = 'Array.isArray(record?.inventory) && record.inventory.length'
+          new = 'Array.isArray(record?.inventory)'
+          if source.count(old) != 1:
+              raise SystemExit(f'expected exactly one branch catalog fallback, found {source.count(old)}')
           path.write_text(source.replace(old, new, 1))
           PY
       - name: Run targeted inventory regressions
