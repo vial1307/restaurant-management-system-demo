@@ -966,7 +966,7 @@ export async function getCloudInventoryHistory(site = currentSite(), limit = 200
 
   try {
     const [historyResult, rows] = await Promise.all([
-      vpsInventoryHistory(site, limit),
+      vpsInventoryHistory(site, { limit }),
       fetchSite(site),
     ]);
     const itemMap = new Map(rows.map((row) => [row.item.id, row.item]));
