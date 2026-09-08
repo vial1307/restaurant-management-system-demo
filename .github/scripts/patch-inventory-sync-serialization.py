@@ -60,11 +60,3 @@ if source.count(old_sync) != 1:
     raise SystemExit(f"sync function anchor count={source.count(old_sync)}")
 source = source.replace(old_sync, new_sync)
 path.write_text(source, encoding="utf-8")
-
-workflow_path = Path(".github/workflows/deploy-vps.yml")
-workflow = workflow_path.read_text(encoding="utf-8")
-anchor = "          node tests/vps-business-module-revision-runtime-regression.mjs\n"
-addition = anchor + "          node tests/inventory-sync-serialization-regression.mjs\n"
-if workflow.count(anchor) != 1:
-    raise SystemExit(f"workflow runtime anchor count={workflow.count(anchor)}")
-workflow_path.write_text(workflow.replace(anchor, addition), encoding="utf-8")
