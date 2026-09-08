@@ -1,0 +1,45 @@
+name: One-shot central empty cache reseed patch
+
+on:
+  push:
+    branches:
+      - fix-central-empty-cache-reseed-20260909
+    paths:
+      - ".github/workflows/one-shot-central-empty-cache-reseed.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix-central-empty-cache-reseed-20260909
+
+      - name: Apply central empty cache patch
+        run: python3 .github/scripts/patch-central-empty-cache-reseed.py
+
+      - name: Validate targeted regression
+        run: |
+          set -euo pipefail
+          node --check src/auth-layer.js
+          node tests/central-empty-cache-reseed-contract-regression.mjs
+          node tests/inventory-empty-snapshot-regression.mjs
+          node tests/inventory-history-limit-contract-regression.mjs
+          node tests/inventory-sync-serialization-regression.mjs
+          node tests/vps-inventory-cache-invalidation-regression.mjs
+
+      - name: Commit patch
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/one-shot-central-empty-cache-reseed.yml
+          git rm .github/scripts/patch-central-empty-cache-reseed.py
+          git add src/auth-layer.js tests/performance-regression.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Preserve authoritative empty central inventory cache"
+          git push origin HEAD:fix-central-empty-cache-reseed-20260909
