@@ -18,3 +18,5 @@ Priority: P2 inventory history correctness
 ## Acceptance
 
 A contract regression must verify the VPS wrapper accepts an options object, inventory-cloud passes `{ limit }`, and the obsolete scalar call shape is absent. Existing static/performance/runtime, API/PostgreSQL, Chromium, recovery/persistence, full-device, exact-SHA deploy, health/release and production UI smoke gates remain mandatory.
+
+Targeted validation passed together with the authoritative-empty-snapshot, sync-serialization, and read-after-write cache regressions before PR certification.
