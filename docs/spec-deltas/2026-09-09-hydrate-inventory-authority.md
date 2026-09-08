@@ -23,3 +23,5 @@ This means an archived catalog item or intentionally removed work location can d
 ## Acceptance
 
 A runtime regression must prove that hydration preserves a partial authoritative inventory array without adding defaults, preserves legacy-looking minimum/unit values exactly, preserves an explicit empty work array, and still derives work inventory only when the work array is absent/malformed. The regression must run in normal preflight with the existing empty-snapshot, central-empty-cache and branch-empty-catalog authority guards.
+
+Targeted validation must also keep history-limit, sync-serialization and read-after-write cache regressions green before the full PR gate runs.
