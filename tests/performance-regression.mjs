@@ -20,3 +20,4 @@ await import("./inventory-sync-serialization-regression.mjs");
 await import("./inventory-empty-snapshot-regression.mjs");
 await import("./inventory-history-limit-contract-regression.mjs");
 await import("./central-empty-cache-reseed-contract-regression.mjs");
+await import("./branch-empty-catalog-fallback-contract-regression.mjs");
