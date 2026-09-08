@@ -320,7 +320,7 @@ export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,lo
 function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
   const { record } = currentBranchRecord();
   if (!record || !["fuxing","yongji"].includes(site)) return [];
-  const inventory = Array.isArray(record?.inventory) && record.inventory.length
+  const inventory = Array.isArray(record?.inventory)
     ? record.inventory
     : DEFAULT_ITEMS;
   const work = Array.isArray(record?.workInventory) ? record.workInventory : [];
