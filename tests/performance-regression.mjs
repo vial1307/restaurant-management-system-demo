@@ -22,3 +22,4 @@ await import("./inventory-history-limit-contract-regression.mjs");
 await import("./central-empty-cache-reseed-contract-regression.mjs");
 await import("./branch-empty-catalog-fallback-contract-regression.mjs");
 await import("./inventory-hydration-authority-regression.mjs");
+await import("./catalog-archive-admin-boundary-regression.mjs");
