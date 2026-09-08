@@ -1354,7 +1354,14 @@ function render() {
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
   const mobileMenu = view.mobileMenuOpen ? `<div class="mobile-menu-backdrop" data-action="close-mobile-menu"><nav class="mobile-menu" aria-label="${escapeHtml(context.language === "zh" ? "全部功能" : "Tất cả chức năng")}"><div class="mobile-menu-heading"><strong>${escapeHtml(context.language === "zh" ? "全部功能" : "Tất cả chức năng")}</strong><button class="icon-button" data-action="close-mobile-menu" aria-label="${escapeHtml(context.text.cancel)}">${icon("close")}</button></div><div class="mobile-menu-grid">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</div></nav></div>` : "";
-  root.innerHTML = `<div class="app-shell">${sidebar(context, active)}<div class="main-shell">${topbar(context)}<main class="page-content">${pages[active](context)}</main></div><nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav></div>${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  const sidebarMarkup = sidebar(context, active);
+  const topbarMarkup = topbar(context);
+  const pageMarkup = `<main class="page-content">${pages[active](context)}</main>`;
+  const mobileNavMarkup = `<nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav>`;
+  const overlaysMarkup = `${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  if (typeof root.renderSections === "function") {
+    root.renderSections({ sidebar: sidebarMarkup, topbar: topbarMarkup, page: pageMarkup, mobileNav: mobileNavMarkup, overlays: overlaysMarkup });
+  } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
