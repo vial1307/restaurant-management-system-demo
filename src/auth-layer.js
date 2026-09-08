@@ -108,7 +108,7 @@ function centralDraftKey(item) {
 function loadBaseStock() {
   try {
     const saved = JSON.parse(localStorage.getItem(CENTRAL_KEY) || "null");
-    if (Array.isArray(saved) && saved.length) return saved;
+    if (Array.isArray(saved)) return saved;
   } catch {}
   const seeded = structuredClone(DEFAULT_PRODUCTS);
   localStorage.setItem(CENTRAL_KEY, JSON.stringify(seeded));
