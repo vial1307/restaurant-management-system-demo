@@ -20,4 +20,4 @@ The failure reproduced twice on main and both artifacts stopped at the same asse
 
 ## Acceptance
 
-The complete PR gate must pass, including the WebKit manager/employee/Central cases, before merge. Main must then pass the same full-device gate before exact-SHA deploy and production smoke.
+The one-shot source patch and syntax validation completed successfully. The complete PR gate must pass, including the WebKit manager/employee/Central cases, before merge. Main must then pass the same full-device gate before exact-SHA deploy and production smoke.
