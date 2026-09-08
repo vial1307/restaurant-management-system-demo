@@ -115,7 +115,7 @@ async function assertPermissionNavigation(page, session, label) {
       const displayed = await link.evaluate((node) => getComputedStyle(node).display !== "none");
       assert.equal(displayed, expected, `${label}: full mobile menu permission mismatch for ${route}`);
     }
-    await page.locator('[data-action="close-mobile-menu"]').first().click();
+    await page.keyboard.press("Escape");
     await page.locator(".mobile-menu-backdrop").waitFor({ state:"detached", timeout:10000 });
   }
 }
