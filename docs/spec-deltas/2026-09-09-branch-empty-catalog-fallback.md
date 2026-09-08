@@ -18,3 +18,5 @@ Priority: P1 inventory consistency
 ## Acceptance
 
 A contract regression must verify that `buildBranchCatalog()` directly accepts any array and rejects the old `record.inventory.length` condition. Existing inventory empty-snapshot and central empty-cache regressions remain mandatory so authoritative empty state is preserved end-to-end for both branch and central inventory.
+
+Targeted validation must also keep inventory history-limit, sync-serialization and read-after-write cache regressions green before the full PR gate runs.
