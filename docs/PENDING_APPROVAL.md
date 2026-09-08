@@ -27,7 +27,7 @@ Measure:
 - request queueing
 - inventory transaction correctness under concurrency
 
-A load smoke test against the isolated CI database may be added safely without approval; only production stress is held here.
+Safe CI coverage: an isolated API load smoke now runs against the CI PostgreSQL container at 10, 25 and 50 concurrent clients. It measures p50/p95/p99/max latency and fails on HTTP/request errors or excessive latency. This does **not** exercise the production VPS and does not replace the production stress test above.
 
 ## P1 — Host-level VPS monitoring stack
 
@@ -45,18 +45,13 @@ Preferred direction:
 - API latency/error rate;
 - alert thresholds documented in the repo.
 
-## P1 — Whole-app render architecture refactor
+## Completed — Stable shell section rendering
 
-Status: PENDING APPROVAL
+Status: COMPLETED 2026-09-08
 
-Reason: replacing the current broad `store.subscribe(renderWhenAuthorized)` / application-shell re-render model with granular page/component rendering is a deep frontend architectural change and has a high regression surface.
+The previous whole-app render architecture item is no longer pending. Production now uses the bounded section-render API for sidebar, topbar, page, mobile navigation and root overlays while preserving the legacy full-render fallback for corruption recovery. PR #50 passed static/performance, API/PostgreSQL, Chromium, recovery/persistence and full-device cross-browser regression, then exact-SHA VPS deploy, health/release verification and production UI smoke.
 
-Goal after approval:
-
-- local updates should render only the affected page/region;
-- navigation should preserve stable shell DOM;
-- background synchronization should not rebuild unrelated modules;
-- measurable reduction in long tasks/layout work.
+Further component/row-level rendering optimizations remain optional performance work and must preserve current business behavior.
 
 ## P1 — Business-state concurrency model
 
