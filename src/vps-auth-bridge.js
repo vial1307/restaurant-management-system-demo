@@ -273,10 +273,15 @@ document.addEventListener("submit", async (event) => {
     };
     const message = form.querySelector("[data-account-form-message]");
     try {
-      await vpsSaveUser(body);
+      const result = await vpsSaveUser(body);
+      const currentSession = legacySession();
+      if (result?.user?.id === currentSession?.id) {
+        invalidateCurrentVpsUser();
+        mirrorVpsSession(result.user);
+        window.dispatchEvent(new CustomEvent("shitu:auth-synced"));
+      }
       await syncProfiles();
       document.querySelector("[data-account-modal]")?.remove();
-      location.reload();
     } catch (error) {
       const code = error instanceof Error ? (error.code || error.message) : "";
       if (message) message.textContent = `Không thể lưu tài khoản. · 帳號儲存失敗。 ${esc(code)}`;
@@ -307,7 +312,6 @@ document.addEventListener("click", async (event) => {
     await vpsDeleteUser(deleteButton.dataset.accountDelete);
     await syncProfiles();
     document.querySelector("[data-account-modal]")?.remove();
-    location.reload();
   } catch (error) {
     alert(`Không thể xóa tài khoản. · 帳號刪除失敗。 ${error instanceof Error ? (error.code || error.message) : ""}`);
   }
