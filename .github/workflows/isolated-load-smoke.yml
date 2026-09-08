@@ -1,0 +1,83 @@
+name: Isolated CI API Load Smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "vps/backend/**"
+      - "vps/database/**"
+      - ".github/workflows/isolated-load-smoke.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "vps/backend/**"
+      - "vps/database/**"
+      - ".github/workflows/isolated-load-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-load-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      CI_LOAD_MAX_P95_MS: "5000"
+      CI_LOAD_MAX_SINGLE_MS: "10000"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend packages
+        run: npm ci --prefix vps/backend
+
+      - name: Prepare isolated database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start isolated API
+        run: |
+          set -euo pipefail
+          node vps/backend/src/server.mjs >/tmp/kitchen-load-api.log 2>&1 &
+          echo $! >/tmp/kitchen-load-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-load-api.log
+          exit 1
+
+      - name: Run 10/25/50-client isolated load smoke
+        run: node vps/backend/scripts/isolated-load-smoke.mjs
+
+      - name: Dump API log on failure
+        if: failure()
+        run: cat /tmp/kitchen-load-api.log 2>/dev/null || true
