@@ -7,6 +7,13 @@ import { businessModulesFromState } from "../src/business-state-sync.js";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const source = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
+for (const obsolete of [
+  ".github/workflows/port-system-recent-fixes.yml",
+  "scripts/port-system-recent-fixes.py",
+  "scripts/port-system-recent-fixes-v2.py",
+]) {
+  assert.equal(fs.existsSync(path.join(ROOT, obsolete)), false, `${obsolete} must not return; system-demo is the sole production source`);
+}
 const memoryStorage = () => {
   const values = new Map();
   return {
