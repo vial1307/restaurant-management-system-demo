@@ -127,12 +127,12 @@ async function assertBranchInventoryRole(page, testCase, label) {
   if (testCase.manage) {
     await manage.waitFor({ state:"visible", timeout:10000 });
     await manage.click();
+    const edit = page.locator('[data-action="open-edit-item"]').first();
+    await edit.waitFor({ state:"visible", timeout:10000 });
     const directControls = await page.locator('[data-manage-adjust="true"]').count();
     if (testCase.stocktake) assert(directControls > 0, `${label}: stocktake controls missing`);
     else assert.equal(directControls, 0, `${label}: unauthorized stocktake controls visible`);
 
-    const edit = page.locator('[data-action="open-edit-item"]').first();
-    await edit.waitFor({ state:"visible", timeout:10000 });
     await edit.click();
     const modal = page.locator('form[data-form="edit-item"]');
     await modal.waitFor({ state:"visible", timeout:10000 });
