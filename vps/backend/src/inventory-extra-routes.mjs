@@ -186,6 +186,21 @@ export async function registerInventoryExtraRoutes(app) {
     );
     if (!loc.rowCount) return reply.code(404).send({ error: "LOCATION_NOT_FOUND" });
 
+    const configured = await pool.query(
+      `select 1
+       from public.inventory_items i
+       join public.inventory_stock s on s.item_id=i.id
+       where i.active=true
+         and i.catalog_key=$1
+         and i.item_key like $2
+         and s.location_id=$3
+       limit 1`,
+      [catalogKey,site + ":%",loc.rows[0].id]
+    );
+    if (!configured.rowCount) {
+      return reply.code(409).send({ error: "RECEIVE_DEFAULT_LOCATION_NOT_CONFIGURED" });
+    }
+
     await pool.query(
       `insert into public.inventory_receive_defaults(site,catalog_key,location_id,updated_by,updated_at)
        values($1,$2,$3,$4,now())
@@ -505,6 +520,9 @@ export async function registerInventoryExtraRoutes(app) {
             const fixedLocationId = fixed.rows[0]?.location_id || "";
             if (!fixedLocationId) {
               throw Object.assign(new Error("DESTINATION_RECEIVE_DEFAULT_REQUIRED"), { statusCode:409 });
+            }
+            if (!configuredIds.includes(fixedLocationId)) {
+              throw Object.assign(new Error("DESTINATION_RECEIVE_DEFAULT_NOT_CONFIGURED"), { statusCode:409 });
             }
             if (fixedLocationId !== destinationLocationId) {
               throw Object.assign(new Error("DESTINATION_LOCATION_MUST_USE_RECEIVE_DEFAULT"), { statusCode:409 });
