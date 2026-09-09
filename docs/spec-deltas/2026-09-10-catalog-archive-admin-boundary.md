@@ -20,5 +20,6 @@ For branch catalog management, the stocktake helper also inherits the current-se
 ## Acceptance
 
 - Static regression locks frontend helper and backend permission parity.
+- Targeted archive/inventory regressions pass on the current production-main baseline before PR certification.
 - Full PR certification must pass before merge.
 - Exact-SHA production certification must pass after merge.
