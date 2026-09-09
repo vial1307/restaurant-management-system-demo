@@ -24,6 +24,7 @@ const POLL_MS = 60000;
 const REQUIRED_SCHEMA_VERSION = 11;
 const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
 const MIGRATION_RETRY_MS = 5000;
+const AUTH_SYNC_RETRY_MS = 5500;
 
 function isInventoryBackendConfigured() {
   return isVpsApiConfigured();
@@ -62,6 +63,7 @@ const CENTRAL_CODE_TO_ZONE = Object.fromEntries(
 let migrationAvailable = null;
 let migrationCheckedAt = 0;
 let polling = 0;
+let authSyncRetryTimer = 0;
 let bootedUserId = "";
 let inventorySyncTail = Promise.resolve();
 let lastSite = "";
@@ -214,6 +216,21 @@ function dispatchStatus(status, detail = {}) {
   window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-status", {
     detail: { status, ...detail },
   }));
+}
+
+function clearAuthSyncRetry() {
+  if (!authSyncRetryTimer) return;
+  window.clearTimeout(authSyncRetryTimer);
+  authSyncRetryTimer = 0;
+}
+
+function scheduleAuthSyncRetry(site) {
+  if (authSyncRetryTimer || !site || !session()) return;
+  authSyncRetryTimer = window.setTimeout(() => {
+    authSyncRetryTimer = 0;
+    if (document.documentElement.dataset.vpsAuthReady !== "true" || !session()) return;
+    void syncInventoryNow(currentSite() || site);
+  }, AUTH_SYNC_RETRY_MS);
 }
 
 function appState() {
@@ -652,11 +669,13 @@ async function runInventorySync(site, { reloadBranch = false } = {}) {
   }
   try {
     const rows = await fetchSite(site);
+    clearAuthSyncRetry();
     const changed = site === "central" ? applyCentral(rows) : applyBranch(rows, site);
     void reloadBranch;
     dispatchStatus("synced", { site, count: rows.length });
     return changed;
   } catch (error) {
+    if (error?.code === "AUTH_REQUIRED") scheduleAuthSyncRetry(site);
     dispatchStatus("error", { site, error: error?.message || String(error) });
     return false;
   }
