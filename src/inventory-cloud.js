@@ -908,7 +908,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
 
 export async function cloudArchiveCentralItem(itemKey) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
   if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
   try {
     const data = await vpsArchiveCatalogItem(itemKey);
@@ -922,7 +922,7 @@ export async function cloudArchiveCentralItem(itemKey) {
 
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
   if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const itemKey = branchItemKey(site,stockKey);
