@@ -43,6 +43,7 @@ async function login(page, context, username, foreignSite, label) {
     await page.waitForSelector(".app-shell", { state:"visible", timeout:12000 });
     await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:12000 });
   } catch (uiError) {
+    console.log("MOBILE_ROLE_SITE_LOGIN_FALLBACK", label);
     // WebKit in CI can occasionally drop the login cookie during a form navigation.
     // Re-seed the same account through the browser context so cookie/session scope
     // remains identical to the page origin, then let the auth bridge rebuild local state.
@@ -215,6 +216,10 @@ async function runRoleCase(browser, testCase) {
   page.on("request", (request) => {
     const site = inventorySiteFromUrl(request.url());
     if (site) requestedSites.push(site);
+  });
+  page.on("response", (response) => {
+    const site = inventorySiteFromUrl(response.url());
+    if (site) console.log("MOBILE_ROLE_SITE_INVENTORY_RESPONSE", label, site, response.status());
   });
 
   try {
