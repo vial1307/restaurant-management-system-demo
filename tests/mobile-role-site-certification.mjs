@@ -77,10 +77,12 @@ async function selectTodayViaUi(page, label, site) {
   await toggle.click();
 
   await page.evaluate(() => {
-    globalThis.__mobileRoleInventoryAppliedSites = [];
-    window.addEventListener("shitu:inventory-cloud-updated", (event) => {
-      const appliedSite = event?.detail?.site;
-      if (appliedSite) globalThis.__mobileRoleInventoryAppliedSites.push(appliedSite);
+    globalThis.__mobileRoleInventorySyncedSites = [];
+    window.addEventListener("shitu:inventory-cloud-status", (event) => {
+      const detail = event?.detail || {};
+      if (detail.status === "synced" && detail.site) {
+        globalThis.__mobileRoleInventorySyncedSites.push(detail.site);
+      }
     });
   });
 
@@ -89,8 +91,8 @@ async function selectTodayViaUi(page, label, site) {
   await today.click();
 
   await page.waitForFunction((expectedSite) => (
-    Array.isArray(globalThis.__mobileRoleInventoryAppliedSites)
-    && globalThis.__mobileRoleInventoryAppliedSites.includes(expectedSite)
+    Array.isArray(globalThis.__mobileRoleInventorySyncedSites)
+    && globalThis.__mobileRoleInventorySyncedSites.includes(expectedSite)
   ), site, { timeout:15000 });
 
   await page.locator(".calendar-popover").waitFor({ state:"detached", timeout:10000 });
@@ -302,4 +304,4 @@ for (const [engineName, engine] of Object.entries(ENGINES)) {
   }
 }
 
-console.log("MOBILE_ROLE_SITE_CERTIFICATION_V3_OK");
+console.log("MOBILE_ROLE_SITE_CERTIFICATION_V4_OK");
