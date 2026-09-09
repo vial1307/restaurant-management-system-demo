@@ -71,14 +71,27 @@ async function gotoInventory(page) {
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout:15000 });
 }
 
-async function selectTodayViaUi(page, label) {
+async function selectTodayViaUi(page, label, site) {
   const toggle = page.locator('[data-action="toggle-calendar"]').first();
   await toggle.waitFor({ state:"visible", timeout:10000 });
   await toggle.click();
 
+  await page.evaluate(() => {
+    globalThis.__mobileRoleInventoryAppliedSites = [];
+    window.addEventListener("shitu:inventory-cloud-updated", (event) => {
+      const appliedSite = event?.detail?.site;
+      if (appliedSite) globalThis.__mobileRoleInventoryAppliedSites.push(appliedSite);
+    });
+  });
+
   const today = page.locator('[data-action="calendar-shortcut"][data-shortcut="today"]').first();
   await today.waitFor({ state:"visible", timeout:10000 });
   await today.click();
+
+  await page.waitForFunction((expectedSite) => (
+    Array.isArray(globalThis.__mobileRoleInventoryAppliedSites)
+    && globalThis.__mobileRoleInventoryAppliedSites.includes(expectedSite)
+  ), site, { timeout:15000 });
 
   await page.locator(".calendar-popover").waitFor({ state:"detached", timeout:10000 });
   await toggle.click();
@@ -225,7 +238,7 @@ async function runRoleCase(browser, testCase) {
     assert.equal(session.location, testCase.site, `${label}: wrong scoped site`);
 
     await gotoInventory(page);
-    await selectTodayViaUi(page, label);
+    await selectTodayViaUi(page, label, testCase.site);
     assert.equal(await page.locator(".access-empty-state").count(), 0, `${label}: authorized inventory blocked`);
     const activeSite = await page.evaluate(() => localStorage.getItem("shitu-admin-active-site-v1"));
     assert.equal(activeSite, testCase.site, `${label}: stale active site was not repaired`);
@@ -289,4 +302,4 @@ for (const [engineName, engine] of Object.entries(ENGINES)) {
   }
 }
 
-console.log("MOBILE_ROLE_SITE_CERTIFICATION_V2_OK");
+console.log("MOBILE_ROLE_SITE_CERTIFICATION_V3_OK");
