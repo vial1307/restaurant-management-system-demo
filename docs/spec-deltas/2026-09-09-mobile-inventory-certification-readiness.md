@@ -10,6 +10,8 @@ After authoritative inventory hydration removed legacy default rows, main full-d
 
 A first test-only patch proved this was not merely an immediate selector race: WebKit still had no Manage product row after 10 seconds. The runtime path explains the symptom. During the five-second post-login grace period, an inventory GET can receive `AUTH_REQUIRED`; `apiRequest()` intentionally does not expire the just-created local session during that grace window, but `runInventorySync()` previously swallowed the failed sync and did not retry until the 60-second poll/focus lifecycle. The UI could therefore remain authorized but empty.
 
+The final cross-browser gate is instrumented to report when WebKit uses its CI-only login fallback and to report HTTP status for each branch inventory response. This diagnostic must distinguish a production runtime retry problem from a certification fallback that bypasses the normal `vpsLogin()` contract before any further behavior change is made.
+
 ## Required behavior
 
 - branch Manage certification waits for a real product row before evaluating positive/negative stocktake controls;
