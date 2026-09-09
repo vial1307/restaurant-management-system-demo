@@ -10,7 +10,7 @@ After authoritative inventory hydration removed legacy default rows, main full-d
 
 A first test-only patch proved this was not merely an immediate selector race: WebKit still had no Manage product row after 10 seconds. The runtime path explains the symptom. During the five-second post-login grace period, an inventory GET can receive `AUTH_REQUIRED`; `apiRequest()` intentionally does not expire the just-created local session during that grace window, but `runInventorySync()` previously swallowed the failed sync and did not retry until the 60-second poll/focus lifecycle. The UI could therefore remain authorized but empty.
 
-The final cross-browser gate is instrumented to report when WebKit uses its CI-only login fallback and to report HTTP status for each branch inventory response. This diagnostic must distinguish a production runtime retry problem from a certification fallback that bypasses the normal `vpsLogin()` contract before any further behavior change is made.
+A temporary diagnostic run then established the CI-specific WebKit behavior without changing production semantics. All WebKit role/site certification cases used the existing browser-context login fallback, but every observed inventory request returned HTTP 200. Manager Fuxing received two 200 responses, employee Fuxing received one 200 response, and Central received two 200 responses; all three cases passed. Therefore the fallback itself was not shown to generate an inventory `AUTH_REQUIRED` failure. The temporary diagnostic logging was removed before final certification.
 
 ## Required behavior
 
@@ -24,4 +24,4 @@ The final cross-browser gate is instrumented to report when WebKit uses its CI-o
 
 ## Acceptance
 
-A runtime regression must prove login success followed by one inventory `AUTH_REQUIRED` schedules a bounded retry and that the successful retry applies an authoritative Fuxing snapshot. Existing serialization, empty-snapshot and hydration-authority regressions remain mandatory. The full PR gate must pass, including WebKit manager/employee/Central cases, before merge. Main must then pass full-device before exact-SHA deploy, health/release and production smoke.
+A runtime regression must prove login success followed by one inventory `AUTH_REQUIRED` schedules a bounded retry and that the successful retry applies an authoritative Fuxing snapshot. Existing serialization, empty-snapshot and hydration-authority regressions remain mandatory. The final PR tree must pass a clean full PR gate with no temporary diagnostics, including WebKit manager/employee/Central cases. Because this gate has shown intermittent WebKit behavior, the regression job should also pass a second consecutive run before merge. Main must then pass full-device before exact-SHA deploy, health/release and production smoke.
