@@ -53,18 +53,28 @@ The previous whole-app render architecture item is no longer pending. Production
 
 Further component/row-level rendering optimizations remain optional performance work and must preserve current business behavior.
 
-## P1 — Business-state concurrency model
+## Completed — Module-level business-state optimistic concurrency
+
+Status: COMPLETED 2026-09-08
+
+Non-inventory business modules already use module-level optimistic concurrency in PostgreSQL. Writes carry `expectedModuleRevisions`, stale writes receive `BUSINESS_STATE_CONFLICT`, missing/corrupt revision baselines are rejected instead of guessed, independent modules can be written concurrently, and frontend conflict recovery preserves the local draft while reconciling the visible state to the authoritative server revision.
+
+This completed layer is covered by isolated PostgreSQL concurrency regression and browser conflict-recovery/persistence regression. It is not awaiting approval.
+
+## P1 — Deeper per-record / realtime business concurrency
 
 Status: PENDING APPROVAL
 
-Reason: current non-inventory business modules are persisted by site/revision in `business_state`. Moving to per-module/per-record optimistic concurrency, conflict resolution or realtime push changes database/API semantics and requires a deliberate migration.
+Reason: moving beyond the current module-level optimistic concurrency to per-record conflict tokens, row-level merge semantics or realtime push changes database/API/business semantics and requires a deliberate migration.
 
-Goal after approval:
+Potential goals after approval:
 
-- prevent accidental last-write-wins when two users edit the same module concurrently;
-- detect stale revision writes;
-- return a clear conflict response;
-- optionally add self-hosted realtime delivery later without changing PostgreSQL authority.
+- reduce conflicts when different users edit different records inside the same module;
+- define explicit same-record merge/reject semantics;
+- optionally add self-hosted realtime delivery without changing PostgreSQL authority;
+- preserve the existing module-level concurrency guarantees during migration.
+
+This item is an optional deeper concurrency model, not a fix for an unprotected last-write-wins system.
 
 ## P2 — Physical-device release certification
 
