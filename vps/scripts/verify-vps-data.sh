@@ -165,8 +165,8 @@ warn_nonzero "duplicate active catalog keys inside the same site" "
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "006" ]]; then
-  echo "ERROR: schema version ${schema} is older than 006"
+if [[ "${schema}" < "007" ]]; then
+  echo "ERROR: schema version ${schema} is older than 007"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
