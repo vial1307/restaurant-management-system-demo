@@ -10,12 +10,12 @@ const CASES = [
   { engine:"chromium", username:"managerfx", role:"manager", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:true },
   { engine:"chromium", username:"manageryj", role:"manager", site:"yongji", foreign:"fuxing", width:412, height:915, manage:true, operations:true, stocktake:true, receiveDefault:true },
   { engine:"chromium", username:"supervisorfx", role:"supervisor", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:false },
-  { engine:"chromium", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:412, height:915, manage:true, operations:true, stocktake:false, receiveDefault:false },
+  { engine:"chromium", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:412, height:915, manage:true, operations:true, stocktake:true, receiveDefault:false },
   { engine:"chromium", username:"parttimefx", role:"parttime", site:"fuxing", foreign:"yongji", width:390, height:844, manage:false, operations:false, stocktake:false, receiveDefault:false },
-  { engine:"chromium", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:412, height:915, central:true, manage:true, operations:true, stocktake:false },
+  { engine:"chromium", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:412, height:915, central:true, manage:true, operations:true, stocktake:true },
   { engine:"webkit", username:"managerfx", role:"manager", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:true },
-  { engine:"webkit", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:false, receiveDefault:false },
-  { engine:"webkit", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:390, height:844, central:true, manage:true, operations:true, stocktake:false },
+  { engine:"webkit", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:false },
+  { engine:"webkit", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:390, height:844, central:true, manage:true, operations:true, stocktake:true },
 ];
 
 function inventorySiteFromUrl(url) {
@@ -130,8 +130,8 @@ async function assertBranchInventoryRole(page, testCase, label) {
     const edit = page.locator('[data-action="open-edit-item"]').first();
     await edit.waitFor({ state:"visible", timeout:10000 });
     const directControls = await page.locator('[data-manage-adjust="true"]').count();
-    if (testCase.stocktake) assert(directControls > 0, `${label}: stocktake controls missing`);
-    else assert.equal(directControls, 0, `${label}: unauthorized stocktake controls visible`);
+    if (testCase.stocktake) assert(directControls > 0, `${label}: inventory edit controls missing`);
+    else assert.equal(directControls, 0, `${label}: unauthorized inventory edit controls visible`);
 
     await edit.click();
     const modal = page.locator('form[data-form="edit-item"]');
@@ -149,7 +149,7 @@ async function assertBranchInventoryRole(page, testCase, label) {
     for (const [name, field] of [["quantity", quantity], ["minimum", minimum], ["workMinimum", workMinimum]]) {
       const readonly = await field.getAttribute("readonly");
       if (testCase.stocktake) assert.equal(readonly, null, `${label}: ${name} unexpectedly read-only`);
-      else assert.equal(readonly, "", `${label}: ${name} editable without stocktake authority`);
+      else assert.equal(readonly, "", `${label}: ${name} editable without inventory edit permission`);
     }
     assert.equal(await receiveDefault.isDisabled(), !testCase.receiveDefault, `${label}: receiving-default ownership mismatch`);
     await assertNoHorizontalOverflow(page, `${label}-product-modal`);
@@ -180,8 +180,8 @@ async function assertCentralInventoryRole(page, testCase, label) {
   await manage.waitFor({ state:"visible", timeout:10000 });
   await manage.click();
   const directControls = await page.locator('[data-central-manage-adjust="true"]').count();
-  if (testCase.stocktake) assert(directControls > 0, `${label}: central stocktake controls missing`);
-  else assert.equal(directControls, 0, `${label}: central role received direct stocktake controls`);
+  if (testCase.stocktake) assert(directControls > 0, `${label}: central inventory edit controls missing`);
+  else assert.equal(directControls, 0, `${label}: central inventory edit controls visible without edit permission`);
 
   const edit = page.locator('[data-central-editor-open]').first();
   await edit.waitFor({ state:"visible", timeout:10000 });
@@ -194,8 +194,8 @@ async function assertCentralInventoryRole(page, testCase, label) {
     assert.equal(await quantity.getAttribute("readonly"), null, `${label}: central quantity unexpectedly read-only`);
     assert.equal(await minimum.getAttribute("readonly"), null, `${label}: central minimum unexpectedly read-only`);
   } else {
-    assert.equal(await quantity.getAttribute("readonly"), "", `${label}: central quantity editable without stocktake authority`);
-    assert.equal(await minimum.getAttribute("readonly"), "", `${label}: central minimum editable without stocktake authority`);
+    assert.equal(await quantity.getAttribute("readonly"), "", `${label}: central quantity editable without inventory edit permission`);
+    assert.equal(await minimum.getAttribute("readonly"), "", `${label}: central minimum editable without inventory edit permission`);
   }
   await assertNoHorizontalOverflow(page, `${label}-central-modal`);
   await page.locator('button[data-central-editor-close]').first().click();
