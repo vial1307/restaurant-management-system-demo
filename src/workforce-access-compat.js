@@ -1,6 +1,6 @@
 import { accountCan, currentAccountSession } from "./account-permissions.js";
 
-const MANAGER_ROLES = new Set(["admin", "manager"]);
+const MANAGEMENT_ROLES = new Set(["admin", "manager", "supervisor"]);
 let reconcilePending = false;
 let redirecting = false;
 
@@ -12,8 +12,8 @@ function accountRole(user = session()) {
   return String(user?.accountRole || user?.role || "");
 }
 
-function isManagerOrAbove(user = session()) {
-  return Boolean(user && (user.role === "admin" || MANAGER_ROLES.has(accountRole(user))));
+function isManagementRole(user = session()) {
+  return Boolean(user && (user.role === "admin" || MANAGEMENT_ROLES.has(accountRole(user))));
 }
 
 function permissionState() {
@@ -26,8 +26,10 @@ function permissionState() {
     attendanceView,
     scheduleView,
     workforceView: attendanceView || scheduleView,
-    attendanceEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "attendance", "edit"))),
-    scheduleEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "schedule", "edit"))),
+    // attendance.edit on employee/part-time is self-service only. Correction UI
+    // is management-only and still requires the explicit account edit bit.
+    attendanceEdit: Boolean(user && isManagementRole(user) && (admin || accountCan(user, "attendance", "edit"))),
+    scheduleEdit: Boolean(user && isManagementRole(user) && (admin || accountCan(user, "schedule", "edit"))),
   };
 }
 
@@ -105,23 +107,29 @@ function reconcileTabs({ attendanceView, scheduleView }) {
   });
 }
 
-function reconcileManagerControls({ attendanceEdit, scheduleEdit }) {
-  document.querySelectorAll('[data-action="attendance-edit"]').forEach((control) => {
-    if (!(control instanceof HTMLElement)) return;
-    if (!attendanceEdit) return;
-    control.hidden = false;
+function setControlAvailability(control, authorized) {
+  if (!(control instanceof HTMLElement)) return;
+  control.hidden = !authorized;
+  if (authorized) {
     control.removeAttribute("aria-hidden");
     control.removeAttribute("aria-disabled");
+    control.style.display = "";
     if ("disabled" in control) control.disabled = false;
+    return;
+  }
+  control.setAttribute("aria-hidden", "true");
+  control.setAttribute("aria-disabled", "true");
+  control.style.display = "none";
+  if ("disabled" in control) control.disabled = true;
+}
+
+function reconcileManagerControls({ attendanceEdit, scheduleEdit }) {
+  document.querySelectorAll('[data-action="attendance-edit"], [data-workforce-edit-attendance]').forEach((control) => {
+    setControlAvailability(control, attendanceEdit);
   });
 
   document.querySelectorAll('[data-action="schedule-add"], [data-action="schedule-edit"], [data-action="schedule-delete"]').forEach((control) => {
-    if (!(control instanceof HTMLElement)) return;
-    if (!scheduleEdit) return;
-    control.hidden = false;
-    control.removeAttribute("aria-hidden");
-    control.removeAttribute("aria-disabled");
-    if ("disabled" in control) control.disabled = false;
+    setControlAvailability(control, scheduleEdit);
   });
 }
 
@@ -157,7 +165,7 @@ function reconcile() {
 function requestReconcile() {
   if (reconcilePending) return;
   reconcilePending = true;
-  requestAnimationFrame(() => requestAnimationFrame(reconcile));
+  requestAnimationFrame(reconcile);
 }
 
 document.addEventListener("click", (event) => {
