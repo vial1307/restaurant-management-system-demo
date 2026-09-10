@@ -321,6 +321,7 @@ function decorateWorkforce() {
   const subtitle = heading.querySelector("p");
   if (title && title.textContent !== c.title) title.textContent = c.title;
   if (subtitle && subtitle.textContent !== c.subtitle) subtitle.textContent = c.subtitle;
+  [...heading.children].slice(1).forEach((element) => { if (element instanceof HTMLElement) element.hidden = false; });
   document.title = `${c.title} · 食徒 Kitchen OS`;
 
   root.querySelector("[data-workforce-tabs]")?.remove();
