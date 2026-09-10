@@ -27,3 +27,4 @@ await import("./fuxing-large-freezer-stocktake-regression.mjs");
 await import("./fuxing-large-freezer-stocktake-20260910-regression.mjs");
 await import("./catalog-archive-admin-boundary-regression.mjs");
 await import("./schema-008-deploy-baseline-regression.mjs");
+await import("./action-feedback-contract-regression.mjs");
