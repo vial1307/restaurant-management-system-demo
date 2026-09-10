@@ -68,7 +68,15 @@ function armForCurrentRoute() {
   }
 }
 
-if (typeof window !== "undefined" && typeof document !== "undefined") {
+const browserEventsAvailable =
+  typeof window !== "undefined"
+  && typeof document !== "undefined"
+  && typeof window.addEventListener === "function"
+  && typeof window.dispatchEvent === "function"
+  && typeof document.addEventListener === "function"
+  && typeof document.querySelector === "function";
+
+if (browserEventsAvailable) {
   window.addEventListener("hashchange", armForCurrentRoute);
   window.addEventListener("shitu:vps-auth-ready", () => {
     if (routeFromHash() === "inventory") armForCurrentRoute();
