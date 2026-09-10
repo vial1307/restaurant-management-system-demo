@@ -11,7 +11,8 @@ const oldSchemaAssertion = 'assert.equal(health.data.schema,"005");';
 assert(source.includes(oldSchemaAssertion), "legacy API regression schema assertion changed; update v6 runner explicitly");
 
 const oldEmployeeStocktakeAssertion = `assert.equal(employeeSet.response.status,200);\nassert.equal(Number(employeeSet.data.after),99);`;
-assert(source.includes(oldEmployeeStocktakeAssertion), "employee stocktake regression changed; update v6 runner explicitly");
+assert(source.includes(oldEmployeeStocktakeAssertion), "employee inventory edit regression changed; update v6 runner explicitly");
+const permissionDrivenEmployeeEditAssertion = `${oldEmployeeStocktakeAssertion}\n\nconst parttimeSet = await request("/api/inventory/set-quantity",{\n  method:"POST",cookie:parttime.cookie,\n  body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:100}\n});\nassert.equal(parttimeSet.response.status,403);\nassert.equal(parttimeSet.data.error,"INVENTORY_EDIT_NOT_ALLOWED");`;
 
 const oldSupervisorReceiveDefaultAssertion = `assert.equal((await request("/api/inventory/receive-default",{\n  method:"POST",cookie:supervisor.cookie,\n  body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"}\n})).response.status,200);`;
 assert(source.includes(oldSupervisorReceiveDefaultAssertion), "supervisor receive-default regression changed; update v6 runner explicitly");
@@ -23,10 +24,7 @@ const allSiteSnapshotRegression = `${oldAllSiteViewAssertion}\n\nfunction assert
 
 const migrated = source
   .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"008");')
-  .replace(
-    oldEmployeeStocktakeAssertion,
-    `assert.equal(employeeSet.response.status,403);\nassert.equal(employeeSet.data.error,"STOCKTAKE_ROLE_REQUIRED");`
-  )
+  .replace(oldEmployeeStocktakeAssertion, permissionDrivenEmployeeEditAssertion)
   .replace(
     oldSupervisorReceiveDefaultAssertion,
     `const supervisorReceiveDefault = await request("/api/inventory/receive-default",{\n  method:"POST",cookie:supervisor.cookie,\n  body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"}\n});\nassert.equal(supervisorReceiveDefault.response.status,403);\nassert.equal(supervisorReceiveDefault.data.error,"RECEIVE_DEFAULT_MANAGER_REQUIRED");`
