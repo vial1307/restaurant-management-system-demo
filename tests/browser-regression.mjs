@@ -280,9 +280,6 @@ async function roleDesktop(browser, username, checks) {
     await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, {timeout:10000});
     await page.locator('[data-central-mode="in"]').waitFor({state:"visible"});
 
-    // Central inventory is live and must not be hidden when the shared service
-    // date is moved to a historical day. This caught the production regression
-    // where all four operational tabs disappeared from the central warehouse.
     await page.locator('[data-action="shift-date"][data-offset="-1"]').click();
     await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
     for(const mode of ["in","pick","transfer","ship"]){
@@ -317,10 +314,10 @@ async function roleDesktop(browser, username, checks) {
       await page.locator('[data-central-editor-open="new"]').waitFor({state:"visible"});
       const centralManageQuantityControls=await page.locator('[data-central-manage-adjust="true"]').count();
       if(checks.stocktake === true){
-        assert(centralManageQuantityControls > 0,"central stocktake quantity controls missing");
+        assert(centralManageQuantityControls > 0,"central inventory edit controls missing");
       }
       if(checks.stocktake === false){
-        assert.equal(centralManageQuantityControls,0,"central role must not receive direct stocktake quantity controls");
+        assert.equal(centralManageQuantityControls,0,"central account without inventory edit must not receive direct quantity controls");
       }
       await page.locator('[data-central-editor-open="new"]').click();
       const centralSave=page.locator('.modal-header-save[data-central-save-item]');
@@ -329,12 +326,12 @@ async function roleDesktop(browser, username, checks) {
       const centralQuantityField=page.locator('input[name^="central-quantity:"]').first();
       const centralMinimumField=page.locator('input[name^="central-minimum:"]').first();
       if(checks.stocktake === false){
-        assert.equal(await centralQuantityField.getAttribute("readonly"),"","central role quantity field must be read-only");
-        assert.equal(await centralMinimumField.getAttribute("readonly"),"","central role minimum field must be read-only");
+        assert.equal(await centralQuantityField.getAttribute("readonly"),"","central quantity field must be read-only without inventory edit permission");
+        assert.equal(await centralMinimumField.getAttribute("readonly"),"","central minimum field must be read-only without inventory edit permission");
       }
       if(checks.stocktake === true){
-        assert.equal(await centralQuantityField.getAttribute("readonly"),null,"central stocktake quantity field unexpectedly read-only");
-        assert.equal(await centralMinimumField.getAttribute("readonly"),null,"central stocktake minimum field unexpectedly read-only");
+        assert.equal(await centralQuantityField.getAttribute("readonly"),null,"central quantity field unexpectedly read-only despite inventory edit permission");
+        assert.equal(await centralMinimumField.getAttribute("readonly"),null,"central minimum field unexpectedly read-only despite inventory edit permission");
       }
       await page.locator('button[data-central-editor-close]').click();
     }
@@ -356,10 +353,10 @@ async function roleDesktop(browser, username, checks) {
       await manage.click();
       const manageQuantityControls=await page.locator('[data-manage-adjust="true"]').count();
       if(checks.stocktake === true){
-        assert(manageQuantityControls > 0,`${username} missing management quantity controls`);
+        assert(manageQuantityControls > 0,`${username} missing inventory edit quantity controls`);
       }
       if(checks.stocktake === false){
-        assert.equal(manageQuantityControls,0,`${username} must not receive stocktake quantity controls`);
+        assert.equal(manageQuantityControls,0,`${username} must not receive quantity controls without inventory edit permission`);
       }
       const editItem=page.locator('[data-action="open-edit-item"]').first();
       await editItem.waitFor({state:"visible"});
@@ -370,7 +367,7 @@ async function roleDesktop(browser, username, checks) {
         assert.equal(await workMinimum.getAttribute("readonly"),null,`${username} work minimum unexpectedly read-only`);
       }
       if(checks.stocktake === false){
-        assert.equal(await workMinimum.getAttribute("readonly"),"",`${username} can edit work minimum without stocktake authority`);
+        assert.equal(await workMinimum.getAttribute("readonly"),"",`${username} can edit work minimum without inventory edit permission`);
       }
       const receiveDefault=page.locator('select[name="receiveZone"]');
       await receiveDefault.waitFor({state:"visible"});
@@ -390,7 +387,7 @@ async function roleDesktop(browser, username, checks) {
       assert((await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count()) > 0);
     }
     if(checks.stocktake === true){
-      assert((await page.locator('input.minimum-input').count()) > 0,"stocktake control missing");
+      assert((await page.locator('input.minimum-input').count()) > 0,"inventory edit control missing");
     }
   }
   await assertNoPageErrors(page,errors,username);
@@ -511,9 +508,9 @@ try{
   await adminDesktop(browser);
   await roleDesktop(browser,"managerfx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:true});
   await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,receiveDefault:false,dashboardEdit:false});
-  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,receiveDefault:false,dashboardEdit:false});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:true,receiveDefault:false,dashboardEdit:false});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
-  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:false});
+  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:true});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});
   await responsiveAdmin(browser,{width:440,height:956});
