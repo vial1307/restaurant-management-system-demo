@@ -171,11 +171,13 @@ export function canManageReceiveDefault(site = activeInventorySite()) {
 
 export function canDirectInventoryAdjust() {
   if (!canInventoryEdit()) return false;
-  const currentRole = role();
-  const s=session();
-  const site=activeInventorySite();
-  if (currentRole === "admin") return true;
-  return ["manager","supervisor"].includes(currentRole) && (s?.location === site || s?.location === "all");
+  const s = session();
+  const site = activeInventorySite();
+  if (!s || !site) return false;
+  if (role() === "admin") return true;
+  // Operational quantity/minimum controls project the effective permission,
+  // while the account's site scope still constrains where that permission applies.
+  return s.location === site || s.location === "all";
 }
 
 export function activeInventorySite() {
