@@ -10,25 +10,45 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 
 - Settings shows one merged workforce permission row: `Chấm công · Lịch làm · Lương / 出勤 · 排班 · 薪資`.
 - The existing `attendance` and `schedule` permission keys remain in storage/API for backward compatibility and to avoid a production permission migration.
-- The visible merged row synchronizes both legacy view permissions. Schedule edit is mirrored only for manager/admin accounts; employee/part-time attendance self-service keeps the prior attendance permission model.
 - The top-level workforce entry is available when either legacy `attendance.view` or `schedule.view` is granted, so an existing schedule-only account cannot lose access during the UI consolidation.
-- Internal tabs remain permission-aware: attendance and payroll require `attendance.view`; schedule requires `schedule.view`. If a legacy schedule-only account enters the merged attendance route, it is redirected to its permitted Schedule panel.
-- Manager/admin rank is required in addition to the relevant account edit permission: attendance time correction uses `attendance.edit`, while schedule management uses `schedule.edit`.
-- Manager/admin accounts are the only UI authority for correcting actual work times or using schedule management controls.
-- This change does not introduce per-record authorization or alter the approved module-level concurrency model.
+- Internal tabs remain permission-aware: attendance and payroll require `attendance.view`; schedule requires `schedule.view`.
+- `attendance.edit` has two different scopes depending on account role and MUST be enforced by the VPS, not inferred from hidden UI:
+  - `admin`, `manager`, and an explicitly configured `supervisor` may correct attendance records when `attendance.edit` is granted.
+  - `employee` and `parttime` use `attendance.edit` only for self-service clock-in/clock-out. It never grants branch-wide attendance replacement, payroll-policy editing, hourly-rate editing, or correction of completed attendance records.
+- `schedule.edit` is a management capability. `employee` and `parttime` never receive schedule mutation authority through the workforce compatibility layer.
+- Unauthorized management controls must be actively hidden and disabled after every auth/render reconciliation; previously visible controls must not remain actionable after a role or permission change.
+- Frontend visibility is not authorization. The VPS applies the same site, role, module and workforce record-scope rules to every read and write.
+
+## Workforce record-scope contract
+
+- For `employee` and `parttime`, attendance reads return only that employee's attendance rows and schedule reads return only that employee's schedule rows.
+- The self employee is resolved from the server-controlled shared staff roster by a unique exact account/display-name match. If identity cannot be resolved unambiguously, self-service attendance mutation is denied instead of widening access.
+- Shared staff data may still contain coworkers required for UI compatibility, but coworker `hourlyRate` values are removed from employee/part-time responses.
+- Employee/part-time attendance writes are merged into the server's existing attendance module; they must never replace or delete coworkers' rows.
+- A self-service clock-in may create only one new open row for the resolved employee. Server-controlled staff name, area and hourly rate are canonicalized from the staff roster.
+- A self-service clock-out may only transition that employee's existing open row from `clockOut = null` to a clock-out timestamp. Other fields of the existing row are immutable through self-service.
+- Completed attendance rows, payroll policy, coworker rows, hourly rate, clock-in time, scheduled start and break minutes cannot be corrected by employee/part-time self-service; those corrections require authorized management access.
+- Conflict responses are scoped with the same read rules, so an employee/part-time account cannot receive coworkers' attendance or schedule data through an optimistic-concurrency conflict payload.
 
 ## Workforce UI contract
 
 - Top-level navigation displays one visible workforce entry; the separate Schedule navigation entry does not occupy visual or interactive navigation space.
 - The authorized legacy `#schedule` route remains present for compatibility/certification and remains functional as the Schedule tab so old links and existing app handlers do not break.
 - The Salary tab provides month-level totals derived from the canonical attendance wage calculator: completed shifts, worked hours, gross pay, deductions and temporary net pay.
-- Manager/admin attendance view exposes a correction editor for actual clock-in, actual clock-out, break minutes, scheduled start, hourly rate and note.
+- Management attendance view exposes a correction editor for actual clock-in, actual clock-out, break minutes, scheduled start, hourly rate and note only when the authenticated account has management edit authority.
 - A corrected clock-out cannot precede clock-in.
 - Manager time corrections are written to the existing `attendance` business-state module with an expected module revision and are only reported successful after VPS confirmation.
 
+## Payroll calculation contract
+
+- The current canonical wage calculation remains attendance-driven: completed worked minutes after unpaid break × hourly rate, then configured late deduction, producing gross, deduction and temporary net pay.
+- Incomplete clock records contribute no payable completed-shift amount until clock-out exists.
+- Hourly rate used for employee/part-time self-service is server-canonicalized from the staff roster; client-side manipulation must not change another employee's wage basis.
+- Payroll results remain estimates until management has corrected exceptional attendance data. Overtime, statutory holiday multipliers, bonuses, insurance/tax deductions and monthly payroll locking are not silently invented by this change; they require an explicit business rule before becoming payroll logic.
+
 ## Data contract
 
-- No schema migration is required.
-- Existing `attendance`, `payroll` and `schedule` business-state payloads remain unchanged.
+- No PostgreSQL schema migration is required for this hardening stage; the existing shared staff roster is the server-side identity source for legacy accounts.
+- Existing `attendance`, `payroll` and `schedule` business-state payload shapes remain backward compatible.
 - Existing account permission data remains readable without rewriting historical records.
 - No inventory or production stock data is modified by this feature.
