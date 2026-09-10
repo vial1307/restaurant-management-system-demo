@@ -10,19 +10,6 @@ function requireInventory(user, site, action, reply) {
   return false;
 }
 
-function canStocktakeRole(user, site) {
-  return siteAllowed(user, site)
-    && hasPermission(user, "inventory", "edit")
-    && (user.role === "admin" || ["manager","supervisor"].includes(user.role));
-}
-
-function requireStocktakeRole(user, site, reply) {
-  if (!requireInventory(user, site, "edit", reply)) return false;
-  if (canStocktakeRole(user, site)) return true;
-  reply.code(403).send({ error: "STOCKTAKE_ROLE_REQUIRED" });
-  return false;
-}
-
 function requireCatalogManager(user, site, reply) {
   // Catalogue access follows the explicit inventory edit permission. Role
   // names must not silently override a permission granted by an administrator.
@@ -239,8 +226,8 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireStocktakeRole(user, row.site, reply)) {
-          throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
+        if (!requireInventory(user, row.site, "edit", reply)) {
+          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
         }
 
         await client.query(
@@ -310,7 +297,7 @@ export async function registerInventoryExtraRoutes(app) {
     );
     const row = ctx.rows[0];
     if (!row) return reply.code(404).send({ error: "ITEM_LOCATION_NOT_FOUND" });
-    if (!requireStocktakeRole(user,row.site,reply)) return;
+    if (!requireInventory(user,row.site,"edit",reply)) return;
 
     await pool.query(
       `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
@@ -333,7 +320,7 @@ export async function registerInventoryExtraRoutes(app) {
       return reply.code(400).send({ error: "INVALID_CATALOG_ITEM" });
     }
     if (!requireCatalogManager(user,site,reply)) return;
-    const stocktakeWrite = canStocktakeRole(user,site);
+    const stocktakeWrite = siteAllowed(user,site) && hasPermission(user,"inventory","edit");
 
     try {
       const saved = await withTransaction(async (client) => {
