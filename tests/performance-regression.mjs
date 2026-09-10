@@ -24,5 +24,6 @@ await import("./branch-empty-catalog-fallback-contract-regression.mjs");
 await import("./inventory-hydration-authority-regression.mjs");
 await import("./inventory-auth-grace-retry-regression.mjs");
 await import("./fuxing-large-freezer-stocktake-regression.mjs");
+await import("./fuxing-large-freezer-stocktake-20260910-regression.mjs");
 await import("./catalog-archive-admin-boundary-regression.mjs");
-await import("./schema-007-deploy-baseline-regression.mjs");
+await import("./schema-008-deploy-baseline-regression.mjs");
