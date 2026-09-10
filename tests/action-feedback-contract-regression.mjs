@@ -54,6 +54,11 @@ assert.match(allButtonFeedback, /FLASH_MS\s*=\s*1150/, "generic UI feedback must
 assert.match(allButtonFeedback, /old\.remove\(\)/, "generic UI feedback must replace instead of stack during rapid navigation");
 assert.match(allButtonFeedback, /Đã thực hiện/, "Vietnamese generic button feedback must be present");
 assert.match(allButtonFeedback, /操作已執行/, "Traditional Chinese generic button feedback must be present");
+assert.doesNotMatch(
+  allButtonFeedback,
+  /from\s+["']\.\/action-feedback\.js["']/,
+  "universal feedback must not instantiate a second unversioned action-feedback module"
+);
 
 assert.match(css, /position:\s*fixed/, "toast host must remain visible above the application");
 assert.match(css, /z-index:\s*10050/, "toast must sit above existing modal layers");
