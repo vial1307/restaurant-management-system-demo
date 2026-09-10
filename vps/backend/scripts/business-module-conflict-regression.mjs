@@ -76,15 +76,12 @@ async function verifyCorruptedRevisionBaseline(adminCookie) {
 
 const health = await call("/api/health");
 assert.equal(health.response.status, 200);
-assert.equal(health.data.schema, "008", "module revision migration is not active");
+assert.equal(health.data.schema, "009", "latest production migration is not active");
 
 const admin = await login("yangchuadmin");
 const employee = await login("employeefx");
 await verifyCorruptedRevisionBaseline(admin);
 
-// Fuxing may already have been mutated by the API regression that intentionally
-// runs before this concurrency suite. Assert token validity here, not a pristine
-// revision value. The isolated Yongji case above owns the exact absent=0 contract.
 const initial = await call("/api/business-state/fuxing", { cookie: admin });
 assert.equal(initial.response.status, 200);
 assert.equal(typeof initial.data.moduleRevisions, "object", "GET must expose module revisions");
@@ -163,8 +160,6 @@ const restore = await call("/api/business-state/fuxing", {
 });
 assert.equal(restore.response.status, 200, JSON.stringify(restore.data));
 
-// Audit entries are append-only and deduplicated by id. They do not require a
-// read token and must not block employee writes merely because audit is hidden.
 const auditA = { id: "concurrency-audit-a", kind: "test", label: "A", details: "", staffId: "a", staffName: "A", at: "2026-09-06T05:00:00.000Z" };
 const auditB = { id: "concurrency-audit-b", kind: "test", label: "B", details: "", staffId: "b", staffName: "B", at: "2026-09-06T05:00:01.000Z" };
 const [auditWriteA, auditWriteB] = await Promise.all([
@@ -178,7 +173,6 @@ const auditEntries = auditRead.data.modules.audit?.audit || [];
 const auditIds = new Set(auditEntries.map((entry) => entry.id));
 assert(auditIds.has(auditA.id) && auditIds.has(auditB.id), "concurrent audit append lost an entry");
 
-// Reusing an existing audit id must never mutate the persisted event.
 const auditTamper = { ...auditA, label: "TAMPERED", details: "must-not-replace-server-entry" };
 const auditTamperWrite = await call("/api/business-state/fuxing", {
   method: "POST", cookie: admin, body: { modules: { audit: { audit: [auditTamper] } } },
