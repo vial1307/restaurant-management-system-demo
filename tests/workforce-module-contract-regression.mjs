@@ -43,7 +43,7 @@ assert.match(accessCompat, /showTab\(tabs\.querySelector\('a\[href="#attendance"
 assert.match(accessCompat, /showTab\(tabs\.querySelector\('a\[href="#schedule"\]'\), scheduleView\)/, "schedule tab must honor schedule view permission");
 assert.match(accessCompat, /showTab\(tabs\.querySelector\('a\[href="#attendance\?workforce=payroll"\]'\), attendanceView\)/, "payroll tab must follow attendance permission");
 assert.match(accessCompat, /route === "attendance" && !state\.attendanceView && state\.scheduleView/, "schedule-only legacy accounts must be redirected to their permitted panel");
-assert.match(accessCompat, /data\.workforceLegacySchedule = "true"/, "authorized legacy schedule route must remain present without becoming a second visible navigation item");
+assert.match(accessCompat, /dataset\.workforceLegacySchedule = "true"/, "authorized legacy schedule route must remain present without becoming a second visible navigation item");
 assert.match(accessCompat, /isManagerOrAbove\(user\).*accountCan\(user, "attendance", "edit"\)/s, "attendance corrections must require manager/admin rank and attendance edit permission");
 assert.match(accessCompat, /isManagerOrAbove\(user\).*accountCan\(user, "schedule", "edit"\)/s, "schedule management must require manager/admin rank and schedule edit permission");
 
