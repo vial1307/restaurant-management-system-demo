@@ -12,49 +12,59 @@ const backend = source("vps/backend/src/inventory-extra-routes.mjs");
 assert.match(
   app,
   /manageQuantityEdit:canDirectInventoryAdjust\(\)/,
-  "Manage tab must not grant direct quantity editing from catalog permission alone"
+  "Manage tab must derive direct quantity editing from the effective inventory edit contract"
 );
 assert.match(
   app,
   /element\.dataset\.manageAdjust === "true" && canManageBranchCatalog\(activeInventorySite\(\)\) && canDirectInventoryAdjust\(\)/,
-  "quantity change handler must retain the stocktake role guard"
+  "quantity change handler must retain both catalog access and effective inventory edit guards"
 );
 assert.match(
   app,
   /const stocktakeEditable = canDirectInventoryAdjust\(\);/,
-  "product modal must derive stock fields from the stocktake guard"
+  "product modal must derive stock fields from the effective inventory edit guard"
 );
 assert.match(
   app,
   /name="quantity:\$\{zone\.id\}"[^>]+readonly aria-readonly=/,
-  "non-stocktake catalog editors must see quantity as read-only in the product modal"
+  "accounts without direct inventory edit permission must see quantity as read-only"
 );
 assert.match(
   app,
   /name="minimum:\$\{zone\.id\}"[^>]+readonly aria-readonly=/,
-  "non-stocktake catalog editors must see minimum as read-only in the product modal"
+  "accounts without direct inventory edit permission must see minimum as read-only"
 );
 
 assert.match(
   cloud,
   /if \(!canDirectInventoryAdjust\(\)\) return \{ ok: false, fallback: false, error: new Error\("DIRECT_ADJUST_NOT_ALLOWED"\) \};/,
-  "frontend VPS set-quantity wrapper must not honor an inventory-editor bypass"
+  "frontend VPS set-quantity wrapper must enforce the effective edit/site contract"
 );
 assert.doesNotMatch(
   cloud,
-  /allowInventoryEditor && canInventoryEdit\(\)/,
-  "legacy inventory-editor quantity bypass must remain removed"
+  /\["manager","supervisor"\]/,
+  "frontend direct inventory controls must not reintroduce a manager/supervisor-only role gate"
 );
 
 assert.match(
   backend,
-  /const stocktakeWrite = canStocktakeRole\(user,site\);/,
-  "catalog sync must compute the stocktake write boundary server-side"
+  /if \(!requireInventory\(user, row\.site, "edit", reply\)\) \{/,
+  "set-quantity must authorize with inventory.edit plus site scope"
 );
 assert.match(
   backend,
-  /if \(stocktakeWrite\) \{[\s\S]*?quantity=excluded\.quantity,[\s\S]*?minimum_quantity=excluded\.minimum_quantity,[\s\S]*?\} else \{[\s\S]*?on conflict\(item_id,location_id\) do nothing/,
-  "catalog-only editors may create zeroed stock rows but must not overwrite quantity/minimum"
+  /if \(!requireInventory\(user,row\.site,"edit",reply\)\) return;/,
+  "set-minimum must authorize with inventory.edit plus site scope"
+);
+assert.match(
+  backend,
+  /const stocktakeWrite = siteAllowed\(user,site\) && hasPermission\(user,"inventory","edit"\);/,
+  "catalog sync must compute quantity/minimum write authority from effective permission and site scope"
+);
+assert.doesNotMatch(
+  backend,
+  /STOCKTAKE_ROLE_REQUIRED|canStocktakeRole/,
+  "legacy role-only stocktake boundary must remain removed"
 );
 
-console.log("catalog stocktake boundary regression passed");
+console.log("catalog inventory edit boundary regression passed");

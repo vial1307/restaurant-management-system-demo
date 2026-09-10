@@ -30,59 +30,76 @@ async function login(username) {
     body: { username, password: PASSWORD },
   });
   assert.equal(result.response.status, 200, `login failed for ${username}: ${JSON.stringify(result.data)}`);
-  return result.cookie;
+  return { cookie: result.cookie, user: result.data.user };
 }
 
 const employee = await login("employeefx");
-const supervisor = await login("supervisorfx");
+const parttime = await login("parttimefx");
 const central = await login("centralreg");
 const admin = await login("yangchuadmin");
 
-const before = await request("/api/inventory/fuxing", { cookie: admin });
+assert.equal(Boolean(employee.user.permissions?.inventory?.edit), true, "employee fixture must carry explicit inventory.edit");
+assert.equal(Boolean(parttime.user.permissions?.inventory?.edit), false, "part-time fixture must not carry inventory.edit");
+assert.equal(Boolean(central.user.permissions?.inventory?.edit), true, "central fixture must carry explicit inventory.edit");
+
+const before = await request("/api/inventory/fuxing", { cookie: admin.cookie });
 assert.equal(before.response.status, 200);
 const beef = before.data.items.find((item) => item.catalog_key === "beef");
 const freezer = before.data.locations.find((location) => location.code === "fuxing-freezer");
 const workNoodles = before.data.locations.find((location) => location.code === "fuxing-work-noodles");
 assert(beef && freezer && workNoodles, "fuxing beef/freezer/work fixture missing");
 
-const supervisorQuantity = await request("/api/inventory/set-quantity", {
+// A scoped employee with inventory.edit receives the same quantity/minimum
+// mutation authority as other editors. Role name is not an extra gate.
+const employeeQuantity = await request("/api/inventory/set-quantity", {
   method: "POST",
-  cookie: supervisor,
-  body: { itemId: beef.id, locationId: freezer.id, quantity: 13 },
+  cookie: employee.cookie,
+  body: { itemId: beef.id, locationId: freezer.id, quantity: 31 },
 });
-assert.equal(supervisorQuantity.response.status, 200);
-const supervisorMinimum = await request("/api/inventory/set-minimum", {
-  method: "POST",
-  cookie: supervisor,
-  body: { itemId: beef.id, locationId: freezer.id, minimum: 5 },
-});
-assert.equal(supervisorMinimum.response.status, 200);
-const supervisorWorkMinimum = await request("/api/inventory/set-minimum", {
-  method: "POST",
-  cookie: supervisor,
-  body: { itemId: beef.id, locationId: workNoodles.id, minimum: 7 },
-});
-assert.equal(supervisorWorkMinimum.response.status, 200);
+assert.equal(employeeQuantity.response.status, 200);
+assert.equal(Number(employeeQuantity.data.after), 31);
 
-const seeded = await request("/api/inventory/fuxing", { cookie: admin });
-const locations = seeded.data.stock
+const employeeMinimum = await request("/api/inventory/set-minimum", {
+  method: "POST",
+  cookie: employee.cookie,
+  body: { itemId: beef.id, locationId: freezer.id, minimum: 8 },
+});
+assert.equal(employeeMinimum.response.status, 200);
+
+const employeeWorkMinimum = await request("/api/inventory/set-minimum", {
+  method: "POST",
+  cookie: employee.cookie,
+  body: { itemId: beef.id, locationId: workNoodles.id, minimum: 9 },
+});
+assert.equal(employeeWorkMinimum.response.status, 200);
+
+// The same endpoints remain server-protected for an account without edit.
+for (const [pathname, body] of [
+  ["/api/inventory/set-quantity", { itemId: beef.id, locationId: freezer.id, quantity: 999 }],
+  ["/api/inventory/set-minimum", { itemId: beef.id, locationId: freezer.id, minimum: 999 }],
+]) {
+  const denied = await request(pathname, { method: "POST", cookie: parttime.cookie, body });
+  assert.equal(denied.response.status, 403, `part-time mutation was accepted by ${pathname}`);
+  assert.equal(denied.data?.error, "INVENTORY_EDIT_NOT_ALLOWED");
+}
+
+// Catalogue save must obey the same effective permission instead of silently
+// treating quantity fields differently by role. Build the payload from the
+// current snapshot so unrelated configured locations are retained.
+const seeded = await request("/api/inventory/fuxing", { cookie: admin.cookie });
+const employeeCatalogLocations = seeded.data.stock
   .filter((row) => row.item_id === beef.id)
   .map((row) => {
     const location = seeded.data.locations.find((candidate) => candidate.id === row.location_id);
     return {
       code: location.code,
-      quantity: row.location_id === freezer.id ? 999 : Number(row.quantity),
-      minimum: row.location_id === freezer.id || row.location_id === workNoodles.id
-        ? 999
-        : Number(row.minimum_quantity),
+      quantity: row.location_id === freezer.id ? 32 : Number(row.quantity),
+      minimum: row.location_id === freezer.id ? 10 : Number(row.minimum_quantity),
     };
   });
-assert(locations.some((entry) => entry.code === freezer.code));
-assert(locations.some((entry) => entry.code === workNoodles.code));
-
-const catalogEdit = await request("/api/inventory/catalog/sync", {
+const employeeCatalogEdit = await request("/api/inventory/catalog/sync", {
   method: "POST",
-  cookie: employee,
+  cookie: employee.cookie,
   body: {
     item: {
       key: beef.item_key,
@@ -92,101 +109,69 @@ const catalogEdit = await request("/api/inventory/catalog/sync", {
       unit: beef.unit,
       work_area: beef.work_area,
       storage_only: beef.storage_only,
-      locations,
+      locations: employeeCatalogLocations,
     },
   },
 });
-assert.equal(catalogEdit.response.status, 200, `catalog metadata edit should remain allowed: ${JSON.stringify(catalogEdit.data)}`);
+assert.equal(employeeCatalogEdit.response.status, 200, `employee catalog save denied despite inventory.edit: ${JSON.stringify(employeeCatalogEdit.data)}`);
 
-const after = await request("/api/inventory/fuxing", { cookie: admin });
-assert.equal(after.response.status, 200);
-const protectedStock = after.data.stock.find((row) => row.item_id === beef.id && row.location_id === freezer.id);
-assert(protectedStock, "protected beef stock row missing after catalog sync");
-assert.equal(Number(protectedStock.quantity), 13, "catalog sync bypassed stocktake quantity permission");
-assert.equal(Number(protectedStock.minimum_quantity), 5, "catalog sync bypassed stocktake minimum permission");
-const protectedWorkStock = after.data.stock.find((row) => row.item_id === beef.id && row.location_id === workNoodles.id);
-assert(protectedWorkStock, "protected beef work stock row missing after catalog sync");
-assert.equal(Number(protectedWorkStock.minimum_quantity), 7, "catalog sync bypassed work minimum stocktake permission");
+const afterEmployeeCatalog = await request("/api/inventory/fuxing", { cookie: admin.cookie });
+const employeeCatalogStock = afterEmployeeCatalog.data.stock.find(
+  (row) => row.item_id === beef.id && row.location_id === freezer.id
+);
+assert.equal(Number(employeeCatalogStock?.quantity), 32, "employee inventory editor did not persist quantity under inventory.edit");
+assert.equal(Number(employeeCatalogStock?.minimum_quantity), 10, "employee inventory editor did not persist minimum under inventory.edit");
 
-// Central-kitchen accounts keep inventory/catalog operational access, but they
-// are not a stocktake role. Seed one Central row as admin, prove direct stocktake
-// endpoints reject the Central role, then prove Central catalog sync cannot
-// overwrite the seeded quantity/minimum either.
-const centralBefore = await request("/api/inventory/central", { cookie: admin });
+const deniedCatalog = await request("/api/inventory/catalog/sync", {
+  method: "POST",
+  cookie: parttime.cookie,
+  body: {
+    item: {
+      key: beef.item_key,
+      catalog_key: beef.catalog_key,
+      zh: beef.name_zh_tw,
+      vi: beef.name_vi,
+      unit: beef.unit,
+      work_area: beef.work_area,
+      storage_only: beef.storage_only,
+      locations: employeeCatalogLocations,
+    },
+  },
+});
+assert.equal(deniedCatalog.response.status, 403, "part-time catalog mutation unexpectedly allowed");
+assert.equal(deniedCatalog.data?.error, "INVENTORY_EDIT_NOT_ALLOWED");
+
+// Central staff are scoped to Central and, when explicitly granted edit,
+// receive the same operational quantity/minimum controls for that site.
+const centralBefore = await request("/api/inventory/central", { cookie: admin.cookie });
 assert.equal(centralBefore.response.status, 200);
 const centralItem = centralBefore.data.items.find((item) => item.catalog_key === "save-button-central")
   || centralBefore.data.items[0];
 const centralFreezer = centralBefore.data.locations.find((location) => location.code === "central-freezer");
 assert(centralItem && centralFreezer, "central item/freezer fixture missing");
 
-const adminCentralQuantity = await request("/api/inventory/set-quantity", {
+const centralQuantity = await request("/api/inventory/set-quantity", {
   method: "POST",
-  cookie: admin,
-  body: { itemId: centralItem.id, locationId: centralFreezer.id, quantity: 17 },
+  cookie: central.cookie,
+  body: { itemId: centralItem.id, locationId: centralFreezer.id, quantity: 21 },
 });
-assert.equal(adminCentralQuantity.response.status, 200);
-const adminCentralMinimum = await request("/api/inventory/set-minimum", {
+assert.equal(centralQuantity.response.status, 200);
+assert.equal(Number(centralQuantity.data.after), 21);
+
+const centralMinimum = await request("/api/inventory/set-minimum", {
   method: "POST",
-  cookie: admin,
-  body: { itemId: centralItem.id, locationId: centralFreezer.id, minimum: 6 },
+  cookie: central.cookie,
+  body: { itemId: centralItem.id, locationId: centralFreezer.id, minimum: 7 },
 });
-assert.equal(adminCentralMinimum.response.status, 200);
+assert.equal(centralMinimum.response.status, 200);
 
-const centralDirectQuantity = await request("/api/inventory/set-quantity", {
+// Site scope is still enforced even when inventory.edit is true.
+const wrongSite = await request("/api/inventory/set-quantity", {
   method: "POST",
-  cookie: central,
-  body: { itemId: centralItem.id, locationId: centralFreezer.id, quantity: 999 },
+  cookie: employee.cookie,
+  body: { itemId: centralItem.id, locationId: centralFreezer.id, quantity: 77 },
 });
-assert.equal(centralDirectQuantity.response.status, 403, "central role unexpectedly received direct quantity stocktake authority");
-assert.equal(centralDirectQuantity.data?.error, "STOCKTAKE_ROLE_REQUIRED");
+assert.equal(wrongSite.response.status, 403, "employee edit permission escaped assigned site scope");
+assert.equal(wrongSite.data?.error, "INVENTORY_EDIT_NOT_ALLOWED");
 
-const centralDirectMinimum = await request("/api/inventory/set-minimum", {
-  method: "POST",
-  cookie: central,
-  body: { itemId: centralItem.id, locationId: centralFreezer.id, minimum: 999 },
-});
-assert.equal(centralDirectMinimum.response.status, 403, "central role unexpectedly received minimum stocktake authority");
-assert.equal(centralDirectMinimum.data?.error, "STOCKTAKE_ROLE_REQUIRED");
-
-const centralSeeded = await request("/api/inventory/central", { cookie: admin });
-assert.equal(centralSeeded.response.status, 200);
-const centralLocations = centralSeeded.data.stock
-  .filter((row) => row.item_id === centralItem.id)
-  .map((row) => {
-    const location = centralSeeded.data.locations.find((candidate) => candidate.id === row.location_id);
-    return {
-      code: location.code,
-      quantity: row.location_id === centralFreezer.id ? 999 : Number(row.quantity),
-      minimum: row.location_id === centralFreezer.id ? 999 : Number(row.minimum_quantity),
-    };
-  });
-assert(centralLocations.some((entry) => entry.code === centralFreezer.code), "central protected stock row missing before catalog sync");
-
-const centralCatalogEdit = await request("/api/inventory/catalog/sync", {
-  method: "POST",
-  cookie: central,
-  body: {
-    item: {
-      key: centralItem.item_key,
-      catalog_key: centralItem.catalog_key,
-      zh: centralItem.name_zh_tw,
-      vi: centralItem.name_vi,
-      unit: centralItem.unit,
-      work_area: centralItem.work_area,
-      storage_only: centralItem.storage_only,
-      locations: centralLocations,
-    },
-  },
-});
-assert.equal(centralCatalogEdit.response.status, 200, `central catalog metadata edit should remain allowed: ${JSON.stringify(centralCatalogEdit.data)}`);
-
-const centralAfter = await request("/api/inventory/central", { cookie: admin });
-assert.equal(centralAfter.response.status, 200);
-const protectedCentralStock = centralAfter.data.stock.find(
-  (row) => row.item_id === centralItem.id && row.location_id === centralFreezer.id
-);
-assert(protectedCentralStock, "protected central stock row missing after catalog sync");
-assert.equal(Number(protectedCentralStock.quantity), 17, "central catalog sync bypassed stocktake quantity permission");
-assert.equal(Number(protectedCentralStock.minimum_quantity), 6, "central catalog sync bypassed stocktake minimum permission");
-
-console.log("catalog stocktake API regression passed");
+console.log("permission-driven inventory edit API regression passed");
