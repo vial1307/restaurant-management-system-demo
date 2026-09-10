@@ -39,7 +39,9 @@ const [adminCookie, employeeCookie, supervisorCookie] = await Promise.all([
 const inventory = await request("/api/inventory/fuxing", { cookie:adminCookie });
 assert.equal(inventory.response.status, 200);
 const beef = inventory.data.items.find((item) => item.catalog_key === "beef");
-const freezer = inventory.data.locations.find((location) => location.code === "fuxing-freezer");
+const freezer = inventory.data.locations.find((location) =>
+  location.code === "fuxing-large-freezer" || location.code === "fuxing-freezer"
+);
 assert(beef && freezer, "concurrency fixture beef/freezer missing");
 const originalStockRow = inventory.data.stock.find((row) => row.item_id === beef.id && row.location_id === freezer.id);
 const originalQuantity = Number(originalStockRow?.quantity || 0);
