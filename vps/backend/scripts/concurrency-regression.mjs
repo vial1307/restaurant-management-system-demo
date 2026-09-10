@@ -27,8 +27,9 @@ async function login(username) {
   return result.cookie;
 }
 
-const [adminCookie, employeeCookie, supervisorCookie] = await Promise.all([
+const [adminCookie, managerCookie, employeeCookie, supervisorCookie] = await Promise.all([
   login("yangchuadmin"),
+  login("managerfx"),
   login("employeefx"),
   login("supervisorfx"),
 ]);
@@ -93,9 +94,10 @@ const restoreStock = await request("/api/inventory/set-quantity", {
 });
 assert.equal(restoreStock.response.status, 200, "failed to restore inventory concurrency fixture");
 
-// Distinct business modules saved at the same time must both survive. Preserve
-// every pre-existing field so this regression does not destroy fixtures that
-// subsequent browser tests expect.
+// Distinct business modules saved at the same time must both survive. The
+// attendance write uses a manager because employee/part-time attendance writes
+// are intentionally record-scoped self-service operations and may not replace
+// payroll policy or the branch-wide attendance module.
 const beforeBusiness = await request("/api/business-state/fuxing", { cookie:adminCookie });
 assert.equal(beforeBusiness.response.status, 200);
 const originalSettings = structuredClone(beforeBusiness.data.modules.settings || {});
@@ -113,7 +115,7 @@ const testAttendance = {
   ],
   payroll:{
     ...(originalAttendance.payroll || {}),
-    concurrencyMarker:"employee-attendance-write",
+    concurrencyMarker:"manager-attendance-write",
   },
 };
 
@@ -125,7 +127,7 @@ const businessWrites = await Promise.all([
   }),
   request("/api/business-state/fuxing", {
     method:"POST",
-    cookie:employeeCookie,
+    cookie:managerCookie,
     body:{ modules:{ attendance:testAttendance } },
   }),
 ]);
@@ -136,7 +138,7 @@ for (const [index, result] of businessWrites.entries()) {
 const sharedState = await request("/api/business-state/fuxing", { cookie:adminCookie });
 assert.equal(sharedState.response.status, 200);
 assert.equal(sharedState.data.modules.settings?.concurrencyMarker, "admin-settings-write", "concurrent settings module was overwritten");
-assert.equal(sharedState.data.modules.attendance?.payroll?.concurrencyMarker, "employee-attendance-write", "concurrent attendance module was overwritten");
+assert.equal(sharedState.data.modules.attendance?.payroll?.concurrencyMarker, "manager-attendance-write", "concurrent attendance module was overwritten");
 
 const restoreBusiness = await request("/api/business-state/fuxing", {
   method:"POST",
