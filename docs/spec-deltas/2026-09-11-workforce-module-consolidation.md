@@ -13,9 +13,9 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 - The top-level workforce entry is available when either legacy `attendance.view` or `schedule.view` is granted, so an existing schedule-only account cannot lose access during the UI consolidation.
 - Internal tabs remain permission-aware: attendance and payroll require `attendance.view`; schedule requires `schedule.view`.
 - `attendance.edit` has two different scopes depending on account role and MUST be enforced by the VPS, not inferred from hidden UI:
-  - `admin`, `manager`, and an explicitly configured `supervisor` may correct attendance records when `attendance.edit` is granted.
+  - `admin` and `manager` may correct attendance records when `attendance.edit` is granted. `supervisor` remains non-management for workforce correction under the current approved role matrix.
   - `employee` and `parttime` use `attendance.edit` only for self-service clock-in/clock-out. It never grants branch-wide attendance replacement, payroll-policy editing, hourly-rate editing, or correction of completed attendance records.
-- `schedule.edit` is a management capability. `employee` and `parttime` never receive schedule mutation authority through the workforce compatibility layer.
+- `schedule.edit` is an admin/manager capability. `employee`, `parttime`, and `supervisor` never receive schedule mutation authority through the workforce compatibility layer under the current role matrix.
 - Unauthorized management controls must be actively hidden and disabled after every auth/render reconciliation; previously visible controls must not remain actionable after a role or permission change.
 - Frontend visibility is not authorization. The VPS applies the same site, role, module and workforce record-scope rules to every read and write.
 
@@ -35,7 +35,7 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 - Top-level navigation displays one visible workforce entry; the separate Schedule navigation entry does not occupy visual or interactive navigation space.
 - The authorized legacy `#schedule` route remains present for compatibility/certification and remains functional as the Schedule tab so old links and existing app handlers do not break.
 - The Salary tab provides month-level totals derived from the canonical attendance wage calculator: completed shifts, worked hours, gross pay, deductions and temporary net pay.
-- Management attendance view exposes a correction editor for actual clock-in, actual clock-out, break minutes, scheduled start, hourly rate and note only when the authenticated account has management edit authority.
+- Admin/manager attendance view exposes a correction editor for actual clock-in, actual clock-out, break minutes, scheduled start, hourly rate and note only when the authenticated account also has attendance edit authority.
 - A corrected clock-out cannot precede clock-in.
 - Manager time corrections are written to the existing `attendance` business-state module with an expected module revision and are only reported successful after VPS confirmation.
 
