@@ -17,7 +17,7 @@ const oldSupervisorReceiveDefaultAssertion = `assert.equal((await request("/api/
 assert(source.includes(oldSupervisorReceiveDefaultAssertion), "supervisor receive-default regression changed; update v6 runner explicitly");
 
 const migrated = source
-  .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"007");')
+  .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"008");')
   .replace(
     oldEmployeeStocktakeAssertion,
     `assert.equal(employeeSet.response.status,403);\nassert.equal(employeeSet.data.error,"STOCKTAKE_ROLE_REQUIRED");`
