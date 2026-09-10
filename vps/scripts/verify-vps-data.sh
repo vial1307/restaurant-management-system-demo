@@ -128,6 +128,88 @@ check_zero "stored business modules missing revision tokens" "
         end
 "
 
+# Schema 009 authoritative Fuxing 大冷凍 reconciliation. This is a deployment
+# invariant: every user-confirmed row must exist at the exact canonical location
+# with the exact quantity and database unit. Other storage/work locations are
+# intentionally outside this check and are not inferred or zeroed.
+check_zero "canonical Fuxing large-freezer location cardinality" "
+  select case when count(*)=1 then 0 else 1 end
+  from public.inventory_locations
+  where code='fuxing-large-freezer' and site='fuxing' and kind='storage' and active=true
+"
+check_zero "Fuxing large-freezer authoritative 51-row reconciliation" "
+  with expected(item_key, expected_quantity, expected_unit) as (
+    values
+      ('fuxing:freezer-beef-noodle-broth',20::numeric,'包'),
+      ('fuxing:freezer-clear-stew-broth',20,'包'),
+      ('fuxing:freezer-kombu-broth-large',21,'包'),
+      ('fuxing:freezer-kombu-broth-small',40,'包'),
+      ('fuxing:freezer-taro-chicken-soup',5,'包'),
+      ('fuxing:freezer-light-mala-broth',78,'包'),
+      ('fuxing:freezer-heavy-mala-broth',67,'包'),
+      ('fuxing:oxtail-rice',91,'包'),
+      ('fuxing:freezer-oxtail-meat-2kg',9,'包'),
+      ('fuxing:freezer-beef-bag',7,'包'),
+      ('fuxing:freezer-beef-tendon-3kg',0,'包'),
+      ('fuxing:freezer-braised-tofu',105,'包'),
+      ('fuxing:freezer-braised-duck-wing',57,'包'),
+      ('fuxing:freezer-braised-duck-tongue',54,'包'),
+      ('fuxing:freezer-braised-duck-intestine',94,'包'),
+      ('fuxing:freezer-tiger-skin-chicken-feet',75,'包'),
+      ('fuxing:freezer-rice-cake',26,'包'),
+      ('fuxing:freezer-tender-beef',17,'包'),
+      ('fuxing:freezer-sichuan-mala-broth',35,'包'),
+      ('fuxing:freezer-noodle-oil-1kg',57,'包'),
+      ('fuxing:freezer-heavy-mala-oil',39,'包'),
+      ('fuxing:freezer-yellow-throat',4,'包'),
+      ('fuxing:duck-intestine',4,'包'),
+      ('fuxing:freezer-frog',31,'包'),
+      ('fuxing:freezer-large-intestine',40,'包'),
+      ('fuxing:freezer-braised-tripe',110,'包'),
+      ('fuxing:freezer-grass-prawn',0,'箱'),
+      ('fuxing:freezer-french-bread',71,'條'),
+      ('fuxing:freezer-pr-short-rib',1,'塊'),
+      ('fuxing:freezer-pr-marbled-beef',0,'塊'),
+      ('fuxing:freezer-ch-marbled-beef',1,'塊'),
+      ('fuxing:freezer-lamb-shoulder',3,'塊'),
+      ('fuxing:freezer-ribeye',3,'塊'),
+      ('fuxing:freezer-yellow-beef-brisket',6,'塊'),
+      ('fuxing:freezer-wagyu',0,'塊'),
+      ('fuxing:freezer-pork-collar-box',7,'條'),
+      ('fuxing:freezer-hell-tripe',24,'包'),
+      ('fuxing:freezer-rice-sauce-180g',28,'包'),
+      ('fuxing:freezer-hell-beef-rice',18,'包'),
+      ('fuxing:freezer-sous-vide-steak',44,'包'),
+      ('fuxing:freezer-secret-garlic-sauce',50,'包'),
+      ('fuxing:freezer-mild-dipping-sauce',20,'包'),
+      ('fuxing:frozen-noodles',30,'片'),
+      ('fuxing:freezer-crispy-ribs',3,'斤'),
+      ('fuxing:freezer-fried-taro',3,'包'),
+      ('fuxing:freezer-fried-squid',1,'包'),
+      ('fuxing:freezer-buniu-concentrate',3,'包'),
+      ('fuxing:freezer-sous-vide-chicken',18,'包'),
+      ('fuxing:freezer-pork-knuckle',6,'包'),
+      ('fuxing:freezer-sous-vide-pork-shoulder',5,'包'),
+      ('fuxing:freezer-croissant',15,'個')
+  ), target_location as (
+    select id
+    from public.inventory_locations
+    where code='fuxing-large-freezer' and site='fuxing' and kind='storage' and active=true
+  )
+  select count(*)
+  from expected e
+  left join public.inventory_items i
+    on i.item_key=e.item_key and i.active=true and i.storage_only=true
+  left join target_location l on true
+  left join public.inventory_stock s
+    on s.item_id=i.id and s.location_id=l.id
+  where i.id is null
+     or l.id is null
+     or s.item_id is null
+     or s.quantity is distinct from e.expected_quantity
+     or i.unit is distinct from e.expected_unit
+"
+
 FULL_ADMIN_KEYS="dashboard inventory procurement reservations preparation menu sop skills attendance schedule reports remote settings"
 missing_admin=0
 for key in ${FULL_ADMIN_KEYS}; do
