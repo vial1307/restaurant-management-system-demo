@@ -159,8 +159,10 @@ app.get("/api/inventory/:site", async (request, reply) => {
       `select s.item_id,s.location_id,s.quantity,s.minimum_quantity,s.updated_at
        from public.inventory_stock s
        join public.inventory_locations l on l.id=s.location_id
-       where l.site=$1 and l.active=true`,
-      [site]
+       join public.inventory_items i on i.id=s.item_id
+       where l.site=$1 and l.active=true
+         and i.active=true and i.item_key like $2`,
+      [site, site + ":%"]
     ),
     pool.query(
       `select d.site,d.catalog_key,d.location_id,d.updated_at,l.code as location_code
