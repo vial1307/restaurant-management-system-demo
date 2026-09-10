@@ -41,10 +41,10 @@ assert.match(feedback, /save-schedule/, "schedule save modal must participate in
 
 assert.match(allButtonFeedback, /const BUTTON_SELECTOR = \[/, "universal button feedback must use one delegated selector");
 assert.match(allButtonFeedback, /"button"/, "native button controls must be covered");
-assert.match(allButtonFeedback, /\[role=\\"button\\"\]/, "ARIA button controls must be covered");
-assert.match(allButtonFeedback, /input\[type=\\"button\\"\]/, "input button controls must be covered");
-assert.match(allButtonFeedback, /input\[type=\\"submit\\"\]/, "submit controls must be covered");
-assert.match(allButtonFeedback, /input\[type=\\"reset\\"\]/, "reset controls must be covered");
+assert.match(allButtonFeedback, /\[role="button"\]/, "ARIA button controls must be covered");
+assert.match(allButtonFeedback, /input\[type="button"\]/, "input button controls must be covered");
+assert.match(allButtonFeedback, /input\[type="submit"\]/, "submit controls must be covered");
+assert.match(allButtonFeedback, /input\[type="reset"\]/, "reset controls must be covered");
 assert.match(allButtonFeedback, /document\.addEventListener\("click", handleAnyButtonClick, true\)/, "dynamically rendered buttons must be covered by delegated capture");
 assert.match(allButtonFeedback, /usesConfirmedWriteFeedback\(control\)/, "confirmed writes must not receive optimistic generic success feedback");
 assert.match(allButtonFeedback, /\[data-action-feedback-host\]/, "feedback toast controls must be excluded to prevent recursive notifications");
