@@ -1,8 +1,28 @@
-import {
-  businessActionModule,
-  businessFormModule,
-  feedbackLanguage,
-} from "./action-feedback.js";
+const CONFIRMED_BUSINESS_FORMS = new Set([
+  "save-skill-assessment",
+  "save-custom-skill",
+  "save-sop",
+  "save-staff",
+  "clock-in",
+  "edit-attendance",
+  "save-schedule",
+  "save-job",
+  "save-inspection",
+]);
+
+const CONFIRMED_BUSINESS_ACTIONS = new Set([
+  "skill-toggle",
+  "skill-delete",
+  "skill-approve",
+  "sop-remove-utensil",
+  "sop-remove-photo",
+  "sop-delete",
+  "sop-approve",
+  "sop-restore",
+  "schedule-delete",
+  "job-delete",
+  "clock-out",
+]);
 
 const BUTTON_SELECTOR = [
   "button",
@@ -32,6 +52,10 @@ const CONFIRMED_FORM_SELECTOR = [
 const FLASH_MS = 1150;
 let flashSequence = 0;
 let flashTimer = 0;
+
+function feedbackLanguage() {
+  return document.documentElement.lang === "zh-Hant" ? "zh" : "vi";
+}
 
 function ensureHost() {
   let host = document.querySelector("[data-action-feedback-host]");
@@ -87,13 +111,13 @@ export function usesConfirmedWriteFeedback(control) {
   if (control.closest(CONFIRMED_INVENTORY_SELECTOR)) return true;
 
   const actionTarget = control.closest("[data-action]");
-  if (businessActionModule(actionTarget?.dataset?.action || "")) return true;
+  if (CONFIRMED_BUSINESS_ACTIONS.has(String(actionTarget?.dataset?.action || ""))) return true;
 
   if (!isSubmitControl(control)) return false;
   const form = formFor(control);
   if (!form) return false;
   if (form.matches(CONFIRMED_FORM_SELECTOR)) return true;
-  return Boolean(businessFormModule(form.dataset.form || ""));
+  return CONFIRMED_BUSINESS_FORMS.has(String(form.dataset.form || ""));
 }
 
 function removeFlash(flash) {
