@@ -76,7 +76,7 @@ async function verifyCorruptedRevisionBaseline(adminCookie) {
 
 const health = await call("/api/health");
 assert.equal(health.response.status, 200);
-assert.equal(health.data.schema, "008", "module revision migration is not active");
+assert.equal(health.data.schema, "009", "module revision migration is not active");
 
 const admin = await login("yangchuadmin");
 const employee = await login("employeefx");
