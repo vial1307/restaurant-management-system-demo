@@ -30,3 +30,9 @@ const migrated = source
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
 await import("./receiving-default-regression-client.mjs");
+
+// The legacy API regression intentionally exercises historical fixture codes.
+// Browser certification must run against the canonical production location codes
+// consumed by inventory-cloud, otherwise timing determines whether default rows
+// are observed before an authoritative 200 snapshot filters legacy locations out.
+await import("./canonicalize-browser-inventory-fixture.mjs");
