@@ -1,6 +1,6 @@
 import { accountCan, currentAccountSession } from "./account-permissions.js";
 
-const MANAGEMENT_ROLES = new Set(["admin", "manager", "supervisor"]);
+const MANAGER_ROLES = new Set(["admin", "manager"]);
 let reconcilePending = false;
 let redirecting = false;
 
@@ -12,8 +12,8 @@ function accountRole(user = session()) {
   return String(user?.accountRole || user?.role || "");
 }
 
-function isManagementRole(user = session()) {
-  return Boolean(user && (user.role === "admin" || MANAGEMENT_ROLES.has(accountRole(user))));
+function isManagerOrAbove(user = session()) {
+  return Boolean(user && (user.role === "admin" || MANAGER_ROLES.has(accountRole(user))));
 }
 
 function permissionState() {
@@ -27,9 +27,9 @@ function permissionState() {
     scheduleView,
     workforceView: attendanceView || scheduleView,
     // attendance.edit on employee/part-time is self-service only. Correction UI
-    // is management-only and still requires the explicit account edit bit.
-    attendanceEdit: Boolean(user && isManagementRole(user) && (admin || accountCan(user, "attendance", "edit"))),
-    scheduleEdit: Boolean(user && isManagementRole(user) && (admin || accountCan(user, "schedule", "edit"))),
+    // is manager/admin-only and still requires the explicit account edit bit.
+    attendanceEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "attendance", "edit"))),
+    scheduleEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "schedule", "edit"))),
   };
 }
 
@@ -165,7 +165,7 @@ function reconcile() {
 function requestReconcile() {
   if (reconcilePending) return;
   reconcilePending = true;
-  requestAnimationFrame(reconcile);
+  requestAnimationFrame(() => requestAnimationFrame(reconcile));
 }
 
 document.addEventListener("click", (event) => {
