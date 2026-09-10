@@ -16,6 +16,11 @@ assert(source.includes(oldEmployeeStocktakeAssertion), "employee stocktake regre
 const oldSupervisorReceiveDefaultAssertion = `assert.equal((await request("/api/inventory/receive-default",{\n  method:"POST",cookie:supervisor.cookie,\n  body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"}\n})).response.status,200);`;
 assert(source.includes(oldSupervisorReceiveDefaultAssertion), "supervisor receive-default regression changed; update v6 runner explicitly");
 
+const oldAllSiteViewAssertion = `for (const site of ["fuxing","yongji","central"]) {\n  assert.equal((await inventory(admin.cookie,site)).response.status,200,\`admin cannot view \${site}\`);\n}`;
+assert(source.includes(oldAllSiteViewAssertion), "all-site inventory regression changed; update snapshot integrity injection explicitly");
+
+const allSiteSnapshotRegression = `${oldAllSiteViewAssertion}\n\nfunction assertInventorySnapshotIntegrity(snapshot, site) {\n  assert.equal(snapshot?.site, site, \`snapshot site mismatch for \${site}\`);\n  assert(Array.isArray(snapshot?.items), \`items missing for \${site}\`);\n  assert(Array.isArray(snapshot?.locations), \`locations missing for \${site}\`);\n  assert(Array.isArray(snapshot?.stock), \`stock missing for \${site}\`);\n  const itemIds = new Set(snapshot.items.map((item) => item.id));\n  const locationIds = new Set(snapshot.locations.map((location) => location.id));\n  for (const row of snapshot.stock) {\n    assert(itemIds.has(row.item_id), \`orphan/inactive item stock leaked into \${site} snapshot: \${row.item_id}\`);\n    assert(locationIds.has(row.location_id), \`inactive/foreign location stock leaked into \${site} snapshot: \${row.location_id}\`);\n  }\n}\n\nfor (const [site, locationCode] of [["central","central-freezer"],["fuxing","fuxing-freezer"],["yongji","yongji-freezer"]]) {\n  const itemKey = \`\${site}:snapshot-archive-regression\`;\n  const created = await request("/api/inventory/catalog/sync",{\n    method:"POST",cookie:admin.cookie,\n    body:{item:{\n      key:itemKey,catalog_key:\`snapshot-archive-\${site}\`,zh:\`快照封存測試-\${site}\`,vi:\`Kiểm thử snapshot archive \${site}\`,\n      unit:"包",work_area:"noodles",storage_only:true,\n      locations:[{code:locationCode,quantity:3,minimum:1}]\n    }}\n  });\n  assert.equal(created.response.status,200,\`catalog seed failed for \${site}\`);\n\n  const beforeArchive = await inventory(admin.cookie,site);\n  assert.equal(beforeArchive.response.status,200);\n  assertInventorySnapshotIntegrity(beforeArchive.data,site);\n  const seededItem = beforeArchive.data.items.find((item)=>item.item_key===itemKey);\n  assert(seededItem,\`seeded item missing before archive for \${site}\`);\n  assert(beforeArchive.data.stock.some((row)=>row.item_id===seededItem.id),\`seeded stock missing before archive for \${site}\`);\n\n  const archived = await request("/api/inventory/catalog/archive",{\n    method:"POST",cookie:admin.cookie,body:{itemKey}\n  });\n  assert.equal(archived.response.status,200,\`archive failed for \${site}\`);\n  assert.equal(archived.data.archived,true);\n\n  const afterArchive = await inventory(admin.cookie,site);\n  assert.equal(afterArchive.response.status,200);\n  assertInventorySnapshotIntegrity(afterArchive.data,site);\n  assert(!afterArchive.data.items.some((item)=>item.id===seededItem.id || item.item_key===itemKey),\`archived item leaked into item list for \${site}\`);\n  assert(!afterArchive.data.stock.some((row)=>row.item_id===seededItem.id),\`archived item stock leaked into active snapshot for \${site}\`);\n}`;
+
 const migrated = source
   .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"008");')
   .replace(
@@ -25,7 +30,8 @@ const migrated = source
   .replace(
     oldSupervisorReceiveDefaultAssertion,
     `const supervisorReceiveDefault = await request("/api/inventory/receive-default",{\n  method:"POST",cookie:supervisor.cookie,\n  body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"}\n});\nassert.equal(supervisorReceiveDefault.response.status,403);\nassert.equal(supervisorReceiveDefault.data.error,"RECEIVE_DEFAULT_MANAGER_REQUIRED");`
-  );
+  )
+  .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression);
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
