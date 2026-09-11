@@ -82,6 +82,7 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
   if (modules.shared && typeof modules.shared === "object") {
     scoped.shared = {
       ...modules.shared,
+      activeStaffId: staffId,
       staff: Array.isArray(modules.shared.staff)
         ? modules.shared.staff.map((member) => String(member?.id || "") === staffId ? member : omitHourlyRate(member))
         : [],
