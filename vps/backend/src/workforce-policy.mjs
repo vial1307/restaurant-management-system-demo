@@ -98,9 +98,19 @@ function immutableAttendanceFieldsEqual(before, incoming) {
 
 function scheduledStartFor(beforeModules, staffId, date) {
   const schedules = Array.isArray(beforeModules?.schedule?.schedules) ? beforeModules.schedule.schedules : [];
-  const candidates = schedules.filter((entry) => String(entry?.staffId || "") === staffId && String(entry?.date || "") === date);
-  if (candidates.length !== 1) return "";
-  return text(candidates[0].start);
+  const staffSchedules = schedules.filter((entry) => String(entry?.staffId || "") === staffId);
+  const dayCandidates = staffSchedules.filter((entry) => entry?.applyMode !== "month" && String(entry?.date || "") === date);
+  if (dayCandidates.length === 1) return text(dayCandidates[0].start);
+  if (dayCandidates.length > 1) return "";
+
+  const month = String(date).slice(0, 7);
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+  const recurringCandidates = staffSchedules.filter((entry) => (
+    entry?.applyMode === "month"
+    && String(entry?.month || "") === month
+    && Number(entry?.weekday) === weekday
+  ));
+  return recurringCandidates.length === 1 ? text(recurringCandidates[0].start) : "";
 }
 
 export function mergeSelfServiceAttendance(user, beforeModules = {}, incomingModule = {}) {
