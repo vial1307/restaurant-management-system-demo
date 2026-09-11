@@ -119,6 +119,18 @@ async function openSchedule(page) {
   await page.waitForFunction(() => !document.querySelector(".workforce-request-loading"), null, { timeout:30000 });
 }
 
+async function openScheduleForDate(page, date) {
+  await openSchedule(page);
+  await selectServiceDate(page, date);
+  await page.waitForFunction((expected) => {
+    let selectedDate = "";
+    try { selectedDate = JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null")?.selectedDate || ""; }
+    catch {}
+    const workspace = document.querySelector("[data-workforce-request-workspace]");
+    return selectedDate === expected && workspace && !workspace.classList.contains("hidden") && !document.querySelector(".workforce-request-loading");
+  }, date, { timeout:30000 });
+}
+
 async function waitForRequestRow(page, date, reason) {
   const row = page.locator(".workforce-request-row").filter({ hasText:date }).filter({ hasText:reason }).first();
   await row.waitFor({ state:"visible", timeout:30000 });
@@ -133,8 +145,7 @@ try {
   const employeeErrors = [];
   employeePage.on("pageerror", (error) => employeeErrors.push(error.message));
   await browserLogin(employeePage, "employeefx");
-  await selectServiceDate(employeePage, DATE);
-  await openSchedule(employeePage);
+  await openScheduleForDate(employeePage, DATE);
 
   assert.equal(await employeePage.locator("[data-workforce-request-form]").count(), 1, "employee must receive own request form");
   assert.equal(await employeePage.locator(".workforce-request-queue").count(), 0, "employee must not receive manager approval queue");
@@ -167,8 +178,7 @@ try {
   const managerErrors = [];
   managerPage.on("pageerror", (error) => managerErrors.push(error.message));
   await browserLogin(managerPage, "managerfx");
-  await selectServiceDate(managerPage, DATE);
-  await openSchedule(managerPage);
+  await openScheduleForDate(managerPage, DATE);
 
   assert.equal(await managerPage.locator("[data-workforce-request-form]").count(), 0, "manager must not receive self-service request form");
   const managerRow = await waitForRequestRow(managerPage, DATE, REASON);
@@ -188,7 +198,7 @@ try {
   assert.deepEqual(managerErrors, [], `manager request page errors: ${managerErrors.join(" | ")}`);
 
   await employeePage.reload({ waitUntil:"domcontentloaded" });
-  await openSchedule(employeePage);
+  await openScheduleForDate(employeePage, DATE);
   employeeRow = await waitForRequestRow(employeePage, DATE, REASON);
   assert.match(await employeeRow.innerText(), /Đã duyệt|已核准/, "employee must see approved own request status");
   assert.equal(await employeeRow.locator("[data-workforce-request-cancel]").count(), 0, "approved request must not remain cancellable");
@@ -201,8 +211,7 @@ try {
   const supervisorErrors = [];
   supervisorPage.on("pageerror", (error) => supervisorErrors.push(error.message));
   await browserLogin(supervisorPage, "supervisorfx");
-  await selectServiceDate(supervisorPage, DATE);
-  await openSchedule(supervisorPage);
+  await openScheduleForDate(supervisorPage, DATE);
   assert.equal(await supervisorPage.locator("[data-workforce-request-approve]").count(), 0, "supervisor must not receive approve controls");
   assert.equal(await supervisorPage.locator("[data-workforce-request-reject-form]").count(), 0, "supervisor must not receive reject controls");
   assert.equal(await supervisorPage.locator("[data-workforce-request-form]").count(), 0, "supervisor must not receive employee self-service form");
@@ -214,8 +223,7 @@ try {
   const parttimeErrors = [];
   parttimePage.on("pageerror", (error) => parttimeErrors.push(error.message));
   await browserLogin(parttimePage, "parttimefx");
-  await selectServiceDate(parttimePage, DATE);
-  await openSchedule(parttimePage);
+  await openScheduleForDate(parttimePage, DATE);
   assert.equal(await parttimePage.locator("[data-workforce-request-form]").count(), 1, "part-time must receive own leave/change request form");
   assert.equal(await parttimePage.locator("[data-workforce-request-approve]").count(), 0, "part-time must not receive manager decision controls");
   assert.deepEqual(parttimeErrors, [], `part-time request page errors: ${parttimeErrors.join(" | ")}`);
