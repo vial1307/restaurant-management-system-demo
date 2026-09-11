@@ -250,11 +250,12 @@ function managerAttendanceMarkup(state) {
 
 function payrollMarkup(state) {
   const c = copy();
-  const manager = canManageTime();
   const currentMonth = payrollMonth || String(state?.selectedDate || "").slice(0, 7);
   payrollMonth = currentMonth;
-  const ownId = state?.operations?.activeStaffId || "";
-  const entries = (state?.operations?.attendance || []).filter((entry) => String(entry.date || "").startsWith(`${currentMonth}-`) && (manager || entry.staffId === ownId));
+  // Attendance in local state has already been scoped by the authenticated VPS
+  // response. Do not re-filter by a device-local activeStaffId, which can be
+  // stale after login/permission transitions and incorrectly hide own payroll.
+  const entries = (state?.operations?.attendance || []).filter((entry) => String(entry.date || "").startsWith(`${currentMonth}-`));
   const byStaff = new Map();
   let open = 0;
   for (const entry of entries) {
