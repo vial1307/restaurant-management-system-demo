@@ -30,6 +30,13 @@ function can(user, moduleName, action) {
   if (action === "edit" && ["reservations", "preparation"].includes(moduleName)) {
     return hasPermission(user, moduleName, "edit");
   }
+  // Workforce management mutations are intentionally stricter than generic
+  // permission bits. Supervisor is non-management for attendance correction and
+  // scheduling under the approved role matrix, including legacy accounts whose
+  // stored permissions may still contain edit=true.
+  if (action === "edit" && ["attendance", "schedule"].includes(moduleName) && user?.role === "supervisor") {
+    return false;
+  }
   if (action === "edit" && moduleName === "schedule" && isWorkforceSelfServiceUser(user)) {
     return false;
   }
