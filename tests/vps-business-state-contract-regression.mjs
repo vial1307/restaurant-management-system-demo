@@ -30,6 +30,7 @@ assert.match(acceptedRevisionHelper, /Number\.isInteger\(loadedModuleRevisions\[
 assert.match(sync, /const expectedModuleRevisions = acceptedRevisionsFor\(dirtyNames, key\)/, "dirty business writes must derive expected revisions from the accepted sync baseline helper");
 assert.match(sync, /vpsSaveBusinessState\(site, dirtyModules, expectedModuleRevisions\)/, "business sync must pass its accepted revision baseline explicitly to transport");
 assert.match(sync, /clearBusinessStateForAuthorizationTransition\(\)/, "authorization transitions must clear the previous local business snapshot before hydration");
+assert.match(sync, /const activeStaffId = String\(modules\?\.shared\?\.activeStaffId \|\| ""\);[\s\S]{0,180}store\.switchStaff\(activeStaffId\)/, "business hydration must select the VPS-authenticated self staff identity");
 
 const loadFunction = sync.match(/async function load\(\) \{[\s\S]*?\n  \}\n\n  const guardSiteSwitch/)?.[0] || "";
 assert(loadFunction, "business sync load function must remain identifiable for concurrency contract guards");
@@ -79,6 +80,7 @@ const baseModules = {
 const scoped = scopeWorkforceModules(employee, structuredClone(baseModules), baseModules);
 assert.deepEqual(scoped.attendance.attendance.map((entry) => entry.id), ["employee-old"], "employee read must contain only own attendance");
 assert.deepEqual(scoped.schedule.schedules.map((entry) => entry.id), ["schedule-hai-dang"], "employee read must contain only own schedule");
+assert.equal(scoped.shared.activeStaffId, "staff-hai-dang", "employee response must identify the authenticated staff record for client clock-in selection");
 assert.equal(scoped.shared.staff.find((entry) => entry.id === "staff-hai-dang")?.hourlyRate, 220, "employee may receive own hourly rate for own payroll calculation");
 assert.equal(Object.hasOwn(scoped.shared.staff.find((entry) => entry.id === "staff-manager"), "hourlyRate"), false, "coworker hourly rate must not leak through shared staff");
 
