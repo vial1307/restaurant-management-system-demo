@@ -23,10 +23,12 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 ## Workforce record-scope contract
 
 - For `employee` and `parttime`, attendance reads return only that employee's attendance rows and schedule reads return only that employee's schedule rows.
-- The self employee is resolved from the server-controlled shared staff roster by a unique exact account/display-name match. If identity cannot be resolved unambiguously, self-service attendance mutation is denied instead of widening access.
+- The self employee is resolved from the server-controlled shared staff roster by a unique explicit account binding when available, otherwise by a unique exact account/display-name match. If identity cannot be resolved unambiguously, self-service attendance mutation is denied instead of widening access.
+- The scoped VPS response includes the authenticated `activeStaffId`; after hydration the client selects that staff record instead of retaining a device-local manager/employee selection from a previous session.
 - Shared staff data may still contain coworkers required for UI compatibility, but coworker `hourlyRate` values are removed from employee/part-time responses.
 - Employee/part-time attendance writes are merged into the server's existing attendance module; they must never replace or delete coworkers' rows.
 - A self-service clock-in may create only one new open row for the resolved employee. Server-controlled staff name, area and hourly rate are canonicalized from the staff roster.
+- When clock-in is linked to a schedule, an explicit day schedule takes precedence. If no day schedule exists, a unique recurring monthly schedule matching the date's weekday supplies `scheduledStart`. Ambiguous multiple matching schedules fail closed by leaving `scheduledStart` unset rather than guessing.
 - A self-service clock-out may only transition that employee's existing open row from `clockOut = null` to a clock-out timestamp. Other fields of the existing row are immutable through self-service.
 - Completed attendance rows, payroll policy, coworker rows, hourly rate, clock-in time, scheduled start and break minutes cannot be corrected by employee/part-time self-service; those corrections require authorized management access.
 - Conflict responses are scoped with the same read rules, so an employee/part-time account cannot receive coworkers' attendance or schedule data through an optimistic-concurrency conflict payload.
@@ -46,6 +48,7 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 - The current canonical wage calculation remains attendance-driven: completed worked minutes after unpaid break × hourly rate, then configured late deduction, producing gross, deduction and temporary net pay.
 - Incomplete clock records contribute no payable completed-shift amount until clock-out exists.
 - Hourly rate used for employee/part-time self-service is server-canonicalized from the staff roster; client-side manipulation must not change another employee's wage basis.
+- `scheduledStart` used for late calculation must come from the server-resolved day/recurring schedule when a unique applicable schedule exists, not from employee-supplied clock-in payload data.
 - Payroll results remain estimates until management has corrected exceptional attendance data. Overtime, statutory holiday multipliers, bonuses, insurance/tax deductions and monthly payroll locking are not silently invented by this change; they require an explicit business rule before becoming payroll logic.
 
 ## Data contract
