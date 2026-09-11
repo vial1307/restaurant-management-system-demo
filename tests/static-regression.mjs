@@ -154,7 +154,16 @@ for (const moduleName of ["settings","reservations","procurement","preparation",
 }
 assert.match(businessSync, /remote:\s*\{\s*jobCatalog:/, "remote job catalog must persist under remote permission");
 assert(!/revision\s*\|\|\s*0\)\s*>\s*0[\s\S]{0,500}else if\s*\(hasBusinessEdit\(\)\)\s*\{\s*await save\(\)/.test(businessSync), "an empty server must not be seeded by an untouched clean browser");
-assert(!businessSync.includes("store.resetBusinessModules()"), "partial server state must not erase business modules that still exist only on the device");
+assert.match(
+  businessSync,
+  /const clearBusinessStateForAuthorizationTransition = \(\) => \{[\s\S]{0,180}if \(!authorizationTransitionPending\) return false;[\s\S]{0,180}store\.resetBusinessModules\(\)/,
+  "stale local business modules may only be cleared behind the authorization-transition guard"
+);
+assert.equal(
+  (businessSync.match(/store\.resetBusinessModules\(\)/g) || []).length,
+  1,
+  "business-module reset must remain isolated to the authorization-transition path"
+);
 assert.match(businessSync, /loadedRevisionKey === key && loadedRevision === revision/, "unchanged VPS business-state revision must skip a redundant merge/render");
 assert.match(businessSync, /detail:\{ status:"ready", site, unchanged:true \}/, "unchanged business-state refresh must expose the no-op status");
 
