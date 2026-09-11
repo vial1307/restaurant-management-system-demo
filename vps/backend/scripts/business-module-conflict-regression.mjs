@@ -79,6 +79,7 @@ assert.equal(health.response.status, 200);
 assert.equal(health.data.schema, "008", "module revision migration is not active");
 
 const admin = await login("yangchuadmin");
+const manager = await login("managerfx");
 const employee = await login("employeefx");
 await verifyCorruptedRevisionBaseline(admin);
 
@@ -112,8 +113,19 @@ const first = await call("/api/business-state/fuxing", {
 assert.equal(first.response.status, 200, JSON.stringify(first.data));
 assert.equal(Number(first.data.moduleRevisions.attendance), attendanceRevision + 1);
 
-const stale = await call("/api/business-state/fuxing", {
+// Employee/part-time attendance writes are self-service record merges. A payload
+// that attempts to replace payroll policy must be rejected before conflict logic.
+const employeePayrollTamper = await call("/api/business-state/fuxing", {
   method: "POST", cookie: employee,
+  body: { modules: { attendance: writerB }, expectedModuleRevisions: { attendance: attendanceRevision } },
+});
+assert.equal(employeePayrollTamper.response.status, 403, JSON.stringify(employeePayrollTamper.data));
+assert.equal(employeePayrollTamper.data.error, "WORKFORCE_PAYROLL_EDIT_NOT_ALLOWED");
+
+// Branch-wide attendance corrections and payroll policy writes remain revision-
+// guarded. A manager with a stale attendance token must receive the conflict.
+const stale = await call("/api/business-state/fuxing", {
+  method: "POST", cookie: manager,
   body: { modules: { attendance: writerB }, expectedModuleRevisions: { attendance: attendanceRevision } },
 });
 assert.equal(stale.response.status, 409, JSON.stringify(stale.data));
@@ -144,7 +156,7 @@ const [settingsWrite, attendanceWrite] = await Promise.all([
     body: { modules: { settings: settingsPayload }, expectedModuleRevisions: { settings: settingsRevision } },
   }),
   call("/api/business-state/fuxing", {
-    method: "POST", cookie: employee,
+    method: "POST", cookie: manager,
     body: { modules: { attendance: attendancePayload }, expectedModuleRevisions: { attendance: nextAttendanceRevision } },
   }),
 ]);

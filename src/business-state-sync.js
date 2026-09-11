@@ -268,6 +268,7 @@ export function attachBusinessStateSync(store) {
   let saveInFlight = null;
   let saveInFlightKey = "";
   let saveInFlightSnapshot = "";
+  let authorizationTransitionPending = false;
 
   const identityKey = () => {
     const user = readSession();
@@ -301,6 +302,7 @@ export function attachBusinessStateSync(store) {
 
   const captureAuthorizationRecovery = (event) => {
     if (!event.detail?.authorizationChanged) return;
+    authorizationTransitionPending = true;
     const previous = event.detail?.previous;
     const site = currentSite();
     const key = previous?.id && site ? `${previous.id}:${site}` : "";
@@ -330,6 +332,26 @@ export function attachBusinessStateSync(store) {
     window.dispatchEvent(new CustomEvent("shitu:business-state-status", {
       detail: { status: "recovery-pending", site, modules: changedModules, capturedAt: draft.capturedAt },
     }));
+  };
+
+  const clearBusinessStateForAuthorizationTransition = () => {
+    if (!authorizationTransitionPending) return false;
+    applyingRemote = true;
+    try {
+      store.resetBusinessModules();
+    } finally {
+      applyingRemote = false;
+      authorizationTransitionPending = false;
+    }
+    return true;
+  };
+
+  const applyAuthorizedServerModules = (modules) => {
+    store.mergeBusinessModules(modules);
+    const activeStaffId = String(modules?.shared?.activeStaffId || "");
+    if (activeStaffId && typeof store.switchStaff === "function") {
+      store.switchStaff(activeStaffId);
+    }
   };
 
   const acceptedRevisionsFor = (names, key = identityKey()) => (
@@ -489,7 +511,7 @@ export function attachBusinessStateSync(store) {
               );
               applyingRemote = true;
               try {
-                store.mergeBusinessModules(authoritativeModules);
+                applyAuthorizedServerModules(authoritativeModules);
               } finally {
                 applyingRemote = false;
               }
@@ -563,6 +585,10 @@ export function attachBusinessStateSync(store) {
       loadedModuleRevisionKey = "";
       loadedModuleRevisions = {};
     }
+    // Authorization transitions may reduce what the next identity is allowed to
+    // read. Clear the old identity's local business snapshot before any early
+    // return or server merge, then hydrate only modules the VPS authorizes.
+    clearBusinessStateForAuthorizationTransition();
     if (!key || !site || !hasBusinessView() || navigator.onLine === false) {
       if (key) surfaceRecovery(key);
       if (key && site && pending && navigator.onLine === false) {
@@ -598,7 +624,7 @@ export function attachBusinessStateSync(store) {
         const recoverableModules = Object.fromEntries(recoverableNames.map((name) => [name, structuredClone(pendingModules[name])]));
 
         applyingRemote = true;
-        if (revision > 0) store.mergeBusinessModules(serverModules);
+        if (revision > 0) applyAuthorizedServerModules(serverModules);
         const serverBaselineModules = businessModulesFromState(store.getState());
         for (const name of recoverableNames) {
           serverBaselineModules[name] = Object.hasOwn(serverModules, name)
@@ -634,7 +660,7 @@ export function attachBusinessStateSync(store) {
         // Merge only modules that already exist on the server. Modules not yet
         // migrated must keep their device copy until an authorized real edit
         // persists them, especially when the first writer has limited rights.
-        store.mergeBusinessModules(serverModules);
+        applyAuthorizedServerModules(serverModules);
         applyingRemote = false;
         lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
       } else {
@@ -700,6 +726,7 @@ export function attachBusinessStateSync(store) {
         }));
         return;
       }
+      clearBusinessStateForAuthorizationTransition();
       safeReloadPending = false;
       location.reload();
     })();
@@ -709,6 +736,7 @@ export function attachBusinessStateSync(store) {
   const reload = () => { void load(); };
   const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
   const authReload = (event) => {
+    if (event.detail?.authorizationChanged) authorizationTransitionPending = true;
     if (event.detail?.safeReloadRequested) return;
     if (event.detail?.authorizationChanged) {
       void load();

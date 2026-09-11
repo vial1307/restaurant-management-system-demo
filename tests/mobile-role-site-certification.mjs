@@ -94,11 +94,24 @@ async function assertNoHorizontalOverflow(page, label) {
   assert(overflow <= 3, `${label}: horizontal overflow ${overflow}px`);
 }
 
+async function waitForPermissionState(page, scopeSelector, route, expected) {
+  await page.waitForFunction(({ scopeSelector, route, expected }) => {
+    const host = document.querySelector(scopeSelector);
+    const link = host?.querySelector(`.nav-item[href="#${route}"]`);
+    if (!link) return false;
+    const displayed = getComputedStyle(link).display !== "none";
+    if (displayed !== expected) return false;
+    if (route === "schedule" && expected) return link.dataset.workforceLegacySchedule === "true";
+    return true;
+  }, { scopeSelector, route, expected }, { timeout:10000 });
+}
+
 async function assertPermissionNavigation(page, session, label) {
   for (const route of ACCOUNT_MODULES) {
     const expected = Boolean(session?.permissions?.[route]?.view) || session?.role === "admin" || session?.accountRole === "admin";
     const nav = page.locator(`.mobile-nav .nav-item[href="#${route}"]`);
     assert.equal(await nav.count(), 1, `${label}: mobile nav entry missing for ${route}`);
+    await waitForPermissionState(page, ".mobile-nav", route, expected);
     const displayed = await nav.evaluate((node) => getComputedStyle(node).display !== "none");
     assert.equal(displayed, expected, `${label}: mobile nav permission mismatch for ${route}`);
   }
@@ -112,6 +125,7 @@ async function assertPermissionNavigation(page, session, label) {
       const expected = Boolean(session?.permissions?.[route]?.view) || session?.role === "admin" || session?.accountRole === "admin";
       const link = menu.locator(`.nav-item[href="#${route}"]`);
       assert.equal(await link.count(), 1, `${label}: full mobile menu entry missing for ${route}`);
+      await waitForPermissionState(page, ".mobile-menu-grid", route, expected);
       const displayed = await link.evaluate((node) => getComputedStyle(node).display !== "none");
       assert.equal(displayed, expected, `${label}: full mobile menu permission mismatch for ${route}`);
     }

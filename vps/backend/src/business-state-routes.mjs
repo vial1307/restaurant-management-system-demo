@@ -1,5 +1,10 @@
 import { pool, withTransaction } from "./db.mjs";
 import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
+import {
+  isWorkforceSelfServiceUser,
+  mergeSelfServiceAttendance,
+  scopeWorkforceModules,
+} from "./workforce-policy.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -25,6 +30,16 @@ function can(user, moduleName, action) {
   if (action === "edit" && ["reservations", "preparation"].includes(moduleName)) {
     return hasPermission(user, moduleName, "edit");
   }
+  // Workforce management mutations are intentionally stricter than generic
+  // permission bits. Supervisor is non-management for attendance correction and
+  // scheduling under the approved role matrix, including legacy accounts whose
+  // stored permissions may still contain edit=true.
+  if (action === "edit" && ["attendance", "schedule"].includes(moduleName) && user?.role === "supervisor") {
+    return false;
+  }
+  if (action === "edit" && moduleName === "schedule" && isWorkforceSelfServiceUser(user)) {
+    return false;
+  }
   if (moduleName === "shared" && action === "edit") {
     return user.role === "admin" || hasPermission(user, "settings", "edit");
   }
@@ -37,9 +52,10 @@ function can(user, moduleName, action) {
 export { can as canBusinessModule };
 
 function filteredModules(user, modules) {
-  return Object.fromEntries(
+  const permitted = Object.fromEntries(
     Object.entries(modules || {}).filter(([moduleName]) => can(user, moduleName, "view"))
   );
+  return scopeWorkforceModules(user, permitted, modules || {});
 }
 
 function validStoredRevision(value) {
@@ -137,7 +153,13 @@ export async function registerBusinessStateRoutes(app) {
       return reply.code(403).send({ error: "BUSINESS_STATE_EDIT_NOT_ALLOWED" });
     }
 
-    const guardedNames = editableNames.filter((moduleName) => moduleName !== "audit");
+    const selfServiceAttendance = isWorkforceSelfServiceUser(user) && Object.hasOwn(editable, "attendance");
+    // Self-service attendance uses a server-side record merge under the row lock,
+    // so it must not conflict merely because another employee changed the same
+    // branch-wide attendance module between reads.
+    const guardedNames = editableNames.filter((moduleName) => (
+      moduleName !== "audit" && !(selfServiceAttendance && moduleName === "attendance")
+    ));
     const expectedInput = requestedModuleRevisions(request.body);
     const expected = Object.fromEntries(
       guardedNames.map((moduleName) => [moduleName, validExpectedRevision(expectedInput[moduleName])])
@@ -170,11 +192,12 @@ export async function registerBusinessStateRoutes(app) {
         (moduleName) => expected[moduleName] !== currentRevision(beforeRevisions, moduleName)
       );
       if (conflictingModules.length) {
-        const conflictModules = Object.fromEntries(
+        const rawConflictModules = Object.fromEntries(
           conflictingModules
             .filter((moduleName) => can(user, moduleName, "view") && before[moduleName] !== undefined)
             .map((moduleName) => [moduleName, before[moduleName]])
         );
+        const conflictModules = scopeWorkforceModules(user, rawConflictModules, before);
         const conflictRevisions = Object.fromEntries(
           conflictingModules
             .filter((moduleName) => can(user, moduleName, "view"))
@@ -183,8 +206,17 @@ export async function registerBusinessStateRoutes(app) {
         return { conflict: true, conflictingModules, modules: conflictModules, moduleRevisions: conflictRevisions };
       }
 
-      const next = { ...before, ...editable };
-      if (editable.audit) next.audit = mergeAuditModule(before.audit, editable.audit);
+      const effectiveEditable = { ...editable };
+      if (selfServiceAttendance) {
+        const workforceMerge = mergeSelfServiceAttendance(user, before, effectiveEditable.attendance);
+        if (!workforceMerge.ok) {
+          return { workforceDenied:true, error:workforceMerge.error };
+        }
+        effectiveEditable.attendance = workforceMerge.module;
+      }
+
+      const next = { ...before, ...effectiveEditable };
+      if (effectiveEditable.audit) next.audit = mergeAuditModule(before.audit, effectiveEditable.audit);
       const nextRevisions = { ...beforeRevisions };
       for (const moduleName of editableNames) {
         nextRevisions[moduleName] = currentRevision(beforeRevisions, moduleName) + 1;
@@ -223,6 +255,9 @@ export async function registerBusinessStateRoutes(app) {
         moduleRevisions: result.moduleRevisions,
         modules: result.modules,
       });
+    }
+    if (result.workforceDenied) {
+      return reply.code(403).send({ error:result.error || "WORKFORCE_EDIT_NOT_ALLOWED", site });
     }
 
     return {

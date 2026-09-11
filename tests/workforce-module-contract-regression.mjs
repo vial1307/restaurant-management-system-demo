@@ -38,6 +38,10 @@ assert.match(workforce, /scheduleRow\.hidden = true/, "Settings must show only o
 assert.match(workforce, /scheduleView\.checked = attendanceView\.checked/, "merged permission view toggle must synchronize both legacy permission keys");
 assert.match(workforce, /scheduleEdit\.checked = managerRole && attendanceEdit\.checked/, "schedule edit permission must only mirror for manager/admin accounts");
 
+assert.match(workforce, /const entries = \(state\?\.operations\?\.attendance \|\| \[\]\)\.filter\(\(entry\) => String\(entry\.date \|\| ""\)\.startsWith\(`\$\{currentMonth\}-`\)\);/, "payroll must aggregate the VPS-scoped attendance set for the selected month");
+assert.doesNotMatch(workforce, /ownId = state\?\.operations\?\.activeStaffId/, "payroll must not depend on stale device-local activeStaffId identity");
+assert.doesNotMatch(workforce, /manager \|\| entry\.staffId === ownId/, "frontend must not re-authorize payroll rows using local staff identity");
+
 assert.match(accessCompat, /attendanceView \|\| scheduleView/, "top-level workforce entry must be visible when either legacy view permission is available");
 assert.match(accessCompat, /showTab\(tabs\.querySelector\('a\[href="#attendance"\]'\), attendanceView\)/, "attendance tab must honor attendance view permission");
 assert.match(accessCompat, /showTab\(tabs\.querySelector\('a\[href="#schedule"\]'\), scheduleView\)/, "schedule tab must honor schedule view permission");

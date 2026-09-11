@@ -89,9 +89,10 @@ const delay = (ms = 0) => new Promise((resolve) => nativeSetTimeout(resolve, ms)
 let state = {
   settings: { reservationBuffer: 0, language: "vi" },
   records: {},
-  operations: {},
+  operations: { attendance: [{ id:"stale-admin-row", staffId:"admin", clockIn:"2026-09-11T01:00:00.000Z" }] },
 };
 let subscriber = () => {};
+let resetCalls = 0;
 const store = {
   getState() { return state; },
   subscribe(listener) {
@@ -100,6 +101,16 @@ const store = {
   },
   mergeBusinessModules(modules) {
     if (modules.settings) state = { ...state, settings: { ...state.settings, ...modules.settings } };
+    if (modules.attendance) {
+      state = {
+        ...state,
+        operations: {
+          ...state.operations,
+          attendance: structuredClone(modules.attendance.attendance || []),
+          payroll: structuredClone(modules.attendance.payroll || {}),
+        },
+      };
+    }
     if (modules.reservations?.records) {
       const records = { ...state.records };
       for (const [date, value] of Object.entries(modules.reservations.records)) {
@@ -113,6 +124,14 @@ const store = {
       state = { ...state, records };
     }
   },
+  resetBusinessModules() {
+    resetCalls += 1;
+    state = {
+      settings: { reservationBuffer: 0, language: state.settings?.language || "vi" },
+      records: {},
+      operations: {},
+    };
+  },
 };
 
 const serverBySite = {
@@ -122,7 +141,13 @@ const serverBySite = {
 let readCalls = [];
 globalThis.__testVpsBusinessState = async (site) => {
   readCalls.push(site);
-  return structuredClone(serverBySite[site]);
+  const session = JSON.parse(storage.get(AUTH_KEY) || "null");
+  const base = structuredClone(serverBySite[site]);
+  const modules = {};
+  if (session?.permissions?.settings?.view && base.modules.settings) modules.settings = base.modules.settings;
+  if (session?.permissions?.reservations?.view && base.modules.reservations) modules.reservations = base.modules.reservations;
+  if (session?.permissions?.attendance?.view && base.modules.attendance) modules.attendance = base.modules.attendance;
+  return { ...base, modules };
 };
 globalThis.__testVpsSaveBusinessState = async (_site, modules) => ({
   revision: 99,
@@ -135,6 +160,7 @@ const detach = attachBusinessStateSync(store);
 await delay(20);
 assert.deepEqual(readCalls, ["fuxing"], "initial Fuxing business baseline was not loaded");
 assert.equal(state.settings.reservationBuffer, 3);
+assert.equal(resetCalls, 0, "normal initial load must not erase legacy local business seed data");
 
 // Dirty Fuxing state must be captured synchronously before a validated move to Yongji.
 state = { ...state, settings: { ...state.settings, reservationBuffer: 9 } };
@@ -167,7 +193,9 @@ window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
   detail: { authorizationChanged: true, safeReloadRequested: false },
 }));
 await delay(20);
+assert.equal(resetCalls, 1, "authorization transition did not clear the prior identity's local business snapshot");
 assert.equal(state.settings.reservationBuffer, 7, "Yongji state was not loaded after the authorization transition");
+assert.equal(state.operations.attendance, undefined, "old identity attendance survived a site/authorization transition");
 const recoveryAfterMove = JSON.parse(storage.get(RECOVERY_KEY) || "null");
 assert.equal(recoveryAfterMove?.drafts?.["recovery-user:fuxing"]?.modules?.settings?.reservationBuffer, 9, "Yongji refresh deleted or re-scoped the Fuxing recovery draft");
 assert.equal(recoveryAfterMove?.drafts?.["recovery-user:yongji"], undefined, "Fuxing recovery data leaked into the Yongji identity");
@@ -179,13 +207,14 @@ window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
   detail: { authorizationChanged: true, safeReloadRequested: false },
 }));
 await delay(20);
+assert.equal(resetCalls, 2, "returning to another authorization scope did not clear the previous local snapshot");
 assert.equal(state.settings.reservationBuffer, 3, "Fuxing baseline did not reload before permission-revocation case");
 state = { ...state, settings: { ...state.settings, reservationBuffer: 11 } };
 subscriber();
 const revoked = {
   ...fuxingAgain,
   permissions: {
-    settings: { view: true, edit: false },
+    settings: { view: false, edit: false },
     reservations: { view: true, edit: false },
   },
 };
@@ -199,16 +228,27 @@ window.dispatchEvent(new CustomEvent("shitu:auth-transition-preparing", {
 const recoveryAfterRevoke = JSON.parse(storage.get(RECOVERY_KEY) || "null");
 assert.equal(recoveryAfterRevoke?.drafts?.["recovery-user:fuxing"]?.modules?.settings?.reservationBuffer, 11, "same-site permission revocation did not refresh the recovery draft with the latest dirty edit");
 
-// A non-authorization profile update must not generate or replace a recovery draft.
+storage.set(AUTH_KEY, JSON.stringify(revoked));
+window.dispatchEvent(new CustomEvent("shitu:auth-synced", {
+  detail: { authorizationChanged: true, safeReloadRequested: false },
+}));
+await delay(20);
+assert.equal(resetCalls, 3, "same-site permission revocation did not clear the privileged local snapshot");
+assert.equal(state.settings.reservationBuffer, 0, "a module removed from the new permission scope remained visible from the old local snapshot");
+assert.equal(state.operations.attendance, undefined, "privileged attendance data survived a permission downgrade");
+
+// A non-authorization profile update must not generate, replace, or clear business data.
 const beforeMetadataOnly = storage.get(RECOVERY_KEY);
+const beforeResetCalls = resetCalls;
 window.dispatchEvent(new CustomEvent("shitu:auth-transition-preparing", {
   detail: {
     authorizationChanged: false,
-    previous: fuxingAgain,
-    next: { ...fuxingAgain, name: "Renamed User" },
+    previous: revoked,
+    next: { ...revoked, name: "Renamed User" },
   },
 }));
 assert.equal(storage.get(RECOVERY_KEY), beforeMetadataOnly, "metadata-only profile update changed authorization recovery state");
+assert.equal(resetCalls, beforeResetCalls, "metadata-only profile update cleared business state");
 
 detach();
 console.log("BUSINESS_STATE_AUTH_RECOVERY_OK");

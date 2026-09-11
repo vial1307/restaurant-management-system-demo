@@ -26,6 +26,8 @@ function permissionState() {
     attendanceView,
     scheduleView,
     workforceView: attendanceView || scheduleView,
+    // attendance.edit on employee/part-time is self-service only. Correction UI
+    // is manager/admin-only and still requires the explicit account edit bit.
     attendanceEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "attendance", "edit"))),
     scheduleEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "schedule", "edit"))),
   };
@@ -65,8 +67,8 @@ function markLegacyScheduleRoute(node, authorized) {
   node.dataset.workforceLegacySchedule = "true";
   Object.assign(node.style, {
     position: "absolute",
-    width: "1px",
-    height: "1px",
+    width: "0",
+    height: "0",
     minWidth: "0",
     minHeight: "0",
     margin: "0",
@@ -80,8 +82,8 @@ function markLegacyScheduleRoute(node, authorized) {
   });
   // workforce-module.css intentionally hides the legacy entry with !important.
   // Override only the display property so certification can still verify that an
-  // authorized legacy route exists, while the clipping/opacity rules keep it out
-  // of the visible and interactive navigation UI.
+  // authorized legacy route exists. Zero geometry, clipping and disabled pointer
+  // events keep it entirely outside the visible/interactive navigation contract.
   node.style.setProperty("display", "block", "important");
 }
 
@@ -105,23 +107,29 @@ function reconcileTabs({ attendanceView, scheduleView }) {
   });
 }
 
-function reconcileManagerControls({ attendanceEdit, scheduleEdit }) {
-  document.querySelectorAll('[data-action="attendance-edit"]').forEach((control) => {
-    if (!(control instanceof HTMLElement)) return;
-    if (!attendanceEdit) return;
-    control.hidden = false;
+function setControlAvailability(control, authorized) {
+  if (!(control instanceof HTMLElement)) return;
+  control.hidden = !authorized;
+  if (authorized) {
     control.removeAttribute("aria-hidden");
     control.removeAttribute("aria-disabled");
+    control.style.display = "";
     if ("disabled" in control) control.disabled = false;
+    return;
+  }
+  control.setAttribute("aria-hidden", "true");
+  control.setAttribute("aria-disabled", "true");
+  control.style.display = "none";
+  if ("disabled" in control) control.disabled = true;
+}
+
+function reconcileManagerControls({ attendanceEdit, scheduleEdit }) {
+  document.querySelectorAll('[data-action="attendance-edit"], [data-workforce-edit-attendance]').forEach((control) => {
+    setControlAvailability(control, attendanceEdit);
   });
 
   document.querySelectorAll('[data-action="schedule-add"], [data-action="schedule-edit"], [data-action="schedule-delete"]').forEach((control) => {
-    if (!(control instanceof HTMLElement)) return;
-    if (!scheduleEdit) return;
-    control.hidden = false;
-    control.removeAttribute("aria-hidden");
-    control.removeAttribute("aria-disabled");
-    if ("disabled" in control) control.disabled = false;
+    setControlAvailability(control, scheduleEdit);
   });
 }
 
