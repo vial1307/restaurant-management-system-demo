@@ -11,6 +11,12 @@ function validMonth(value) {
   return /^\d{4}-\d{2}$/.test(String(value || ""));
 }
 
+function validCompletedAttendance(entry) {
+  const start = Date.parse(String(entry?.clockIn || ""));
+  const end = Date.parse(String(entry?.clockOut || ""));
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start;
+}
+
 function actorName(user) {
   return text(user?.display_name || user?.displayName || user?.username || "manager");
 }
@@ -158,7 +164,7 @@ export async function registerWorkforceApprovalRoutes(app) {
       mutate(module) {
         const entry = module.attendance.find((item) => text(item?.id) === id);
         if (!entry) return { ok:false, status:404, error:"WORKFORCE_ATTENDANCE_NOT_FOUND" };
-        if (!entry.clockOut || !Number.isFinite(Date.parse(String(entry.clockOut)))) {
+        if (!validCompletedAttendance(entry)) {
           return { ok:false, status:409, error:"WORKFORCE_ATTENDANCE_INCOMPLETE" };
         }
         const month = text(entry.date).slice(0, 7);
@@ -214,11 +220,11 @@ export async function registerWorkforceApprovalRoutes(app) {
           return { ok:true, unchanged:true, payload:structuredClone(currentPeriod) };
         }
         const monthEntries = module.attendance.filter((entry) => text(entry?.date).startsWith(`${month}-`));
-        const open = monthEntries.filter((entry) => !entry?.clockOut);
-        if (open.length) {
+        const incomplete = monthEntries.filter((entry) => !validCompletedAttendance(entry));
+        if (incomplete.length) {
           return { ok:false, status:409, error:"WORKFORCE_PAYROLL_OPEN_SHIFTS" };
         }
-        const completed = monthEntries.filter((entry) => entry?.clockOut && Number.isFinite(Date.parse(String(entry.clockOut))));
+        const completed = monthEntries.filter(validCompletedAttendance);
         if (!completed.length) {
           return { ok:false, status:409, error:"WORKFORCE_PAYROLL_PERIOD_EMPTY" };
         }
