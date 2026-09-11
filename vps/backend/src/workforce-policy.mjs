@@ -36,7 +36,7 @@ function selfServicePayroll(payroll = {}) {
     ? structuredClone(payroll)
     : {};
   if (!scoped.periods || typeof scoped.periods !== "object" || Array.isArray(scoped.periods)) return scoped;
-  scoped.periods = Object.fromEntries(Object.entries(scoped.periods).flatMap(([month, period]) => {
+  const scopedPeriods = Object.fromEntries(Object.entries(scoped.periods).flatMap(([month, period]) => {
     if (!period || typeof period !== "object" || Array.isArray(period)) return [];
     return [[month, {
       month:text(period.month || month),
@@ -47,6 +47,8 @@ function selfServicePayroll(payroll = {}) {
         : {}),
     }]];
   }));
+  if (Object.keys(scopedPeriods).length) scoped.periods = scopedPeriods;
+  else delete scoped.periods;
   return scoped;
 }
 
