@@ -63,7 +63,9 @@ assert.match(reconciliation, /import \{ calculateAttendance \} from "\.\/operati
 assert.match(reconciliation, /if \(!wage\.complete\).*kind:"open"/s, "open-shift status must derive from canonical completion state");
 assert.match(reconciliation, /if \(wage\.lateMinutes > 0\).*kind:"late"/s, "late status must derive from canonical late minutes");
 assert.match(reconciliation, /state\?\.operations\?\.attendance \|\| \[\]/, "monthly reconciliation must use the VPS-scoped attendance set");
-assert.match(reconciliation, /operations\?\.schedules \|\| \[\]/, "schedule reconciliation must use the existing schedule model");
+assert.match(reconciliation, /function authoritativeScheduleModule/, "schedule reconciliation must resolve its authoritative schedule source explicitly");
+assert.match(reconciliation, /remote\.module\.schedules/, "schedule reconciliation must prefer the VPS schedule module when request state is loaded");
+assert.match(reconciliation, /state\?\.operations\?\.schedules/, "schedule reconciliation must retain the existing local schedule model as its pre-load fallback");
 assert.match(reconciliation, /entry\.month === month && Number\(entry\.weekday\) === weekday/, "monthly recurring schedules must keep current month+weekday semantics");
 assert.match(reconciliation, /plannedMinutes/, "schedule reconciliation must derive planned hours without converting them into payroll");
 assert.doesNotMatch(reconciliation, /vpsSaveBusinessState|fetch\(|activeStaffId/, "reconciliation must remain read-only and must not authorize from local staff identity");
