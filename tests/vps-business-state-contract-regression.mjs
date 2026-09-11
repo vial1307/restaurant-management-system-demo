@@ -29,6 +29,7 @@ assert.match(acceptedRevisionHelper, /loadedModuleRevisionKey === key/, "accepte
 assert.match(acceptedRevisionHelper, /Number\.isInteger\(loadedModuleRevisions\[name\]\)[\s\S]{0,100}loadedModuleRevisions\[name\]/, "accepted revision lookup must use only validated tokens from the sync baseline");
 assert.match(sync, /const expectedModuleRevisions = acceptedRevisionsFor\(dirtyNames, key\)/, "dirty business writes must derive expected revisions from the accepted sync baseline helper");
 assert.match(sync, /vpsSaveBusinessState\(site, dirtyModules, expectedModuleRevisions\)/, "business sync must pass its accepted revision baseline explicitly to transport");
+assert.match(sync, /clearBusinessStateForAuthorizationTransition\(\)/, "authorization transitions must clear the previous local business snapshot before hydration");
 
 const loadFunction = sync.match(/async function load\(\) \{[\s\S]*?\n  \}\n\n  const guardSiteSwitch/)?.[0] || "";
 assert(loadFunction, "business sync load function must remain identifiable for concurrency contract guards");
@@ -107,8 +108,58 @@ const canonicalNew = clockInMerge.module.attendance.find((entry) => entry.id ===
 assert.equal(canonicalNew.staffName, "海登", "server roster must canonicalize self-service staff name");
 assert.equal(canonicalNew.area, "soup", "server roster must canonicalize self-service work area");
 assert.equal(canonicalNew.hourlyRate, 220, "server roster must canonicalize self-service hourly rate");
-assert.equal(canonicalNew.scheduledStart, "17:00", "server schedule must canonicalize scheduled start");
+assert.equal(canonicalNew.scheduledStart, "17:00", "server day schedule must canonicalize scheduled start");
 assert.equal(canonicalNew.breakMinutes, 0, "employee self-service must not set payroll-affecting break minutes");
+
+const recurringModules = structuredClone(baseModules);
+recurringModules.schedule.schedules = [
+  { id:"recurring-hai-dang", date:"2026-09-04", month:"2026-09", weekday:5, applyMode:"month", staffId:"staff-hai-dang", start:"18:00", end:"00:00" },
+];
+const recurringScoped = scopeWorkforceModules(employee, structuredClone(recurringModules), recurringModules);
+const recurringInput = {
+  attendance:[
+    {
+      id:"employee-recurring",
+      date:"2026-09-18",
+      staffId:"staff-hai-dang",
+      staffName:"tampered",
+      area:"meat",
+      hourlyRate:9999,
+      scheduledStart:"23:59",
+      clockIn:"2026-09-18T10:02:00.000Z",
+      clockOut:null,
+      breakMinutes:90,
+      note:"recurring self clock in",
+    },
+    recurringScoped.attendance.attendance[0],
+  ],
+  payroll:structuredClone(recurringModules.attendance.payroll),
+};
+const recurringMerge = mergeSelfServiceAttendance(employee, recurringModules, recurringInput);
+assert.equal(recurringMerge.ok, true, "self clock-in against a recurring monthly schedule must be accepted");
+assert.equal(recurringMerge.module.attendance.find((entry) => entry.id === "employee-recurring")?.scheduledStart, "18:00", "recurring month+weekday schedule must feed the canonical scheduled start");
+
+const overrideModules = structuredClone(recurringModules);
+overrideModules.schedule.schedules.push({
+  id:"day-override-hai-dang", date:"2026-09-18", applyMode:"day", staffId:"staff-hai-dang", start:"17:30", end:"23:30",
+});
+const overrideScoped = scopeWorkforceModules(employee, structuredClone(overrideModules), overrideModules);
+const overrideInput = {
+  attendance:[
+    {
+      id:"employee-override",
+      date:"2026-09-18",
+      staffId:"staff-hai-dang",
+      clockIn:"2026-09-18T09:30:00.000Z",
+      clockOut:null,
+    },
+    overrideScoped.attendance.attendance[0],
+  ],
+  payroll:structuredClone(overrideModules.attendance.payroll),
+};
+const overrideMerge = mergeSelfServiceAttendance(employee, overrideModules, overrideInput);
+assert.equal(overrideMerge.ok, true, "day-specific schedule override must remain clock-in compatible");
+assert.equal(overrideMerge.module.attendance.find((entry) => entry.id === "employee-override")?.scheduledStart, "17:30", "day-specific schedule must override the recurring monthly schedule");
 
 const employeeViewAfterClockIn = {
   ...clockInMerge.module,
