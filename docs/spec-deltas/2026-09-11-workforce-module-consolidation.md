@@ -18,6 +18,7 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 - `schedule.edit` is an admin/manager capability. `employee`, `parttime`, and `supervisor` never receive schedule mutation authority through the workforce compatibility layer under the current role matrix.
 - Unauthorized management controls must be actively hidden and disabled after every auth/render reconciliation; previously visible controls must not remain actionable after a role or permission change.
 - Frontend visibility is not authorization. The VPS applies the same site, role, module and workforce record-scope rules to every read and write.
+- On every authorization-changing transition (account/site/role/permission), any unsaved old-scope edits are captured to the existing recovery draft first, then the old local business snapshot is cleared before the new VPS-authorized modules are rendered. A lower-privilege account must never inherit an omitted module from a previous higher-privilege local session.
 
 ## Workforce record-scope contract
 
@@ -35,6 +36,7 @@ Attendance, work schedule and salary calculation are presented as one top-level 
 - Top-level navigation displays one visible workforce entry; the separate Schedule navigation entry does not occupy visual or interactive navigation space.
 - The authorized legacy `#schedule` route remains present for compatibility/certification and remains functional as the Schedule tab so old links and existing app handlers do not break.
 - The Salary tab provides month-level totals derived from the canonical attendance wage calculator: completed shifts, worked hours, gross pay, deductions and temporary net pay.
+- Payroll UI aggregates the attendance rows already authorized and scoped by the VPS for the selected month. It must not re-filter authorization using device-local `activeStaffId`, because that identifier can be stale across account or permission transitions.
 - Admin/manager attendance view exposes a correction editor for actual clock-in, actual clock-out, break minutes, scheduled start, hourly rate and note only when the authenticated account also has attendance edit authority.
 - A corrected clock-out cannot precede clock-in.
 - Manager time corrections are written to the existing `attendance` business-state module with an expected module revision and are only reported successful after VPS confirmation.
