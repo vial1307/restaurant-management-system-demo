@@ -151,7 +151,9 @@ async function assertGeometry(page, label) {
       .filter((node) => {
         const style = getComputedStyle(node);
         const rect = node.getBoundingClientRect();
-        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+        if (node.hidden || node.getAttribute("aria-hidden") === "true" || node.hasAttribute("inert")) return false;
+        if (style.display === "none" || style.visibility === "hidden" || style.pointerEvents === "none") return false;
+        return rect.width > 0 && rect.height > 0;
       });
     const describe = (node, rect, extra = {}) => ({
       tag:node.tagName.toLowerCase(),
