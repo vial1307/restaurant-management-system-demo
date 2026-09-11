@@ -7,8 +7,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const workforce = read("src/workforce-module.js");
 const reconciliation = read("src/workforce-reconciliation.js");
+const approval = read("src/workforce-approval.js");
 const workforceCss = read("src/workforce-module.css");
 const accessCompat = read("src/workforce-access-compat.js");
+const lockPolicy = read("vps/backend/src/workforce-lock-policy.mjs");
+const approvalRoutes = read("vps/backend/src/workforce-approval-routes.mjs");
+const businessRoutes = read("vps/backend/src/business-state-routes.mjs");
 const index = read("index.html");
 const vpsEntry = read("vps-entry.html");
 
@@ -17,6 +21,7 @@ assert(index.includes("src/workforce-module.css?v=__KITCHEN_RELEASE__"), "workfo
 assert(index.includes("src/workforce-module.js?v=__KITCHEN_RELEASE__"), "workforce runtime must be release stamped");
 assert(index.includes("src/workforce-access-compat.js?v=__KITCHEN_RELEASE__"), "workforce access compatibility must be release stamped");
 assert(index.includes("src/workforce-reconciliation.js?v=__KITCHEN_RELEASE__"), "workforce reconciliation runtime must be release stamped");
+assert(index.includes("src/workforce-approval.js?v=__KITCHEN_RELEASE__"), "workforce approval runtime must be release stamped");
 assert(!index.includes("src/all-button-feedback.js"), "generic UI-button feedback must stay removed");
 
 assert.match(workforce, /data-workforce-tabs/, "merged module must render internal tabs");
@@ -41,7 +46,7 @@ assert.match(workforce, /scheduleRow\.hidden = true/, "Settings must show only o
 assert.match(workforce, /scheduleView\.checked = attendanceView\.checked/, "merged permission view toggle must synchronize both legacy permission keys");
 assert.match(workforce, /scheduleEdit\.checked = managerRole && attendanceEdit\.checked/, "schedule edit permission must only mirror for manager/admin accounts");
 
-assert.match(workforce, /const entries = \(state\?\.operations\?\.attendance \|\| \[\]\)\.filter\(\(entry\) => String\(entry\.date \|\| ""\)\.startsWith\(`\$\{currentMonth\}-`\)\);/, "payroll must aggregate the VPS-scoped attendance set for the selected month");
+assert.match(workforce, /const entries = \(state\?\.operations\?\.attendance \|\| \[\]\)\.filter\(\(entry\) => String\(entry\.date \|\| ""\)\.startsWith\(`\$\{currentMonth\}-`\)\);/, "legacy payroll renderer must remain scoped to the VPS-authorized attendance set");
 assert.doesNotMatch(workforce, /ownId = state\?\.operations\?\.activeStaffId/, "payroll must not depend on stale device-local activeStaffId identity");
 assert.doesNotMatch(workforce, /manager \|\| entry\.staffId === ownId/, "frontend must not re-authorize payroll rows using local staff identity");
 
@@ -63,13 +68,47 @@ assert.match(reconciliation, /entry\.month === month && Number\(entry\.weekday\)
 assert.match(reconciliation, /plannedMinutes/, "schedule reconciliation must derive planned hours without converting them into payroll");
 assert.doesNotMatch(reconciliation, /vpsSaveBusinessState|fetch\(|activeStaffId/, "reconciliation must remain read-only and must not authorize from local staff identity");
 assert.match(reconciliation, /OT, hệ số ngày lễ, thưởng, bảo hiểm hoặc thuế/, "payroll estimate must disclose payroll rules that are intentionally not inferred");
+
+assert.match(approval, /MANAGER_ROLES = new Set\(\["admin", "manager"\]\)/, "approval UI authority must be admin/manager only");
+assert.match(approval, /entry\?\.approvalStatus === "approved"/, "approved attendance must be explicit server state");
+assert.match(approval, /const approved = complete\.filter\(isApproved\)/, "payroll must aggregate approved completed shifts only");
+assert.match(approval, /period\.policySnapshot/, "locked payroll must use the server-captured policy snapshot");
+assert.match(approval, /legacyStats\.hidden = true/, "legacy all-attendance payroll totals must be hidden when approval payroll is active");
+assert.match(approval, /legacyCard\.hidden = true/, "legacy all-attendance payroll table must be hidden when approval payroll is active");
+assert.match(approval, /data-workforce-lock-period/, "manager payroll UI must expose period locking");
+assert.match(approval, /data-workforce-reopen-form/, "locked payroll UI must expose reopen with reason");
+assert.match(approval, /\/api\/workforce\/\$\{encodeURIComponent\(site\)\}\/attendance\//, "approval UI must use the dedicated VPS command route");
+assert.doesNotMatch(approval, /activeStaffId/, "approval UI must not authorize from device-local staff identity");
+
+assert.match(lockPolicy, /WORKFORCE_PAYROLL_PERIOD_DIRECT_EDIT_NOT_ALLOWED/, "generic business-state writes must not mutate payroll periods directly");
+assert.match(lockPolicy, /WORKFORCE_ATTENDANCE_APPROVAL_DIRECT_EDIT_NOT_ALLOWED/, "generic business-state writes must not forge approval metadata");
+assert.match(lockPolicy, /WORKFORCE_PAYROLL_PERIOD_LOCKED/, "generic attendance mutations must be blocked in locked periods");
+assert.match(lockPolicy, /sanitized\.push\(clearApproval\(incoming\)\)/, "editing an approved open-period attendance row must invalidate approval");
+assert.match(businessRoutes, /mergeManagedAttendance/, "business-state attendance writes must pass through managed workforce policy");
+assert.match(businessRoutes, /enforceSelfServiceUnlocked/, "self-service writes must not alter locked payroll periods");
+assert.match(businessRoutes, /workforceAttendanceChanges/, "attendance corrections must be identified in VPS audit metadata");
+
+assert.match(approvalRoutes, /workforce-attendance-approve/, "VPS must audit attendance approval");
+assert.match(approvalRoutes, /workforce-payroll-period-lock/, "VPS must audit payroll-period lock");
+assert.match(approvalRoutes, /workforce-payroll-period-reopen/, "VPS must audit payroll-period reopen");
+assert.match(approvalRoutes, /approvedByUserId/, "approval actor must be server generated");
+assert.match(approvalRoutes, /lockedByUserId/, "payroll lock actor must be server generated");
+assert.match(approvalRoutes, /policySnapshot/, "payroll lock must capture payroll policy");
+assert.match(approvalRoutes, /WORKFORCE_PAYROLL_OPEN_SHIFTS/, "payroll lock must reject incomplete attendance");
+assert.match(approvalRoutes, /WORKFORCE_PAYROLL_UNAPPROVED_SHIFTS/, "payroll lock must reject unapproved completed attendance");
+assert.match(approvalRoutes, /WORKFORCE_REOPEN_REASON_REQUIRED/, "reopening a locked payroll period must require a reason");
+
 assert.match(workforceCss, /\.workforce-status\[data-kind="late"\]/, "late reconciliation status must have a dedicated visual state");
 assert.match(workforceCss, /\.workforce-status\[data-kind="open"\]/, "open reconciliation status must have a dedicated visual state");
 assert.match(workforceCss, /\.workforce-schedule-reconciliation/, "schedule reconciliation must have responsive styling");
+assert.match(workforceCss, /\.workforce-approval-status/, "approval status must have dedicated styling");
+assert.match(workforceCss, /\.workforce-period-reopen/, "payroll reopen control must be responsive");
 
 assert.match(workforce, /出勤 · 排班 · 薪資/, "Traditional Chinese workforce label must be present");
 assert.match(workforce, /Chấm công · Lịch làm · Lương/, "Vietnamese workforce label must be present");
 assert.match(reconciliation, /排班對帳/, "Traditional Chinese reconciliation label must be present");
 assert.match(reconciliation, /Đối soát ngoại lệ/, "Vietnamese reconciliation label must be present");
+assert.match(approval, /已核准/, "Traditional Chinese approval label must be present");
+assert.match(approval, /Đã duyệt/, "Vietnamese approval label must be present");
 
 console.log("WORKFORCE_MODULE_CONTRACT_OK");
