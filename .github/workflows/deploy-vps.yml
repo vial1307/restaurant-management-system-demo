@@ -102,6 +102,7 @@ jobs:
           test -f src/business-recovery-notice.css
           test -f src/business-persistence-status.js
           test -f src/business-persistence-status.css
+          test -f src/workforce-approval.js
           test -f vps/docker-compose.yml
           test -f vps/Caddyfile
           test -f src/vps-auth-bridge.js
@@ -110,10 +111,14 @@ jobs:
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh
+          test -f vps/backend/src/workforce-approval-routes.mjs
+          test -f vps/backend/src/workforce-lock-policy.mjs
           test -f vps/backend/scripts/concurrency-regression.mjs
           test -f vps/backend/scripts/business-module-conflict-regression.mjs
           test -f vps/backend/scripts/business-state-regression-client.mjs
+          test -f vps/backend/scripts/workforce-approval-regression-client.mjs
           test -f vps/backend/scripts/api-regression-v6.mjs
+          test -f tests/workforce-approval-browser-regression.mjs
           test -f vps/backend/package-lock.json
           test -f tests/package-lock.json
           test -f vps/database/migrations/004_restore_primary_admin.sql
@@ -201,6 +206,9 @@ jobs:
 
       - name: Desktop and mobile Chromium regression
         run: node tests/browser-regression.mjs
+
+      - name: Workforce approval browser regression
+        run: node tests/workforce-approval-browser-regression.mjs
 
       - name: Business recovery notice browser regression
         run: node tests/business-recovery-notice-browser-regression.mjs

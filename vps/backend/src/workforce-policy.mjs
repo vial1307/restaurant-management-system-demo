@@ -31,6 +31,27 @@ function omitHourlyRate(member) {
   return copy;
 }
 
+function selfServicePayroll(payroll = {}) {
+  const scoped = payroll && typeof payroll === "object" && !Array.isArray(payroll)
+    ? structuredClone(payroll)
+    : {};
+  if (!scoped.periods || typeof scoped.periods !== "object" || Array.isArray(scoped.periods)) return scoped;
+  const scopedPeriods = Object.fromEntries(Object.entries(scoped.periods).flatMap(([month, period]) => {
+    if (!period || typeof period !== "object" || Array.isArray(period)) return [];
+    return [[month, {
+      month:text(period.month || month),
+      status:text(period.status || "open"),
+      lockedAt:period.lockedAt || null,
+      ...(period.policySnapshot && typeof period.policySnapshot === "object" && !Array.isArray(period.policySnapshot)
+        ? { policySnapshot:structuredClone(period.policySnapshot) }
+        : {}),
+    }]];
+  }));
+  if (Object.keys(scopedPeriods).length) scoped.periods = scopedPeriods;
+  else delete scoped.periods;
+  return scoped;
+}
+
 export function isWorkforceSelfServiceUser(user) {
   return SELF_SERVICE_ROLES.has(String(user?.role || ""));
 }
@@ -67,6 +88,7 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
       attendance: Array.isArray(modules.attendance.attendance)
         ? modules.attendance.attendance.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
         : [],
+      payroll:selfServicePayroll(modules.attendance.payroll || {}),
     };
   }
 
@@ -133,7 +155,7 @@ export function mergeSelfServiceAttendance(user, beforeModules = {}, incomingMod
   const incomingEntries = Array.isArray(incomingModule?.attendance) ? incomingModule.attendance : null;
   if (!incomingEntries) return { ok:false, error:"WORKFORCE_ATTENDANCE_INVALID" };
 
-  if (!jsonEqual(incomingModule?.payroll || {}, beforeModule.payroll || {})) {
+  if (!jsonEqual(incomingModule?.payroll || {}, selfServicePayroll(beforeModule.payroll || {}))) {
     return { ok:false, error:"WORKFORCE_PAYROLL_EDIT_NOT_ALLOWED" };
   }
   if (incomingEntries.some((entry) => String(entry?.staffId || "") !== staffId)) {

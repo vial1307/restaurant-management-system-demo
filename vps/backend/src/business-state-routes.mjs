@@ -5,6 +5,11 @@ import {
   mergeSelfServiceAttendance,
   scopeWorkforceModules,
 } from "./workforce-policy.mjs";
+import {
+  enforceSelfServiceUnlocked,
+  mergeManagedAttendance,
+} from "./workforce-lock-policy.mjs";
+import { registerWorkforceApprovalRoutes } from "./workforce-approval-routes.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -114,6 +119,8 @@ function mergeAuditModule(before, incoming) {
 }
 
 export async function registerBusinessStateRoutes(app) {
+  await registerWorkforceApprovalRoutes(app);
+
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
@@ -207,12 +214,24 @@ export async function registerBusinessStateRoutes(app) {
       }
 
       const effectiveEditable = { ...editable };
+      let workforceAudit = null;
       if (selfServiceAttendance) {
         const workforceMerge = mergeSelfServiceAttendance(user, before, effectiveEditable.attendance);
         if (!workforceMerge.ok) {
-          return { workforceDenied:true, error:workforceMerge.error };
+          return { workforceDenied:true, error:workforceMerge.error, status:workforceMerge.status || 403 };
+        }
+        const lockPolicy = enforceSelfServiceUnlocked(before, workforceMerge.module);
+        if (!lockPolicy.ok) {
+          return { workforceDenied:true, error:lockPolicy.error, status:lockPolicy.status || 409 };
+        }
+        effectiveEditable.attendance = lockPolicy.module;
+      } else if (Object.hasOwn(effectiveEditable, "attendance")) {
+        const workforceMerge = mergeManagedAttendance(before, effectiveEditable.attendance);
+        if (!workforceMerge.ok) {
+          return { workforceDenied:true, error:workforceMerge.error, status:workforceMerge.status || 403 };
         }
         effectiveEditable.attendance = workforceMerge.module;
+        workforceAudit = workforceMerge.audit || null;
       }
 
       const next = { ...before, ...effectiveEditable };
@@ -231,11 +250,15 @@ export async function registerBusinessStateRoutes(app) {
       const savedModuleRevisions = Object.fromEntries(
         editableNames.map((moduleName) => [moduleName, nextRevisions[moduleName]])
       );
+      const auditMetadata = { modules: editableNames, moduleRevisions: savedModuleRevisions };
+      if (workforceAudit?.changedAttendanceIds?.length) {
+        auditMetadata.workforceAttendanceChanges = workforceAudit.changedAttendanceIds;
+      }
       await client.query(
         `insert into public.audit_logs(
            actor_user_id,actor_username,action,entity_type,entity_id,site,before_data,after_data,metadata
          ) values($1,$2,'save','business_state',$3,$3,null,null,$4::jsonb)`,
-        [user.id, user.username, site, JSON.stringify({ modules: editableNames, moduleRevisions: savedModuleRevisions })]
+        [user.id, user.username, site, JSON.stringify(auditMetadata)]
       );
       return { ...saved.rows[0], moduleRevisions: savedModuleRevisions };
     });
@@ -257,7 +280,7 @@ export async function registerBusinessStateRoutes(app) {
       });
     }
     if (result.workforceDenied) {
-      return reply.code(403).send({ error:result.error || "WORKFORCE_EDIT_NOT_ALLOWED", site });
+      return reply.code(result.status || 403).send({ error:result.error || "WORKFORCE_EDIT_NOT_ALLOWED", site });
     }
 
     return {

@@ -53,3 +53,4 @@ await import("./receiving-default-regression-client.mjs");
 // consumed by inventory-cloud, otherwise timing determines whether default rows
 // are observed before an authoritative 200 snapshot filters legacy locations out.
 await import("./canonicalize-browser-inventory-fixture.mjs");
+await import("./workforce-approval-regression-client.mjs");
