@@ -75,6 +75,22 @@ async function browserLogin(page, username) {
   await page.waitForSelector(".app-shell", { timeout:30000 });
 }
 
+async function selectServiceDate(page, date) {
+  const [year, month] = date.split("-").map(Number);
+  const toggle = page.locator('[data-action="toggle-calendar"]').first();
+  await toggle.waitFor({ state:"visible", timeout:10000 });
+  await toggle.click();
+  await page.locator('[data-field="calendarYear"]').selectOption(String(year));
+  await page.locator('[data-field="calendarMonth"]').selectOption(String(month - 1));
+  const day = page.locator(`[data-action="calendar-select-day"][data-date="${date}"]`).first();
+  await day.waitFor({ state:"visible", timeout:10000 });
+  await day.click();
+  await page.waitForFunction((expected) => {
+    try { return JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null")?.selectedDate === expected; }
+    catch { return false; }
+  }, date, { timeout:10000 });
+}
+
 async function openSchedule(page) {
   await page.goto(`${WEB}/#schedule`, { waitUntil:"domcontentloaded" });
   await page.waitForFunction(() => location.hash.replace(/^#\/?/, "").split("?")[0] === "schedule", null, { timeout:10000 });
@@ -97,6 +113,7 @@ try {
   const employeeErrors = [];
   employeePage.on("pageerror", (error) => employeeErrors.push(error.message));
   await browserLogin(employeePage, "employeefx");
+  await selectServiceDate(employeePage, DATE);
   await openSchedule(employeePage);
 
   assert.equal(await employeePage.locator("[data-workforce-request-form]").count(), 1, "employee must receive own request form");
@@ -129,6 +146,7 @@ try {
   const managerErrors = [];
   managerPage.on("pageerror", (error) => managerErrors.push(error.message));
   await browserLogin(managerPage, "managerfx");
+  await selectServiceDate(managerPage, DATE);
   await openSchedule(managerPage);
 
   assert.equal(await managerPage.locator("[data-workforce-request-form]").count(), 0, "manager must not receive self-service request form");
@@ -144,7 +162,6 @@ try {
     return row?.dataset.requestStatus === "approved" && !document.querySelector(`[data-workforce-request-approve="${id}"]`);
   }, created.id, { timeout:30000 });
   assert.match(await approvedHistoryRow.innerText(), /Đã duyệt|已核准/, "manager approved status missing");
-  const effective = managerPage.locator(".workforce-effective-exceptions").filter({ hasText:DATE }).or(managerPage.locator(".workforce-effective-exceptions"));
   await managerPage.waitForFunction(() => document.querySelector(".workforce-effective-exceptions")?.textContent?.includes("12:30"), null, { timeout:30000 });
   assert.match(await managerPage.locator(".workforce-effective-exceptions").innerText(), /12:30.*20:30/s, "approved override is not shown as effective schedule");
   assert.deepEqual(managerErrors, [], `manager request page errors: ${managerErrors.join(" | ")}`);
@@ -163,6 +180,7 @@ try {
   const supervisorErrors = [];
   supervisorPage.on("pageerror", (error) => supervisorErrors.push(error.message));
   await browserLogin(supervisorPage, "supervisorfx");
+  await selectServiceDate(supervisorPage, DATE);
   await openSchedule(supervisorPage);
   assert.equal(await supervisorPage.locator("[data-workforce-request-approve]").count(), 0, "supervisor must not receive approve controls");
   assert.equal(await supervisorPage.locator("[data-workforce-request-reject-form]").count(), 0, "supervisor must not receive reject controls");
@@ -175,6 +193,7 @@ try {
   const parttimeErrors = [];
   parttimePage.on("pageerror", (error) => parttimeErrors.push(error.message));
   await browserLogin(parttimePage, "parttimefx");
+  await selectServiceDate(parttimePage, DATE);
   await openSchedule(parttimePage);
   assert.equal(await parttimePage.locator("[data-workforce-request-form]").count(), 1, "part-time must receive own leave/change request form");
   assert.equal(await parttimePage.locator("[data-workforce-request-approve]").count(), 0, "part-time must not receive manager decision controls");
