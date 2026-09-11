@@ -67,8 +67,8 @@ function markLegacyScheduleRoute(node, authorized) {
   node.dataset.workforceLegacySchedule = "true";
   Object.assign(node.style, {
     position: "absolute",
-    width: "1px",
-    height: "1px",
+    width: "0",
+    height: "0",
     minWidth: "0",
     minHeight: "0",
     margin: "0",
@@ -82,8 +82,8 @@ function markLegacyScheduleRoute(node, authorized) {
   });
   // workforce-module.css intentionally hides the legacy entry with !important.
   // Override only the display property so certification can still verify that an
-  // authorized legacy route exists, while the clipping/opacity rules keep it out
-  // of the visible and interactive navigation UI.
+  // authorized legacy route exists. Zero geometry, clipping and disabled pointer
+  // events keep it entirely outside the visible/interactive navigation contract.
   node.style.setProperty("display", "block", "important");
 }
 
