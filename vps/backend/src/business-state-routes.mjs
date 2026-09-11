@@ -9,6 +9,7 @@ import {
   enforceSelfServiceUnlocked,
   mergeManagedAttendance,
 } from "./workforce-lock-policy.mjs";
+import { registerWorkforceApprovalRoutes } from "./workforce-approval-routes.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -118,6 +119,8 @@ function mergeAuditModule(before, incoming) {
 }
 
 export async function registerBusinessStateRoutes(app) {
+  await registerWorkforceApprovalRoutes(app);
+
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
