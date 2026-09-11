@@ -156,7 +156,10 @@ function errorMessage(error) {
 async function postWorkforce(path, body) {
   if (actionPending) return;
   actionPending = true;
-  document.querySelectorAll("[data-workforce-approval-action]").forEach((button) => { if ("disabled" in button) button.disabled = true; });
+  const controls = [...document.querySelectorAll("[data-workforce-approval-action]")]
+    .filter((button) => "disabled" in button);
+  const disabledBefore = controls.map((button) => Boolean(button.disabled));
+  controls.forEach((button) => { button.disabled = true; });
   try {
     await apiRequest(path, { method:"POST", body });
     notify("success", copy().success, "VPS OK");
@@ -165,7 +168,8 @@ async function postWorkforce(path, body) {
     const message = errorMessage(error);
     notify("error", copy().error, message);
     actionPending = false;
-    document.querySelectorAll("[data-workforce-approval-action]").forEach((button) => { if ("disabled" in button) button.disabled = false; });
+    controls.forEach((button, index) => { button.disabled = disabledBefore[index]; });
+    requestDecorate();
   }
 }
 
@@ -181,6 +185,7 @@ function attendancePeriodMarkup(state, month) {
 
 function decorateAttendance(root, state) {
   if (!managerAccount()) return;
+  const c = copy();
   const date = String(state?.selectedDate || "");
   const month = date.slice(0, 7);
   const period = periodFor(state, month);
@@ -189,7 +194,7 @@ function decorateAttendance(root, state) {
   if (!managerDay) return;
 
   let banner = root.querySelector("[data-workforce-period-banner]");
-  const bannerSignature = `${month}|${locked ? "locked" : "open"}|${period?.lockedAt || ""}`;
+  const bannerSignature = `${month}|${locked ? "locked" : "open"}|${period?.lockedAt || ""}|${period?.reopenedAt || ""}`;
   if (!banner) {
     managerDay.insertAdjacentHTML("afterbegin", attendancePeriodMarkup(state, month));
     banner = root.querySelector("[data-workforce-period-banner]");
@@ -218,11 +223,11 @@ function decorateAttendance(root, state) {
     }
     const status = isApproved(entry) ? "approved" : wage.complete ? "pending" : "open";
     badge.dataset.status = status;
-    badge.textContent = status === "approved" ? copy().approved : status === "pending" ? copy().pending : copy().openShift;
+    badge.textContent = status === "approved" ? c.approved : status === "pending" ? c.pending : c.openShift;
 
     if (edit) {
       edit.disabled = locked;
-      edit.title = locked ? copy().lockedEdit : "";
+      edit.title = locked ? c.lockedEdit : "";
     }
     actions.querySelector("[data-workforce-approve-attendance]")?.remove();
     if (!locked && wage.complete && !isApproved(entry)) {
@@ -231,7 +236,7 @@ function decorateAttendance(root, state) {
       button.className = "secondary-button workforce-approve-button";
       button.dataset.workforceApproveAttendance = String(entry.id);
       button.dataset.workforceApprovalAction = "";
-      button.textContent = copy().approve;
+      button.textContent = c.approve;
       actions.prepend(button);
     }
   }
@@ -302,7 +307,7 @@ function decoratePayroll(root, state) {
   const month = panel.querySelector("[data-workforce-payroll-month]")?.value || String(state?.selectedDate || "").slice(0, 7);
   const period = periodFor(state, month);
   const data = payrollRows(state, month);
-  const signature = `${month}|${period?.status || "open"}|${period?.lockedAt || ""}|${period?.reopenedAt || ""}|${data.all.map((entry) => `${entry.id}:${entry.approvalStatus || ""}:${entry.clockOut || ""}`).join("|")}`;
+  const signature = `${month}|${period?.status || "open"}|${period?.lockedAt || ""}|${period?.reopenedAt || ""}|${data.all.map((entry) => `${entry.id}:${entry.approvalStatus || ""}:${entry.clockIn || ""}:${entry.clockOut || ""}:${entry.breakMinutes || 0}:${entry.hourlyRate || 0}:${entry.scheduledStart || ""}`).join("|")}`;
 
   const legacyStats = panel.querySelector(".workforce-payroll-stats");
   const legacyCard = panel.querySelector(".workforce-payroll-card");
