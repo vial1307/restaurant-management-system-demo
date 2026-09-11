@@ -94,11 +94,20 @@ async function assertNoHorizontalOverflow(page, label) {
   assert(overflow <= 3, `${label}: horizontal overflow ${overflow}px`);
 }
 
+async function waitForLegacyScheduleReconcile(page, scopeSelector) {
+  await page.waitForFunction((scope) => {
+    const host = document.querySelector(scope);
+    const link = host?.querySelector('.nav-item[href="#schedule"]');
+    return link?.dataset.workforceLegacySchedule === "true";
+  }, scopeSelector, { timeout:10000 });
+}
+
 async function assertPermissionNavigation(page, session, label) {
   for (const route of ACCOUNT_MODULES) {
     const expected = Boolean(session?.permissions?.[route]?.view) || session?.role === "admin" || session?.accountRole === "admin";
     const nav = page.locator(`.mobile-nav .nav-item[href="#${route}"]`);
     assert.equal(await nav.count(), 1, `${label}: mobile nav entry missing for ${route}`);
+    if (route === "schedule" && expected) await waitForLegacyScheduleReconcile(page, ".mobile-nav");
     const displayed = await nav.evaluate((node) => getComputedStyle(node).display !== "none");
     assert.equal(displayed, expected, `${label}: mobile nav permission mismatch for ${route}`);
   }
@@ -112,6 +121,7 @@ async function assertPermissionNavigation(page, session, label) {
       const expected = Boolean(session?.permissions?.[route]?.view) || session?.role === "admin" || session?.accountRole === "admin";
       const link = menu.locator(`.nav-item[href="#${route}"]`);
       assert.equal(await link.count(), 1, `${label}: full mobile menu entry missing for ${route}`);
+      if (route === "schedule" && expected) await waitForLegacyScheduleReconcile(page, ".mobile-menu-grid");
       const displayed = await link.evaluate((node) => getComputedStyle(node).display !== "none");
       assert.equal(displayed, expected, `${label}: full mobile menu permission mismatch for ${route}`);
     }
