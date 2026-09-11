@@ -48,6 +48,7 @@ assert(adoptRevisionBaselineIndex > normalizeServerRevisionsIndex, "business syn
 assert.match(routes, /scopeWorkforceModules\(user, permitted, modules \|\| \{\}\)/, "business-state reads must apply workforce record scoping after module authorization");
 assert.match(routes, /isWorkforceSelfServiceUser\(user\)[\s\S]{0,120}attendance/, "employee/part-time attendance must enter the record-scoped self-service path");
 assert.match(routes, /moduleName === "schedule" && isWorkforceSelfServiceUser\(user\)/, "employee/part-time schedule writes must be denied at the VPS boundary");
+assert.match(routes, /\["attendance", "schedule"\]\.includes\(moduleName\) && user\?\.role === "supervisor"/, "supervisor must be denied attendance/schedule management writes even if legacy edit bits remain stored");
 
 const employee = {
   id:"user-hai-dang",
