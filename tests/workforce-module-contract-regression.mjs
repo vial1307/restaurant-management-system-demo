@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const workforce = read("src/workforce-module.js");
+const reconciliation = read("src/workforce-reconciliation.js");
+const workforceCss = read("src/workforce-module.css");
 const accessCompat = read("src/workforce-access-compat.js");
 const index = read("index.html");
 const vpsEntry = read("vps-entry.html");
@@ -14,6 +16,7 @@ assert.equal(index, vpsEntry, "canonical and VPS shells must remain identical");
 assert(index.includes("src/workforce-module.css?v=__KITCHEN_RELEASE__"), "workforce CSS must be release stamped");
 assert(index.includes("src/workforce-module.js?v=__KITCHEN_RELEASE__"), "workforce runtime must be release stamped");
 assert(index.includes("src/workforce-access-compat.js?v=__KITCHEN_RELEASE__"), "workforce access compatibility must be release stamped");
+assert(index.includes("src/workforce-reconciliation.js?v=__KITCHEN_RELEASE__"), "workforce reconciliation runtime must be release stamped");
 assert(!index.includes("src/all-button-feedback.js"), "generic UI-button feedback must stay removed");
 
 assert.match(workforce, /data-workforce-tabs/, "merged module must render internal tabs");
@@ -51,7 +54,22 @@ assert.match(accessCompat, /dataset\.workforceLegacySchedule = "true"/, "authori
 assert.match(accessCompat, /isManagerOrAbove\(user\).*accountCan\(user, "attendance", "edit"\)/s, "attendance corrections must require manager/admin rank and attendance edit permission");
 assert.match(accessCompat, /isManagerOrAbove\(user\).*accountCan\(user, "schedule", "edit"\)/s, "schedule management must require manager/admin rank and schedule edit permission");
 
+assert.match(reconciliation, /import \{ calculateAttendance \} from "\.\/operations\.js"/, "reconciliation must reuse the canonical attendance calculator");
+assert.match(reconciliation, /if \(!wage\.complete\).*kind:"open"/s, "open-shift status must derive from canonical completion state");
+assert.match(reconciliation, /if \(wage\.lateMinutes > 0\).*kind:"late"/s, "late status must derive from canonical late minutes");
+assert.match(reconciliation, /state\?\.operations\?\.attendance \|\| \[\]/, "monthly reconciliation must use the VPS-scoped attendance set");
+assert.match(reconciliation, /operations\?\.schedules \|\| \[\]/, "schedule reconciliation must use the existing schedule model");
+assert.match(reconciliation, /entry\.month === month && Number\(entry\.weekday\) === weekday/, "monthly recurring schedules must keep current month+weekday semantics");
+assert.match(reconciliation, /plannedMinutes/, "schedule reconciliation must derive planned hours without converting them into payroll");
+assert.doesNotMatch(reconciliation, /vpsSaveBusinessState|fetch\(|activeStaffId/, "reconciliation must remain read-only and must not authorize from local staff identity");
+assert.match(reconciliation, /OT, hệ số ngày lễ, thưởng, bảo hiểm hoặc thuế/, "payroll estimate must disclose payroll rules that are intentionally not inferred");
+assert.match(workforceCss, /\.workforce-status\[data-kind="late"\]/, "late reconciliation status must have a dedicated visual state");
+assert.match(workforceCss, /\.workforce-status\[data-kind="open"\]/, "open reconciliation status must have a dedicated visual state");
+assert.match(workforceCss, /\.workforce-schedule-reconciliation/, "schedule reconciliation must have responsive styling");
+
 assert.match(workforce, /出勤 · 排班 · 薪資/, "Traditional Chinese workforce label must be present");
 assert.match(workforce, /Chấm công · Lịch làm · Lương/, "Vietnamese workforce label must be present");
+assert.match(reconciliation, /排班對帳/, "Traditional Chinese reconciliation label must be present");
+assert.match(reconciliation, /Đối soát ngoại lệ/, "Vietnamese reconciliation label must be present");
 
 console.log("WORKFORCE_MODULE_CONTRACT_OK");
