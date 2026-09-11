@@ -267,9 +267,14 @@ async function runAdminMobile(browser) {
     await login(page, context, "yangchuadmin", "fuxing", label);
     const session = await sessionSnapshot(page);
     assert.equal(session?.accountRole || session?.role, "admin");
+
+    // Match the readiness contract used by every scoped role case before
+    // certifying navigation permissions. The inventory route gives the auth,
+    // stable-shell and workforce compatibility bridges time to reconcile the
+    // current session without weakening any permission assertion.
+    await gotoInventory(page);
     await assertPermissionNavigation(page, session, label);
 
-    await gotoInventory(page);
     for (const site of ["fuxing", "yongji", "central"]) {
       const switcher = page.locator(`[data-warehouse="${site}"]`).first();
       await switcher.waitFor({ state:"visible", timeout:10000 });
