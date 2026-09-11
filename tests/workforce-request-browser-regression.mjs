@@ -5,8 +5,28 @@ const API = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const WEB = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const PASSWORD = "KitchenTest!123";
 const SITE = "fuxing";
-const DATE = "2026-12-08";
-const REASON = "Browser request regression";
+const RUN_ID = String(process.env.GITHUB_RUN_ID || Date.now());
+const RUN_ATTEMPT = String(process.env.GITHUB_RUN_ATTEMPT || "1");
+const RUN_TOKEN = `${RUN_ID}-${RUN_ATTEMPT}`;
+
+function stableSeed(value) {
+  let hash = 2166136261;
+  for (const char of String(value)) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function isolatedServiceDate(token) {
+  const start = Date.UTC(2027, 0, 1);
+  const spanDays = 3287; // 2027-01-01 through 2035-12-31; stays inside the UI calendar's selectable window.
+  const offset = stableSeed(token) % spanDays;
+  return new Date(start + offset * 86400000).toISOString().slice(0, 10);
+}
+
+const DATE = isolatedServiceDate(RUN_TOKEN);
+const REASON = `Browser request regression ${RUN_TOKEN}`;
 
 async function request(path, { method="GET", body, cookie } = {}) {
   const response = await fetch(API + path, {
@@ -48,7 +68,7 @@ async function seedBaseSchedule() {
     shift:"custom",
     start:"10:00",
     end:"18:00",
-    note:"browser request base",
+    note:`browser request base ${RUN_TOKEN}`,
   });
   const saved = await request(`/api/business-state/${SITE}`, {
     method:"POST",
@@ -140,6 +160,7 @@ try {
   assert.equal(created.status, "pending");
   assert.equal(created.requestedStart, "12:30");
   assert.equal(created.requestedEnd, "20:30");
+  assert.equal(await employeeRow.locator(`[data-workforce-request-cancel="${created.id}"]`).count(), 1, "owner cancel control must belong to the current request");
 
   const managerContext = await browser.newContext({ viewport:{ width:390, height:844 } });
   const managerPage = await managerContext.newPage();
@@ -151,16 +172,16 @@ try {
 
   assert.equal(await managerPage.locator("[data-workforce-request-form]").count(), 0, "manager must not receive self-service request form");
   const managerRow = await waitForRequestRow(managerPage, DATE, REASON);
-  assert.equal(await managerRow.locator("[data-workforce-request-approve]").count(), 1, "manager approve control missing");
-  assert.equal(await managerRow.locator("[data-workforce-request-reject-form]").count(), 1, "manager reject control missing");
-  await managerRow.locator("[data-workforce-request-approve]").click();
+  assert.equal(await managerRow.locator(`[data-workforce-request-approve="${created.id}"]`).count(), 1, "manager approve control missing for current request");
+  assert.equal(await managerRow.locator(`[data-workforce-request-reject-form][data-request-id="${created.id}"]`).count(), 1, "manager reject control missing for current request");
+  await managerRow.locator(`[data-workforce-request-approve="${created.id}"]`).click();
 
   const approvedHistoryRow = await waitForRequestRow(managerPage, DATE, REASON);
-  await managerPage.waitForFunction((id) => {
+  await managerPage.waitForFunction(({ id, reason }) => {
     const rows = [...document.querySelectorAll(".workforce-request-row")];
-    const row = rows.find((entry) => entry.textContent?.includes("Browser request regression"));
+    const row = rows.find((entry) => entry.textContent?.includes(reason));
     return row?.dataset.requestStatus === "approved" && !document.querySelector(`[data-workforce-request-approve="${id}"]`);
-  }, created.id, { timeout:30000 });
+  }, { id:created.id, reason:REASON }, { timeout:30000 });
   assert.match(await approvedHistoryRow.innerText(), /Đã duyệt|已核准/, "manager approved status missing");
   await managerPage.waitForFunction(() => document.querySelector(".workforce-effective-exceptions")?.textContent?.includes("12:30"), null, { timeout:30000 });
   assert.match(await managerPage.locator(".workforce-effective-exceptions").innerText(), /12:30.*20:30/s, "approved override is not shown as effective schedule");
