@@ -52,6 +52,14 @@ const manager = await login("managerfx");
 const employee = await login("employeefx");
 
 const seed = await saveAttendance(admin.cookie, (module) => {
+  // Earlier workforce regressions intentionally leave an employee shift open.
+  // Close those historical rows so this test reaches the locked-period guard
+  // instead of being rejected first by the one-open-shift self-service rule.
+  for (const entry of module.attendance) {
+    if (entry?.clockOut) continue;
+    const start = Date.parse(String(entry?.clockIn || ""));
+    if (Number.isFinite(start)) entry.clockOut = new Date(start + 8 * 60 * 60 * 1000).toISOString();
+  }
   module.attendance = module.attendance.filter((entry) => !String(entry?.date || "").startsWith(`${MONTH}-`));
   module.attendance.unshift({
     id:ATTENDANCE_ID,
