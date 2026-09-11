@@ -39,8 +39,8 @@ function copy() {
     plannedEntries:"Ca đã xếp",
     plannedStaff:"Người đã xếp",
     plannedHours:"Giờ dự kiến",
-    inside:"Nội trường",
-    outside:"Ngoại trường",
+    inside:"Trong bếp",
+    outside:"Ngoài sảnh",
     payrollEstimate:"Lương là số tạm tính từ dữ liệu chấm công đã được VPS xác nhận; hiện chưa áp dụng OT, hệ số ngày lễ, thưởng, bảo hiểm hoặc thuế nếu các quy tắc đó chưa được cấu hình rõ ràng.",
     noExceptions:"Tháng này không có ca đi muộn hoặc ca chưa chấm tan.",
   };
@@ -140,6 +140,7 @@ function decorateAttendance(root, state) {
     if (status.kind === "open") open += 1;
     const row = root.querySelector(`[data-workforce-edit-attendance="${CSS.escape(String(entry.id))}"]`)?.closest(".workforce-attendance-row");
     if (!row) continue;
+    row.classList.add("workforce-reconciled");
 
     const planned = scheduleForAttendance(state, entry);
     const plannedLabel = planned
