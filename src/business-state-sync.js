@@ -346,6 +346,14 @@ export function attachBusinessStateSync(store) {
     return true;
   };
 
+  const applyAuthorizedServerModules = (modules) => {
+    store.mergeBusinessModules(modules);
+    const activeStaffId = String(modules?.shared?.activeStaffId || "");
+    if (activeStaffId && typeof store.switchStaff === "function") {
+      store.switchStaff(activeStaffId);
+    }
+  };
+
   const acceptedRevisionsFor = (names, key = identityKey()) => (
     loadedModuleRevisionKey === key
       ? Object.fromEntries(names.flatMap((name) => Number.isInteger(loadedModuleRevisions[name]) ? [[name, loadedModuleRevisions[name]]] : []))
@@ -503,7 +511,7 @@ export function attachBusinessStateSync(store) {
               );
               applyingRemote = true;
               try {
-                store.mergeBusinessModules(authoritativeModules);
+                applyAuthorizedServerModules(authoritativeModules);
               } finally {
                 applyingRemote = false;
               }
@@ -616,7 +624,7 @@ export function attachBusinessStateSync(store) {
         const recoverableModules = Object.fromEntries(recoverableNames.map((name) => [name, structuredClone(pendingModules[name])]));
 
         applyingRemote = true;
-        if (revision > 0) store.mergeBusinessModules(serverModules);
+        if (revision > 0) applyAuthorizedServerModules(serverModules);
         const serverBaselineModules = businessModulesFromState(store.getState());
         for (const name of recoverableNames) {
           serverBaselineModules[name] = Object.hasOwn(serverModules, name)
@@ -652,7 +660,7 @@ export function attachBusinessStateSync(store) {
         // Merge only modules that already exist on the server. Modules not yet
         // migrated must keep their device copy until an authorized real edit
         // persists them, especially when the first writer has limited rights.
-        store.mergeBusinessModules(serverModules);
+        applyAuthorizedServerModules(serverModules);
         applyingRemote = false;
         lastSavedSnapshot = JSON.stringify(businessModulesFromState(store.getState()));
       } else {
