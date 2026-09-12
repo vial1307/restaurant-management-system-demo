@@ -99,13 +99,70 @@ function statusFor(entry, payroll) {
   return { kind:"complete", label:copy().complete, wage };
 }
 
-function applicableSchedules(operations, date) {
+function authoritativeScheduleModule(state) {
+  const remote = globalThis.__shituWorkforceScheduleModule;
+  if (remote?.module && typeof remote.module === "object") {
+    return {
+      schedules:Array.isArray(remote.module.schedules) ? remote.module.schedules : [],
+      exceptions:Array.isArray(remote.module.exceptions) ? remote.module.exceptions : [],
+    };
+  }
+  return {
+    schedules:Array.isArray(state?.operations?.schedules) ? state.operations.schedules : [],
+    exceptions:[],
+  };
+}
+
+function baseSchedulesForDate(module, date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return [];
   const month = date.slice(0, 7);
   const weekday = new Date(`${date}T12:00:00`).getDay();
-  return (operations?.schedules || []).filter((entry) => entry?.applyMode === "month"
+  return (module?.schedules || []).filter((entry) => entry?.applyMode === "month"
     ? entry.month === month && Number(entry.weekday) === weekday
     : entry?.date === date);
+}
+
+function effectiveSchedules(state, date) {
+  const module = authoritativeScheduleModule(state);
+  const base = baseSchedulesForDate(module, date);
+  const exceptions = (module.exceptions || []).filter((entry) => String(entry?.date || "") === String(date || ""));
+  if (!exceptions.length) return base;
+
+  const byStaff = new Map();
+  for (const entry of base) {
+    const key = String(entry?.staffId || "");
+    if (!byStaff.has(key)) byStaff.set(key, []);
+    byStaff.get(key).push(entry);
+  }
+  for (const entry of exceptions) {
+    const key = String(entry?.staffId || "");
+    if (!byStaff.has(key)) byStaff.set(key, []);
+  }
+
+  const effective = [];
+  for (const [staffId, baseEntries] of byStaff) {
+    const staffExceptions = exceptions.filter((entry) => String(entry?.staffId || "") === staffId);
+    if (staffExceptions.length > 1) continue;
+    if (!staffExceptions.length) {
+      effective.push(...baseEntries);
+      continue;
+    }
+    const exception = staffExceptions[0];
+    if (exception.kind === "leave") continue;
+    if (exception.kind !== "override") continue;
+    const source = baseEntries.find((entry) => String(entry?.id || "") === String(exception.sourceScheduleId || "")) || baseEntries[0];
+    if (!source) continue;
+    effective.push({
+      ...source,
+      start:String(exception.start || source.start || ""),
+      end:String(exception.end || source.end || ""),
+      department:exception.department === "outside" ? "outside" : source.department,
+      area:String(exception.area || source.area || ""),
+      shift:String(exception.shift || source.shift || "custom"),
+      scheduleExceptionId:String(exception.id || ""),
+    });
+  }
+  return effective;
 }
 
 function plannedMinutes(entry) {
@@ -122,7 +179,7 @@ function plannedMinutes(entry) {
 }
 
 function scheduleForAttendance(state, entry) {
-  const candidates = applicableSchedules(state?.operations, entry?.date)
+  const candidates = effectiveSchedules(state, entry?.date)
     .filter((item) => item.staffId === entry.staffId);
   return candidates.find((item) => item.start === entry.scheduledStart) || candidates[0] || null;
 }
@@ -227,12 +284,16 @@ function decoratePayroll(root, state) {
 function decorateSchedule(root, state) {
   const c = copy();
   const date = String(state.selectedDate || "");
-  const entries = applicableSchedules(state.operations, date);
+  const entries = effectiveSchedules(state, date);
   const staffCount = new Set(entries.map((entry) => entry.staffId).filter(Boolean)).size;
   const inside = entries.filter((entry) => entry.department === "inside").length;
   const outside = entries.filter((entry) => entry.department === "outside").length;
   const hours = entries.reduce((sum, entry) => sum + plannedMinutes(entry), 0) / 60;
-  const signature = `${date}|${entries.map((entry) => `${entry.id}:${entry.start}:${entry.end}:${entry.department}`).join("|")}`;
+  const remoteSignature = (authoritativeScheduleModule(state).exceptions || [])
+    .filter((entry) => String(entry?.date || "") === date)
+    .map((entry) => `${entry.id}:${entry.kind}:${entry.start || ""}:${entry.end || ""}`)
+    .join("|");
+  const signature = `${date}|${entries.map((entry) => `${entry.id}:${entry.start}:${entry.end}:${entry.department}`).join("|")}|${remoteSignature}`;
   let panel = root.querySelector("[data-workforce-schedule-reconciliation]");
   const tabs = root.querySelector("[data-workforce-tabs]");
   if (!tabs) return;
@@ -277,6 +338,7 @@ document.addEventListener("change", (event) => {
 window.addEventListener("hashchange", requestDecorate);
 window.addEventListener("shitu:accounts-synced", requestDecorate);
 window.addEventListener("shitu:business-state-updated", requestDecorate);
+window.addEventListener("shitu:workforce-schedule-state", requestDecorate);
 
 const observer = new MutationObserver(requestDecorate);
 observer.observe(document.documentElement, { childList:true, subtree:true });

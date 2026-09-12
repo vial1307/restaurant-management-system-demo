@@ -10,6 +10,7 @@ import {
   mergeManagedAttendance,
 } from "./workforce-lock-policy.mjs";
 import { registerWorkforceApprovalRoutes } from "./workforce-approval-routes.mjs";
+import { registerWorkforceRequestRoutes } from "./workforce-request-routes.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -118,8 +119,17 @@ function mergeAuditModule(before, incoming) {
   return { audit: merged.slice(0, 500) };
 }
 
+function preserveScheduleWorkflow(before, incoming) {
+  const stored = before && typeof before === "object" && !Array.isArray(before) ? before : {};
+  const next = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? structuredClone(incoming) : {};
+  next.requests = structuredClone(Array.isArray(stored.requests) ? stored.requests : []);
+  next.exceptions = structuredClone(Array.isArray(stored.exceptions) ? stored.exceptions : []);
+  return next;
+}
+
 export async function registerBusinessStateRoutes(app) {
   await registerWorkforceApprovalRoutes(app);
+  await registerWorkforceRequestRoutes(app);
 
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -232,6 +242,10 @@ export async function registerBusinessStateRoutes(app) {
         }
         effectiveEditable.attendance = workforceMerge.module;
         workforceAudit = workforceMerge.audit || null;
+      }
+
+      if (Object.hasOwn(effectiveEditable, "schedule")) {
+        effectiveEditable.schedule = preserveScheduleWorkflow(before.schedule, effectiveEditable.schedule);
       }
 
       const next = { ...before, ...effectiveEditable };
