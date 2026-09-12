@@ -132,7 +132,7 @@ function managerAccount(user = session()) {
 }
 
 function selfServiceAccount(user = session()) {
-  return Boolean(user && SELF_SERVICE_ROLES.has(String(user.role || role(user))) && scheduleVisible(user));
+  return Boolean(user && SELF_SERVICE_ROLES.has(role(user)) && scheduleVisible(user));
 }
 
 function activeSite(user = session()) {
