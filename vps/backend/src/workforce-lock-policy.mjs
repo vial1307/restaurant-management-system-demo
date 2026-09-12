@@ -14,6 +14,7 @@ function attendanceModule(modules = {}) {
   return {
     ...input,
     attendance:Array.isArray(input.attendance) ? input.attendance : [],
+    correctionRequests:Array.isArray(input.correctionRequests) ? input.correctionRequests : [],
     payroll:input.payroll && typeof input.payroll === "object" && !Array.isArray(input.payroll) ? input.payroll : {},
   };
 }
@@ -49,10 +50,6 @@ function clearApproval(entry) {
   delete copy.approvedByUserId;
   delete copy.approvedByName;
   return copy;
-}
-
-function withoutApproval(entry) {
-  return clearApproval(entry || {});
 }
 
 export function enforceSelfServiceUnlocked(beforeModules = {}, mergedModule = {}) {
@@ -137,7 +134,12 @@ export function mergeManagedAttendance(beforeModules = {}, incomingModule = {}) 
   const nextPayroll = { ...incomingPayroll, periods:structuredClone(beforePeriods) };
   return {
     ok:true,
-    module:{ ...incomingModule, attendance:sanitized, payroll:nextPayroll },
+    module:{
+      ...incomingModule,
+      attendance:sanitized,
+      correctionRequests:structuredClone(beforeModule.correctionRequests),
+      payroll:nextPayroll,
+    },
     audit:{ changedAttendanceIds:[...new Set(changedIds.filter(Boolean))] },
   };
 }
