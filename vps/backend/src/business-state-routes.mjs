@@ -11,6 +11,7 @@ import {
 } from "./workforce-lock-policy.mjs";
 import { registerWorkforceApprovalRoutes } from "./workforce-approval-routes.mjs";
 import { registerWorkforceRequestRoutes } from "./workforce-request-routes.mjs";
+import { registerWorkforceAttendanceCorrectionRoutes } from "./workforce-attendance-correction-routes.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -130,6 +131,7 @@ function preserveScheduleWorkflow(before, incoming) {
 export async function registerBusinessStateRoutes(app) {
   await registerWorkforceApprovalRoutes(app);
   await registerWorkforceRequestRoutes(app);
+  await registerWorkforceAttendanceCorrectionRoutes(app);
 
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
