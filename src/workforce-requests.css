@@ -1,0 +1,272 @@
+.workforce-request-workspace {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.workforce-request-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.workforce-request-grid.manager {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+}
+
+.workforce-request-form,
+.workforce-request-queue,
+.workforce-request-history,
+.workforce-request-loading {
+  min-width: 0;
+}
+
+.workforce-request-form {
+  padding: 18px;
+}
+
+.workforce-request-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.workforce-request-form-grid label,
+.workforce-request-manager-actions form {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workforce-request-form-grid label > span,
+.workforce-request-manager-actions form::before {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted, #65736f);
+}
+
+.workforce-request-form-grid input,
+.workforce-request-form-grid select,
+.workforce-request-form-grid textarea,
+.workforce-request-manager-actions input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border, #dfe6e3);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: inherit;
+  padding: 9px 11px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.workforce-request-form-grid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.workforce-request-reason {
+  grid-column: 1 / -1;
+}
+
+.workforce-request-boundary {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(214, 149, 42, 0.10);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.manager-boundary {
+  margin: 0;
+}
+
+.workforce-request-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border, #e5ebe8);
+}
+
+.workforce-request-row:first-of-type {
+  border-top: 0;
+}
+
+.workforce-request-main {
+  min-width: 0;
+}
+
+.workforce-request-heading,
+.workforce-request-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 10px;
+  align-items: center;
+}
+
+.workforce-request-heading strong {
+  font-size: 15px;
+}
+
+.workforce-request-meta {
+  margin-top: 4px;
+  color: var(--muted, #65736f);
+  font-size: 12px;
+}
+
+.workforce-request-main p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.workforce-request-main small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted, #65736f);
+}
+
+.workforce-request-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(214, 149, 42, 0.14);
+}
+
+.workforce-request-status[data-status="approved"] {
+  background: rgba(43, 132, 87, 0.14);
+}
+
+.workforce-request-status[data-status="rejected"] {
+  background: rgba(188, 67, 67, 0.13);
+}
+
+.workforce-request-status[data-status="cancelled"] {
+  background: rgba(101, 115, 111, 0.13);
+}
+
+.workforce-request-manager-actions {
+  display: grid;
+  gap: 8px;
+  width: min(260px, 34vw);
+}
+
+.workforce-request-manager-actions form {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.workforce-request-manager-actions form::before {
+  content: "";
+  display: none;
+}
+
+.workforce-request-manager-actions button,
+.workforce-request-cancel {
+  min-height: 40px;
+}
+
+.workforce-request-decision {
+  padding-left: 10px;
+  border-left: 3px solid var(--border, #dfe6e3);
+  color: var(--muted, #65736f);
+}
+
+.workforce-request-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 999px;
+  font-weight: 800;
+  background: rgba(214, 149, 42, 0.14);
+}
+
+.workforce-effective-exceptions {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border, #dfe6e3);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+
+.workforce-effective-exceptions h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.workforce-effective-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #e5ebe8);
+}
+
+.workforce-effective-row span {
+  color: var(--muted, #65736f);
+}
+
+.workforce-request-loading {
+  padding: 16px;
+}
+
+.workforce-request-loading p,
+.workforce-request-history .empty-state,
+.workforce-request-queue .empty-state {
+  margin: 0;
+  padding: 16px;
+}
+
+@media (max-width: 900px) {
+  .workforce-request-grid,
+  .workforce-request-grid.manager {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workforce-request-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workforce-request-manager-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .workforce-request-workspace {
+    gap: 12px;
+    margin: 12px 0;
+  }
+
+  .workforce-request-form {
+    padding: 14px;
+  }
+
+  .workforce-request-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workforce-request-reason {
+    grid-column: auto;
+  }
+
+  .workforce-request-row {
+    padding: 13px 12px;
+  }
+
+  .workforce-request-manager-actions form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

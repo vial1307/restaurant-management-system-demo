@@ -98,6 +98,12 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
       schedules: Array.isArray(modules.schedule.schedules)
         ? modules.schedule.schedules.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
         : [],
+      requests: Array.isArray(modules.schedule.requests)
+        ? modules.schedule.requests.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
+        : [],
+      exceptions: Array.isArray(modules.schedule.exceptions)
+        ? modules.schedule.exceptions.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
+        : [],
     };
   }
 
@@ -119,7 +125,18 @@ function immutableAttendanceFieldsEqual(before, incoming) {
   return jsonEqual(before, next);
 }
 
-function scheduledStartFor(beforeModules, staffId, date) {
+export function scheduledStartFor(beforeModules, staffId, date) {
+  const exceptions = Array.isArray(beforeModules?.schedule?.exceptions) ? beforeModules.schedule.exceptions : [];
+  const activeExceptions = exceptions.filter((entry) => (
+    String(entry?.staffId || "") === staffId
+    && String(entry?.date || "") === date
+    && ["leave", "override"].includes(String(entry?.kind || ""))
+  ));
+  if (activeExceptions.length > 1) return "";
+  if (activeExceptions.length === 1) {
+    return activeExceptions[0].kind === "override" ? text(activeExceptions[0].start) : "";
+  }
+
   const schedules = Array.isArray(beforeModules?.schedule?.schedules) ? beforeModules.schedule.schedules : [];
   const staffSchedules = schedules.filter((entry) => String(entry?.staffId || "") === staffId);
   const dayCandidates = staffSchedules.filter((entry) => entry?.applyMode !== "month" && String(entry?.date || "") === date);
