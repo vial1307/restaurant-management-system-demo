@@ -347,6 +347,15 @@ export function attachBusinessStateSync(store) {
   };
 
   const applyAuthorizedServerModules = (modules) => {
+    const schedule = modules?.schedule;
+    if (schedule && typeof schedule === "object" && !Array.isArray(schedule)) {
+      const state = store.getState();
+      if (state?.operations) {
+        state.operations.scheduleExceptions = Array.isArray(schedule.exceptions)
+          ? structuredClone(schedule.exceptions)
+          : [];
+      }
+    }
     store.mergeBusinessModules(modules);
     const activeStaffId = String(modules?.shared?.activeStaffId || "");
     if (activeStaffId && typeof store.switchStaff === "function") {
@@ -751,6 +760,7 @@ export function attachBusinessStateSync(store) {
   window.addEventListener("shitu:auth-synced", authReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
   window.addEventListener("shitu:active-site-changed", reload);
+  window.addEventListener("shitu:workforce-schedule-state", reload);
   window.addEventListener("shitu:safe-reload-requested", guardSafeReload);
   window.addEventListener("online", saveThenReload);
   window.addEventListener("focus", saveThenReload);
@@ -764,6 +774,7 @@ export function attachBusinessStateSync(store) {
     window.removeEventListener("shitu:auth-synced", authReload);
     window.removeEventListener("shitu:vps-auth-ready", saveThenReload);
     window.removeEventListener("shitu:active-site-changed", reload);
+    window.removeEventListener("shitu:workforce-schedule-state", reload);
     window.removeEventListener("shitu:safe-reload-requested", guardSafeReload);
     window.removeEventListener("online", saveThenReload);
     window.removeEventListener("focus", saveThenReload);

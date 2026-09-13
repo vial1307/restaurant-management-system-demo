@@ -6,6 +6,8 @@ const WEB = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const PASSWORD = "KitchenTest!123";
 const SITE = "fuxing";
 const DATE = "2038-06-05";
+const EFFECTIVE_DATE = "2039-02-14";
+const EFFECTIVE_SCHEDULE_ID = "effective-browser-employee-shift";
 
 const BROWSER_RULES = {
   shifts:{
@@ -43,6 +45,13 @@ async function apiLogin(username) {
 
 async function seed() {
   const manager = await apiLogin("managerfx");
+  const employee = await apiLogin("employeefx");
+  const employeeState = await request(`/api/business-state/${SITE}`, { cookie:employee });
+  assert.equal(employeeState.response.status, 200, `employee state seed read failed: ${JSON.stringify(employeeState.data)}`);
+  const employeeStaffId = String(employeeState.data?.modules?.shared?.activeStaffId || "");
+  assert(employeeStaffId, "employee workforce staff identity missing");
+  const employeeName = String(employeeState.data?.modules?.shared?.staff?.find((entry) => String(entry?.id || "") === employeeStaffId)?.name || "Employee Fixture");
+
   const rules = await request(`/api/workforce/${SITE}/schedule-rules`, { method:"POST", cookie:manager, body:BROWSER_RULES });
   assert.equal(rules.response.status, 200, `browser rule seed failed: ${JSON.stringify(rules.data)}`);
 
@@ -50,20 +59,54 @@ async function seed() {
   assert.equal(state.response.status, 200);
   const reservations = structuredClone(state.data.modules.reservations || { records:{} });
   reservations.records ??= {};
-  reservations.records[DATE] = {
-    ...(reservations.records[DATE] || {}),
-    reservation:{ lunchTables:0, dinnerTables:5, remaining:{ vegetables:0, braised:0, hotpot:0 } },
-    riceRemaining:0,
-    updatedAt:null,
-  };
-  const revision = state.data.moduleRevisions.reservations;
-  assert(Number.isInteger(revision), "reservation module revision missing");
+  for (const targetDate of [DATE, EFFECTIVE_DATE]) {
+    reservations.records[targetDate] = {
+      ...(reservations.records[targetDate] || {}),
+      reservation:{ lunchTables:0, dinnerTables:5, remaining:{ vegetables:0, braised:0, hotpot:0 } },
+      riceRemaining:0,
+      updatedAt:null,
+    };
+  }
+  const schedules = [...(state.data.modules.schedule?.schedules || [])]
+    .filter((entry) => String(entry?.id || "") !== EFFECTIVE_SCHEDULE_ID);
+  schedules.push({
+    id:EFFECTIVE_SCHEDULE_ID,
+    date:EFFECTIVE_DATE,
+    month:EFFECTIVE_DATE.slice(0, 7),
+    weekday:new Date(`${EFFECTIVE_DATE}T12:00:00`).getDay(),
+    applyMode:"day",
+    staffId:employeeStaffId,
+    staffName:employeeName,
+    department:"inside",
+    area:"noodles",
+    shift:"evening",
+    start:"17:00",
+    end:"23:00",
+    note:"effective schedule browser regression",
+  });
+  const reservationRevision = state.data.moduleRevisions.reservations;
+  const scheduleRevision = state.data.moduleRevisions.schedule;
+  assert(Number.isInteger(reservationRevision), "reservation module revision missing");
+  assert(Number.isInteger(scheduleRevision), "schedule module revision missing");
   const saved = await request(`/api/business-state/${SITE}`, {
     method:"POST",
     cookie:manager,
-    body:{ modules:{ reservations }, expectedModuleRevisions:{ reservations:revision } },
+    body:{
+      modules:{ reservations, schedule:{ schedules } },
+      expectedModuleRevisions:{ reservations:reservationRevision, schedule:scheduleRevision },
+    },
   });
-  assert.equal(saved.response.status, 200, `browser reservation seed failed: ${JSON.stringify(saved.data)}`);
+  assert.equal(saved.response.status, 200, `browser state seed failed: ${JSON.stringify(saved.data)}`);
+
+  const leave = await request(`/api/workforce/${SITE}/schedule-requests`, {
+    method:"POST",
+    cookie:employee,
+    body:{ type:"leave", date:EFFECTIVE_DATE, reason:"Effective schedule browser regression leave" },
+  });
+  assert.equal(leave.response.status, 200, `employee leave seed failed: ${JSON.stringify(leave.data)}`);
+  const requestId = String(leave.data?.request?.id || "");
+  assert(requestId, "seeded leave request id missing");
+  return { requestId, employeeStaffId };
 }
 
 async function browserLogin(page, username) {
@@ -85,7 +128,18 @@ async function openSchedule(page) {
   await page.locator(".schedule-calendar").waitFor({ state:"visible", timeout:30000 });
 }
 
-await seed();
+async function selectScheduleDate(page, date) {
+  await page.locator('[data-field="schedule-month"]').fill(date.slice(0, 7));
+  const day = page.locator(`.schedule-day[data-date="${date}"]`);
+  await day.waitFor({ state:"visible", timeout:30000 });
+  await day.click();
+  await page.waitForFunction((target) => {
+    try { return JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null")?.selectedDate === target; }
+    catch { return false; }
+  }, date, { timeout:30000 });
+}
+
+const fixture = await seed();
 const browser = await chromium.launch({ headless:true });
 try {
   const managerContext = await browser.newContext({ viewport:{ width:1365, height:900 } });
@@ -94,8 +148,7 @@ try {
   managerPage.on("pageerror", (error) => managerErrors.push(error.message));
   await browserLogin(managerPage, "managerfx");
   await openSchedule(managerPage);
-  await managerPage.locator('[data-field="schedule-month"]').fill(DATE.slice(0, 7));
-  await managerPage.locator(`.schedule-day[data-date="${DATE}"]`).click();
+  await selectScheduleDate(managerPage, DATE);
   await managerPage.locator("[data-workforce-schedule-rules-open]").waitFor({ state:"visible", timeout:30000 });
 
   const eveningOption = managerPage.locator('[data-field="schedule-shift"] option[value="evening"]');
@@ -122,6 +175,21 @@ try {
   await managerPage.waitForFunction(() => document.querySelector('form[data-form="save-schedule"] input[name="start"]')?.value === "18:00", null, { timeout:10000 });
   assert.equal(await scheduleForm.locator('input[name="end"]').inputValue(), "23:00", "new schedule end must use configured default");
   await managerPage.locator('[data-action="management-close"] .icon-button').click();
+
+  await selectScheduleDate(managerPage, EFFECTIVE_DATE);
+  await managerPage.waitForFunction(() => document.querySelector(".capacity-numbers > div:nth-child(2) strong")?.textContent === "1/4", null, { timeout:30000 });
+  const approval = managerPage.locator(`[data-workforce-request-approve="${fixture.requestId}"]`);
+  await approval.waitFor({ state:"visible", timeout:30000 });
+  await managerPage.evaluate(() => { window.__effectiveScheduleNoReloadMarker = "alive"; });
+  await approval.click();
+  await managerPage.waitForFunction(() => document.querySelector(".capacity-numbers > div:nth-child(2) strong")?.textContent === "0/4", null, { timeout:30000 });
+  assert.equal(await managerPage.evaluate(() => window.__effectiveScheduleNoReloadMarker), "alive", "approved leave capacity update must happen without full page reload");
+  await managerPage.waitForFunction((staffId) => {
+    try {
+      const state = JSON.parse(localStorage.getItem("shitu-kitchen-os-v1") || "null");
+      return state?.operations?.scheduleExceptions?.some((entry) => entry?.staffId === staffId && entry?.date === "2039-02-14" && entry?.kind === "leave");
+    } catch { return false; }
+  }, fixture.employeeStaffId, { timeout:30000 });
   assert.deepEqual(managerErrors, [], `manager schedule rules errors: ${managerErrors.join(" | ")}`);
   await managerContext.close();
 
@@ -132,6 +200,8 @@ try {
   await browserLogin(mobilePage, "managerfx");
   await openSchedule(mobilePage);
   await mobilePage.locator("[data-workforce-schedule-rules-open]").waitFor({ state:"visible", timeout:30000 });
+  await selectScheduleDate(mobilePage, EFFECTIVE_DATE);
+  await mobilePage.waitForFunction(() => document.querySelector(".capacity-numbers > div:nth-child(2) strong")?.textContent === "0/4", null, { timeout:30000 });
   await mobilePage.locator("[data-workforce-schedule-rules-open]").click();
   const mobileEditor = mobilePage.locator("[data-workforce-schedule-rules-modal] .workforce-schedule-rules-modal");
   await mobileEditor.waitFor({ state:"visible", timeout:10000 });

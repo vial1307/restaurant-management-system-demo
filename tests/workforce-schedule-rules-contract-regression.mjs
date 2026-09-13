@@ -43,7 +43,8 @@ assert.match(policy, /const \{ rules:_managerRules, \.\.\.scheduleForSelfService
 
 assert.match(ui, /\["admin", "manager"\]\.includes\(role\)/, "UI rule editor must be manager/admin only");
 assert.match(ui, /accountCan\(session, "schedule", "edit"\)/, "UI rule editor must require schedule edit permission");
-assert.match(ui, /schedulesForDate\(state\?\.operations \|\| \{\}, date, shift\)/, "capacity overlay must use actual stored schedules");
+assert.match(ui, /import \{ effectiveSchedulesForDate \} from "\.\/workforce-effective-schedule-core\.js";/, "capacity overlay must use the shared effective-schedule resolver");
+assert.match(ui, /effectiveSchedulesForDate\(state\?\.operations \|\| \{\}, date, shift\)/, "capacity overlay must count approved leave/override effects instead of raw stored schedules");
 assert.match(ui, /qualifiedAreas\(state\.operations, entry\.staffId\)/, "fixed-area coverage must retain SOP qualification check");
 assert.match(ui, /newSchedulePending/, "new schedule default-time guard missing");
 assert.match(ui, /cacheRules\.shifts\[shift\?\.value\]/, "new schedule defaults must use configured shift window");

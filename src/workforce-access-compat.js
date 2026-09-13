@@ -16,9 +16,13 @@ function isManagerOrAbove(user = session()) {
   return Boolean(user && (user.role === "admin" || MANAGER_ROLES.has(accountRole(user))));
 }
 
+function isAdmin(user = session()) {
+  return Boolean(user && (user.role === "admin" || accountRole(user) === "admin"));
+}
+
 function permissionState() {
   const user = session();
-  const admin = Boolean(user && (user.role === "admin" || accountRole(user) === "admin"));
+  const admin = isAdmin(user);
   const attendanceView = Boolean(user && (admin || accountCan(user, "attendance", "view")));
   const scheduleView = Boolean(user && (admin || accountCan(user, "schedule", "view")));
   return {
@@ -46,6 +50,17 @@ function showUnifiedEntry(node, visible) {
   node.removeAttribute("aria-hidden");
   node.removeAttribute("tabindex");
   node.style.display = "";
+}
+
+function reconcileAdminNavigation(user) {
+  if (!isAdmin(user)) return;
+  document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item, .mobile-menu-grid .nav-item").forEach((node) => {
+    const route = String(node.getAttribute("href") || "").replace(/^#/, "").split("?")[0];
+    // #schedule has a separate compatibility contract below: it must remain in
+    // the DOM for legacy routing/certification while having zero visible geometry.
+    if (!route || route === "schedule") return;
+    showUnifiedEntry(node, true);
+  });
 }
 
 function markLegacyScheduleRoute(node, authorized) {
@@ -155,6 +170,12 @@ function redirectUnauthorizedPanel(state) {
 function reconcile() {
   reconcilePending = false;
   const state = permissionState();
+  // app.js can render navigation while the VPS profile is still being mirrored.
+  // Non-admin accounts are later normalized by auth-layer.js, but admins bypass
+  // that branch because their permission set is implicitly full. Reconcile the
+  // admin navigation here so a cold-start render can never leave stale `hidden`
+  // attributes behind on mobile or desktop.
+  reconcileAdminNavigation(state.user);
   document.querySelectorAll('a.nav-item[href="#attendance"]').forEach((node) => showUnifiedEntry(node, state.workforceView));
   document.querySelectorAll('a.nav-item[href="#schedule"]').forEach((node) => markLegacyScheduleRoute(node, state.scheduleView));
   reconcileTabs(state);

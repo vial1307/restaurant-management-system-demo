@@ -1,5 +1,6 @@
 import { accountCan, currentAccountSession } from "./account-permissions.js";
-import { qualifiedAreas, schedulesForDate } from "./operations.js";
+import { qualifiedAreas } from "./operations.js";
+import { effectiveSchedulesForDate } from "./workforce-effective-schedule-core.js";
 import { apiRequest } from "./vps-api.js";
 
 const STATE_KEY = "shitu-kitchen-os-v1";
@@ -146,7 +147,7 @@ function bandForTables(tables, rules = cacheRules) {
 function configuredCapacity(state, date, shift, rules = cacheRules) {
   const tables = Math.max(0, Math.round(Number(state?.records?.[date]?.reservation?.dinnerTables) || 0));
   const band = bandForTables(tables, rules);
-  const entries = schedulesForDate(state?.operations || {}, date, shift);
+  const entries = effectiveSchedulesForDate(state?.operations || {}, date, shift);
   const inside = entries.filter((entry) => entry.department === "inside");
   const outside = entries.filter((entry) => entry.department === "outside");
   const covered = new Set();

@@ -1,4 +1,5 @@
 import { flatSkillCatalog, normalizeCustomSkill, normalizeSkillAssessment, normalizeSkillProfiles } from "./skills.js";
+import { effectiveSchedulesForDate, normalizeScheduleException } from "./workforce-effective-schedule-core.js";
 
 export const STAFF_ROLES = [
   { id: "manager", vi: "Quản lý", zh: "管理者" },
@@ -200,6 +201,7 @@ export function createOperationalState(settings = {}) {
     audit: [],
     payroll: clone(DEFAULT_PAYROLL_POLICY),
     schedules: [],
+    scheduleExceptions: [],
     jobCatalog: clone(DEFAULT_JOB_CATALOG),
     customSkills: [],
     skillProfiles: { noodles: {}, soup: {}, seafood: {}, meat: {} },
@@ -244,6 +246,9 @@ export function hydrateOperations(input, settings = {}) {
   const skillApprovals = Array.isArray(input.skillApprovals)
     ? input.skillApprovals.filter((entry) => entry && String(entry.staffId || "") && ["noodles", "soup", "seafood", "meat"].includes(entry.area) && ["D", "C", "B", "A"].includes(entry.level)).map((entry) => ({ ...entry, staffId: String(entry.staffId), level: String(entry.level) }))
     : [];
+  const scheduleExceptions = (Array.isArray(input.scheduleExceptions) ? input.scheduleExceptions : Array.isArray(input.exceptions) ? input.exceptions : [])
+    .map(normalizeScheduleException)
+    .filter(Boolean);
 
   return {
     sops,
@@ -256,6 +261,7 @@ export function hydrateOperations(input, settings = {}) {
     audit: Array.isArray(input.audit) ? input.audit : [],
     payroll: { ...clone(DEFAULT_PAYROLL_POLICY), ...(input.payroll || {}) },
     schedules: Array.isArray(input.schedules) ? input.schedules.map(normalizeSchedule).filter(Boolean) : [],
+    scheduleExceptions,
     jobCatalog: Array.isArray(input.jobCatalog) && input.jobCatalog.length
       ? input.jobCatalog.map(normalizeJob).filter(Boolean)
       : fallback.jobCatalog,
@@ -339,7 +345,7 @@ export function qualifiedAreas(operations, staffId) {
 export function assessShiftCapacity(state, date, shift = "evening") {
   const record = state.records[date];
   const requirement = staffingRequirement(record?.reservation?.dinnerTables || 0);
-  const entries = schedulesForDate(state.operations, date, shift);
+  const entries = effectiveSchedulesForDate(state.operations, date, shift);
   const inside = entries.filter((entry) => entry.department === "inside");
   const outside = entries.filter((entry) => entry.department === "outside");
   const requiredAreas = ["noodles", "soup", "seafood", "meat"];
