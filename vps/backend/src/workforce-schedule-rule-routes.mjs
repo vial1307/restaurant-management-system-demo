@@ -65,11 +65,11 @@ function canonicalRuleValue(rules) {
     }])),
     staffingBands:Array.isArray(rules?.staffingBands)
       ? rules.staffingBands.map((band) => ({
-          minTables:Number(band?.minTables),
-          maxTables:band?.maxTables === null ? null : Number(band?.maxTables),
-          requiredInside:Number(band?.requiredInside),
-          fixedAreas:Boolean(band?.fixedAreas),
-          needsReview:Boolean(band?.needsReview),
+          minTables:band?.minTables,
+          maxTables:band?.maxTables === null ? null : band?.maxTables,
+          requiredInside:band?.requiredInside,
+          fixedAreas:band?.fixedAreas,
+          needsReview:band?.needsReview,
         }))
       : [],
   };
@@ -103,9 +103,7 @@ function validateRuleValue(value) {
     if (!band || typeof band !== "object" || Array.isArray(band)) {
       return { ok:false, error:"WORKFORCE_SCHEDULE_RULE_BANDS_INVALID" };
     }
-    const minTables = Number(band.minTables);
-    const maxTables = band.maxTables === null ? null : Number(band.maxTables);
-    const requiredInside = Number(band.requiredInside);
+    const { minTables, maxTables, requiredInside } = band;
     if (!Number.isInteger(minTables) || minTables < 0) {
       return { ok:false, error:"WORKFORCE_SCHEDULE_RULE_BANDS_INVALID" };
     }
@@ -126,7 +124,7 @@ function validateRuleValue(value) {
       return { ok:false, error:"WORKFORCE_SCHEDULE_RULE_BANDS_INVALID" };
     }
     if (index > 0) {
-      const priorMax = Number(bands[index - 1]?.maxTables);
+      const priorMax = bands[index - 1]?.maxTables;
       if (!Number.isInteger(priorMax) || minTables !== priorMax + 1) {
         return { ok:false, error:"WORKFORCE_SCHEDULE_RULE_BANDS_INVALID" };
       }
