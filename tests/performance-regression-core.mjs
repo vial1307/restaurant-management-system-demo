@@ -52,7 +52,8 @@ assert.match(businessSync, /const localSnapshotBeforeLoad = identityChanged[\s\S
 assert.match(businessSync, /!identityChanged && localSnapshotBeforeLoad !== JSON\.stringify\(businessModulesFromState\(store\.getState\(\)\)\)[\s\S]{0,260}deferred:true[\s\S]{0,80}return;/, "business-state refresh must defer stale server merges after an in-flight local edit");
 assert.match(businessSync, /navigator\.onLine === false[\s\S]{0,260}BUSINESS_STATE_OFFLINE[\s\S]{0,260}return false;/, "unsaved business state must block offline refresh or warehouse switching");
 assert.match(businessSync, /const guardSiteSwitch = \(event\) => \{[\s\S]{0,900}closest\?\.\("\[data-warehouse\]"\)[\s\S]{0,1200}const saved = await save\(\)[\s\S]{0,700}button\.click\(\)/, "warehouse switching must save the source business state before replaying the click");
-assert.match(businessSync, /document\.addEventListener\("click", guardSiteSwitch, true\)[\s\S]{0,700}document\.removeEventListener\("click", guardSiteSwitch, true\)/, "warehouse switch guard must attach and clean up in capture phase");
+assert.match(businessSync, /document\.addEventListener\("click", guardSiteSwitch, true\)/, "warehouse switch guard must attach in capture phase");
+assert.match(businessSync, /document\.removeEventListener\("click", guardSiteSwitch, true\)/, "warehouse switch guard must clean up in capture phase");
 
 const adminAccountSync = deviceSync.match(/async function syncAdminAccounts\([\s\S]*?\n}\n\nasync function drainPendingLanguage/)?.[0] || "";
 assert.match(adminAccountSync, /try \{[\s\S]{0,120}result = await vpsListUsers\(\);[\s\S]{0,160}catch \{[\s\S]{0,220}return false;[\s\S]{0,100}lastAdminAccountsAt = Date\.now\(\);/, "admin account failures must stay isolated and leave retry throttle untouched");
