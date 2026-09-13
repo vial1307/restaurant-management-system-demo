@@ -8,13 +8,19 @@ on:
     paths:
       - "index.html"
       - "vps-entry.html"
+      - "src/operations.js"
+      - "src/business-state-sync.js"
+      - "src/workforce-effective-schedule-core.js"
       - "src/workforce-schedule-rules.js"
+      - "tests/workforce-effective-schedule-regression.mjs"
       - "tests/workforce-schedule-rules-*.mjs"
       - "vps/backend/src/business-state-routes.mjs"
       - "vps/backend/src/workforce-policy.mjs"
+      - "vps/backend/src/workforce-request-routes.mjs"
       - "vps/backend/src/workforce-schedule-rule-routes.mjs"
       - "vps/backend/scripts/workforce-schedule-rule-regression-client.mjs"
       - "docs/spec-deltas/2026-09-13-workforce-schedule-rules.md"
+      - "docs/spec-deltas/2026-09-13-workforce-effective-schedule.md"
       - ".github/workflows/workforce-schedule-rules-regression.yml"
 
 permissions:
@@ -73,11 +79,18 @@ jobs:
 
       - name: Validate schedule rules JavaScript syntax
         run: |
+          node --check src/workforce-effective-schedule-core.js
+          node --check src/operations.js
+          node --check src/business-state-sync.js
           node --check src/workforce-schedule-rules.js
+          node --check tests/workforce-effective-schedule-regression.mjs
           node --check tests/workforce-schedule-rules-contract-regression.mjs
           node --check tests/workforce-schedule-rules-browser-regression.mjs
           node --check vps/backend/src/workforce-schedule-rule-routes.mjs
           node --check vps/backend/scripts/workforce-schedule-rule-regression-client.mjs
+
+      - name: Effective schedule regression
+        run: node tests/workforce-effective-schedule-regression.mjs
 
       - name: Schedule rules contract regression
         run: node tests/workforce-schedule-rules-contract-regression.mjs
