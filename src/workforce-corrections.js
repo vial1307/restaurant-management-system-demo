@@ -18,7 +18,7 @@ function copy() {
     newRequest:"提出修正", attendance:"出勤紀錄", clockIn:"上班時間", clockOut:"下班時間", breakMinutes:"休息分鐘", note:"備註", reason:"修正原因", reasonPlaceholder:"請說明為什麼需要修正", submit:"送出修正申請",
     queue:"待審核修正", history:"修正紀錄", pending:"待審核", approved:"已核准", rejected:"已拒絕", cancelled:"已取消", approve:"核准修正", reject:"拒絕", cancel:"取消申請", decision:"拒絕原因", decisionPlaceholder:"拒絕時請填寫原因",
     noAttendance:"目前沒有可提出修正的出勤紀錄。", noPending:"目前沒有待審核修正。", noHistory:"尚無修正紀錄。", loading:"正在讀取 VPS 出勤修正…", saved:"出勤修正流程已更新", saveError:"無法更新出勤修正流程",
-    locked:"此出勤所屬薪資期間已鎖定。管理者必須先重新開啟該期間，才能核准修正。", reasonRequired:"修正原因至少需要 3 個字元。", decisionRequired:"拒絕原因至少需要 3 個字元。", pendingExists:"此出勤已有待審核的修正申請。", noChanges:"修正內容與目前出勤相同。", sourceChanged:"原出勤已被更新；請取消舊申請並重新提出。", notPending:"此申請已處理。", ownOnly:"只能操作自己的出勤修正申請。", invalidTime:"請檢查上、下班時間。", invalidBreak:"休息分鐘必須是 0 以上的數字。",
+    locked:"此出勤所屬薪資期間已鎖定。管理者必須先重新開啟該期間，才能核准修正。", reasonRequired:"修正原因至少需要 3 個字元。", decisionRequired:"拒絕原因至少需要 3 個字元。", pendingExists:"此出勤已有待審核的修正申請。", noChanges:"修正內容與目前出勤相同。", sourceChanged:"原出勤已被更新；請取消舊申請後重新提出。", notPending:"此申請已處理。", ownOnly:"只能操作自己的出勤修正申請。", invalidTime:"請檢查上、下班時間。", invalidBreak:"休息分鐘必須是 0 以上的數字。",
     payrollBoundary:"修正只改既有出勤事實，不會新增加班、假日倍率、獎金、保險、稅或其他薪資規則。", from:"原本", to:"申請修正", select:"選擇出勤",
   } : {
     title:"Yêu cầu sửa chấm công", subtitle:"Nhân viên gửi yêu cầu, quản lý duyệt trên VPS; sau khi duyệt sửa, bản chấm công phải được duyệt lại trước khi được tính vào lương đã duyệt.",
@@ -119,10 +119,23 @@ function decorate(){
 function requestDecorate(){ if(renderPending)return; renderPending=true; requestAnimationFrame(decorate); }
 
 async function postAction(path,body={},{reload=false}={}){
-  if(actionPending)return false; actionPending=true; document.querySelectorAll("[data-workforce-correction-workspace] button,[data-workforce-correction-workspace] input,[data-workforce-correction-workspace] select,[data-workforce-correction-workspace] textarea").forEach((node)=>{node.disabled=true;});
-  try{ await apiRequest(path,{method:"POST",body}); notify("success",copy().saved,"VPS OK"); if(reload){location.reload();return true;} await refreshRemote(true); return true; }
-  catch(error){ notify("error",copy().saveError,errorMessage(error)); return false; }
-  finally{ actionPending=false; requestDecorate(); }
+  if(actionPending)return false;
+  actionPending=true;
+  document.querySelectorAll("[data-workforce-correction-workspace] button,[data-workforce-correction-workspace] input,[data-workforce-correction-workspace] select,[data-workforce-correction-workspace] textarea").forEach((node)=>{node.disabled=true;});
+  try{
+    await apiRequest(path,{method:"POST",body});
+    notify("success",copy().saved,"VPS OK");
+    if(reload){ location.reload(); return true; }
+    await refreshRemote(true);
+    return true;
+  }catch(error){
+    notify("error",copy().saveError,errorMessage(error));
+    document.querySelector("[data-workforce-correction-workspace]")?.removeAttribute("data-signature");
+    return false;
+  }finally{
+    actionPending=false;
+    requestDecorate();
+  }
 }
 
 document.addEventListener("change",(event)=>{ const select=event.target; if(select instanceof HTMLSelectElement&&select.matches("[data-workforce-correction-attendance]"))populateForm(select.closest("form"),select.value); },true);
@@ -135,5 +148,9 @@ document.addEventListener("click",(event)=>{
   const approve=event.target.closest?.("[data-workforce-correction-approve]"); if(approve){event.preventDefault();if(!managerAccount()||approve.disabled)return;const id=String(approve.dataset.workforceCorrectionApprove||"");void postAction(`/api/workforce/${encodeURIComponent(activeSite())}/attendance-corrections/${encodeURIComponent(id)}/approve`,{},{reload:true});return;}
   const cancel=event.target.closest?.("[data-workforce-correction-cancel]"); if(cancel){event.preventDefault();if(!selfServiceAccount())return;const id=String(cancel.dataset.workforceCorrectionCancel||"");void postAction(`/api/workforce/${encodeURIComponent(activeSite())}/attendance-corrections/${encodeURIComponent(id)}/cancel`);}
 },true);
-window.addEventListener("hashchange",requestDecorate); window.addEventListener("shitu:accounts-synced",()=>{remoteKey="";remoteAttendance=null;requestDecorate();}); window.addEventListener("shitu:business-state-updated",()=>{remoteKey="";remoteAttendance=null;requestDecorate();});
-const observer=new MutationObserver(requestDecorate); observer.observe(document.documentElement,{childList:true,subtree:true}); requestDecorate();
+window.addEventListener("hashchange",requestDecorate);
+window.addEventListener("shitu:accounts-synced",()=>{remoteKey="";remoteAttendance=null;requestDecorate();});
+window.addEventListener("shitu:business-state-updated",()=>{remoteKey="";remoteAttendance=null;requestDecorate();});
+const observer=new MutationObserver(requestDecorate);
+observer.observe(document.documentElement,{childList:true,subtree:true});
+requestDecorate();
