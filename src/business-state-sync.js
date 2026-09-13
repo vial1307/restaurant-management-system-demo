@@ -516,8 +516,8 @@ export function attachBusinessStateSync(store) {
             if (recoverySaved) {
               const baseline = snapshotModules(lastSavedSnapshot);
               const authoritativeModules = Object.fromEntries(
-                conflictingNames.map((name) => [name, structuredClone(serverModules[name])]
-              ));
+                conflictingNames.map((name) => [name, structuredClone(serverModules[name])])
+              );
               applyingRemote = true;
               try {
                 applyAuthorizedServerModules(authoritativeModules);
