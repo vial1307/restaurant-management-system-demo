@@ -79,21 +79,22 @@ function resolveBaseSchedules(operations, date) {
 
 export function effectiveSchedulesForDate(operations, date, shift = "evening") {
   const baseSchedules = resolveBaseSchedules(operations, date);
-  const exceptions = (Array.isArray(operations?.scheduleExceptions) ? operations.scheduleExceptions : [])
-    .map((entry) => normalizeScheduleException(entry))
-    .filter((entry) => entry && entry.date === date);
+  const rawExceptions = (Array.isArray(operations?.scheduleExceptions) ? operations.scheduleExceptions : [])
+    .filter((entry) => text(entry?.date) === date && text(entry?.staffId));
   const byStaff = new Map();
-  for (const exception of exceptions) {
-    const list = byStaff.get(exception.staffId) || [];
-    list.push(exception);
-    byStaff.set(exception.staffId, list);
+  for (const rawException of rawExceptions) {
+    const staffId = text(rawException.staffId);
+    const list = byStaff.get(staffId) || [];
+    list.push(rawException);
+    byStaff.set(staffId, list);
   }
 
   return baseSchedules.flatMap((base) => {
     const staffExceptions = byStaff.get(text(base?.staffId)) || [];
     if (staffExceptions.length > 1) return [];
     if (!staffExceptions.length) return coversShift(base, shift) ? [base] : [];
-    const exception = staffExceptions[0];
+    const exception = normalizeScheduleException(staffExceptions[0]);
+    if (!exception) return [];
     if (exception.kind === "leave") return [];
     if (!validOverride(exception, base)) return [];
     const effective = {
