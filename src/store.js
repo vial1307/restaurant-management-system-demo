@@ -64,17 +64,22 @@ function snapshotFromPersistedState(storage, site) {
 function attachInventorySiteParity(core, storage) {
   if (!globalThis.window?.addEventListener) return;
 
-  const applySnapshot = (site, snapshot = null) => {
+  const applySnapshot = (site, snapshot = null, { forcePersist = false } = {}) => {
     if (!BRANCH_SITES.has(site)) return;
     const state = core.getState();
     const date = String(state?.selectedDate || "");
     if (!date) return;
     const usable = snapshot?.site === site && snapshot?.date === date ? snapshot : null;
     const record = state?.records?.[date];
-    if (record?.inventorySite === site && (!usable || (
-      JSON.stringify(record.inventory || []) === JSON.stringify(usable.inventory || [])
-      && JSON.stringify(record.workInventory || []) === JSON.stringify(usable.workInventory || [])
-    ))) return;
+    const sameUsableSnapshot = Boolean(usable
+      && record?.inventorySite === site
+      && JSON.stringify(record.inventory || []) === JSON.stringify(usable.inventory || [])
+      && JSON.stringify(record.workInventory || []) === JSON.stringify(usable.workInventory || []));
+    const sameEmptyTarget = Boolean(!usable
+      && record?.inventorySite === site
+      && (record?.inventory || []).length === 0
+      && (record?.workInventory || []).length === 0);
+    if (!forcePersist && (sameUsableSnapshot || sameEmptyTarget)) return;
 
     core.update((draft) => {
       const target = draft.records?.[draft.selectedDate];
@@ -86,10 +91,10 @@ function attachInventorySiteParity(core, storage) {
     });
   };
 
-  const reconcileTargetSite = (site = effectiveInventorySite(storage)) => {
+  const reconcileTargetSite = (site = effectiveInventorySite(storage), options = {}) => {
     if (!BRANCH_SITES.has(site)) return;
     const cache = readBranchCache(storage);
-    applySnapshot(site, cache?.[site] || null);
+    applySnapshot(site, cache?.[site] || null, options);
   };
 
   window.addEventListener("shitu:inventory-cloud-updated", (event) => {
@@ -100,7 +105,19 @@ function attachInventorySiteParity(core, storage) {
     const cache = readBranchCache(storage);
     cache[site] = snapshot;
     writeBranchCache(storage, cache);
-    if (effectiveInventorySite(storage) === site) applySnapshot(site, snapshot);
+
+    const activeSite = effectiveInventorySite(storage);
+    if (activeSite === site) {
+      applySnapshot(site, snapshot);
+      return;
+    }
+
+    // A request from the previously active branch can finish after the user has
+    // already switched sites. inventory-cloud has written that late response to
+    // localStorage before dispatching this event, so force-persist the current
+    // target snapshot again. This keeps both the live store and reload state on
+    // the active branch instead of merely hiding the stale response in memory.
+    reconcileTargetSite(activeSite, { forcePersist:true });
   });
 
   window.addEventListener("shitu:active-site-changed", (event) => {
