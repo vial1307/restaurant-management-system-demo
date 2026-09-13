@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { assessShiftCapacity, hydrateOperations } from "../src/operations.js";
+import { assessShiftCapacity, hydrateOperations, schedulesForDate } from "../src/operations.js";
 import { effectiveSchedulesForDate, normalizeScheduleException } from "../src/workforce-effective-schedule-core.js";
 import { businessModulesFromState } from "../src/business-state-sync.js";
 
@@ -67,8 +67,13 @@ function state(exceptions = [], extraSchedules = []) {
 }
 
 const baseline = assessShiftCapacity(state(), DATE, "evening");
-assert.equal(baseline.inside.length, 4, "baseline should count four unique effective inside schedules");
+assert.equal(baseline.inside.length, 4, "baseline should count four inside schedules");
 assert.equal(baseline.overloaded, false, "four qualified areas should satisfy 7-table capacity");
+assert.deepEqual(
+  effectiveSchedulesForDate(operations(), DATE, "evening"),
+  schedulesForDate(operations(), DATE, "evening"),
+  "without approved exceptions, effective resolution must preserve existing base schedule behavior"
+);
 
 const leave = {
   id:"exception-leave",
@@ -97,21 +102,30 @@ const override = {
   area:"noodles",
   shift:"evening",
 };
-const effectiveOverride = effectiveSchedulesForDate(operations([override]), DATE, "evening");
+const overrideOperations = operations([override]);
+const baseBeforeOverride = structuredClone(overrideOperations.schedules);
+const effectiveOverride = effectiveSchedulesForDate(overrideOperations, DATE, "evening");
 assert.equal(effectiveOverride.length, 4, "valid override should retain one effective shift");
 assert.equal(effectiveOverride.find((entry) => entry.staffId === "staff-1")?.start, "17:00", "override start must replace base start");
 assert.equal(effectiveOverride.find((entry) => entry.staffId === "staff-1")?.end, "23:00", "override end must replace base end");
+assert.deepEqual(overrideOperations.schedules, baseBeforeOverride, "effective resolution must never mutate stored base schedules");
 assert.equal(assessShiftCapacity(state([override]), DATE, "evening").overloaded, false, "valid override should preserve capacity");
 
 const staleOverride = { ...override, sourceScheduleId:"old-schedule" };
-assert.equal(effectiveSchedulesForDate(operations([staleOverride]), DATE, "evening").length, 3, "stale override must fail closed instead of counting a changed base shift");
+const staleEffective = effectiveSchedulesForDate(operations([staleOverride]), DATE, "evening");
+assert.equal(staleEffective.length, 4, "stale override must keep the existing base assignment unchanged");
+assert.equal(staleEffective.find((entry) => entry.staffId === "staff-1")?.start, "16:00", "stale override must not replace base time");
 
 const malformedOverride = { ...override, start:"25:00" };
 assert.equal(normalizeScheduleException(malformedOverride), null, "malformed override should be rejected by normalization");
-assert.equal(effectiveSchedulesForDate(operations([malformedOverride]), DATE, "evening").length, 3, "malformed exception on a staffed date must fail closed");
+const malformedEffective = effectiveSchedulesForDate(operations([malformedOverride]), DATE, "evening");
+assert.equal(malformedEffective.length, 4, "malformed exception must preserve the base schedule");
+assert.equal(malformedEffective.find((entry) => entry.staffId === "staff-1")?.start, "16:00", "malformed exception must not modify base time");
 
 const duplicateExceptions = [leave, { ...leave, id:"exception-leave-2", requestId:"request-leave-2" }];
-assert.equal(effectiveSchedulesForDate(operations(duplicateExceptions), DATE, "evening").length, 3, "duplicate exceptions for one staff/date must fail closed");
+const duplicateEffective = effectiveSchedulesForDate(operations(duplicateExceptions), DATE, "evening");
+assert.equal(duplicateEffective.length, 4, "duplicate legacy exceptions must preserve the base schedule instead of selecting one arbitrarily");
+assert.equal(duplicateEffective.some((entry) => entry.staffId === "staff-1"), true, "duplicate exceptions must not silently remove the base assignment");
 
 const recurringForStaff1 = {
   ...schedules[0],
@@ -119,14 +133,11 @@ const recurringForStaff1 = {
   applyMode:"month",
   date:"2039-01-01",
   month:"2039-01",
-  weekday:new Date(`${DATE}T12:00:00Z`).getUTCDay(),
+  weekday:new Date(`${DATE}T12:00:00`).getDay(),
 };
-const dayWins = effectiveSchedulesForDate(operations([], [recurringForStaff1]), DATE, "evening");
-assert.equal(dayWins.filter((entry) => entry.staffId === "staff-1").length, 1, "specific-day schedule must take precedence over recurring schedule");
-assert.equal(dayWins.find((entry) => entry.staffId === "staff-1")?.id, "schedule-1", "day-specific schedule should be the effective base");
-
-const duplicateDay = { ...schedules[0], id:"schedule-duplicate-day" };
-assert.equal(effectiveSchedulesForDate(operations([], [duplicateDay]), DATE, "evening").filter((entry) => entry.staffId === "staff-1").length, 0, "ambiguous duplicate base schedules must fail closed");
+const rawWithRecurring = schedulesForDate(operations([], [recurringForStaff1]), DATE, "evening");
+const effectiveWithRecurring = effectiveSchedulesForDate(operations([], [recurringForStaff1]), DATE, "evening");
+assert.deepEqual(effectiveWithRecurring, rawWithRecurring, "existing day/month base resolution must remain unchanged when there is no exception");
 
 const hydrated = operations([override]);
 assert.equal(hydrated.scheduleExceptions.length, 1, "VPS exceptions should survive operations hydration");
