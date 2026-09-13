@@ -17,6 +17,8 @@ on:
       - "vps/backend/src/permissions.mjs"
       - "vps/backend/src/inventory-extra-routes.mjs"
       - "vps/backend/src/server.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs"
       - "vps/backend/scripts/inventory-permission-data-parity-regression.mjs"
       - "docs/spec-deltas/2026-09-14-inventory-permission-data-parity.md"
       - ".github/workflows/inventory-parity-regression.yml"
@@ -35,6 +37,8 @@ on:
       - "vps/backend/src/permissions.mjs"
       - "vps/backend/src/inventory-extra-routes.mjs"
       - "vps/backend/src/server.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs"
       - "vps/backend/scripts/inventory-permission-data-parity-regression.mjs"
       - "docs/spec-deltas/2026-09-14-inventory-permission-data-parity.md"
       - ".github/workflows/inventory-parity-regression.yml"
@@ -100,6 +104,7 @@ jobs:
           node --check vps/backend/src/auth.mjs
           node --check tests/inventory-permission-data-parity-regression.mjs
           node --check tests/inventory-role-data-parity-browser-regression.mjs
+          node --check vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs
           node --check vps/backend/scripts/inventory-permission-data-parity-regression.mjs
 
       - name: Permission and site snapshot contract regression
@@ -121,6 +126,9 @@ jobs:
 
       - name: Cross-role inventory API parity regression
         run: node vps/backend/scripts/inventory-permission-data-parity-regression.mjs
+
+      - name: Canonicalize branch location codes for browser certification
+        run: node vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs
 
       - name: Start frontend test server
         run: |
