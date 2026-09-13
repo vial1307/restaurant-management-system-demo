@@ -12,6 +12,7 @@ import {
 import { registerWorkforceApprovalRoutes } from "./workforce-approval-routes.mjs";
 import { registerWorkforceCorrectionRoutes } from "./workforce-correction-routes.mjs";
 import { registerWorkforceRequestRoutes } from "./workforce-request-routes.mjs";
+import { registerWorkforceScheduleRuleRoutes } from "./workforce-schedule-rule-routes.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -125,6 +126,11 @@ function preserveScheduleWorkflow(before, incoming) {
   const next = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? structuredClone(incoming) : {};
   next.requests = structuredClone(Array.isArray(stored.requests) ? stored.requests : []);
   next.exceptions = structuredClone(Array.isArray(stored.exceptions) ? stored.exceptions : []);
+  if (stored.rules && typeof stored.rules === "object" && !Array.isArray(stored.rules)) {
+    next.rules = structuredClone(stored.rules);
+  } else {
+    delete next.rules;
+  }
   return next;
 }
 
@@ -132,6 +138,7 @@ export async function registerBusinessStateRoutes(app) {
   await registerWorkforceApprovalRoutes(app);
   await registerWorkforceCorrectionRoutes(app);
   await registerWorkforceRequestRoutes(app);
+  await registerWorkforceScheduleRuleRoutes(app);
 
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
