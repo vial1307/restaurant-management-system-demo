@@ -47,6 +47,10 @@ assert.match(ui, /schedulesForDate\(state\?\.operations \|\| \{\}, date, shift\)
 assert.match(ui, /qualifiedAreas\(state\.operations, entry\.staffId\)/, "fixed-area coverage must retain SOP qualification check");
 assert.match(ui, /newSchedulePending/, "new schedule default-time guard missing");
 assert.match(ui, /cacheRules\.shifts\[shift\?\.value\]/, "new schedule defaults must use configured shift window");
+assert.match(ui, /function setText\(node, value\)/, "schedule decorator must avoid identical text writes");
+assert.match(ui, /function mutationNeedsDecoration\(mutation\)/, "schedule observer must filter unrelated DOM mutations");
+assert.match(ui, /observer\.observe\(document\.querySelector\("#app"\) \|\| document\.body/, "schedule observer must stay scoped to the app root");
+assert(!ui.includes("new MutationObserver(queueDecorate)"), "schedule observer must not decorate on every child-list mutation");
 assert(!ui.includes("activeStaffId"), "rule UI must not trust device-local activeStaffId for authorization");
 
 assert.match(spec, /Existing schedule assignments retain their stored `start` and `end`/, "immutable existing assignment requirement missing");
