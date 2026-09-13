@@ -116,11 +116,11 @@ try {
     ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm","central","storage",10],
     ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm","central","storage",20],
     ["central-work-use","使用中","Đang sử dụng","central","work",90],
-    ["fuxing-large-freezer","大冷凍","Tủ đông lớn","fuxing","storage",10],
-    ["fuxing-four-door","四門冰箱","Tủ lạnh 4 cánh","fuxing","storage",20],
+    ["fuxing-freezer","大冷凍","Tủ đông lớn","fuxing","storage",10],
+    ["fuxing-four","四門冰箱","Tủ lạnh 4 cánh","fuxing","storage",20],
     ["fuxing-work-noodles","麵區","Khu mì","fuxing","work",90],
-    ["yongji-large-freezer","大冷凍","Tủ đông lớn","yongji","storage",10],
-    ["yongji-four-door","四門冰箱","Tủ lạnh 4 cánh","yongji","storage",20],
+    ["yongji-freezer","大冷凍","Tủ đông lớn","yongji","storage",10],
+    ["yongji-four","四門冰箱","Tủ lạnh 4 cánh","yongji","storage",20],
     ["yongji-work-noodles","麵區","Khu mì","yongji","work",90]
   ]) {
     const { rows } = await client.query(
@@ -156,20 +156,20 @@ try {
     );
   };
 
-  await addStock("fuxing:beef","fuxing-large-freezer",10,4);
-  await addStock("fuxing:beef","fuxing-four-door",1,1);
+  await addStock("fuxing:beef","fuxing-freezer",10,4);
+  await addStock("fuxing:beef","fuxing-four",1,1);
   await addStock("fuxing:beef","fuxing-work-noodles",0,0);
-  await addStock("yongji:beef","yongji-large-freezer",2,1);
-  await addStock("yongji:beef","yongji-four-door",3,1);
+  await addStock("yongji:beef","yongji-freezer",2,1);
+  await addStock("yongji:beef","yongji-four",3,1);
   await addStock("central:beef","central-freezer",20,5);
-  await addStock("fuxing:tofu","fuxing-large-freezer",5,1);
+  await addStock("fuxing:tofu","fuxing-freezer",5,1);
   // yongji:tofu intentionally has no configured stock location.
   await addStock("central:mala","central-freezer",8,2);
 
   await client.query(
     `insert into public.inventory_receive_defaults(site,catalog_key,location_id,updated_by)
      values('yongji','beef',$1,$2)`,
-    [locations["yongji-four-door"].id,users.manageryj.id]
+    [locations["yongji-four"].id,users.manageryj.id]
   );
 
   console.log(JSON.stringify({
