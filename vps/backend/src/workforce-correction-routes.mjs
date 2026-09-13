@@ -86,8 +86,18 @@ function canonicalCorrection(input = {}) {
   };
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return value.map(stableJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, stableJson(value[key])])
+    );
+  }
+  return value;
+}
+
 function jsonEqual(left, right) {
-  try { return JSON.stringify(left) === JSON.stringify(right); }
+  try { return JSON.stringify(stableJson(left)) === JSON.stringify(stableJson(right)); }
   catch { return false; }
 }
 
