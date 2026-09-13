@@ -273,7 +273,7 @@ export async function registerWorkforceApprovalRoutes(app) {
     const month = text(request.params.month);
     if (!validMonth(month)) return reply.code(400).send({ error:"WORKFORCE_PAYROLL_MONTH_INVALID" });
     const reason = text(request.body?.reason);
-    if (reason.length < 3) return reply.code(40).send({ error:"WORKFORCE_REOPEN_REASON_REQUIRED" });
+    if (reason.length < 3) return reply.code(400).send({ error:"WORKFORCE_REOPEN_REASON_REQUIRED" });
 
     const now = new Date().toISOString();
     const reopenedByName = actorName(user);
