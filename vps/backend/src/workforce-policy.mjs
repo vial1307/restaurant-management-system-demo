@@ -88,6 +88,9 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
       attendance: Array.isArray(modules.attendance.attendance)
         ? modules.attendance.attendance.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
         : [],
+      correctionRequests: Array.isArray(modules.attendance.correctionRequests)
+        ? modules.attendance.correctionRequests.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
+        : [],
       payroll:selfServicePayroll(modules.attendance.payroll || {}),
     };
   }

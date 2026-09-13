@@ -1,0 +1,128 @@
+name: Workforce Attendance Correction Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "vps-entry.html"
+      - "src/workforce-corrections.js"
+      - "src/workforce-corrections.css"
+      - "src/workforce-policy.js"
+      - "tests/workforce-correction-*.mjs"
+      - "vps/backend/src/business-state-routes.mjs"
+      - "vps/backend/src/workforce-correction-routes.mjs"
+      - "vps/backend/src/workforce-lock-policy.mjs"
+      - "vps/backend/src/workforce-policy.mjs"
+      - "vps/backend/scripts/workforce-correction-regression-client.mjs"
+      - "docs/spec-deltas/2026-09-13-workforce-attendance-corrections.md"
+      - ".github/workflows/workforce-correction-regression.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workforce-correction-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  correction-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_PORT: "8080"
+      TEST_WEB_PORT: "3000"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      TEST_WEB_BASE: "http://localhost:3000"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend and browser test packages
+        run: |
+          npm ci --prefix vps/backend
+          npm ci --prefix tests
+
+      - name: Validate correction JavaScript syntax
+        run: |
+          node --check src/workforce-corrections.js
+          node --check tests/workforce-correction-contract-regression.mjs
+          node --check tests/workforce-correction-browser-regression.mjs
+          node --check vps/backend/src/workforce-correction-routes.mjs
+          node --check vps/backend/scripts/workforce-correction-regression-client.mjs
+
+      - name: Attendance correction contract regression
+        run: node tests/workforce-correction-contract-regression.mjs
+
+      - name: Prepare isolated regression database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-correction-api.log 2>&1 &
+          echo $! >/tmp/kitchen-correction-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-correction-api.log
+          exit 1
+
+      - name: Seed canonical workforce regression fixtures
+        run: node vps/backend/scripts/api-regression-v6.mjs
+
+      - name: Attendance correction API regression
+        run: node vps/backend/scripts/workforce-correction-regression-client.mjs
+
+      - name: Start frontend test server
+        run: |
+          node tests/web-server.mjs >/tmp/kitchen-correction-web.log 2>&1 &
+          echo $! >/tmp/kitchen-correction-web.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-correction-web.log
+          exit 1
+
+      - name: Attendance correction browser regression
+        run: node tests/workforce-correction-browser-regression.mjs
+
+      - name: Dump correction logs on failure
+        if: failure()
+        run: |
+          echo "=== CORRECTION API LOG ==="
+          cat /tmp/kitchen-correction-api.log 2>/dev/null || true
+          echo "=== CORRECTION WEB LOG ==="
+          cat /tmp/kitchen-correction-web.log 2>/dev/null || true
