@@ -96,8 +96,9 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
   }
 
   if (modules.schedule && typeof modules.schedule === "object") {
+    const { rules:_managerRules, ...scheduleForSelfService } = modules.schedule;
     scoped.schedule = {
-      ...modules.schedule,
+      ...scheduleForSelfService,
       schedules: Array.isArray(modules.schedule.schedules)
         ? modules.schedule.schedules.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
         : [],
