@@ -20,13 +20,14 @@ This file is the canonical continuation log for implementation, CI, merge and de
 ### Production pipeline
 - Main deployment workflow run: `34715840529` for exact application commit `69fcc350dd8f9cb645177eb571ecef956479d34d`.
 - Isolated API load-smoke run: `34715840533` — passed 10/25/50-client smoke.
-- At the time this entry was first written, deployment preflight was green and the production regression job was still executing its full-device gate. Update this section after deploy/release smoke completes.
+- Production result verified: preflight, regression, exact-SHA VPS deploy, health/release check and `production-ui-smoke` all completed successfully.
+- Production deploy job used the existing server-side backup/rollback path before releasing the exact tested commit.
 
 ### Database safety
 - No schema/data migration is introduced by PR #80.
 - Before the next schema/data migration, preserve one immutable original PostgreSQL baseline dump outside normal rotating backups. Do not claim this baseline exists until it has been verified on the VPS.
 
 ### Next continuation point
-1. Complete exact-SHA VPS deployment and production UI smoke for `69fcc350dd8f9cb645177eb571ecef956479d34d`.
-2. Continue workforce hardening without inventing wage rules: attendance correction/request workflow, payroll history/export, and configurable scheduling/shift rules.
+1. Build attendance correction/request workflow as the next workforce slice; employee/part-time submit their own correction request, manager/admin approve or reject, and approved correction invalidates attendance approval so it must be reviewed again.
+2. Then continue payroll history/export and configurable scheduling/shift rules without inventing wage rules.
 3. Keep manager/admin authority distinct from employee/part-time self-service and certify desktop/mobile parity through the existing release gates.
