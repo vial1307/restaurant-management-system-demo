@@ -1,5 +1,6 @@
 import { withTransaction } from "./db.mjs";
 import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
+import { buildPayrollLockSnapshot } from "./workforce-payroll-snapshot.mjs";
 
 const VALID_SITES = new Set(["central", "fuxing", "yongji"]);
 
@@ -49,12 +50,6 @@ function currentModuleRevision(revisions = {}) {
 function periodFor(module, month) {
   const value = module?.payroll?.periods?.[month];
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-
-function policySnapshot(payroll = {}) {
-  const snapshot = structuredClone(payroll || {});
-  delete snapshot.periods;
-  return snapshot;
 }
 
 function auditPayload(value) {
@@ -234,14 +229,26 @@ export async function registerWorkforceApprovalRoutes(app) {
         }
 
         const before = currentPeriod ? structuredClone(currentPeriod) : null;
+        const snapshot = buildPayrollLockSnapshot({
+          month,
+          attendance:completed,
+          payroll:module.payroll,
+          lockedAt:now,
+          lockedByUserId:user.id,
+          lockedByName,
+          currentPeriod,
+        });
+        const priorHistory = Array.isArray(currentPeriod?.history) ? structuredClone(currentPeriod.history) : [];
         const period = {
           month,
           status:"locked",
           lockedAt:now,
           lockedByUserId:String(user.id || ""),
           lockedByName,
-          policySnapshot:policySnapshot(module.payroll),
-          approvedAttendanceIds:completed.map((entry) => String(entry.id || "")).filter(Boolean),
+          policySnapshot:structuredClone(snapshot.policySnapshot),
+          approvedAttendanceIds:[...snapshot.approvedAttendanceIds],
+          currentRevision:snapshot.revision,
+          history:[...priorHistory, snapshot],
         };
         module.payroll.periods[month] = period;
         return {
@@ -249,7 +256,7 @@ export async function registerWorkforceApprovalRoutes(app) {
           module,
           before,
           after:structuredClone(period),
-          metadata:{ approvedCount:completed.length },
+          metadata:{ approvedCount:completed.length, revision:snapshot.revision, snapshotId:snapshot.id },
           payload:structuredClone(period),
         };
       },
@@ -296,7 +303,7 @@ export async function registerWorkforceApprovalRoutes(app) {
           module,
           before,
           after:structuredClone(period),
-          metadata:{ reason },
+          metadata:{ reason, previousRevision:Number(currentPeriod.currentRevision) || 0 },
           payload:structuredClone(period),
         };
       },

@@ -1,0 +1,28 @@
+.workforce-payroll-history{display:grid;gap:16px;margin-top:16px}
+.payroll-history-list{display:grid;gap:14px}
+.payroll-history-intro p{margin:4px 0 0}
+.payroll-history-legacy{margin:14px 0 0;padding:12px 14px;border:1px dashed currentColor;border-radius:12px;opacity:.82}
+.payroll-history-revision{display:grid;gap:14px}
+.payroll-history-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.payroll-history-heading h3,.payroll-history-heading p{margin:0}
+.payroll-history-heading p{margin-top:4px;opacity:.75}
+.payroll-history-heading small{display:block;margin-top:3px;opacity:.65}
+.payroll-history-title-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.payroll-history-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.payroll-history-stats>span{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--border-color,#dfe6e3);border-radius:12px;min-width:0}
+.payroll-history-stats strong{font-size:15px;overflow-wrap:anywhere}
+.payroll-history-stats small{opacity:.7}
+.payroll-history-reopen{display:grid;gap:3px;padding:10px 12px;border-radius:12px;background:rgba(120,120,120,.08)}
+.payroll-history-table-wrap{max-height:340px}
+.payroll-history-export{white-space:nowrap}
+@media(max-width:840px){
+  .payroll-history-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .payroll-history-heading{align-items:stretch;flex-direction:column}
+  .payroll-history-export{width:100%;justify-content:center}
+}
+@media(max-width:520px){
+  .workforce-payroll-history{gap:12px}
+  .payroll-history-stats{grid-template-columns:1fr 1fr}
+  .payroll-history-stats>span:last-child{grid-column:1/-1}
+  .payroll-history-table{min-width:660px}
+}

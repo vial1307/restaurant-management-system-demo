@@ -1,0 +1,128 @@
+name: Workforce Payroll History Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "vps-entry.html"
+      - "src/workforce-payroll-history.js"
+      - "src/workforce-payroll-history.css"
+      - "tests/workforce-payroll-history-*.mjs"
+      - "vps/backend/src/workforce-payroll-snapshot.mjs"
+      - "vps/backend/src/workforce-approval-routes.mjs"
+      - "vps/backend/src/workforce-lock-policy.mjs"
+      - "vps/backend/src/workforce-policy.mjs"
+      - "vps/backend/scripts/workforce-payroll-history-regression-client.mjs"
+      - "docs/spec-deltas/2026-09-13-workforce-payroll-history-export.md"
+      - ".github/workflows/workforce-payroll-history-regression.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workforce-payroll-history-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  payroll-history-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_PORT: "8080"
+      TEST_WEB_PORT: "3000"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      TEST_WEB_BASE: "http://localhost:3000"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+      TZ: "UTC"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend and browser test packages
+        run: |
+          npm ci --prefix vps/backend
+          npm ci --prefix tests
+
+      - name: Validate payroll history JavaScript syntax
+        run: |
+          node --check src/workforce-payroll-history.js
+          node --check tests/workforce-payroll-history-contract-regression.mjs
+          node --check tests/workforce-payroll-history-browser-regression.mjs
+          node --check vps/backend/src/workforce-payroll-snapshot.mjs
+          node --check vps/backend/scripts/workforce-payroll-history-regression-client.mjs
+
+      - name: Payroll history contract regression
+        run: node tests/workforce-payroll-history-contract-regression.mjs
+
+      - name: Prepare isolated regression database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-payroll-history-api.log 2>&1 &
+          echo $! >/tmp/kitchen-payroll-history-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-payroll-history-api.log
+          exit 1
+
+      - name: Seed canonical workforce regression fixtures
+        run: node vps/backend/scripts/api-regression-v6.mjs
+
+      - name: Payroll history API regression
+        run: node vps/backend/scripts/workforce-payroll-history-regression-client.mjs
+
+      - name: Start frontend test server
+        run: |
+          node tests/web-server.mjs >/tmp/kitchen-payroll-history-web.log 2>&1 &
+          echo $! >/tmp/kitchen-payroll-history-web.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-payroll-history-web.log
+          exit 1
+
+      - name: Payroll history browser regression
+        run: node tests/workforce-payroll-history-browser-regression.mjs
+
+      - name: Dump payroll history logs on failure
+        if: failure()
+        run: |
+          echo "=== PAYROLL HISTORY API LOG ==="
+          cat /tmp/kitchen-payroll-history-api.log 2>/dev/null || true
+          echo "=== PAYROLL HISTORY WEB LOG ==="
+          cat /tmp/kitchen-payroll-history-web.log 2>/dev/null || true
