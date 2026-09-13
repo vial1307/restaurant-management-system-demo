@@ -30,7 +30,7 @@ concurrency:
 jobs:
   correction-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     container:
       image: mcr.microsoft.com/playwright:v1.62.1-noble
       options: --ipc=host
@@ -98,6 +98,9 @@ jobs:
           done
           cat /tmp/kitchen-correction-api.log
           exit 1
+
+      - name: Seed canonical workforce regression fixtures
+        run: node vps/backend/scripts/api-regression-v6.mjs
 
       - name: Attendance correction API regression
         run: node vps/backend/scripts/workforce-correction-regression-client.mjs
