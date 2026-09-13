@@ -10,7 +10,7 @@ function text(value) {
 }
 
 function validTimestamp(value) {
-  if (value === null) return true;
+  if (value === null) return false;
   const parsed = Date.parse(String(value || ""));
   return Number.isFinite(parsed);
 }
@@ -80,8 +80,9 @@ function periodLocked(module, date) {
 }
 
 function validCorrectedRange(clockIn, clockOut) {
-  if (!validTimestamp(clockIn) || !validTimestamp(clockOut)) return false;
+  if (!validTimestamp(clockIn)) return false;
   if (clockOut === null) return true;
+  if (!validTimestamp(clockOut)) return false;
   return Date.parse(String(clockOut)) >= Date.parse(String(clockIn));
 }
 
@@ -197,9 +198,6 @@ export async function registerWorkforceAttendanceCorrectionRoutes(app) {
     const requestedClockOut = request.body?.requestedClockOut === null ? null : text(request.body?.requestedClockOut);
     if (!attendanceId) return reply.code(400).send({ error:"WORKFORCE_ATTENDANCE_ID_REQUIRED" });
     if (reason.length < 3) return reply.code(400).send({ error:"WORKFORCE_CORRECTION_REASON_REQUIRED" });
-    if (!validTimestamp(requestedClockIn) || !validTimestamp(requestedClockOut)) {
-      return reply.code(400).send({ error:"WORKFORCE_CORRECTION_TIME_INVALID" });
-    }
     if (!validCorrectedRange(requestedClockIn, requestedClockOut)) {
       return reply.code(400).send({ error:"WORKFORCE_CORRECTION_TIME_INVALID" });
     }
