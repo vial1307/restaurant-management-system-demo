@@ -51,15 +51,15 @@ const { createStore, STORAGE_KEY } = await import(`../src/store.js?inventory-par
 const store = createStore(storage);
 const selectedDate = store.getState().selectedDate;
 
-function setSession(location) {
+function setSession(location, accountRole = location === "all" ? "admin" : "manager") {
   storage.setItem("shitu-kitchen-auth-v1", JSON.stringify({
     id:`user-${location}`,
-    role:"branch",
-    accountRole:"manager",
+    role:accountRole === "admin" ? "admin" : "branch",
+    accountRole,
     location,
     permissions:{ inventory:{view:true,edit:true} },
   }));
-  storage.setItem("shitu-admin-active-site-v1", location);
+  if (["fuxing", "yongji", "central"].includes(location)) storage.setItem("shitu-admin-active-site-v1", location);
 }
 
 function writePersistedBranchSnapshot(site, quantity, minimum) {
@@ -91,7 +91,8 @@ function writePersistedBranchSnapshot(site, quantity, minimum) {
   storage.setItem(STORAGE_KEY, JSON.stringify(persisted));
 }
 
-setSession("fuxing");
+setSession("all");
+storage.setItem("shitu-admin-active-site-v1", "fuxing");
 writePersistedBranchSnapshot("fuxing", 10, 4);
 windowTarget.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{site:"fuxing"} }));
 assert.equal(store.getState().records[selectedDate].inventorySite, "fuxing", "Fuxing snapshot must carry Fuxing identity");
