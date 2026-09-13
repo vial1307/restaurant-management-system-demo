@@ -118,4 +118,17 @@ windowTarget.dispatchEvent(new CustomEvent("shitu:auth-synced"));
 assert.equal(store.getState().records[selectedDate].inventorySite, "yongji", "auth transition must reconcile inventory site");
 assert.equal(store.getState().records[selectedDate].inventory[0]?.quantity, 2, "auth transition must hydrate the target user's site snapshot");
 
+// Simulate a Fuxing request that started before the site switch and completed
+// after Yongji became active. inventory-cloud writes the late payload to the
+// persisted application state before publishing its update event. The parity
+// wrapper must cache that Fuxing response but immediately restore the active
+// Yongji snapshot to both memory and localStorage so a reload cannot regress.
+writePersistedBranchSnapshot("fuxing", 99, 4);
+windowTarget.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{site:"fuxing"} }));
+assert.equal(store.getState().records[selectedDate].inventorySite, "yongji", "late Fuxing response changed live site identity");
+assert.equal(store.getState().records[selectedDate].inventory[0]?.quantity, 2, "late Fuxing response leaked into live Yongji store");
+const persistedAfterLateResponse = JSON.parse(storage.getItem(STORAGE_KEY));
+assert.equal(persistedAfterLateResponse.records[selectedDate].inventorySite, "yongji", "late response corrupted persisted site identity");
+assert.equal(persistedAfterLateResponse.records[selectedDate].inventory[0]?.quantity, 2, "late Fuxing response survived in persisted Yongji mirror");
+
 console.log("INVENTORY_PERMISSION_DATA_PARITY_REGRESSION_OK");
