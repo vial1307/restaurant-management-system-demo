@@ -75,8 +75,3 @@ assert.match(css, /\.workforce-request-workspace/, "request workspace styling mi
 assert.match(css, /@media \(max-width:/, "request workspace must include mobile responsive rules");
 
 console.log("WORKFORCE_REQUEST_CONTRACT_OK");
-await import("./workforce-correction-contract-regression.mjs");
-if (process.env.TEST_API_BASE && process.env.TEST_WEB_BASE) {
-  await import("../vps/backend/scripts/workforce-correction-regression-client.mjs");
-  await import("./workforce-correction-browser-regression.mjs");
-}
