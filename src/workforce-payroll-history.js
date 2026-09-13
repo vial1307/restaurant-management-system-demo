@@ -30,21 +30,21 @@ function copy() {
   } : {
     title:"Lịch sử kỳ lương",
     subtitle:"Mỗi lần khóa lưu một snapshot bất biến; mở lại rồi khóa lần nữa sẽ tạo revision mới.",
-    legacy:"Kỳ khóa này được tạo trước chức năng lịch sử lương nên không có snapshot bất biến. Hệ thống sẽ không lấy dữ liệu hiện tại để dựng ngược lịch sử.",
+    legacy:"Kỳ khóa này được tạo trước chức năng lịch sử lương nên không có snapshot bất biến. Hệ thống sẽ không lấy tưừ liệu hiệxh ại để tụng người lịch sử.",
     revision:"Revision",
     current:"Revision hiện tại",
     lockedAt:"Khóa lúc",
     lockedBy:"Người khóa",
     shifts:"Ca",
-    hours:"Giờ làm",
-    gross:"Lương trước khấu trừ",
+    hours:"Giờl àm",
+    gross:"Lİơng trước khấu trừ",
     deductions:"Khấu trừ",
     net:"Thực nhận",
     staff:"Nhân viên",
     export:"Xuất CSV",
     formula:"Phiên bản công thức",
-    reopenedFrom:"Kỳ đã được mở lại trước revision này",
-    reopenReason:"Lý do",
+    reopenedFrom:"Kỳ đã được lại trước revision này",
+    reopenReason:"L� do",
     noHistory:"Tháng này chưa có lịch sử khóa kỳ lương.",
     exportError:"Không thể xuất revision lương này.",
   };
@@ -118,6 +118,7 @@ function totalsFor(snapshot) {
   const totals = snapshot?.totals && typeof snapshot.totals === "object" ? snapshot.totals : {};
   return {
     shifts:Math.max(0, Number(totals.shifts) || 0),
+    workedMinutes:Math.max(0, Number(totals.workedMinutes) || 0),
     workedHours:Math.max(0, Number(totals.workedHours) || 0),
     gross:Math.max(0, Number(totals.gross) || 0),
     deduction:Math.max(0, Number(totals.deduction) || 0),
@@ -222,7 +223,7 @@ function csvForSnapshot(snapshot) {
     ].map(csvValue).join(","));
   }
   lines.push("");
-  lines.push(["TOTAL","","","", "", "", "", totals.workedHours * 60, totals.workedHours, "", "", totals.gross, totals.deduction, totals.net, "", ""].map(csvValue).join(","));
+  lines.push(["TOTAL","","","", "", "", "", totals.workedMinutes, totals.workedHours, "", "", totals.gross, totals.deduction, totals.net, "", ""].map(csvValue).join(","));
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
