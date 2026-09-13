@@ -28,6 +28,12 @@ let loadInFlight = null;
 let renderQueued = false;
 let newSchedulePending = false;
 
+function setText(node, value) {
+  if (!node) return;
+  const next = String(value ?? "");
+  if (node.textContent !== next) node.textContent = next;
+}
+
 function zh() {
   return document.documentElement.lang === "zh-Hant";
 }
@@ -161,7 +167,7 @@ function decorateShiftOptions(select) {
   for (const id of SHIFT_IDS) {
     const option = select.querySelector(`option[value="${id}"]`);
     const rule = cacheRules.shifts[id];
-    if (option && rule) option.textContent = `${labels[id]} · ${rule.start}–${rule.end}`;
+    if (option && rule) setText(option, `${labels[id]} · ${rule.start}–${rule.end}`);
   }
 }
 
@@ -202,6 +208,7 @@ function decorateSchedulePage() {
   const toolbarShift = document.querySelector('[data-field="schedule-shift"]');
   decorateShiftOptions(toolbarShift);
   const selectedShift = toolbarShift?.value || "evening";
+  const c = copy();
 
   for (const button of document.querySelectorAll(".schedule-day[data-date]")) {
     const date = String(button.dataset.date || "");
@@ -209,10 +216,8 @@ function decorateSchedulePage() {
     const status = capacity.needsReview ? "review" : capacity.overloaded ? "overloaded" : "ready";
     button.classList.remove("status-review", "status-overloaded", "status-ready");
     button.classList.add(`status-${status}`);
-    const span = button.querySelector("span");
-    if (span) span.textContent = `${capacity.tables} ${copy().tables} · ${capacity.inside.length}/${capacity.requiredInside} 內`;
-    const small = button.querySelector("small");
-    if (small) small.textContent = status === "review" ? copy().reviewLabel : status === "overloaded" ? copy().overloaded : copy().enough;
+    setText(button.querySelector("span"), `${capacity.tables} ${c.tables} · ${capacity.inside.length}/${capacity.requiredInside} 內`);
+    setText(button.querySelector("small"), status === "review" ? c.reviewLabel : status === "overloaded" ? c.overloaded : c.enough);
   }
 
   const selectedDate = String(state.selectedDate || "");
@@ -220,16 +225,15 @@ function decorateSchedulePage() {
   const card = document.querySelector(".capacity-detail-card");
   if (card) {
     const numbers = card.querySelectorAll(".capacity-numbers > div strong");
-    if (numbers[0]) numbers[0].textContent = String(capacity.tables);
-    if (numbers[1]) numbers[1].textContent = `${capacity.inside.length}/${capacity.requiredInside}`;
+    setText(numbers[0], String(capacity.tables));
+    setText(numbers[1], `${capacity.inside.length}/${capacity.requiredInside}`);
     const tag = card.querySelector(".card-heading .tag");
     if (tag) {
-      tag.textContent = capacity.overloaded ? copy().overloaded : copy().enough;
+      setText(tag, capacity.overloaded ? c.overloaded : c.enough);
       tag.classList.toggle("tag-empty", capacity.overloaded);
       tag.classList.toggle("tag-ok", !capacity.overloaded);
     }
-    const helper = card.querySelector(".helper-text");
-    if (helper) helper.textContent = `${capacity.tables} ${copy().tables}: ${capacity.requiredInside} ${capacity.fixedAreas ? copy().ruleFixed : copy().ruleThree}`;
+    setText(card.querySelector(".helper-text"), `${capacity.tables} ${c.tables}: ${capacity.requiredInside} ${capacity.fixedAreas ? c.ruleFixed : c.ruleThree}`);
     let warning = card.querySelector("[data-schedule-rules-missing]");
     if (capacity.missingAreas.length) {
       if (!warning) {
@@ -238,7 +242,7 @@ function decorateSchedulePage() {
         warning.dataset.scheduleRulesMissing = "";
         card.append(warning);
       }
-      warning.textContent = `${copy().missing}: ${capacity.missingAreas.join(" · ")}`;
+      setText(warning, `${c.missing}: ${capacity.missingAreas.join(" · ")}`);
     } else warning?.remove();
   }
 
@@ -249,7 +253,7 @@ function decorateSchedulePage() {
       button.type = "button";
       button.className = "secondary-button workforce-schedule-rules-open";
       button.dataset.workforceScheduleRulesOpen = "";
-      button.textContent = copy().open;
+      button.textContent = c.open;
       add.insertAdjacentElement("beforebegin", button);
     }
   } else {
@@ -332,6 +336,12 @@ function queueDecorate() {
   });
 }
 
+function mutationNeedsDecoration(mutation) {
+  const selector = '.app-shell,[data-field="schedule-shift"],.schedule-day,.capacity-detail-card,form[data-form="save-schedule"],[data-action="schedule-add"]';
+  const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
+  return nodes.some((node) => node instanceof Element && (node.matches(selector) || node.querySelector(selector)));
+}
+
 document.addEventListener("click", (event) => {
   const add = event.target.closest?.('[data-action="schedule-add"]');
   if (add) newSchedulePending = true;
@@ -363,6 +373,8 @@ document.addEventListener("change", (event) => {
 window.addEventListener("hashchange", queueDecorate);
 window.addEventListener("shitu:accounts-synced", () => { cacheRevision = -1; queueDecorate(); });
 window.addEventListener("shitu:business-state-updated", () => { cacheRevision = -1; queueDecorate(); });
-const observer = new MutationObserver(queueDecorate);
-observer.observe(document.documentElement, { childList:true, subtree:true });
+const observer = new MutationObserver((mutations) => {
+  if (mutations.some(mutationNeedsDecoration)) queueDecorate();
+});
+observer.observe(document.querySelector("#app") || document.body, { childList:true, subtree:true });
 queueDecorate();
