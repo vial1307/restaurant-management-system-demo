@@ -63,33 +63,43 @@ function reconcilePermissionNavigation(user) {
 function markLegacyScheduleRoute(node, authorized) {
   if (!(node instanceof HTMLElement)) return;
   if (!authorized) {
-    node.hidden = true;
-    node.setAttribute("aria-hidden", "true");
-    node.tabIndex = -1;
-    node.style.display = "none";
+    if (!node.hidden) node.hidden = true;
+    if (node.getAttribute("aria-hidden") !== "true") node.setAttribute("aria-hidden", "true");
+    if (node.tabIndex !== -1) node.tabIndex = -1;
+    if (node.style.getPropertyValue("display") !== "none" || node.style.getPropertyPriority("display")) {
+      node.style.setProperty("display", "none");
+    }
     return;
   }
 
-  node.hidden = false;
-  node.setAttribute("aria-hidden", "true");
-  node.tabIndex = -1;
-  node.dataset.workforceLegacySchedule = "true";
-  Object.assign(node.style, {
-    position: "absolute",
-    width: "0",
-    height: "0",
-    minWidth: "0",
-    minHeight: "0",
-    margin: "0",
-    padding: "0",
-    border: "0",
-    overflow: "hidden",
-    opacity: "0",
-    pointerEvents: "none",
-    clipPath: "inset(50%)",
-    whiteSpace: "nowrap",
-  });
-  node.style.setProperty("display", "block", "important");
+  // workforce-module.js intentionally hides the visible legacy schedule entry.
+  // Compatibility owns the final DOM state for authorized users: keep the route
+  // addressable for routing/certification while preserving zero visible geometry.
+  if (node.hidden) node.hidden = false;
+  if (node.getAttribute("aria-hidden") !== "true") node.setAttribute("aria-hidden", "true");
+  if (node.tabIndex !== -1) node.tabIndex = -1;
+  if (node.dataset.workforceLegacySchedule !== "true") node.dataset.workforceLegacySchedule = "true";
+  const required = {
+    position:"absolute",
+    width:"0px",
+    height:"0px",
+    minWidth:"0px",
+    minHeight:"0px",
+    margin:"0px",
+    padding:"0px",
+    border:"0px",
+    overflow:"hidden",
+    opacity:"0",
+    pointerEvents:"none",
+    clipPath:"inset(50%)",
+    whiteSpace:"nowrap",
+  };
+  for (const [property, value] of Object.entries(required)) {
+    if (node.style[property] !== value) node.style[property] = value;
+  }
+  if (node.style.getPropertyValue("display") !== "block" || node.style.getPropertyPriority("display") !== "important") {
+    node.style.setProperty("display", "block", "important");
+  }
 }
 
 function showTab(link, visible) {
@@ -175,12 +185,7 @@ function requestReconcile() {
 }
 
 document.addEventListener("click", (event) => {
-  // The expanded mobile menu is rendered synchronously by app.js after this
-  // capture-phase handler. Schedule a post-render permission reconciliation so
-  // newly created menu entries inherit the authoritative mirrored VPS profile.
-  if (event.target.closest?.('[data-action="toggle-mobile-menu"]')) {
-    requestReconcile();
-  }
+  if (event.target.closest?.('[data-action="toggle-mobile-menu"]')) requestReconcile();
 
   const entry = event.target.closest?.('a.nav-item[href="#attendance"]');
   if (!entry) return;
@@ -197,6 +202,19 @@ window.addEventListener("shitu:auth-synced", requestReconcile);
 window.addEventListener("shitu:accounts-synced", requestReconcile);
 window.addEventListener("shitu:vps-auth-ready", requestReconcile);
 
-const observer = new MutationObserver(requestReconcile);
-observer.observe(document.documentElement, { childList:true, subtree:true });
+const observer = new MutationObserver((records) => {
+  const relevant = records.some((record) => {
+    if (record.type === "childList") return true;
+    return record.type === "attributes"
+      && record.target instanceof Element
+      && record.target.matches('a.nav-item[href="#schedule"]');
+  });
+  if (relevant) requestReconcile();
+});
+observer.observe(document.documentElement, {
+  childList:true,
+  subtree:true,
+  attributes:true,
+  attributeFilter:["hidden", "aria-hidden", "tabindex", "style", "data-workforce-legacy-schedule"],
+});
 requestReconcile();
