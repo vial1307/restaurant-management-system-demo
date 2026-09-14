@@ -57,6 +57,11 @@ function currentModuleRevision(revisions = {}) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function requestedRevision(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
+
 function canonicalRuleValue(rules) {
   return {
     shifts:Object.fromEntries(SHIFT_IDS.map((id) => [id, {
@@ -257,6 +262,10 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
     if (!VALID_SITES.has(site)) return reply.code(400).send({ error:"INVALID_SITE" });
     if (!siteAllowed(user, site)) return reply.code(403).send({ error:"SITE_NOT_ALLOWED" });
     if (!canManageSchedule(user)) return reply.code(403).send({ error:"WORKFORCE_SCHEDULE_MANAGER_REQUIRED" });
+    const expectedModuleRevision = requestedRevision(request.body?.expectedModuleRevision);
+    if (expectedModuleRevision === null) {
+      return reply.code(409).send({ error:"WORKFORCE_SCHEDULE_PUBLISH_REVISION_REQUIRED" });
+    }
 
     const result = await withTransaction(async (client) => {
       await client.query(
@@ -281,6 +290,13 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
         ? module.publishedSchedules
         : [];
       const moduleRevision = currentModuleRevision(revisions);
+      if (moduleRevision !== expectedModuleRevision) {
+        return {
+          conflict:true,
+          moduleRevision,
+          revision:Number(stored.revision || 0),
+        };
+      }
 
       if (priorPublication && equalSchedules(draftSchedules, priorPublishedSchedules)) {
         return {
@@ -339,6 +355,13 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
       };
     });
 
+    if (result.conflict) {
+      return reply.code(409).send({
+        error:"WORKFORCE_SCHEDULE_PUBLISH_CONFLICT",
+        moduleRevision:result.moduleRevision,
+        revision:result.revision,
+      });
+    }
     return {
       ok:true,
       unchanged:Boolean(result.unchanged),
