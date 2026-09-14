@@ -161,6 +161,32 @@ try {
   assert.equal(await modal.locator('input[name="perm:dashboard:edit"]').count(), 1);
   await modal.locator("[data-account-close]").first().click();
 
+  // Workforce production certification uses the deployed frontend with all API
+  // traffic intercepted above. It verifies the real production bundle and mobile
+  // route composition without writing synthetic attendance/schedule/payroll data.
+  await page.goto(`${BASE}/#attendance`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  const workforceTabs = page.locator("[data-workforce-tabs]");
+  await workforceTabs.waitFor({ state: "visible", timeout: 10000 });
+  assert.equal(await workforceTabs.locator("a").count(), 3, "Production workforce does not expose attendance, schedule and payroll tabs");
+  assert.equal(await page.locator('a.nav-item[href="#schedule"]:visible').count(), 0, "Legacy schedule navigation is visible instead of the merged workforce entry");
+  await page.locator("[data-workforce-manager-day]").waitFor({ state: "visible", timeout: 10000 });
+
+  await page.goto(`${BASE}/#attendance?workforce=payroll`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.locator("[data-workforce-payroll-panel]").waitFor({ state: "visible", timeout: 10000 });
+  assert.equal(await page.locator('[data-workforce-tabs] a[href="#attendance?workforce=payroll"].active').count(), 1, "Production payroll tab is not active on the canonical payroll route");
+
+  await page.goto(`${BASE}/#schedule`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.locator("[data-workforce-tabs]").waitFor({ state: "visible", timeout: 10000 });
+  assert.equal(await page.locator('[data-workforce-tabs] a[href="#schedule"].active').count(), 1, "Production legacy schedule route is not reconciled into the workforce tab");
+  const scheduleRulesButton = page.locator("[data-workforce-schedule-rules-open]");
+  await scheduleRulesButton.waitFor({ state: "visible", timeout: 10000 });
+  await scheduleRulesButton.click();
+  const scheduleRulesModal = page.locator("[data-workforce-schedule-rules-modal]");
+  await scheduleRulesModal.waitFor({ state: "visible", timeout: 10000 });
+  assert.equal(await scheduleRulesModal.locator(".workforce-schedule-rule-card").count(), 3, "Production schedule rules editor is missing shift windows");
+  assert.equal(await scheduleRulesModal.locator(".workforce-staffing-band").count(), 4, "Production schedule rules editor is missing staffing bands");
+  await scheduleRulesModal.locator("[data-workforce-schedule-rules-close]").first().click();
+
   await page.evaluate(() => localStorage.setItem("shitu-admin-active-site-v1", "fuxing"));
   await page.goto(`${BASE}/#inventory`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout: 10000 });
@@ -187,6 +213,7 @@ try {
   console.log("PRODUCTION_PERMISSION_ROWS", JSON.stringify(modules));
   console.log("PRODUCTION_RECOVERY_NOTICE_OK");
   console.log("PRODUCTION_BUSINESS_CONFLICT_NOTICE_OK");
+  console.log("PRODUCTION_WORKFORCE_MOBILE_OK");
   console.log("PRODUCTION_MOBILE_FUNCTIONS_OK", release);
   console.log("PRODUCTION_UI_SMOKE_OK", await page.url());
   await context.close();
