@@ -97,9 +97,10 @@ const emptyPublished = structuredClone(publishedModules);
 emptyPublished.schedule.publishedSchedules = [];
 assert.equal(scheduledStartFor(emptyPublished, "staff-a", "2026-09-16"), "", "Once published, an empty snapshot must fail closed instead of falling back to draft");
 
-const [businessRoutes, scheduleRoutes, indexHtml, vpsEntry] = await Promise.all([
+const [businessRoutes, scheduleRoutes, publicationUi, indexHtml, vpsEntry] = await Promise.all([
   readFile(new URL("../vps/backend/src/business-state-routes.mjs", import.meta.url), "utf8"),
   readFile(new URL("../vps/backend/src/workforce-schedule-rule-routes.mjs", import.meta.url), "utf8"),
+  readFile(new URL("../src/workforce-schedule-publication.js", import.meta.url), "utf8"),
   readFile(new URL("../index.html", import.meta.url), "utf8"),
   readFile(new URL("../vps-entry.html", import.meta.url), "utf8"),
 ]);
@@ -107,8 +108,13 @@ const [businessRoutes, scheduleRoutes, indexHtml, vpsEntry] = await Promise.all(
 assert.match(businessRoutes, /next\.publishedSchedules\s*=\s*structuredClone\(stored\.publishedSchedules\)/, "Generic schedule save must preserve publishedSchedules");
 assert.match(businessRoutes, /next\.publication\s*=\s*structuredClone\(stored\.publication\)/, "Generic schedule save must preserve publication metadata");
 assert.match(scheduleRoutes, /\/api\/workforce\/:site\/schedule-publish/, "Schedule publish endpoint is missing");
+assert.match(scheduleRoutes, /WORKFORCE_SCHEDULE_PUBLISH_REVISION_REQUIRED/, "Publish endpoint must require an expected schedule revision");
+assert.match(scheduleRoutes, /moduleRevision\s*!==\s*expectedModuleRevision/, "Publish endpoint must compare the reviewed revision under the row lock");
+assert.match(scheduleRoutes, /WORKFORCE_SCHEDULE_PUBLISH_CONFLICT/, "Publish endpoint must expose a deterministic revision conflict");
 assert.match(scheduleRoutes, /workforce-schedule-publish/, "Schedule publish audit action is missing");
 assert.match(scheduleRoutes, /publishedSchedules\s*=\s*draftSchedules/, "Publish endpoint must snapshot the current server draft");
+assert.match(publicationUi, /expectedModuleRevision:latest\.moduleRevision/, "Publication UI must publish the exact revision it reviewed");
+assert.match(publicationUi, /shitu:workforce-schedule-state/, "Publication UI must refresh the canonical business-state revision after publish");
 assert.match(indexHtml, /workforce-schedule-publication\.js/, "Canonical index does not load schedule publication UI");
 assert.match(vpsEntry, /workforce-schedule-publication\.js/, "VPS entry does not load schedule publication UI");
 
