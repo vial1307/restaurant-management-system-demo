@@ -197,6 +197,14 @@ try {
   await page.goto(`${BASE}/#schedule`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.locator("[data-workforce-tabs]").waitFor({ state: "visible", timeout: 10000 });
   assert.equal(await page.locator('[data-workforce-tabs] a[href="#schedule"].active').count(), 1, "Production legacy schedule route is not reconciled into the workforce tab");
+  const publicationStatus = page.locator("[data-workforce-publication-status]");
+  await publicationStatus.waitFor({ state: "visible", timeout: 10000 });
+  assert.match(await publicationStatus.innerText(), /publish|phiên bản|相容|發布/i, "Production schedule page does not expose publication status");
+  const publishButton = page.locator("[data-workforce-schedule-publish]");
+  await publishButton.waitFor({ state: "visible", timeout: 10000 });
+  assert.equal(await publishButton.count(), 1, "Production schedule page does not expose a single manager publish control");
+  // Never click the publish button in production smoke: all schedule publication
+  // mutations must come from an explicit real manager action, not CI synthetic data.
   const scheduleRulesButton = page.locator("[data-workforce-schedule-rules-open]");
   await scheduleRulesButton.waitFor({ state: "visible", timeout: 10000 });
   await scheduleRulesButton.click();
@@ -232,6 +240,7 @@ try {
   console.log("PRODUCTION_PERMISSION_ROWS", JSON.stringify(modules));
   console.log("PRODUCTION_RECOVERY_NOTICE_OK");
   console.log("PRODUCTION_BUSINESS_CONFLICT_NOTICE_OK");
+  console.log("PRODUCTION_WORKFORCE_PUBLICATION_UI_OK");
   console.log("PRODUCTION_WORKFORCE_MOBILE_OK");
   console.log("PRODUCTION_MOBILE_FUNCTIONS_OK", release);
   console.log("PRODUCTION_UI_SMOKE_OK", await page.url());
