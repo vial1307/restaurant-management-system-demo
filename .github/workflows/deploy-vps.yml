@@ -57,6 +57,9 @@ jobs:
       - name: Full static regression
         run: node tests/static-regression.mjs
 
+      - name: Workforce schedule publication regression
+        run: node tests/workforce-schedule-publication-regression.mjs
+
       - name: Performance regression guards
         run: node tests/performance-regression.mjs
 
@@ -103,6 +106,7 @@ jobs:
           test -f src/business-persistence-status.js
           test -f src/business-persistence-status.css
           test -f src/workforce-approval.js
+          test -f src/workforce-schedule-publication.js
           test -f vps/docker-compose.yml
           test -f vps/Caddyfile
           test -f src/vps-auth-bridge.js
@@ -117,8 +121,10 @@ jobs:
           test -f vps/backend/scripts/business-module-conflict-regression.mjs
           test -f vps/backend/scripts/business-state-regression-client.mjs
           test -f vps/backend/scripts/workforce-approval-regression-client.mjs
+          test -f vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
           test -f vps/backend/scripts/api-regression-v6.mjs
           test -f tests/workforce-approval-browser-regression.mjs
+          test -f tests/workforce-schedule-publication-regression.mjs
           test -f vps/backend/package-lock.json
           test -f tests/package-lock.json
           test -f vps/database/migrations/004_restore_primary_admin.sql
@@ -187,6 +193,9 @@ jobs:
 
       - name: API role and inventory regression
         run: node vps/backend/scripts/api-regression-v6.mjs
+
+      - name: Workforce schedule publication API regression
+        run: node vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
 
       - name: Multi-user PostgreSQL concurrency regression
         run: |

@@ -57,6 +57,11 @@ function currentModuleRevision(revisions = {}) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function requestedRevision(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
+}
+
 function canonicalRuleValue(rules) {
   return {
     shifts:Object.fromEntries(SHIFT_IDS.map((id) => [id, {
@@ -155,6 +160,13 @@ function equalRuleValue(left, right) {
   return JSON.stringify(canonicalRuleValue(left)) === JSON.stringify(canonicalRuleValue(right));
 }
 
+function equalSchedules(left, right) {
+  const a = Array.isArray(left) ? left : [];
+  const b = Array.isArray(right) ? right : [];
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch { return false; }
+}
+
 function auditPayload(value) {
   return value === undefined ? null : JSON.stringify(value);
 }
@@ -237,6 +249,123 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
       ok:true,
       unchanged:Boolean(result.unchanged),
       rules:result.rules,
+      moduleRevision:result.moduleRevision,
+      revision:result.revision,
+      updatedAt:result.updatedAt,
+    };
+  });
+
+  app.post("/api/workforce/:site/schedule-publish", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const site = text(request.params.site);
+    if (!VALID_SITES.has(site)) return reply.code(400).send({ error:"INVALID_SITE" });
+    if (!siteAllowed(user, site)) return reply.code(403).send({ error:"SITE_NOT_ALLOWED" });
+    if (!canManageSchedule(user)) return reply.code(403).send({ error:"WORKFORCE_SCHEDULE_MANAGER_REQUIRED" });
+    const expectedModuleRevision = requestedRevision(request.body?.expectedModuleRevision);
+    if (expectedModuleRevision === null) {
+      return reply.code(409).send({ error:"WORKFORCE_SCHEDULE_PUBLISH_REVISION_REQUIRED" });
+    }
+
+    const result = await withTransaction(async (client) => {
+      await client.query(
+        `insert into public.business_state(site,modules,module_revisions,revision,updated_by)
+         values($1,'{}'::jsonb,'{}'::jsonb,0,$2)
+         on conflict (site) do nothing`,
+        [site, user.id]
+      );
+      const current = await client.query(
+        "select modules,module_revisions,revision from public.business_state where site=$1 for update",
+        [site]
+      );
+      const stored = current.rows[0] || {};
+      const modules = stored.modules && typeof stored.modules === "object" ? stored.modules : {};
+      const revisions = stored.module_revisions && typeof stored.module_revisions === "object" ? stored.module_revisions : {};
+      const module = scheduleModule(modules);
+      const draftSchedules = structuredClone(module.schedules);
+      const priorPublication = module.publication && typeof module.publication === "object" && !Array.isArray(module.publication)
+        ? structuredClone(module.publication)
+        : null;
+      const priorPublishedSchedules = Array.isArray(module.publishedSchedules)
+        ? module.publishedSchedules
+        : [];
+      const moduleRevision = currentModuleRevision(revisions);
+      if (moduleRevision !== expectedModuleRevision) {
+        return {
+          conflict:true,
+          moduleRevision,
+          revision:Number(stored.revision || 0),
+        };
+      }
+
+      if (priorPublication && equalSchedules(draftSchedules, priorPublishedSchedules)) {
+        return {
+          unchanged:true,
+          publication:priorPublication,
+          moduleRevision,
+          revision:Number(stored.revision || 0),
+        };
+      }
+
+      const now = new Date().toISOString();
+      const publication = {
+        version:Math.max(0, Number(priorPublication?.version) || 0) + 1,
+        publishedAt:now,
+        publishedByUserId:String(user.id || ""),
+        publishedByName:actorName(user),
+        scheduleCount:draftSchedules.length,
+        sourceModuleRevision:moduleRevision,
+      };
+      module.publishedSchedules = draftSchedules;
+      module.publication = publication;
+      const nextModules = { ...modules, schedule:module };
+      const nextModuleRevision = moduleRevision + 1;
+      const nextRevisions = { ...revisions, schedule:nextModuleRevision };
+      const saved = await client.query(
+        `update public.business_state
+         set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_by=$4,updated_at=now()
+         where site=$1
+         returning revision,updated_at`,
+        [site, JSON.stringify(nextModules), JSON.stringify(nextRevisions), user.id]
+      );
+      await client.query(
+        `insert into public.audit_logs(
+           actor_user_id,actor_username,action,entity_type,entity_id,site,before_data,after_data,metadata
+         ) values($1,$2,'workforce-schedule-publish','schedule_publication',$3,$3,$4::jsonb,$5::jsonb,$6::jsonb)`,
+        [
+          user.id,
+          user.username,
+          site,
+          auditPayload(priorPublication),
+          auditPayload(publication),
+          JSON.stringify({
+            version:publication.version,
+            scheduleCount:publication.scheduleCount,
+            sourceModuleRevision:moduleRevision,
+            moduleRevision:nextModuleRevision,
+          }),
+        ]
+      );
+      return {
+        unchanged:false,
+        publication,
+        moduleRevision:nextModuleRevision,
+        revision:Number(saved.rows[0]?.revision || 0),
+        updatedAt:saved.rows[0]?.updated_at || null,
+      };
+    });
+
+    if (result.conflict) {
+      return reply.code(409).send({
+        error:"WORKFORCE_SCHEDULE_PUBLISH_CONFLICT",
+        moduleRevision:result.moduleRevision,
+        revision:result.revision,
+      });
+    }
+    return {
+      ok:true,
+      unchanged:Boolean(result.unchanged),
+      publication:result.publication,
       moduleRevision:result.moduleRevision,
       revision:result.revision,
       updatedAt:result.updatedAt,
