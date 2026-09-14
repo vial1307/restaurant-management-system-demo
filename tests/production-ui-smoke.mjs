@@ -168,7 +168,26 @@ try {
   const workforceTabs = page.locator("[data-workforce-tabs]");
   await workforceTabs.waitFor({ state: "visible", timeout: 10000 });
   assert.equal(await workforceTabs.locator("a").count(), 3, "Production workforce does not expose attendance, schedule and payroll tabs");
-  assert.equal(await page.locator('a.nav-item[href="#schedule"]:visible').count(), 0, "Legacy schedule navigation is visible instead of the merged workforce entry");
+  assert((await page.locator('a.nav-item[href="#attendance"]:visible').count()) >= 1, "Merged workforce navigation entry is not visible on production mobile");
+  const legacyScheduleStates = await page.locator('a.nav-item[href="#schedule"]').evaluateAll((nodes) => nodes.map((node) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return {
+      ariaHidden: node.getAttribute("aria-hidden"),
+      tabIndex: node.tabIndex,
+      width: rect.width,
+      height: rect.height,
+      pointerEvents: style.pointerEvents,
+    };
+  }));
+  assert(legacyScheduleStates.length >= 1, "Production legacy schedule route is missing from compatibility DOM");
+  for (const state of legacyScheduleStates) {
+    assert.equal(state.ariaHidden, "true", "Legacy schedule route is exposed to accessibility navigation");
+    assert.equal(state.tabIndex, -1, "Legacy schedule route remains keyboard-focusable");
+    assert.equal(state.pointerEvents, "none", "Legacy schedule route remains pointer-interactive");
+    assert.equal(state.width, 0, "Legacy schedule route has visible horizontal geometry");
+    assert.equal(state.height, 0, "Legacy schedule route has visible vertical geometry");
+  }
   await page.locator("[data-workforce-manager-day]").waitFor({ state: "visible", timeout: 10000 });
 
   await page.goto(`${BASE}/#attendance?workforce=payroll`, { waitUntil: "domcontentloaded", timeout: 30000 });
