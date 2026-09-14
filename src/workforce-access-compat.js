@@ -80,25 +80,38 @@ function markLegacyScheduleRoute(node, authorized) {
   node.setAttribute("aria-hidden", "true");
   node.tabIndex = -1;
   node.dataset.workforceLegacySchedule = "true";
-  Object.assign(node.style, {
-    position: "absolute",
-    width: "0",
-    height: "0",
-    minWidth: "0",
-    minHeight: "0",
-    margin: "0",
-    padding: "0",
-    border: "0",
-    overflow: "hidden",
-    opacity: "0",
-    pointerEvents: "none",
-    clipPath: "inset(50%)",
-    whiteSpace: "nowrap",
-  });
+
+  // Mobile/tablet theme layers intentionally use !important minimum sizes for
+  // normal navigation tap targets. Legacy #schedule is compatibility-only, so
+  // force every geometry property at the same cascade priority to guarantee it
+  // remains measurable in the DOM while occupying exactly zero visual space.
+  [
+    ["position", "absolute"],
+    ["width", "0"],
+    ["height", "0"],
+    ["min-width", "0"],
+    ["min-height", "0"],
+    ["max-width", "0"],
+    ["max-height", "0"],
+    ["margin", "0"],
+    ["padding", "0"],
+    ["border", "0"],
+    ["box-sizing", "border-box"],
+    ["overflow", "hidden"],
+    ["opacity", "0"],
+    ["pointer-events", "none"],
+    ["clip-path", "inset(50%)"],
+    ["white-space", "nowrap"],
+    ["flex", "0 0 0"],
+    ["flex-basis", "0"],
+    ["font-size", "0"],
+    ["line-height", "0"],
+  ].forEach(([property, value]) => node.style.setProperty(property, value, "important"));
+
   // workforce-module.css intentionally hides the legacy entry with !important.
-  // Override only the display property so certification can still verify that an
-  // authorized legacy route exists. Zero geometry, clipping and disabled pointer
-  // events keep it entirely outside the visible/interactive navigation contract.
+  // Override only display so certification can still verify that an authorized
+  // legacy route exists; the important zero-geometry contract above wins against
+  // every responsive navigation tap-target rule.
   node.style.setProperty("display", "block", "important");
 }
 
