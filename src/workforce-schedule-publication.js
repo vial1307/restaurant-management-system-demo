@@ -205,7 +205,13 @@ async function publishSchedule() {
       notify("warning", copy().draft, copy().stale);
       return;
     }
-    const result = await apiRequest(`/api/workforce/${encodeURIComponent(site)}/schedule-publish`, { method:"POST", body:{} });
+    if (!Number.isInteger(latest.moduleRevision) || latest.moduleRevision < 0) {
+      throw new Error("WORKFORCE_SCHEDULE_PUBLISH_REVISION_REQUIRED");
+    }
+    const result = await apiRequest(`/api/workforce/${encodeURIComponent(site)}/schedule-publish`, {
+      method:"POST",
+      body:{ expectedModuleRevision:latest.moduleRevision },
+    });
     cache = {
       ...latest,
       publication:result?.publication || latest.publication,
