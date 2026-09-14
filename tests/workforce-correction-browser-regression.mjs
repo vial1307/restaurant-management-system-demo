@@ -95,6 +95,16 @@ async function correctionRow(page, reason) {
   return row;
 }
 
+async function clickAndWaitForMainFrameNavigation(page, locator) {
+  const navigation = page.waitForEvent("framenavigated", {
+    predicate:(frame) => frame === page.mainFrame(),
+    timeout:30000,
+  });
+  await locator.click();
+  await navigation;
+  await page.waitForLoadState("domcontentloaded");
+}
+
 const { adminCookie } = await seedApprovedAttendance();
 const browser = await chromium.launch({ headless:true });
 try {
@@ -140,8 +150,7 @@ try {
   let managerRow = await correctionRow(managerPage, REASON);
   assert.equal(await managerRow.locator(`[data-workforce-correction-approve="${created.id}"]`).count(), 1, "manager correction approve control missing");
   assert.equal(await managerRow.locator(`[data-workforce-correction-reject-form][data-request-id="${created.id}"]`).count(), 1, "manager correction reject control missing");
-  await managerRow.locator(`[data-workforce-correction-approve="${created.id}"]`).click();
-  await managerPage.waitForLoadState("domcontentloaded");
+  await clickAndWaitForMainFrameNavigation(managerPage, managerRow.locator(`[data-workforce-correction-approve="${created.id}"]`));
   await openAttendance(managerPage);
   managerRow = await correctionRow(managerPage, REASON);
   assert.match(await managerRow.innerText(), /Đã duyệt|已核准/, "manager approved correction status missing");
