@@ -131,6 +131,16 @@ function preserveScheduleWorkflow(before, incoming) {
   } else {
     delete next.rules;
   }
+  if (Array.isArray(stored.publishedSchedules)) {
+    next.publishedSchedules = structuredClone(stored.publishedSchedules);
+  } else {
+    delete next.publishedSchedules;
+  }
+  if (stored.publication && typeof stored.publication === "object" && !Array.isArray(stored.publication)) {
+    next.publication = structuredClone(stored.publication);
+  } else {
+    delete next.publication;
+  }
   return next;
 }
 
