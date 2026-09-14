@@ -52,14 +52,18 @@ function showUnifiedEntry(node, visible) {
   node.style.display = "";
 }
 
-function reconcileAdminNavigation(user) {
-  if (!isAdmin(user)) return;
+function reconcilePermissionNavigation(user) {
+  if (!user) return;
+  const admin = isAdmin(user);
   document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item, .mobile-menu-grid .nav-item").forEach((node) => {
     const route = String(node.getAttribute("href") || "").replace(/^#/, "").split("?")[0];
-    // #schedule has a separate compatibility contract below: it must remain in
-    // the DOM for legacy routing/certification while having zero visible geometry.
-    if (!route || route === "schedule") return;
-    showUnifiedEntry(node, true);
+    // Workforce routes have a separate compatibility contract below: attendance
+    // is the visible unified entry and schedule remains a zero-geometry legacy
+    // route for routing/certification. Every other route must be reconciled from
+    // the current mirrored VPS profile, because app.js can render before that
+    // profile replaces a stale or unauthenticated local session on cold reload.
+    if (!route || route === "attendance" || route === "schedule") return;
+    showUnifiedEntry(node, admin || accountCan(user, route, "view"));
   });
 }
 
@@ -170,12 +174,11 @@ function redirectUnauthorizedPanel(state) {
 function reconcile() {
   reconcilePending = false;
   const state = permissionState();
-  // app.js can render navigation while the VPS profile is still being mirrored.
-  // Non-admin accounts are later normalized by auth-layer.js, but admins bypass
-  // that branch because their permission set is implicitly full. Reconcile the
-  // admin navigation here so a cold-start render can never leave stale `hidden`
-  // attributes behind on mobile or desktop.
-  reconcileAdminNavigation(state.user);
+  // app.js can render navigation before the mirrored VPS profile is authoritative.
+  // Reconcile every ordinary route from that profile after auth/profile events so
+  // stale hidden/display attributes cannot survive on either scoped accounts or
+  // administrators. Workforce routes keep their dedicated compatibility handling.
+  reconcilePermissionNavigation(state.user);
   document.querySelectorAll('a.nav-item[href="#attendance"]').forEach((node) => showUnifiedEntry(node, state.workforceView));
   document.querySelectorAll('a.nav-item[href="#schedule"]').forEach((node) => markLegacyScheduleRoute(node, state.scheduleView));
   reconcileTabs(state);
