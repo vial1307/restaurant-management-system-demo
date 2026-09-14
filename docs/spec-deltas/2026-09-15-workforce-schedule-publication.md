@@ -27,6 +27,8 @@ Separate manager schedule editing from the employee-visible schedule. Managers e
 
 Endpoint: `POST /api/workforce/:site/schedule-publish`
 
+Request body includes `expectedModuleRevision`, taken from the manager's immediately preceding authoritative schedule read.
+
 Authorization:
 
 - site must be valid and accessible to the authenticated account;
@@ -34,13 +36,16 @@ Authorization:
 
 Atomic behavior under the business-state row lock:
 
-1. Load the latest `schedule` module.
-2. Compare `schedules` with `publishedSchedules`.
-3. If identical and a publication already exists, return unchanged without incrementing revisions.
-4. Otherwise copy the current `schedules` into `publishedSchedules`.
-5. Increment `publication.version` and store actor/time/count/source revision metadata.
-6. Increment the schedule module revision and business-state revision.
-7. Add an audit log entry for `workforce-schedule-publish`.
+1. Load the latest `schedule` module and module revision.
+2. Require the stored schedule revision to equal `expectedModuleRevision`; otherwise return a publish conflict without changing data.
+3. Compare `schedules` with `publishedSchedules`.
+4. If identical and a publication already exists, return unchanged without incrementing revisions.
+5. Otherwise copy the current `schedules` into `publishedSchedules`.
+6. Increment `publication.version` and store actor/time/count/source revision metadata.
+7. Increment the schedule module revision and business-state revision.
+8. Add an audit log entry for `workforce-schedule-publish`.
+
+The revision precondition prevents a manager from publishing schedule changes that another manager saved after the publisher last reviewed the draft.
 
 ## Manager UI
 
@@ -51,7 +56,9 @@ On the schedule page:
 - show `Draft has unpublished changes` when the server-side draft differs from the published snapshot;
 - show a `Publish schedule` action only to admin/manager accounts that can edit schedule;
 - disable publishing when no unpublished changes exist;
-- before publishing, compare the local draft schedule with the latest server draft. If they differ, do not publish stale server data and instruct the user to wait until the draft finishes saving.
+- before publishing, compare the local draft schedule with the latest server draft. If they differ, do not publish stale server data and instruct the user to wait until the draft finishes saving;
+- publish the exact module revision returned by that latest server read;
+- after a successful publish, reload the canonical business-state schedule revision before allowing subsequent edits to persist.
 
 The publish UI must not write synthetic data directly to production PostgreSQL outside the canonical API.
 
@@ -76,5 +83,5 @@ Tests must verify:
 - publication metadata is safe to expose while branch-wide `publishedSchedules` is not;
 - self-service scheduled start comes from the published snapshot after publication;
 - generic schedule saves preserve publication fields;
-- publish endpoint is manager-only, site-scoped, idempotent when unchanged, increments module revision when changed, and writes an audit log;
+- publish endpoint is manager-only, site-scoped, revision-guarded, idempotent when unchanged, increments module revision when changed, and writes an audit log;
 - production smoke sees the publication control/status on the deployed schedule page without performing a publish against production data.
