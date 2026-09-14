@@ -31,6 +31,16 @@ function omitHourlyRate(member) {
   return copy;
 }
 
+function publishedScheduleSource(schedule = {}) {
+  if (!schedule || typeof schedule !== "object" || Array.isArray(schedule)) return [];
+  const publication = schedule.publication;
+  const hasPublication = Boolean(publication && typeof publication === "object" && !Array.isArray(publication));
+  if (hasPublication) {
+    return Array.isArray(schedule.publishedSchedules) ? schedule.publishedSchedules : [];
+  }
+  return Array.isArray(schedule.schedules) ? schedule.schedules : [];
+}
+
 function selfServicePayroll(payroll = {}) {
   const scoped = payroll && typeof payroll === "object" && !Array.isArray(payroll)
     ? structuredClone(payroll)
@@ -96,12 +106,11 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
   }
 
   if (modules.schedule && typeof modules.schedule === "object") {
-    const { rules:_managerRules, ...scheduleForSelfService } = modules.schedule;
+    const { rules:_managerRules, publishedSchedules:_publishedSchedules, ...scheduleForSelfService } = modules.schedule;
+    const employeeSchedules = publishedScheduleSource(modules.schedule);
     scoped.schedule = {
       ...scheduleForSelfService,
-      schedules: Array.isArray(modules.schedule.schedules)
-        ? modules.schedule.schedules.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
-        : [],
+      schedules: employeeSchedules.filter((entry) => staffId && String(entry?.staffId || "") === staffId),
       requests: Array.isArray(modules.schedule.requests)
         ? modules.schedule.requests.filter((entry) => staffId && String(entry?.staffId || "") === staffId)
         : [],
@@ -141,7 +150,7 @@ export function scheduledStartFor(beforeModules, staffId, date) {
     return activeExceptions[0].kind === "override" ? text(activeExceptions[0].start) : "";
   }
 
-  const schedules = Array.isArray(beforeModules?.schedule?.schedules) ? beforeModules.schedule.schedules : [];
+  const schedules = publishedScheduleSource(beforeModules?.schedule || {});
   const staffSchedules = schedules.filter((entry) => String(entry?.staffId || "") === staffId);
   const dayCandidates = staffSchedules.filter((entry) => entry?.applyMode !== "month" && String(entry?.date || "") === date);
   if (dayCandidates.length === 1) return text(dayCandidates[0].start);
