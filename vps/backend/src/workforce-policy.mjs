@@ -106,7 +106,8 @@ export function scopeWorkforceModules(user, modules = {}, identityModules = modu
   }
 
   if (modules.schedule && typeof modules.schedule === "object") {
-    const { rules:_managerRules, publishedSchedules:_publishedSchedules, ...scheduleForSelfService } = modules.schedule;
+    const { rules:_managerRules, ...scheduleForSelfService } = modules.schedule;
+    delete scheduleForSelfService.publishedSchedules;
     const employeeSchedules = publishedScheduleSource(modules.schedule);
     scoped.schedule = {
       ...scheduleForSelfService,
