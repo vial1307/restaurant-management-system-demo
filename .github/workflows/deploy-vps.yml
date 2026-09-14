@@ -121,6 +121,7 @@ jobs:
           test -f vps/backend/scripts/business-module-conflict-regression.mjs
           test -f vps/backend/scripts/business-state-regression-client.mjs
           test -f vps/backend/scripts/workforce-approval-regression-client.mjs
+          test -f vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
           test -f vps/backend/scripts/api-regression-v6.mjs
           test -f tests/workforce-approval-browser-regression.mjs
           test -f tests/workforce-schedule-publication-regression.mjs
@@ -192,6 +193,9 @@ jobs:
 
       - name: API role and inventory regression
         run: node vps/backend/scripts/api-regression-v6.mjs
+
+      - name: Workforce schedule publication API regression
+        run: node vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
 
       - name: Multi-user PostgreSQL concurrency regression
         run: |
