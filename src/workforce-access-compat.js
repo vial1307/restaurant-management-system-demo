@@ -30,8 +30,6 @@ function permissionState() {
     attendanceView,
     scheduleView,
     workforceView: attendanceView || scheduleView,
-    // attendance.edit on employee/part-time is self-service only. Correction UI
-    // is manager/admin-only and still requires the explicit account edit bit.
     attendanceEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "attendance", "edit"))),
     scheduleEdit: Boolean(user && isManagerOrAbove(user) && (admin || accountCan(user, "schedule", "edit"))),
   };
@@ -57,11 +55,6 @@ function reconcilePermissionNavigation(user) {
   const admin = isAdmin(user);
   document.querySelectorAll(".desktop-nav .nav-item, .mobile-nav .nav-item, .mobile-menu-grid .nav-item").forEach((node) => {
     const route = String(node.getAttribute("href") || "").replace(/^#/, "").split("?")[0];
-    // Workforce routes have a separate compatibility contract below: attendance
-    // is the visible unified entry and schedule remains a zero-geometry legacy
-    // route for routing/certification. Every other route must be reconciled from
-    // the current mirrored VPS profile, because app.js can render before that
-    // profile replaces a stale or unauthenticated local session on cold reload.
     if (!route || route === "attendance" || route === "schedule") return;
     showUnifiedEntry(node, admin || accountCan(user, route, "view"));
   });
@@ -77,9 +70,6 @@ function markLegacyScheduleRoute(node, authorized) {
     return;
   }
 
-  // Keep an authorized legacy #schedule route in the DOM for compatibility and
-  // certification, but remove it completely from visual/navigation interaction.
-  // The visible top-level entry is always the merged #attendance workforce item.
   node.hidden = false;
   node.setAttribute("aria-hidden", "true");
   node.tabIndex = -1;
@@ -99,10 +89,6 @@ function markLegacyScheduleRoute(node, authorized) {
     clipPath: "inset(50%)",
     whiteSpace: "nowrap",
   });
-  // workforce-module.css intentionally hides the legacy entry with !important.
-  // Override only the display property so certification can still verify that an
-  // authorized legacy route exists. Zero geometry, clipping and disabled pointer
-  // events keep it entirely outside the visible/interactive navigation contract.
   node.style.setProperty("display", "block", "important");
 }
 
@@ -174,10 +160,6 @@ function redirectUnauthorizedPanel(state) {
 function reconcile() {
   reconcilePending = false;
   const state = permissionState();
-  // app.js can render navigation before the mirrored VPS profile is authoritative.
-  // Reconcile every ordinary route from that profile after auth/profile events so
-  // stale hidden/display attributes cannot survive on either scoped accounts or
-  // administrators. Workforce routes keep their dedicated compatibility handling.
   reconcilePermissionNavigation(state.user);
   document.querySelectorAll('a.nav-item[href="#attendance"]').forEach((node) => showUnifiedEntry(node, state.workforceView));
   document.querySelectorAll('a.nav-item[href="#schedule"]').forEach((node) => markLegacyScheduleRoute(node, state.scheduleView));
@@ -193,6 +175,13 @@ function requestReconcile() {
 }
 
 document.addEventListener("click", (event) => {
+  // The expanded mobile menu is rendered synchronously by app.js after this
+  // capture-phase handler. Schedule a post-render permission reconciliation so
+  // newly created menu entries inherit the authoritative mirrored VPS profile.
+  if (event.target.closest?.('[data-action="toggle-mobile-menu"]')) {
+    requestReconcile();
+  }
+
   const entry = event.target.closest?.('a.nav-item[href="#attendance"]');
   if (!entry) return;
   const state = permissionState();
