@@ -191,7 +191,7 @@ function decorate() {
   }
 }
 
-async function publishSchedule(button) {
+async function publishSchedule() {
   if (!managerAccount() || publishing) return;
   const site = activeSite();
   if (!site) return;
@@ -215,6 +215,10 @@ async function publishSchedule(button) {
     };
     notify("success", copy().success, `v${cache.publication?.version || 1}`);
     window.dispatchEvent(new CustomEvent("shitu:business-state-updated", { detail:{ site, modules:["schedule"], reason:"schedule-published" } }));
+    // The dedicated schedule-state event is consumed by business-state-sync.
+    // Publishing increments the schedule module revision outside the generic save
+    // path, so force a canonical reload before the next manager edit can save.
+    window.dispatchEvent(new CustomEvent("shitu:workforce-schedule-state", { detail:{ site, reason:"schedule-published" } }));
   } catch (cause) {
     notify("error", copy().error, String(cause?.code || cause?.message || "ERROR"));
   } finally {
@@ -238,7 +242,7 @@ document.addEventListener("click", (event) => {
   const button = event.target.closest?.("[data-workforce-schedule-publish]");
   if (!button) return;
   event.preventDefault();
-  void publishSchedule(button);
+  void publishSchedule();
 }, true);
 
 window.addEventListener("hashchange", () => queueDecorate(false));
