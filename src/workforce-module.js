@@ -122,7 +122,7 @@ function esc(value) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('\"', "&quot;");
 }
 
 function number(value) {
@@ -188,12 +188,9 @@ function decoratePermissionRows() {
 function decorateNavigation(panel) {
   const c = copy();
   decoratePermissionRows();
-  document.querySelectorAll('a.nav-item[href="#schedule"]').forEach((node) => {
-    node.hidden = true;
-    node.setAttribute("aria-hidden", "true");
-    node.tabIndex = -1;
-    node.style.display = "none";
-  });
+  // Legacy #schedule navigation state is owned exclusively by
+  // workforce-access-compat.js. This module only decorates the visible merged
+  // workforce entry, avoiding competing hidden/display writes on the same node.
   document.querySelectorAll('a.nav-item[href="#attendance"]').forEach((node) => {
     const label = node.querySelector("span");
     if (label && label.textContent !== c.title) label.textContent = c.title;

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { pool } from "./db.mjs";
-import { normalizeLocationForRole, normalizePermissionsForRole } from "./permissions.mjs";
+import { normalizeLocationForRole, normalizePermissionsForRole, permissionForRole } from "./permissions.mjs";
 
 export const SESSION_COOKIE = "kitchen_session";
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 14);
@@ -75,8 +75,7 @@ export async function requireUser(request, reply) {
 
 export function hasPermission(user, moduleName, actionName) {
   if (!user) return false;
-  if (user.role === "admin") return true;
-  return Boolean(user.permissions?.[moduleName]?.[actionName]);
+  return permissionForRole(user.role, user.permissions, moduleName, actionName);
 }
 
 export function siteAllowed(user, site) {

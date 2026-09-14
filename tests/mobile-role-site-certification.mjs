@@ -43,9 +43,6 @@ async function login(page, context, username, foreignSite, label) {
     await page.waitForSelector(".app-shell", { state:"visible", timeout:12000 });
     await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:12000 });
   } catch (uiError) {
-    // WebKit in CI can occasionally drop the login cookie during a form navigation.
-    // Re-seed the same account through the browser context so cookie/session scope
-    // remains identical to the page origin, then let the auth bridge rebuild local state.
     const response = await context.request.post(`${BASE}/api/auth/login`, {
       data:{ username, password:PASSWORD },
       failOnStatusCode:false,
@@ -95,15 +92,39 @@ async function assertNoHorizontalOverflow(page, label) {
 }
 
 async function waitForPermissionState(page, scopeSelector, route, expected) {
-  await page.waitForFunction(({ scopeSelector, route, expected }) => {
-    const host = document.querySelector(scopeSelector);
-    const link = host?.querySelector(`.nav-item[href="#${route}"]`);
-    if (!link) return false;
-    const displayed = getComputedStyle(link).display !== "none";
-    if (displayed !== expected) return false;
-    if (route === "schedule" && expected) return link.dataset.workforceLegacySchedule === "true";
-    return true;
-  }, { scopeSelector, route, expected }, { timeout:10000 });
+  try {
+    await page.waitForFunction(({ scopeSelector, route, expected }) => {
+      const host = document.querySelector(scopeSelector);
+      const link = host?.querySelector(`.nav-item[href="#${route}"]`);
+      if (!link) return false;
+      const displayed = getComputedStyle(link).display !== "none";
+      if (displayed !== expected) return false;
+      if (route === "schedule" && expected) return link.dataset.workforceLegacySchedule === "true";
+      return true;
+    }, { scopeSelector, route, expected }, { timeout:10000 });
+  } catch (error) {
+    const state = await page.evaluate(({ scopeSelector, route }) => {
+      const host = document.querySelector(scopeSelector);
+      const link = host?.querySelector(`.nav-item[href="#${route}"]`);
+      let session = null;
+      try { session = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
+      return {
+        hostPresent:Boolean(host),
+        linkPresent:Boolean(link),
+        display:link ? getComputedStyle(link).display : null,
+        hidden:link?.hidden ?? null,
+        ariaHidden:link?.getAttribute("aria-hidden") ?? null,
+        tabIndex:link?.getAttribute("tabindex") ?? null,
+        legacySchedule:link?.dataset?.workforceLegacySchedule ?? null,
+        inlineDisplay:link?.style?.getPropertyValue("display") ?? null,
+        inlineDisplayPriority:link?.style?.getPropertyPriority("display") ?? null,
+        role:session?.role ?? null,
+        accountRole:session?.accountRole ?? null,
+        permission:session?.permissions?.[route] ?? null,
+      };
+    }, { scopeSelector, route });
+    throw new Error(`PERMISSION_STATE_TIMEOUT scope=${scopeSelector} route=${route} expected=${expected} state=${JSON.stringify(state)} original=${error?.message || error}`);
+  }
 }
 
 async function assertPermissionNavigation(page, session, label) {
@@ -268,10 +289,6 @@ async function runAdminMobile(browser) {
     const session = await sessionSnapshot(page);
     assert.equal(session?.accountRole || session?.role, "admin");
 
-    // Match the readiness contract used by every scoped role case before
-    // certifying navigation permissions. The inventory route gives the auth,
-    // stable-shell and workforce compatibility bridges time to reconcile the
-    // current session without weakening any permission assertion.
     await gotoInventory(page);
     await assertPermissionNavigation(page, session, label);
 

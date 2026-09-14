@@ -1,0 +1,156 @@
+name: Inventory Permission Data Parity Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/account-permissions.js"
+      - "src/store.js"
+      - "src/inventory-cloud.js"
+      - "src/inventory-operations.js"
+      - "src/inventory-transfer-service.js"
+      - "tests/inventory-permission-data-parity-regression.mjs"
+      - "tests/inventory-role-data-parity-browser-regression.mjs"
+      - "vps/backend/src/auth.mjs"
+      - "vps/backend/src/permissions.mjs"
+      - "vps/backend/src/inventory-extra-routes.mjs"
+      - "vps/backend/src/server.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs"
+      - "vps/backend/scripts/inventory-permission-data-parity-regression.mjs"
+      - "docs/spec-deltas/2026-09-14-inventory-permission-data-parity.md"
+      - ".github/workflows/inventory-parity-regression.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/account-permissions.js"
+      - "src/store.js"
+      - "src/inventory-cloud.js"
+      - "src/inventory-operations.js"
+      - "src/inventory-transfer-service.js"
+      - "tests/inventory-permission-data-parity-regression.mjs"
+      - "tests/inventory-role-data-parity-browser-regression.mjs"
+      - "vps/backend/src/auth.mjs"
+      - "vps/backend/src/permissions.mjs"
+      - "vps/backend/src/inventory-extra-routes.mjs"
+      - "vps/backend/src/server.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs"
+      - "vps/backend/scripts/inventory-permission-data-parity-regression.mjs"
+      - "docs/spec-deltas/2026-09-14-inventory-permission-data-parity.md"
+      - ".github/workflows/inventory-parity-regression.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inventory-parity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inventory-parity-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_PORT: "8080"
+      TEST_WEB_PORT: "3000"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      TEST_WEB_BASE: "http://localhost:3000"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend and browser test packages
+        run: |
+          npm ci --prefix vps/backend
+          npm ci --prefix tests
+
+      - name: Validate inventory parity JavaScript syntax
+        run: |
+          node --check src/store.js
+          node --check vps/backend/src/permissions.mjs
+          node --check vps/backend/src/auth.mjs
+          node --check tests/inventory-permission-data-parity-regression.mjs
+          node --check tests/inventory-role-data-parity-browser-regression.mjs
+          node --check vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs
+          node --check vps/backend/scripts/inventory-permission-data-parity-regression.mjs
+
+      - name: Permission and site snapshot contract regression
+        run: node tests/inventory-permission-data-parity-regression.mjs
+
+      - name: Prepare isolated regression database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-inventory-parity-api.log 2>&1 &
+          echo $! >/tmp/kitchen-inventory-parity-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-inventory-parity-api.log
+          exit 1
+
+      - name: Cross-role inventory API parity regression
+        run: node vps/backend/scripts/inventory-permission-data-parity-regression.mjs
+
+      - name: Canonicalize branch location codes for browser certification
+        run: node vps/backend/scripts/canonicalize-browser-inventory-fixture.mjs
+
+      - name: Start frontend test server
+        run: |
+          node tests/web-server.mjs >/tmp/kitchen-inventory-parity-web.log 2>&1 &
+          echo $! >/tmp/kitchen-inventory-parity-web.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-inventory-parity-web.log
+          exit 1
+
+      - name: Rendered role and site data parity regression
+        run: node tests/inventory-role-data-parity-browser-regression.mjs
+
+      - name: Existing mobile role/site certification
+        run: node tests/mobile-role-site-certification.mjs
+
+      - name: Dump inventory parity logs on failure
+        if: failure()
+        run: |
+          echo "=== INVENTORY PARITY API LOG ==="
+          cat /tmp/kitchen-inventory-parity-api.log 2>/dev/null || true
+          echo "=== INVENTORY PARITY WEB LOG ==="
+          cat /tmp/kitchen-inventory-parity-web.log 2>/dev/null || true
