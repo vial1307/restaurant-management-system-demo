@@ -1,11 +1,11 @@
 name: Workforce Staff Production Backfill
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/workforce-staff-production-backfill.yml"
+  workflow_run:
+    workflows:
+      - "Deploy Kitchen OS to VPS"
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       mode:
@@ -36,13 +36,24 @@ concurrency:
 
 jobs:
   production-backfill:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
     env:
       MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'verify' }}
       SITE: ${{ github.event_name == 'workflow_dispatch' && inputs.site || 'all' }}
+      DEPLOYED_HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
     steps:
+      - name: Checkout maintenance source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
       - name: Require VPS SSH secret
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -58,21 +69,32 @@ jobs:
           chmod 600 "$HOME/.ssh/kitchen_actions"
           ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
 
-      - name: Verify production release and maintenance script
+      - name: Verify deployed release and maintenance source
         run: |
           set -euo pipefail
           ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
           REMOTE_RELEASE="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
-            "git -C /opt/kitchen-os/repo rev-parse --short HEAD && test -f /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs")"
+            "git -C /opt/kitchen-os/repo rev-parse --short HEAD")"
+          LOCAL_SCRIPT_SHA="$(sha256sum vps/backend/scripts/workforce-staff-backfill.mjs | awk '{print $1}')"
+          REMOTE_SCRIPT_SHA="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "test -f /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs && sha256sum /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs | awk '{print \\$1}'")"
+
           echo "Production release: ${ACTUAL_RELEASE}"
           echo "Production repo: ${REMOTE_RELEASE}"
           test "$ACTUAL_RELEASE" = "$REMOTE_RELEASE"
+          test "$LOCAL_SCRIPT_SHA" = "$REMOTE_SCRIPT_SHA"
+
+          if [[ -n "$DEPLOYED_HEAD_SHA" ]]; then
+            EXPECTED_RELEASE="${DEPLOYED_HEAD_SHA:0:7}"
+            echo "Expected deployed release: ${EXPECTED_RELEASE}"
+            test "$ACTUAL_RELEASE" = "$EXPECTED_RELEASE"
+          fi
 
       - name: Verify or apply workforce staff backfill
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$MODE" != "verify" ]]; then
-            echo "Push-triggered maintenance is restricted to verify-only."
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" && "$MODE" != "verify" ]]; then
+            echo "Automatic maintenance is restricted to verify-only."
             exit 64
           fi
 
