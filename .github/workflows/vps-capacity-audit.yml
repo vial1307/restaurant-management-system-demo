@@ -37,6 +37,10 @@ jobs:
           ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
           set -u
 
+          summarize_ms() {
+            awk '{ sum += $1; if (NR == 1 || $1 < min) min = $1; if (NR == 1 || $1 > max) max = $1 } END { if (NR) printf "samples=%d min=%.1fms avg=%.1fms max=%.1fms\n", NR, min*1000, (sum/NR)*1000, max*1000 }'
+          }
+
           echo '=== AUDIT_TIME ==='
           date -u '+%Y-%m-%dT%H:%M:%SZ'
 
@@ -89,8 +93,55 @@ jobs:
             echo 'DOCKER_METRICS_UNAVAILABLE_FOR_DEPLOY_USER'
           fi
 
+          echo '=== DATA_PATH_PERFORMANCE ==='
+          echo '-- localhost API health (includes PostgreSQL queries) --'
+          : > /tmp/kitchen_local_health_times
+          for i in $(seq 1 20); do
+            curl -fsS -o /dev/null -w '%{time_total}\n' http://127.0.0.1:8080/api/health >> /tmp/kitchen_local_health_times
+          done
+          summarize_ms < /tmp/kitchen_local_health_times
+
+          echo '-- local Caddy edge -> API -> PostgreSQL --'
+          : > /tmp/kitchen_edge_health_times
+          for i in $(seq 1 20); do
+            curl -fsS -o /dev/null -w '%{time_total}\n' http://127.0.0.1/api/health >> /tmp/kitchen_edge_health_times
+          done
+          summarize_ms < /tmp/kitchen_edge_health_times
+
+          echo '-- production HTTPS from VPS loopback path --'
+          : > /tmp/kitchen_https_health_times
+          for i in $(seq 1 10); do
+            curl -fsS -o /dev/null -w '%{time_total}\n' https://82.47.180.185.nip.io/api/health >> /tmp/kitchen_https_health_times
+          done
+          summarize_ms < /tmp/kitchen_https_health_times
+
+          echo '-- production static root from VPS --'
+          : > /tmp/kitchen_root_times
+          for i in $(seq 1 10); do
+            curl -fsS -o /dev/null -w '%{time_total}\n' https://82.47.180.185.nip.io/ >> /tmp/kitchen_root_times
+          done
+          summarize_ms < /tmp/kitchen_root_times
+
+          if docker info >/dev/null 2>&1; then
+            echo '-- PostgreSQL representative inventory query plan/execution --'
+            docker exec kitchen-os-db sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -P pager=off -c "EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) select s.item_id,s.location_id,s.quantity,s.minimum_quantity,s.updated_at from public.inventory_stock s join public.inventory_locations l on l.id=s.location_id join public.inventory_items i on i.id=s.item_id where l.site=''fuxing'' and l.active=true and i.active=true and i.item_key like ''fuxing:%'';"' || true
+          fi
+
           echo '=== SERVICE_PORTS ==='
           ss -lnt 2>/dev/null | grep -E '(:22|:80|:443|:8080)[[:space:]]' || true
 
           echo '=== END ==='
           REMOTE
+
+      - name: External production HTTPS timing from CI runner
+        run: |
+          set -euo pipefail
+          echo '=== EXTERNAL_HTTPS_TIMING ==='
+          for path in / /api/health /RELEASE; do
+            echo "-- ${path} --"
+            for i in $(seq 1 10); do
+              curl -fsS -o /dev/null \
+                -w 'dns=%{time_namelookup} connect=%{time_connect} tls=%{time_appconnect} ttfb=%{time_starttransfer} total=%{time_total} size=%{size_download}\n' \
+                "https://82.47.180.185.nip.io${path}"
+            done
+          done
