@@ -1,4 +1,4 @@
-const SELF_SERVICE_ROLES = new Set(["employee", "parttime"]);
+import { hasCapability } from "./auth.mjs";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -63,7 +63,7 @@ function selfServicePayroll(payroll = {}) {
 }
 
 export function isWorkforceSelfServiceUser(user) {
-  return SELF_SERVICE_ROLES.has(String(user?.role || ""));
+  return hasCapability(user, "workforce.self_service");
 }
 
 export function resolveWorkforceStaffId(user, modules = {}) {
