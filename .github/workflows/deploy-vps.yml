@@ -217,7 +217,15 @@ jobs:
         run: node tests/browser-regression.mjs
 
       - name: Workforce approval browser regression
+        env:
+          WORKFORCE_APPROVAL_ONLY: "1"
         run: node tests/workforce-approval-browser-regression.mjs
+
+      - name: Workforce request contract regression
+        run: node tests/workforce-request-contract-regression.mjs
+
+      - name: Workforce request browser regression
+        run: node tests/workforce-request-browser-regression.mjs
 
       - name: Business recovery notice browser regression
         run: node tests/business-recovery-notice-browser-regression.mjs

@@ -74,7 +74,7 @@ function copy() {
     incomplete:"Ca chưa hoàn tất nên chưa thể duyệt.",
     openBlocking:"Vẫn còn ca chưa chấm tan nên chưa thể khóa kỳ.",
     approvalBlocking:"Vẫn còn ca hoàn tất chưa được duyệt nên chưa thể khóa kỳ.",
-    emptyBlocking:"Tháng này chưa có ca hoàn tất để khóa.",
+    emptyBlocking:"Tháng này chưa có ca hoàn tất để khóa kỳ.",
     reasonRequired:"Phải nhập lý do khi mở lại kỳ lương.",
   };
 }
@@ -184,7 +184,12 @@ function attendancePeriodMarkup(state, month) {
 }
 
 function decorateAttendance(root, state) {
-  if (!managerAccount()) return;
+  const canManage = managerAccount();
+  if (!canManage) {
+    root.querySelector("[data-workforce-period-banner]")?.remove();
+    root.querySelectorAll("[data-workforce-approve-attendance]").forEach((button) => button.remove());
+    return;
+  }
   const c = copy();
   const date = String(state?.selectedDate || "");
   const month = date.slice(0, 7);
@@ -264,7 +269,7 @@ function payrollRows(state, month) {
   return { all, complete, approved, pending, open, rows:[...byStaff.values()].sort((a, b) => String(a.staffName).localeCompare(String(b.staffName))) };
 }
 
-function approvedPayrollMarkup(state, month) {
+function approvedPayrollMarkup(state, month, canManage) {
   const c = copy();
   const period = periodFor(state, month);
   const locked = period?.status === "locked";
@@ -278,7 +283,7 @@ function approvedPayrollMarkup(state, month) {
   }), { shifts:0, minutes:0, gross:0, deduction:0, net:0 });
   const ready = data.complete.length > 0 && data.open.length === 0 && data.pending.length === 0;
   const tableRows = data.rows.map((row) => `<tr><td>${esc(row.staffName)}</td><td>${row.shifts}</td><td>${number(row.minutes / 60)}</td><td>NT$${number(row.gross)}</td><td>NT$${number(row.deduction)}</td><td><strong>NT$${number(row.net)}</strong></td></tr>`).join("");
-  const managerControls = managerAccount()
+  const managerControls = canManage
     ? locked
       ? `<form class="workforce-period-reopen" data-workforce-reopen-form data-month="${esc(month)}"><label><span>${esc(c.reopenReason)}</span><input name="reason" required minlength="3" maxlength="240" placeholder="${esc(c.reopenPlaceholder)}"></label><button type="submit" class="secondary-button" data-workforce-approval-action>${esc(c.reopen)}</button></form>`
       : `<div class="workforce-period-lock"><p>${esc(ready ? c.lockReady : c.lockBlocked)}</p><button type="button" class="primary-button" data-workforce-lock-period="${esc(month)}" data-workforce-approval-action ${ready ? "" : "disabled"}>${esc(c.lock)}</button></div>`
@@ -307,7 +312,8 @@ function decoratePayroll(root, state) {
   const month = panel.querySelector("[data-workforce-payroll-month]")?.value || String(state?.selectedDate || "").slice(0, 7);
   const period = periodFor(state, month);
   const data = payrollRows(state, month);
-  const signature = `${month}|${period?.status || "open"}|${period?.lockedAt || ""}|${period?.reopenedAt || ""}|${data.all.map((entry) => `${entry.id}:${entry.approvalStatus || ""}:${entry.clockIn || ""}:${entry.clockOut || ""}:${entry.breakMinutes || 0}:${entry.hourlyRate || 0}:${entry.scheduledStart || ""}`).join("|")}`;
+  const canManage = managerAccount();
+  const signature = `${month}|${period?.status || "open"}|${period?.lockedAt || ""}|${period?.reopenedAt || ""}|manage:${canManage ? "1" : "0"}|${data.all.map((entry) => `${entry.id}:${entry.approvalStatus || ""}:${entry.clockIn || ""}:${entry.clockOut || ""}:${entry.breakMinutes || 0}:${entry.hourlyRate || 0}:${entry.scheduledStart || ""}`).join("|")}`;
 
   const legacyStats = panel.querySelector(".workforce-payroll-stats");
   const legacyCard = panel.querySelector(".workforce-payroll-card");
@@ -317,7 +323,7 @@ function decoratePayroll(root, state) {
   let approvedPanel = panel.querySelector("[data-workforce-approved-payroll]");
   if (approvedPanel?.dataset.signature === signature) return;
   approvedPanel?.remove();
-  panel.insertAdjacentHTML("beforeend", approvedPayrollMarkup(state, month));
+  panel.insertAdjacentHTML("beforeend", approvedPayrollMarkup(state, month, canManage));
   approvedPanel = panel.querySelector("[data-workforce-approved-payroll]");
   if (approvedPanel) approvedPanel.dataset.signature = signature;
 }

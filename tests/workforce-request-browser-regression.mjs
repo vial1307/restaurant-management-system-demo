@@ -53,6 +53,21 @@ async function seedBaseSchedule() {
   const adminCookie = await apiLogin("yangchuadmin");
   const state = await request(`/api/business-state/${SITE}`, { cookie:adminCookie });
   assert.equal(state.response.status, 200);
+
+  // Workforce self-service intentionally fails closed unless the signed-in account
+  // can be mapped to a staff identity. Seed the current compatibility authority
+  // explicitly instead of relying on device-local demo state to create it later.
+  const sharedModule = structuredClone(state.data.modules.shared || { staff:[] });
+  sharedModule.staff = (sharedModule.staff || []).filter((entry) => entry.id !== "staff-employee");
+  sharedModule.staff.push({
+    id:"staff-employee",
+    name:"employeefx",
+    accountUsername:"employeefx",
+    area:"soup",
+    hourlyRate:230,
+    active:true,
+  });
+
   const scheduleModule = structuredClone(state.data.modules.schedule || { schedules:[] });
   scheduleModule.schedules = (scheduleModule.schedules || []).filter((entry) => entry.id !== "workforce-request-browser-base");
   scheduleModule.schedules.push({
@@ -74,8 +89,11 @@ async function seedBaseSchedule() {
     method:"POST",
     cookie:adminCookie,
     body:{
-      modules:{ schedule:scheduleModule },
-      expectedModuleRevisions:{ schedule:state.data.moduleRevisions.schedule },
+      modules:{ shared:sharedModule, schedule:scheduleModule },
+      expectedModuleRevisions:{
+        shared:state.data.moduleRevisions.shared,
+        schedule:state.data.moduleRevisions.schedule,
+      },
     },
   });
   assert.equal(saved.response.status, 200, `browser request schedule seed failed: ${JSON.stringify(saved.data)}`);
