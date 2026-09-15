@@ -97,6 +97,7 @@ export function publicUser(user) {
     username: user.username,
     displayName: user.display_name,
     role: user.role_code || user.role,
+    policyRole: user.role,
     location: user.location,
     permissions: user.permissions || {},
     capabilities: user.capabilities || {},
