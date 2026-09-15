@@ -1,5 +1,3 @@
-import { hasCapability } from "./auth.mjs";
-
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -63,7 +61,7 @@ function selfServicePayroll(payroll = {}) {
 }
 
 export function isWorkforceSelfServiceUser(user) {
-  return hasCapability(user, "workforce.self_service");
+  return Boolean(user?.capabilities?.["workforce.self_service"]);
 }
 
 export function resolveWorkforceStaffId(user, modules = {}) {
