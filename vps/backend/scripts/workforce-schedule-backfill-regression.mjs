@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import pg from "pg";
 
 const { Client } = pg;
+pg.types.setTypeParser(1082, (value) => value);
 const env = { ...process.env };
 const client = new Client({
   host:env.DB_HOST || "127.0.0.1",
