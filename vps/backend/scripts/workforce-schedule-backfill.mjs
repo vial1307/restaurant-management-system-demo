@@ -17,6 +17,18 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 function text(value) { return String(value ?? "").trim(); }
 function object(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
 function array(value) { return Array.isArray(value) ? value : []; }
+function databaseDate(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
+  const raw = text(value);
+  const match = raw.match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : raw.slice(0, 10);
+}
+function databaseTime(value) {
+  const raw = text(value);
+  const match = raw.match(/(?:[01]\d|2[0-3]):[0-5]\d/);
+  return match ? match[0] : raw.slice(0, 5);
+}
 function validIso(value) {
   const raw = text(value);
   return raw && Number.isFinite(Date.parse(raw)) ? raw : null;
@@ -322,10 +334,9 @@ async function upsertPublication(client, plan, scheduleIds) {
     );
     const dbSignature = entries.rows.map((entry) => ({
       legacyId:text(entry.legacy_schedule_id), staffId:text(entry.staff_id), scheduleKind:text(entry.schedule_kind),
-      serviceDate:entry.service_date ? String(entry.service_date).slice(0,10) : null,
-      recurrenceMonth:entry.recurrence_month ? String(entry.recurrence_month).slice(0,10) : null,
+      serviceDate:databaseDate(entry.service_date), recurrenceMonth:databaseDate(entry.recurrence_month),
       weekday:entry.weekday === null ? null : Number(entry.weekday), slotNo:Number(entry.slot_no), shiftType:text(entry.shift_type),
-      startTime:text(entry.start_time).slice(0,5), endTime:text(entry.end_time).slice(0,5), endsNextDay:Boolean(entry.ends_next_day),
+      startTime:databaseTime(entry.start_time), endTime:databaseTime(entry.end_time), endsNextDay:Boolean(entry.ends_next_day),
       departmentCode:text(entry.department_code) || null, workArea:text(entry.work_area) || null, note:text(entry.note),
     })).sort((a,b) => a.legacyId.localeCompare(b.legacyId));
     const expectedSignature = plan.published.map((item) => ({
