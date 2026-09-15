@@ -6,9 +6,11 @@ import { hashPassword, verifyPassword } from "./password.mjs";
 import { registerAdminRoutes } from "./admin-routes.mjs";
 import { registerInventoryExtraRoutes } from "./inventory-extra-routes.mjs";
 import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
+import { hydrateUserAccess } from "./access-control.mjs";
 import {
   createSession,
   destroySession,
+  hasCapability,
   hasPermission,
   publicUser,
   requireUser,
@@ -51,7 +53,7 @@ app.post("/api/auth/login", async (request, reply) => {
   }
 
   const { rows } = await pool.query(
-    `select id,username,display_name,password_hash,role,location,permissions,
+    `select id,username,display_name,password_hash,role as role_code,location,
             preferred_language,active
      from public.app_users
      where username=$1
@@ -59,13 +61,18 @@ app.post("/api/auth/login", async (request, reply) => {
     [username]
   );
 
-  const user = rows[0];
-  const valid = user?.active && user.password_hash
-    ? await verifyPassword(password, user.password_hash)
+  const storedUser = rows[0];
+  const valid = storedUser?.active && storedUser.password_hash
+    ? await verifyPassword(password, storedUser.password_hash)
     : false;
 
   if (!valid) {
     return reply.code(401).send({ error: "INVALID_CREDENTIALS" });
+  }
+
+  const user = await hydrateUserAccess(storedUser);
+  if (!user) {
+    return reply.code(403).send({ error: "ROLE_NOT_ACTIVE" });
   }
 
   await createSession(user.id, reply);
@@ -120,11 +127,13 @@ app.post("/api/auth/preferences", async (request, reply) => {
     `update public.app_users
      set preferred_language=$2
      where id=$1
-     returning id,username,display_name,role,location,permissions,
+     returning id,username,display_name,role as role_code,location,
                preferred_language,active,password_changed_at`,
     [user.id, preferredLanguage]
   );
-  return { user: publicUser(rows[0]) };
+  const refreshed = await hydrateUserAccess(rows[0]);
+  if (!refreshed) return reply.code(403).send({ error:"ROLE_NOT_ACTIVE" });
+  return { user: publicUser(refreshed) };
 });
 
 app.get("/api/inventory/:site", async (request, reply) => {
@@ -190,7 +199,7 @@ app.get("/api/inventory/:site/transactions", async (request, reply) => {
   if (!["central", "fuxing", "yongji"].includes(site)) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
-  if (user.role !== "admin") {
+  if (!hasCapability(user, "inventory.history.full")) {
     return reply.code(403).send({ error: "ADMIN_REQUIRED" });
   }
 
