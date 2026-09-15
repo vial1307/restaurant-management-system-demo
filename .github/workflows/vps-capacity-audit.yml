@@ -1,0 +1,96 @@
+name: VPS Capacity Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/vps-capacity-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Read-only VPS capacity and runtime audit
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -u
+
+          echo '=== AUDIT_TIME ==='
+          date -u '+%Y-%m-%dT%H:%M:%SZ'
+
+          echo '=== OS ==='
+          uname -a
+          if test -r /etc/os-release; then
+            grep -E '^(PRETTY_NAME|VERSION_ID)=' /etc/os-release || true
+          fi
+
+          echo '=== CPU ==='
+          printf 'vCPU: '
+          nproc
+          lscpu 2>/dev/null | grep -E '^(Model name|Architecture|CPU\(s\)|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\)|Virtualization|Hypervisor vendor):' || true
+
+          echo '=== MEMORY ==='
+          free -h
+          echo '-- swap --'
+          swapon --show 2>/dev/null || true
+
+          echo '=== LOAD_UPTIME ==='
+          uptime
+          cat /proc/loadavg
+
+          echo '=== FILESYSTEM ==='
+          df -hT /
+          df -i /
+          echo '-- block devices --'
+          lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS 2>/dev/null || true
+
+          echo '=== KITCHEN_OS_STORAGE ==='
+          du -sh /opt/kitchen-os 2>/dev/null || true
+          du -sh /opt/kitchen-os/backups 2>/dev/null || true
+          printf 'backup_count: '
+          find /opt/kitchen-os/backups -maxdepth 1 -type f -name 'kitchen_os_*.dump' 2>/dev/null | wc -l || true
+          echo '-- newest backups --'
+          find /opt/kitchen-os/backups -maxdepth 1 -type f -name 'kitchen_os_*.dump' -printf '%TY-%Tm-%Td %TH:%TM:%TS %s %p\n' 2>/dev/null | sort -r | head -n 10 || true
+
+          echo '=== DOCKER ==='
+          if docker info >/dev/null 2>&1; then
+            docker version --format 'server={{.Server.Version}}' || true
+            echo '-- containers --'
+            docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' || true
+            echo '-- live resource usage --'
+            docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}' || true
+            echo '-- docker disk usage --'
+            docker system df || true
+            echo '-- postgres data volume --'
+            docker exec kitchen-os-db sh -lc 'du -sh /var/lib/postgresql/data 2>/dev/null || true' || true
+          else
+            echo 'DOCKER_METRICS_UNAVAILABLE_FOR_DEPLOY_USER'
+          fi
+
+          echo '=== SERVICE_PORTS ==='
+          ss -lnt 2>/dev/null | grep -E '(:22|:80|:443|:8080)[[:space:]]' || true
+
+          echo '=== END ==='
+          REMOTE
