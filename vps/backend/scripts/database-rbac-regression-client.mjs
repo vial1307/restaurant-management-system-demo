@@ -92,7 +92,7 @@ const created = await request("/api/admin/users",{
   body:{
     action:"create",
     username:"dbrolecreated",
-    password:"DatabaseRole!123",
+    password:PASSWORD,
     display_name:"DB Role Created",
     role:"assistant_manager",
     location:"fuxing",
