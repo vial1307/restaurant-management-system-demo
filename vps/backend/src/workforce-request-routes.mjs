@@ -10,6 +10,10 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
+function identity(value) {
+  return text(value).toLocaleLowerCase("en-US");
+}
+
 function validDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text(value));
 }
@@ -46,6 +50,40 @@ function scheduleModule(modules = {}) {
   if (!Array.isArray(input.requests)) input.requests = [];
   if (!Array.isArray(input.exceptions)) input.exceptions = [];
   return input;
+}
+
+function resolveRequestStaff(user, modules, module) {
+  const rosterStaffId = resolveWorkforceStaffId(user, modules);
+  if (rosterStaffId) {
+    const roster = Array.isArray(modules?.shared?.staff) ? modules.shared.staff : [];
+    const member = roster.find((entry) => text(entry?.id) === rosterStaffId);
+    return {
+      staffId:rosterStaffId,
+      staffName:text(member?.name) || actorName(user),
+      source:"roster",
+    };
+  }
+
+  const names = new Set([
+    identity(user?.username),
+    identity(user?.display_name),
+    identity(user?.displayName),
+    identity(user?.name),
+  ].filter(Boolean));
+  if (!names.size) return null;
+
+  const matches = (Array.isArray(module?.schedules) ? module.schedules : [])
+    .filter((entry) => text(entry?.staffId) && names.has(identity(entry?.staffName)));
+  const ids = [...new Set(matches.map((entry) => text(entry.staffId)).filter(Boolean))];
+  if (ids.length !== 1) return null;
+
+  const staffId = ids[0];
+  const match = matches.find((entry) => text(entry.staffId) === staffId);
+  return {
+    staffId,
+    staffName:text(match?.staffName) || actorName(user),
+    source:"schedule-compat",
+  };
 }
 
 function currentModuleRevision(revisions = {}) {
@@ -218,13 +256,9 @@ export async function registerWorkforceRequestRoutes(app) {
       action:"workforce-schedule-request-create",
       entityId:id,
       mutate({ modules, module }) {
-        const staffId = resolveWorkforceStaffId(user, modules);
-        if (!staffId) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
-        const staff = Array.isArray(modules?.shared?.staff)
-          ? modules.shared.staff.find((entry) => text(entry?.id) === staffId)
-          : null;
-        const staffName = text(staff?.name) || actorName(user);
-        if (!staffName) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
+        const resolvedStaff = resolveRequestStaff(user, modules, module);
+        if (!resolvedStaff) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
+        const { staffId, staffName } = resolvedStaff;
         if (module.requests.some((entry) => text(entry?.staffId) === staffId && text(entry?.date) === date && entry?.status === "pending")) {
           return { ok:false, status:409, error:"WORKFORCE_REQUEST_PENDING_EXISTS" };
         }
@@ -258,7 +292,7 @@ export async function registerWorkforceRequestRoutes(app) {
           module,
           before:null,
           after:requestPayload(created),
-          metadata:{ type, date, staffId, sourceScheduleId:created.sourceScheduleId || null },
+          metadata:{ type, date, staffId, identitySource:resolvedStaff.source, sourceScheduleId:created.sourceScheduleId || null },
           payload:requestPayload(created),
         };
       },
@@ -282,8 +316,9 @@ export async function registerWorkforceRequestRoutes(app) {
       action:"workforce-schedule-request-cancel",
       entityId:id,
       mutate({ modules, module }) {
-        const staffId = resolveWorkforceStaffId(user, modules);
-        if (!staffId) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
+        const resolvedStaff = resolveRequestStaff(user, modules, module);
+        if (!resolvedStaff) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
+        const staffId = resolvedStaff.staffId;
         const item = module.requests.find((entry) => text(entry?.id) === id);
         if (!item) return { ok:false, status:404, error:"WORKFORCE_REQUEST_NOT_FOUND" };
         if (text(item.staffId) !== staffId) return { ok:false, status:403, error:"WORKFORCE_REQUEST_NOT_OWN" };
@@ -298,7 +333,7 @@ export async function registerWorkforceRequestRoutes(app) {
           module,
           before,
           after:requestPayload(item),
-          metadata:{ staffId, date:item.date, type:item.type },
+          metadata:{ staffId, identitySource:resolvedStaff.source, date:item.date, type:item.type },
           payload:requestPayload(item),
         };
       },
