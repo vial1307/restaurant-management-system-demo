@@ -10,6 +10,7 @@ const employee = {
   username:"employee-a",
   display_name:"Employee A",
   role:"employee",
+  capabilities:{"workforce.self_service":true},
 };
 
 const staff = [

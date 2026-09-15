@@ -68,6 +68,33 @@ async function insertUser(username, role, location, permissions) {
   return rows[0];
 }
 
+async function seedDatabaseDefinedRegressionRoles() {
+  await client.query(
+    `insert into public.account_roles(
+       code,name_vi,name_zh_tw,hierarchy_level,parent_role_code,scope_policy,sort_order,active
+     ) values
+       ('assistant_manager','Phó quản lý','副主管',35,'supervisor','assigned',35,true),
+       ('remote_only','Nhân viên remote','遠端作業人員',15,null,'assigned',80,true)
+     on conflict(code) do update set
+       name_vi=excluded.name_vi,
+       name_zh_tw=excluded.name_zh_tw,
+       hierarchy_level=excluded.hierarchy_level,
+       parent_role_code=excluded.parent_role_code,
+       scope_policy=excluded.scope_policy,
+       sort_order=excluded.sort_order,
+       active=excluded.active,
+       updated_at=now()`
+  );
+  await client.query(
+    `insert into public.role_module_permissions(role_code,module_key,can_view,can_edit)
+     values('remote_only','remote',true,true)
+     on conflict(role_code,module_key) do update set
+       can_view=excluded.can_view,
+       can_edit=excluded.can_edit,
+       updated_at=now()`
+  );
+}
+
 await client.connect();
 try {
   await client.query(`
@@ -98,6 +125,7 @@ try {
   await insertUser("yangchuadmin","manager","all",all(false,false));
 
   for (const file of migrations.filter((name) => name >= "004_")) await applyMigration(file);
+  await seedDatabaseDefinedRegressionRoles();
 
   await client.query("truncate table public.business_state");
 
@@ -105,11 +133,12 @@ try {
   users.admin = (await client.query("select * from public.app_users where username='yangchuadmin'")).rows[0];
   users.managerfx = await insertUser("managerfx","manager","fuxing",managerPermissions);
   users.manageryj = await insertUser("manageryj","manager","yongji",managerPermissions);
+  users.assistantfx = await insertUser("assistantfx","assistant_manager","fuxing",{});
   users.supervisorfx = await insertUser("supervisorfx","supervisor","fuxing",supervisorPermissions);
   users.employeefx = await insertUser("employeefx","employee","fuxing",employeePermissions);
   users.parttimefx = await insertUser("parttimefx","parttime","fuxing",parttimePermissions);
   users.centralreg = await insertUser("centralreg","central","central",centralPermissions);
-  users.remoteonly = await insertUser("remoteonly","employee","fuxing",remotePermissions);
+  users.remoteonly = await insertUser("remoteonly","remote_only","fuxing",remotePermissions);
 
   const locations = {};
   for (const entry of [

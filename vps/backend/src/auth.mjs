@@ -1,6 +1,11 @@
 import crypto from "node:crypto";
 import { pool } from "./db.mjs";
-import { normalizeLocationForRole, normalizePermissionsForRole } from "./permissions.mjs";
+import {
+  hasCapability as accessHasCapability,
+  hasPermission as accessHasPermission,
+  hydrateUserAccess,
+  siteAllowed as accessSiteAllowed,
+} from "./access-control.mjs";
 
 export const SESSION_COOKIE = "kitchen_session";
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 14);
@@ -41,7 +46,7 @@ export async function resolveSession(request) {
 
   const { rows } = await pool.query(
     `select
-       u.id,u.username,u.display_name,u.role,u.location,u.permissions,
+       u.id,u.username,u.display_name,u.role as role_code,u.location,
        u.preferred_language,u.active,
        s.id as session_id,s.expires_at
      from public.sessions s
@@ -53,7 +58,8 @@ export async function resolveSession(request) {
     [tokenHash(token)]
   );
 
-  const user = rows[0] || null;
+  const rawUser = rows[0] || null;
+  const user = rawUser ? await hydrateUserAccess(rawUser) : null;
   if (user) {
     void pool.query(
       "update public.sessions set last_seen_at=now() where id=$1 and last_seen_at < now()-interval '5 minutes'",
@@ -73,16 +79,16 @@ export async function requireUser(request, reply) {
   return user;
 }
 
-export function hasPermission(user, moduleName, actionName) {
-  if (!user) return false;
-  if (user.role === "admin") return true;
-  return Boolean(user.permissions?.[moduleName]?.[actionName]);
+export function hasPermission(user, moduleName, actionName = "view") {
+  return accessHasPermission(user, moduleName, actionName);
+}
+
+export function hasCapability(user, capabilityKey) {
+  return accessHasCapability(user, capabilityKey);
 }
 
 export function siteAllowed(user, site) {
-  if (!user) return false;
-  const location = normalizeLocationForRole(user.role, user.location);
-  return location === "all" || location === site;
+  return accessSiteAllowed(user, site);
 }
 
 export function publicUser(user) {
@@ -90,9 +96,16 @@ export function publicUser(user) {
     id: user.id,
     username: user.username,
     displayName: user.display_name,
-    role: user.role,
-    location: normalizeLocationForRole(user.role, user.location),
-    permissions: normalizePermissionsForRole(user.role, user.permissions),
+    role: user.role_code || user.role,
+    policyRole: user.role,
+    location: user.location,
+    permissions: user.permissions || {},
+    capabilities: user.capabilities || {},
+    hierarchyLevel: Number(user.hierarchy_level || 0),
+    roleParent: user.role_parent || null,
+    roleScopePolicy: user.role_scope_policy || "assigned",
+    roleNameVi: user.role_name_vi || "",
+    roleNameZhTw: user.role_name_zh_tw || "",
     preferredLanguage: user.preferred_language || "vi",
     active: user.active,
   };
