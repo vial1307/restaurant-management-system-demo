@@ -28,6 +28,20 @@ During this phase:
 6. Existing incompatible bindings fail the apply transaction instead of being silently overwritten.
 7. PIN/password-like legacy values are not copied into relational metadata.
 
+## Binding diagnostics
+
+Verify and apply reports must expose aggregate binding outcomes without printing staff names, usernames, IDs, passwords, PINs, or other sensitive roster data.
+
+The stable outcome classes are:
+
+- `bound`: exactly one eligible account was resolved and may be bound;
+- `no_match`: a deterministic lookup key existed but no eligible account matched it;
+- `ambiguous`: more than one eligible account matched, so the row must remain unbound;
+- `claimed`: the only matching account was already claimed by another staff row in the same migration plan;
+- `missing_identity`: the legacy row provided no usable account key or display name.
+
+The report must also aggregate the attempted match method (`explicit_user_id`, `explicit_username`, `display_name`, or `none`). A non-`bound` outcome must never be converted into a guessed binding during apply. The same aggregate diagnostics are persisted in the migration checkpoint after a successful apply.
+
 ## Employment data rules
 
 - Explicit valid legacy `employmentType` values are preserved.
@@ -46,6 +60,17 @@ During this phase:
 - The operation is idempotent: rerunning the same source updates mutable staff master fields but preserves relational staff identity and does not duplicate account bindings.
 - A successful site transaction records checkpoint status `verified` with source `shared` module revision and SHA-256 checksum.
 
+## Production orchestration
+
+Production automation must avoid racing the deployment that installs the backfill script.
+
+- Automatic verification is triggered only after `Deploy Kitchen OS to VPS` completes successfully for `main`.
+- The automatic run is verify-only; it may not enter apply mode.
+- A deployment-triggered verification must pin the deployment workflow `head_sha` and require the public `RELEASE` marker to equal that deployed SHA.
+- Before verify or apply, the workflow must require the public release marker to match the VPS repository HEAD and require the checked-out backfill script SHA-256 to match the script on the VPS.
+- `apply` remains `workflow_dispatch` only and must create the mandatory database backup before any relational write.
+- Production health must be checked again after verify or apply.
+
 ## Safety / cutover boundary
 
 This phase is additive. It must not delete legacy staff rows, change existing workforce authorization behavior, or make relational tables authoritative for schedule/attendance/payroll.
@@ -56,9 +81,11 @@ The next workforce phases may proceed only after production backfill reports are
 
 - Fresh PostgreSQL 16 regression setup can run the backfill.
 - Verify-only mode writes no staff rows.
+- Verify reports distinguish deterministic binding outcomes without exposing roster identity details.
 - Apply creates one relational row per valid legacy staff ID.
 - A second apply does not create duplicate staff or binding rows and preserves UUID identity.
 - Mutable master fields can refresh from a later source revision before authority cutover.
 - Explicit username binding is deterministic.
 - Generic employee role is not incorrectly converted to full-time employment.
-- A verified migration checkpoint records source revision, row counts and checksum.
+- A verified migration checkpoint records source revision, row counts, checksum and aggregate binding diagnostics.
+- Production auto-verification cannot race deployment and cannot enter apply mode.

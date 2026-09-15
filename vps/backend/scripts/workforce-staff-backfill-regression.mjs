@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import pg from "pg";
 
 const { Client } = pg;
 const env = { ...process.env };
+const productionWorkflow = fs.readFileSync(".github/workflows/workforce-staff-production-backfill.yml", "utf8");
 const client = new Client({
   host:env.DB_HOST || "127.0.0.1",
   port:Number(env.DB_PORT || 5432),
@@ -11,6 +13,17 @@ const client = new Client({
   user:env.POSTGRES_USER || "kitchen_test",
   password:env.POSTGRES_PASSWORD || "kitchen_test",
 });
+
+assert.match(productionWorkflow, /workflow_run:/, "production verification must be sequenced after a workflow completion");
+assert.match(productionWorkflow, /Deploy Kitchen OS to VPS/, "production verification must follow the canonical deploy workflow");
+assert.doesNotMatch(productionWorkflow, /\n  push:/, "production verification must not race deployment via an independent push trigger");
+assert.match(productionWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/, "automatic verification must require a successful deployment workflow");
+assert.match(productionWorkflow, /github\.event\.workflow_run\.head_branch == 'main'/, "automatic verification must remain main-only");
+assert.match(productionWorkflow, /github\.event\.workflow_run\.head_sha/, "automatic verification must pin the deployed SHA");
+assert.match(productionWorkflow, /LOCAL_SCRIPT_SHA/, "maintenance workflow must verify the local script checksum");
+assert.match(productionWorkflow, /REMOTE_SCRIPT_SHA/, "maintenance workflow must verify the deployed script checksum");
+assert.match(productionWorkflow, /Creating mandatory pre-backfill database backup/, "apply mode must retain mandatory backup");
+assert.match(productionWorkflow, /GITHUB_EVENT_NAME.*workflow_dispatch/, "automatic runs must remain verify-only");
 
 function runBackfill(...args) {
   const result = spawnSync(process.execPath, ["vps/backend/scripts/workforce-staff-backfill.mjs", ...args], {
@@ -20,6 +33,12 @@ function runBackfill(...args) {
   });
   assert.equal(result.status, 0, `backfill failed\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
   return result.stdout;
+}
+
+function backfillReport(output) {
+  const marker = output.indexOf("\nWORKFORCE_STAFF_BACKFILL_");
+  assert(marker > 0, `backfill report marker missing: ${output}`);
+  return JSON.parse(output.slice(output.indexOf("{"), marker));
 }
 
 await client.connect();
@@ -63,10 +82,33 @@ try {
 
   const verifyOutput = runBackfill("--site=fuxing");
   assert.match(verifyOutput, /WORKFORCE_STAFF_BACKFILL_VERIFY_OK/);
+  const verifyReport = backfillReport(verifyOutput);
+  assert.equal(verifyReport.apply, false);
+  assert.equal(verifyReport.sites.length, 1);
+  assert.equal(verifyReport.sites[0].rosterRows, 2);
+  assert.equal(verifyReport.sites[0].bindableRows, 1);
+  assert.equal(verifyReport.sites[0].unboundRows, 1);
+  assert.deepEqual(verifyReport.sites[0].bindingOutcomes, {
+    bound:1,
+    no_match:1,
+    ambiguous:0,
+    claimed:0,
+    missing_identity:0,
+  });
+  assert.deepEqual(verifyReport.sites[0].bindingMethods, {
+    explicit_user_id:0,
+    explicit_username:1,
+    display_name:1,
+    none:0,
+  });
   assert.equal((await client.query(`select count(*)::int as count from public.staff_members where site_code='fuxing'`)).rows[0].count, 0, "verify-only must not write staff rows");
 
   const firstOutput = runBackfill("--apply", "--site=fuxing");
   assert.match(firstOutput, /WORKFORCE_STAFF_BACKFILL_OK/);
+  const firstReport = backfillReport(firstOutput);
+  assert.equal(firstReport.sites[0].staffWritten, 2);
+  assert.equal(firstReport.sites[0].bindingsWritten, 1);
+  assert.deepEqual(firstReport.sites[0].bindingOutcomes, verifyReport.sites[0].bindingOutcomes);
 
   let staff = await client.query(
     `select id,staff_code,legacy_staff_id,display_name,employment_type,default_work_area,hourly_rate,active
@@ -103,6 +145,8 @@ try {
   assert.equal(Number(checkpoint.rows[0].rows_written), 2);
   assert.match(checkpoint.rows[0].checksum, /^[a-f0-9]{64}$/);
   assert.equal(checkpoint.rows[0].details.authority, "business_state");
+  assert.deepEqual(checkpoint.rows[0].details.bindingOutcomes, verifyReport.sites[0].bindingOutcomes);
+  assert.deepEqual(checkpoint.rows[0].details.bindingMethods, verifyReport.sites[0].bindingMethods);
 
   const firstIds = new Map(staff.rows.map((row) => [row.legacy_staff_id, String(row.id)]));
   const secondOutput = runBackfill("--apply", "--site=fuxing");

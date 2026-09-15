@@ -11,6 +11,7 @@ on:
       - "vps/backend/scripts/workforce-staff-backfill-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-relational-backfill-regression.yml"
+      - ".github/workflows/workforce-staff-production-backfill.yml"
   push:
     branches:
       - main
@@ -20,6 +21,7 @@ on:
       - "vps/backend/scripts/workforce-staff-backfill-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-relational-backfill-regression.yml"
+      - ".github/workflows/workforce-staff-production-backfill.yml"
 
 permissions:
   contents: read

@@ -94,17 +94,54 @@ async function candidateUsers(client, site) {
 function resolveBinding(member, users, claimedUserIds) {
   const explicitUserId = text(member?.accountUserId || member?.account_user_id || member?.userId || member?.user_id);
   const explicitUsername = identity(member?.accountUsername || member?.account_username);
+  const displayName = identity(member?.name);
 
+  let method = "none";
   let matches = [];
-  if (explicitUserId) matches = users.filter((user) => String(user.id) === explicitUserId);
-  else if (explicitUsername) matches = users.filter((user) => identity(user.username) === explicitUsername);
-  else {
-    const name = identity(member?.name);
-    if (name) matches = users.filter((user) => identity(user.display_name) === name);
+  if (explicitUserId) {
+    method = "explicit_user_id";
+    matches = users.filter((user) => String(user.id) === explicitUserId);
+  } else if (explicitUsername) {
+    method = "explicit_username";
+    matches = users.filter((user) => identity(user.username) === explicitUsername);
+  } else if (displayName) {
+    method = "display_name";
+    matches = users.filter((user) => identity(user.display_name) === displayName);
+  } else {
+    return { user:null, status:"missing_identity", method, candidateCount:0 };
   }
 
-  matches = matches.filter((user) => !claimedUserIds.has(String(user.id)));
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length === 0) return { user:null, status:"no_match", method, candidateCount:0 };
+  if (matches.length > 1) return { user:null, status:"ambiguous", method, candidateCount:matches.length };
+
+  const user = matches[0];
+  if (claimedUserIds.has(String(user.id))) {
+    return { user:null, status:"claimed", method, candidateCount:1 };
+  }
+  return { user, status:"bound", method, candidateCount:1 };
+}
+
+function bindingOutcomes(planned) {
+  const outcomes = {
+    bound:0,
+    no_match:0,
+    ambiguous:0,
+    claimed:0,
+    missing_identity:0,
+  };
+  const methods = {
+    explicit_user_id:0,
+    explicit_username:0,
+    display_name:0,
+    none:0,
+  };
+  for (const member of planned) {
+    const status = Object.hasOwn(outcomes, member.bindingStatus) ? member.bindingStatus : "no_match";
+    const method = Object.hasOwn(methods, member.bindingMethod) ? member.bindingMethod : "none";
+    outcomes[status] += 1;
+    methods[method] += 1;
+  }
+  return { outcomes, methods };
 }
 
 async function upsertCheckpoint(client, { site, sourceRevision, status, rowsRead, rowsWritten, checksum, details }) {
@@ -139,7 +176,8 @@ async function inspectSite(client, row) {
   const planned = [];
 
   for (const member of roster) {
-    const binding = resolveBinding(member, users, claimed);
+    const resolution = resolveBinding(member, users, claimed);
+    const binding = resolution.user;
     if (binding) claimed.add(String(binding.id));
     planned.push({
       legacyStaffId:text(member.id),
@@ -152,10 +190,14 @@ async function inspectSite(client, row) {
       active:member.active !== false,
       bindingUserId:binding?.id || null,
       bindingUsername:binding?.username || null,
+      bindingStatus:resolution.status,
+      bindingMethod:resolution.method,
+      bindingCandidateCount:resolution.candidateCount,
     });
   }
 
-  return { site, sourceRevision:Number(row.module_revision || 0), roster, checksum, planned };
+  const bindingSummary = bindingOutcomes(planned);
+  return { site, sourceRevision:Number(row.module_revision || 0), roster, checksum, planned, bindingSummary };
 }
 
 async function applySite(client, plan) {
@@ -234,7 +276,14 @@ async function applySite(client, plan) {
     rowsRead:plan.roster.length,
     rowsWritten:staffWritten,
     checksum:plan.checksum,
-    details:{ staffWritten, bindingsWritten, authority:"business_state", target:"staff_members" },
+    details:{
+      staffWritten,
+      bindingsWritten,
+      bindingOutcomes:plan.bindingSummary.outcomes,
+      bindingMethods:plan.bindingSummary.methods,
+      authority:"business_state",
+      target:"staff_members",
+    },
   });
 
   return { staffWritten, bindingsWritten };
@@ -263,12 +312,16 @@ try {
   for (const row of states.rows) {
     const plan = await inspectSite(client, row);
     if (!APPLY) {
+      const bound = plan.bindingSummary.outcomes.bound;
       report.push({
         site:plan.site,
         mode:"verify-only",
         sourceRevision:plan.sourceRevision,
         rosterRows:plan.roster.length,
-        bindableRows:plan.planned.filter((member) => member.bindingUserId).length,
+        bindableRows:bound,
+        unboundRows:plan.roster.length - bound,
+        bindingOutcomes:plan.bindingSummary.outcomes,
+        bindingMethods:plan.bindingSummary.methods,
         checksum:plan.checksum,
       });
       continue;
@@ -283,11 +336,24 @@ try {
         rowsRead:plan.roster.length,
         rowsWritten:0,
         checksum:plan.checksum,
-        details:{ authority:"business_state", target:"staff_members" },
+        details:{
+          bindingOutcomes:plan.bindingSummary.outcomes,
+          bindingMethods:plan.bindingSummary.methods,
+          authority:"business_state",
+          target:"staff_members",
+        },
       });
       const result = await applySite(client, plan);
       await client.query("commit");
-      report.push({ site:plan.site, mode:"apply", sourceRevision:plan.sourceRevision, checksum:plan.checksum, ...result });
+      report.push({
+        site:plan.site,
+        mode:"apply",
+        sourceRevision:plan.sourceRevision,
+        checksum:plan.checksum,
+        bindingOutcomes:plan.bindingSummary.outcomes,
+        bindingMethods:plan.bindingSummary.methods,
+        ...result,
+      });
     } catch (error) {
       await client.query("rollback");
       throw error;
