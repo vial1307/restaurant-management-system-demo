@@ -1,13 +1,12 @@
 import { pool, withTransaction } from "./db.mjs";
 import { hashPassword } from "./password.mjs";
-import { requireUser } from "./auth.mjs";
-import { normalizeLocationForRole, normalizePermissionsForRole } from "./permissions.mjs";
+import { hasCapability, requireUser } from "./auth.mjs";
+import { hydrateUserAccess, listAccessModel, resolveRoleProfile } from "./access-control.mjs";
 
-const VALID_ROLES = new Set(["admin","manager","supervisor","employee","parttime","central"]);
 const VALID_LOCATIONS = new Set(["all","central","fuxing","yongji"]);
 
 function requireAdmin(user, reply) {
-  if (user?.role === "admin") return true;
+  if (hasCapability(user, "accounts.manage")) return true;
   reply.code(403).send({ error: "ADMIN_REQUIRED" });
   return false;
 }
@@ -21,25 +20,62 @@ function requestedPreferredLanguage(body) {
   return normalizePreferredLanguage(body.preferred_language);
 }
 
+async function resolveRequestedRole(role, location, client = pool) {
+  if (!VALID_LOCATIONS.has(location)) {
+    throw Object.assign(new Error("INVALID_LOCATION"), { statusCode:400 });
+  }
+  const profile = await resolveRoleProfile(role, location, client);
+  if (!profile) throw Object.assign(new Error("INVALID_ROLE"), { statusCode:400 });
+  if (profile.scopePolicy === "assigned" && !["fuxing","yongji"].includes(location)) {
+    throw Object.assign(new Error("INVALID_LOCATION_FOR_ROLE"), { statusCode:400 });
+  }
+  return profile;
+}
+
+async function adminUserPayload(row, client = pool) {
+  if (!row) return null;
+  const hydrated = await hydrateUserAccess({ ...row, role_code:row.role }, client);
+  if (!hydrated) return null;
+  return {
+    id: hydrated.id,
+    username: hydrated.username,
+    display_name: hydrated.display_name,
+    role: hydrated.role_code,
+    location: hydrated.location,
+    permissions: hydrated.permissions || {},
+    capabilities: hydrated.capabilities || {},
+    hierarchy_level: Number(hydrated.hierarchy_level || 0),
+    role_parent: hydrated.role_parent || null,
+    role_scope_policy: hydrated.role_scope_policy || "assigned",
+    role_name_vi: hydrated.role_name_vi || "",
+    role_name_zh_tw: hydrated.role_name_zh_tw || "",
+    preferred_language: hydrated.preferred_language || "vi",
+    active: hydrated.active,
+    created_at: hydrated.created_at,
+    updated_at: hydrated.updated_at,
+    has_password: hydrated.has_password,
+  };
+}
+
 export async function registerAdminRoutes(app) {
+  app.get("/api/admin/access-model", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user || !requireAdmin(user, reply)) return;
+    return listAccessModel();
+  });
+
   app.get("/api/admin/users", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user || !requireAdmin(user, reply)) return;
 
     const { rows } = await pool.query(
-      `select id,username,display_name,role,location,permissions,
+      `select id,username,display_name,role,location,
               preferred_language,active,created_at,updated_at,
               password_hash is not null as has_password
        from public.app_users
        order by created_at,id`
     );
-    return {
-      users: rows.map((row) => ({
-        ...row,
-        location: normalizeLocationForRole(row.role, row.location),
-        permissions: normalizePermissionsForRole(row.role, row.permissions),
-      })),
-    };
+    return { users:(await Promise.all(rows.map((row) => adminUserPayload(row)))).filter(Boolean) };
   });
 
   app.post("/api/admin/users", async (request, reply) => {
@@ -50,10 +86,8 @@ export async function registerAdminRoutes(app) {
     const id = String(request.body?.id || "");
     const username = String(request.body?.username || "").trim().toLowerCase();
     const displayName = String(request.body?.display_name || request.body?.displayName || "").trim();
-    const role = String(request.body?.role || "employee");
-    const location = String(request.body?.location || "fuxing");
-    const permissions = normalizePermissionsForRole(role, request.body?.permissions);
-    const effectiveLocation = normalizeLocationForRole(role, location);
+    const role = String(request.body?.role || "employee").trim();
+    const location = String(request.body?.location || "fuxing").trim();
     const preferredLanguage = requestedPreferredLanguage(request.body);
     const active = request.body?.active !== false;
     const password = String(request.body?.password || "");
@@ -62,11 +96,12 @@ export async function registerAdminRoutes(app) {
       return reply.code(400).send({ error: "USERNAME_FORMAT" });
     }
     if (!displayName) return reply.code(400).send({ error: "DISPLAY_NAME_REQUIRED" });
-    if (!VALID_ROLES.has(role)) return reply.code(400).send({ error: "INVALID_ROLE" });
-    if (!VALID_LOCATIONS.has(location)) return reply.code(400).send({ error: "INVALID_LOCATION" });
     if (password && password.length < 10) return reply.code(400).send({ error: "PASSWORD_TOO_SHORT" });
 
     try {
+      const requestedRole = await resolveRequestedRole(role, location);
+      const effectiveLocation = requestedRole.effectiveLocation;
+
       if (action === "create") {
         if (password.length < 10) return reply.code(400).send({ error: "PASSWORD_TOO_SHORT" });
         const passwordHash = await hashPassword(password);
@@ -74,18 +109,19 @@ export async function registerAdminRoutes(app) {
           `insert into public.app_users(
              username,display_name,password_hash,password_changed_at,
              role,location,permissions,preferred_language,active
-           ) values($1,$2,$3,now(),$4,$5,$6::jsonb,$7,$8)
-           returning id,username,display_name,role,location,permissions,
-                     preferred_language,active,created_at,updated_at`,
-          [username,displayName,passwordHash,role,effectiveLocation,JSON.stringify(permissions),preferredLanguage || "vi",active]
+           ) values($1,$2,$3,now(),$4,$5,'{}'::jsonb,$6,$7)
+           returning id,username,display_name,role,location,
+                     preferred_language,active,created_at,updated_at,
+                     password_hash is not null as has_password`,
+          [username,displayName,passwordHash,role,effectiveLocation,preferredLanguage || "vi",active]
         );
-        return { user: result.rows[0] };
+        return { user:await adminUserPayload(result.rows[0]) };
       }
 
       if (action !== "update" || !id) {
         return reply.code(400).send({ error: "INVALID_ACCOUNT_ACTION" });
       }
-      if (id === user.id && (!active || role !== "admin")) {
+      if (id === user.id && (!active || !requestedRole.capabilities?.["accounts.manage"])) {
         return reply.code(409).send({ error: "CANNOT_REMOVE_OWN_ADMIN_ACCESS" });
       }
 
@@ -97,15 +133,15 @@ export async function registerAdminRoutes(app) {
                display_name=$3,
                role=$4,
                location=$5,
-               permissions=$6::jsonb,
-               preferred_language=coalesce($7::text,preferred_language),
-               active=$8,
-               password_hash=case when $9::text is null then password_hash else $9 end,
-               password_changed_at=case when $9::text is null then password_changed_at else now() end
+               preferred_language=coalesce($6::text,preferred_language),
+               active=$7,
+               password_hash=case when $8::text is null then password_hash else $8 end,
+               password_changed_at=case when $8::text is null then password_changed_at else now() end
            where id=$1
-           returning id,username,display_name,role,location,permissions,
-                     preferred_language,active,created_at,updated_at`,
-          [id,username,displayName,role,effectiveLocation,JSON.stringify(permissions),preferredLanguage,active,passwordHash]
+           returning id,username,display_name,role,location,
+                     preferred_language,active,created_at,updated_at,
+                     password_hash is not null as has_password`,
+          [id,username,displayName,role,effectiveLocation,preferredLanguage,active,passwordHash]
         );
         if (!updated.rowCount) {
           throw Object.assign(new Error("USER_NOT_FOUND"), { statusCode: 404 });
@@ -115,9 +151,10 @@ export async function registerAdminRoutes(app) {
         }
         return updated.rows[0];
       });
-      return { user: result };
+      return { user:await adminUserPayload(result) };
     } catch (error) {
       if (error?.code === "23505") return reply.code(409).send({ error: "USERNAME_EXISTS" });
+      if (error?.code === "23503") return reply.code(400).send({ error: "INVALID_ROLE" });
       return reply.code(error.statusCode || 500).send({ error: error.message || "ACCOUNT_SAVE_FAILED" });
     }
   });
