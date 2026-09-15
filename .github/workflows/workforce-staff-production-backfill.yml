@@ -75,9 +75,9 @@ jobs:
           ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
           REMOTE_RELEASE="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
             "git -C /opt/kitchen-os/repo rev-parse --short HEAD")"
-          LOCAL_SCRIPT_SHA="$(sha256sum vps/backend/scripts/workforce-staff-backfill.mjs | awk '{print $1}')"
+          LOCAL_SCRIPT_SHA="$(sha256sum vps/backend/scripts/workforce-staff-backfill.mjs | cut -d' ' -f1)"
           REMOTE_SCRIPT_SHA="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
-            "test -f /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs && sha256sum /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs | awk '{print \\$1}'")"
+            "test -f /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs && sha256sum /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs | cut -d' ' -f1")"
 
           echo "Production release: ${ACTUAL_RELEASE}"
           echo "Production repo: ${REMOTE_RELEASE}"
