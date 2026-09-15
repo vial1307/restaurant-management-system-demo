@@ -9,6 +9,7 @@ let accessModel = null;
 let sessionSyncInFlight = null;
 let modelSyncInFlight = null;
 let lastSessionSyncAt = 0;
+let patchFrame = 0;
 
 function readJson(key, fallback = null) {
   try {
@@ -108,7 +109,7 @@ async function loadAccessModel({ force = false } = {}) {
       if (!validAccessModel(model)) return accessModel;
       accessModel = model;
       writeJson(ACCESS_MODEL_KEY, model);
-      patchVisibleAccountUi();
+      scheduleVisibleAccountUiPatch();
       return model;
     } catch {
       return accessModel;
@@ -146,9 +147,10 @@ function applyPermissionPreview(modal, role) {
     const match = String(input.name || "").match(/^perm:(.+):(view|edit)$/);
     if (!match) return;
     const [, moduleKey, action] = match;
-    input.checked = Boolean(role.permissions?.[moduleKey]?.[action]);
-    input.disabled = true;
-    input.setAttribute("aria-readonly", "true");
+    const checked = Boolean(role.permissions?.[moduleKey]?.[action]);
+    if (input.checked !== checked) input.checked = checked;
+    if (!input.disabled) input.disabled = true;
+    if (input.getAttribute("aria-readonly") !== "true") input.setAttribute("aria-readonly", "true");
   });
 
   let note = modal.querySelector("[data-rbac-permission-note]");
@@ -159,25 +161,32 @@ function applyPermissionPreview(modal, role) {
     modal.querySelector(".permission-grid")?.insertAdjacentElement("afterend", note);
   }
   if (note) {
-    note.textContent = currentLanguage() === "zh"
+    const nextText = currentLanguage() === "zh"
       ? "權限由資料庫中的職級設定決定；此處僅預覽。"
       : "Quyền được quyết định bởi cấu hình cấp bậc trong database; phần này chỉ để xem trước.";
+    if (note.textContent !== nextText) note.textContent = nextText;
   }
 }
 
 function applyScopePolicy(modal, role) {
   const locationSelect = modal?.querySelector('select[name="location"]');
   if (!locationSelect || !role) return;
-  if (role.scope_policy === "all") locationSelect.value = "all";
-  else if (role.scope_policy === "central") locationSelect.value = "central";
-  else if (!["fuxing","yongji"].includes(locationSelect.value)) locationSelect.value = "fuxing";
+  let nextLocation = locationSelect.value;
+  if (role.scope_policy === "all") nextLocation = "all";
+  else if (role.scope_policy === "central") nextLocation = "central";
+  else if (!["fuxing","yongji"].includes(nextLocation)) nextLocation = "fuxing";
+  if (locationSelect.value !== nextLocation) locationSelect.value = nextLocation;
 
   const locked = role.scope_policy !== "assigned";
-  locationSelect.dataset.rbacLocked = locked ? "true" : "false";
-  locationSelect.setAttribute("aria-readonly", locked ? "true" : "false");
-  locationSelect.style.pointerEvents = locked ? "none" : "";
-  locationSelect.style.opacity = locked ? "0.72" : "";
-  locationSelect.tabIndex = locked ? -1 : 0;
+  const lockValue = locked ? "true" : "false";
+  if (locationSelect.dataset.rbacLocked !== lockValue) locationSelect.dataset.rbacLocked = lockValue;
+  if (locationSelect.getAttribute("aria-readonly") !== lockValue) locationSelect.setAttribute("aria-readonly", lockValue);
+  const pointerEvents = locked ? "none" : "";
+  const opacity = locked ? "0.72" : "";
+  const tabIndex = locked ? -1 : 0;
+  if (locationSelect.style.pointerEvents !== pointerEvents) locationSelect.style.pointerEvents = pointerEvents;
+  if (locationSelect.style.opacity !== opacity) locationSelect.style.opacity = opacity;
+  if (locationSelect.tabIndex !== tabIndex) locationSelect.tabIndex = tabIndex;
 }
 
 function applyRoleToModal(modal, code) {
@@ -195,9 +204,10 @@ function patchAccountModal(modal) {
   const form = modal.querySelector("[data-account-form]");
   const account = accountById(form?.dataset.editId || "");
   const selectedCode = account?.role || roleSelect.value || accessModel.roles[0]?.code || "";
-  roleSelect.innerHTML = accessModel.roles
+  const options = accessModel.roles
     .map((role) => `<option value="${String(role.code).replaceAll('"','&quot;')}">${roleLabel(role)}</option>`)
     .join("");
+  if (roleSelect.innerHTML !== options) roleSelect.innerHTML = options;
   if (roleByCode(selectedCode)) roleSelect.value = selectedCode;
   else if (accessModel.roles[0]) roleSelect.value = accessModel.roles[0].code;
 
@@ -207,8 +217,8 @@ function patchAccountModal(modal) {
   const locationSelect = modal.querySelector('select[name="location"]');
   locationSelect?.addEventListener("change", () => {
     const role = roleByCode(roleSelect.value);
-    if (role?.scope_policy === "all") locationSelect.value = "all";
-    if (role?.scope_policy === "central") locationSelect.value = "central";
+    if (role?.scope_policy === "all" && locationSelect.value !== "all") locationSelect.value = "all";
+    if (role?.scope_policy === "central" && locationSelect.value !== "central") locationSelect.value = "central";
   });
 
   modal.dataset.databaseRbacBound = "true";
@@ -223,7 +233,9 @@ function patchAccountRoleLabels() {
     const role = roleByCode(account?.role);
     if (!role) return;
     const directSpans = row.querySelectorAll(":scope > span");
-    if (directSpans[1]) directSpans[1].textContent = roleLabel(role);
+    const target = directSpans[1];
+    const nextText = roleLabel(role);
+    if (target && target.textContent !== nextText) target.textContent = nextText;
   });
 }
 
@@ -232,9 +244,17 @@ function patchVisibleAccountUi() {
   document.querySelectorAll("[data-account-modal]").forEach((modal) => patchAccountModal(modal));
 }
 
+function scheduleVisibleAccountUiPatch() {
+  if (patchFrame) return;
+  patchFrame = requestAnimationFrame(() => {
+    patchFrame = 0;
+    patchVisibleAccountUi();
+  });
+}
+
 const observer = new MutationObserver(() => {
   if (!validAccessModel(accessModel)) return;
-  patchVisibleAccountUi();
+  scheduleVisibleAccountUiPatch();
 });
 observer.observe(document.body, { childList:true, subtree:true });
 
@@ -248,7 +268,7 @@ window.addEventListener("shitu:vps-auth-ready", () => {
     if (session?.capabilities?.["accounts.manage"]) void loadAccessModel();
   });
 });
-window.addEventListener("shitu:accounts-synced", patchVisibleAccountUi);
+window.addEventListener("shitu:accounts-synced", scheduleVisibleAccountUiPatch);
 window.addEventListener("focus", () => { void syncSessionFromDatabase(); });
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void syncSessionFromDatabase();
