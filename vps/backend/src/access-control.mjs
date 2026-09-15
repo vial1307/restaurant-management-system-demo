@@ -4,6 +4,18 @@ function jsonObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function compatibilityRole(role) {
+  const permissions = role.permissions || {};
+  const capabilities = role.capabilities || {};
+  if (capabilities["accounts.manage"]) return "admin";
+  if (capabilities["inventory.receive_defaults.manage"]) return "manager";
+  if (capabilities["inventory.stocktake"]) return "supervisor";
+  if (capabilities["workforce.self_service"] && permissions?.inventory?.edit) return "employee";
+  if (capabilities["workforce.self_service"]) return "parttime";
+  if (role.scopePolicy === "central") return "central";
+  return "branch";
+}
+
 export async function resolveRoleProfile(roleCode, requestedLocation = "", client = pool) {
   const role = String(roleCode || "").trim();
   if (!role) return null;
@@ -32,7 +44,7 @@ export async function resolveRoleProfile(roleCode, requestedLocation = "", clien
 
   const row = rows[0];
   if (!row) return null;
-  return {
+  const profile = {
     code: row.code,
     nameVi: row.name_vi,
     nameZhTw: row.name_zh_tw,
@@ -45,6 +57,7 @@ export async function resolveRoleProfile(roleCode, requestedLocation = "", clien
     permissions: jsonObject(row.permissions),
     capabilities: jsonObject(row.capabilities),
   };
+  return { ...profile, compatibilityRole:compatibilityRole(profile) };
 }
 
 export async function hydrateUserAccess(user, client = pool) {
@@ -54,7 +67,7 @@ export async function hydrateUserAccess(user, client = pool) {
   if (!role) return null;
   return {
     ...user,
-    role: role.code,
+    role: role.compatibilityRole,
     role_code: role.code,
     location: role.effectiveLocation,
     permissions: role.permissions,
@@ -118,6 +131,7 @@ export async function listAccessModel(client = pool) {
       sort_order: Number(row.sort_order || 0),
       permissions: resolved.permissions,
       capabilities: resolved.capabilities,
+      compatibility_role: resolved.compatibilityRole,
     });
   }
 
