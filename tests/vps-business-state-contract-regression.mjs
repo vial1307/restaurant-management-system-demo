@@ -46,15 +46,16 @@ assert(normalizeServerRevisionsIndex > deferredReturnIndex, "deferred read must 
 assert(adoptRevisionBaselineIndex > normalizeServerRevisionsIndex, "business sync must adopt module revision baseline only after an accepted read");
 
 assert.match(routes, /scopeWorkforceModules\(user, permitted, modules \|\| \{\}\)/, "business-state reads must apply workforce record scoping after module authorization");
-assert.match(routes, /isWorkforceSelfServiceUser\(user\)[\s\S]{0,120}attendance/, "employee/part-time attendance must enter the record-scoped self-service path");
-assert.match(routes, /moduleName === "schedule" && isWorkforceSelfServiceUser\(user\)/, "employee/part-time schedule writes must be denied at the VPS boundary");
-assert.match(routes, /\["attendance", "schedule"\]\.includes\(moduleName\) && user\?\.role === "supervisor"/, "supervisor must be denied attendance/schedule management writes even if legacy edit bits remain stored");
+assert.match(routes, /isWorkforceSelfServiceUser\(user\)[\s\S]{0,120}attendance/, "workforce self-service attendance must enter the record-scoped path");
+assert.match(routes, /moduleName === "schedule" && isWorkforceSelfServiceUser\(user\)/, "workforce self-service schedule writes must be denied at the VPS boundary");
+assert.match(routes, /\["attendance", "schedule"\]\.includes\(moduleName\) && user\?\.role === "supervisor"/, "supervisor compatibility policy must remain denied attendance/schedule management writes while legacy edit bits exist");
 
 const employee = {
   id:"user-hai-dang",
   username:"haidang",
   display_name:"海登",
   role:"employee",
+  capabilities:{ "workforce.self_service":true },
 };
 const baseModules = {
   shared:{
