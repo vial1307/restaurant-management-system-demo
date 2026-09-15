@@ -8,6 +8,7 @@ on:
     paths:
       - "vps/database/**"
       - "vps/backend/scripts/database-core-v2-regression.mjs"
+      - "vps/backend/scripts/database-restore-lifecycle-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/database-schema-regression.yml"
   push:
@@ -16,6 +17,7 @@ on:
     paths:
       - "vps/database/**"
       - "vps/backend/scripts/database-core-v2-regression.mjs"
+      - "vps/backend/scripts/database-restore-lifecycle-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/database-schema-regression.yml"
 
@@ -62,9 +64,13 @@ jobs:
         run: |
           node --check vps/backend/scripts/regression-setup.mjs
           node --check vps/backend/scripts/database-core-v2-regression.mjs
+          node --check vps/backend/scripts/database-restore-lifecycle-regression.mjs
 
       - name: Apply all migrations to fresh PostgreSQL 16
         run: node vps/backend/scripts/regression-setup.mjs
 
       - name: Verify Core v2 constraints and immutable history
         run: node vps/backend/scripts/database-core-v2-regression.mjs
+
+      - name: Verify restore verification lifecycle
+        run: node vps/backend/scripts/database-restore-lifecycle-regression.mjs
