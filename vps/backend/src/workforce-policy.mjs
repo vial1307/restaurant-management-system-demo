@@ -39,6 +39,28 @@ function publishedScheduleSource(schedule = {}) {
   return Array.isArray(schedule.schedules) ? schedule.schedules : [];
 }
 
+function scheduleIdentityStaffId(user, modules = {}) {
+  const identities = new Set([
+    identity(user?.username),
+    identity(user?.display_name || user?.displayName || user?.name),
+  ].filter(Boolean));
+  if (!identities.size) return "";
+
+  const schedule = modules?.schedule && typeof modules.schedule === "object" && !Array.isArray(modules.schedule)
+    ? modules.schedule
+    : {};
+  const candidates = [
+    ...(Array.isArray(schedule.schedules) ? schedule.schedules : []),
+    ...(Array.isArray(schedule.publishedSchedules) ? schedule.publishedSchedules : []),
+  ];
+  const staffIds = new Set(candidates.flatMap((entry) => {
+    const staffId = text(entry?.staffId);
+    const staffName = identity(entry?.staffName || entry?.name);
+    return staffId && staffName && identities.has(staffName) ? [staffId] : [];
+  }));
+  return staffIds.size === 1 ? [...staffIds][0] : "";
+}
+
 function selfServicePayroll(payroll = {}) {
   const scoped = payroll && typeof payroll === "object" && !Array.isArray(payroll)
     ? structuredClone(payroll)
@@ -67,7 +89,6 @@ export function isWorkforceSelfServiceUser(user) {
 export function resolveWorkforceStaffId(user, modules = {}) {
   if (!user || !isWorkforceSelfServiceUser(user)) return "";
   const staff = staffRoster(modules).filter((member) => member && text(member.id));
-  if (!staff.length) return "";
 
   const userId = text(user.id);
   const username = identity(user.username);
@@ -80,9 +101,16 @@ export function resolveWorkforceStaffId(user, modules = {}) {
   if (explicitMatches.length > 1) return "";
 
   const displayName = identity(user.display_name || user.displayName || user.name);
-  if (!displayName) return "";
-  const nameMatches = staff.filter((member) => identity(member.name) === displayName);
-  return nameMatches.length === 1 ? text(nameMatches[0].id) : "";
+  if (displayName) {
+    const nameMatches = staff.filter((member) => identity(member.name) === displayName);
+    if (nameMatches.length === 1) return text(nameMatches[0].id);
+    if (nameMatches.length > 1) return "";
+  }
+
+  // Compatibility path while workforce identity is being backfilled into Core v2.
+  // The schedule is server-owned planning data; a unique account-name match is
+  // safer than trusting device-local activeStaffId and removes login/sync races.
+  return scheduleIdentityStaffId(user, modules);
 }
 
 export function scopeWorkforceModules(user, modules = {}, identityModules = modules) {
