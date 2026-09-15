@@ -29,6 +29,24 @@ function databaseTime(value) {
   const match = raw.match(/(?:[01]\d|2[0-3]):[0-5]\d/);
   return match ? match[0] : raw.slice(0, 5);
 }
+function signatureDifferences(actualRows, expectedRows) {
+  const actualById = new Map(actualRows.map((row) => [row.legacyId, row]));
+  const expectedById = new Map(expectedRows.map((row) => [row.legacyId, row]));
+  const ids = [...new Set([...actualById.keys(), ...expectedById.keys()])].sort();
+  const result = [];
+  for (const legacyId of ids) {
+    const actual = actualById.get(legacyId);
+    const expected = expectedById.get(legacyId);
+    if (!actual || !expected) {
+      result.push({ legacyId, fields:[actual ? "missing_expected_row" : "missing_database_row"] });
+      continue;
+    }
+    const fields = [...new Set([...Object.keys(actual), ...Object.keys(expected)])]
+      .filter((key) => JSON.stringify(actual[key]) !== JSON.stringify(expected[key]));
+    if (fields.length) result.push({ legacyId, fields });
+  }
+  return result.slice(0, 20);
+}
 function validIso(value) {
   const raw = text(value);
   return raw && Number.isFinite(Date.parse(raw)) ? raw : null;
@@ -346,7 +364,8 @@ async function upsertPublication(client, plan, scheduleIds) {
       departmentCode:item.departmentCode, workArea:item.workArea, note:item.note,
     })).sort((a,b) => a.legacyId.localeCompare(b.legacyId));
     if (JSON.stringify(dbSignature) !== JSON.stringify(expectedSignature)) {
-      throw new Error(`WORKFORCE_SCHEDULE_PUBLICATION_PARITY_MISMATCH:${plan.site}:v${version}:entries`);
+      const differences = signatureDifferences(dbSignature, expectedSignature);
+      throw new Error(`WORKFORCE_SCHEDULE_PUBLICATION_PARITY_MISMATCH:${plan.site}:v${version}:entries:${JSON.stringify(differences)}`);
     }
   }
   return { publicationsWritten, publicationEntriesWritten };
