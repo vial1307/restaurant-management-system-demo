@@ -1,0 +1,72 @@
+name: Workforce Relational Backfill Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "vps/database/**"
+      - "vps/backend/scripts/workforce-staff-backfill.mjs"
+      - "vps/backend/scripts/workforce-staff-backfill-regression.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - ".github/workflows/workforce-relational-backfill-regression.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "vps/database/**"
+      - "vps/backend/scripts/workforce-staff-backfill.mjs"
+      - "vps/backend/scripts/workforce-staff-backfill-regression.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - ".github/workflows/workforce-relational-backfill-regression.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  workforce-backfill-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend packages
+        run: npm ci --prefix vps/backend
+
+      - name: Validate backfill scripts
+        run: |
+          node --check vps/backend/scripts/workforce-staff-backfill.mjs
+          node --check vps/backend/scripts/workforce-staff-backfill-regression.mjs
+
+      - name: Apply canonical schema and seed regression users
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Verify deterministic staff identity backfill
+        run: node vps/backend/scripts/workforce-staff-backfill-regression.mjs
