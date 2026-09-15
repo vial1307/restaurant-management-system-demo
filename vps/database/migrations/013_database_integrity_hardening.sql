@@ -148,7 +148,8 @@ create index if not exists api_idempotency_keys_site_created_idx
   where site_code is not null;
 
 -- A backup is not considered operationally proven merely because a dump file
--- exists. Restore verification is append-only evidence tied to backup_history.
+-- exists. Restore verification is append-oriented evidence tied to backup_history.
+-- A running verification may be finalized exactly once; terminal evidence is immutable.
 create table if not exists public.backup_restore_verifications (
   id uuid primary key default gen_random_uuid(),
   backup_id uuid not null references public.backup_history(id) on delete restrict,
@@ -178,9 +179,39 @@ create index if not exists backup_restore_verifications_backup_idx
 create index if not exists backup_restore_verifications_status_idx
   on public.backup_restore_verifications(status,started_at desc);
 
+create or replace function public.enforce_backup_restore_verification_lifecycle()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'backup restore verification history is immutable'
+      using errcode = '55000';
+  end if;
+
+  if old.status <> 'running' then
+    raise exception 'completed backup restore verification history is immutable'
+      using errcode = '55000';
+  end if;
+
+  if new.status not in ('succeeded','failed') then
+    raise exception 'running backup restore verification may only finalize to succeeded or failed'
+      using errcode = '55000';
+  end if;
+
+  if row(new.id,new.backup_id,new.target_environment,new.started_at)
+     is distinct from row(old.id,old.backup_id,old.target_environment,old.started_at) then
+    raise exception 'backup restore verification identity cannot change during finalization'
+      using errcode = '55000';
+  end if;
+
+  return new;
+end;
+$$;
+
 drop trigger if exists backup_restore_verifications_immutable on public.backup_restore_verifications;
 create trigger backup_restore_verifications_immutable
 before update or delete on public.backup_restore_verifications
-for each row execute function public.reject_immutable_history_mutation();
+for each row execute function public.enforce_backup_restore_verification_lifecycle();
 
 commit;
