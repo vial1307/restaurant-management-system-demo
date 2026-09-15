@@ -140,5 +140,7 @@ try {
 }
 
 console.log("WORKFORCE_APPROVAL_BROWSER_REGRESSION_OK");
-await import("./workforce-request-contract-regression.mjs");
-await import("./workforce-request-browser-regression.mjs");
+if (process.env.WORKFORCE_APPROVAL_ONLY !== "1") {
+  await import("./workforce-request-contract-regression.mjs");
+  await import("./workforce-request-browser-regression.mjs");
+}
