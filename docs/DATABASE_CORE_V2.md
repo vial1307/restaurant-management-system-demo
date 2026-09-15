@@ -6,7 +6,7 @@ This document is an implementation map for developers. Normative behavior remain
 
 PostgreSQL on the VPS is the only shared source of truth.
 
-Core v2 is introduced additively by migrations 010-012. Existing `business_state.modules` JSONB remains compatibility storage until each domain completes an explicit backfill/parity/API cutover. A domain must never have two independent writable authorities.
+Core v2 is introduced additively by migrations 010-013. Existing `business_state.modules` JSONB remains compatibility storage until each domain completes an explicit backfill/parity/API cutover. A domain must never have two independent writable authorities.
 
 ## 2. Identity and organization
 
@@ -22,6 +22,8 @@ Core v2 is introduced additively by migrations 010-012. Existing `business_state
 
 Do not use display names as persistent employee identity. Business records reference `staff_members.id`.
 
+A UUID being valid is not sufficient proof that a relation is valid. Site-scoped and employee-scoped relations must use composite foreign keys where a wrong-site or wrong-employee reference would otherwise be possible.
+
 ## 3. System/control-plane tables
 
 | Table | Purpose |
@@ -30,7 +32,9 @@ Do not use display names as persistent employee identity. Business records refer
 | `system_settings` | Versioned global configuration values |
 | `data_migration_checkpoints` | Backfill/cutover checkpoint and verification state |
 | `system_jobs` | Long-running/queued maintenance job state |
+| `api_idempotency_keys` | Durable mutation retry/idempotency ledger |
 | `backup_history` | Backup metadata for Admin Console/operations visibility |
+| `backup_restore_verifications` | Append-only evidence that a backup was actually restorable |
 | `schema_migrations` | Applied migration ledger |
 | `audit_logs` | Append-oriented actor/action audit history |
 
@@ -72,8 +76,11 @@ Important invariants enforced by PostgreSQL include:
 - only one active schedule slot exists for the same staff/date/slot;
 - only one pending schedule request exists for the same staff/date;
 - only one active schedule exception exists for the same staff/date;
+- schedule/request/exception/attendance references cannot silently point at another site or another employee;
+- publication entries must belong to the same site as their publication;
 - only one active open attendance record exists for a staff member;
 - approved attendance must be closed and carry approval metadata;
+- active payroll policy effective-date ranges for the same site cannot overlap;
 - payroll month uses first-of-month identity;
 - payroll lock snapshots are immutable;
 - correction records are immutable.
@@ -95,7 +102,7 @@ Normalized target tables:
 - `procurement_order_lines`
 - `menu_items`
 
-Orders separate header lifecycle from line items. Supplier rules separate vendor identity from branch-specific ordering/delivery behavior.
+Orders separate header lifecycle from line items. Supplier rules separate vendor identity from branch-specific ordering/delivery behavior. Daily preparation tasks and remote-job runs may only reference templates owned by the same site.
 
 ## 7. SOP, skills and remote work
 
@@ -125,18 +132,51 @@ An approved SOP revision and its steps become immutable. A future edit creates a
 - Site timezone: currently `Asia/Taipei`.
 - JSONB: snapshots, metadata, extension/configuration values, or compatibility only—not the long-term primary representation of core transactions.
 
-## 9. Foreign-key deletion policy
+Database timestamps represent instants. Business dates are explicit fields and are not inferred later from a UTC timestamp without the owning site's timezone.
+
+## 9. Foreign-key deletion and scope policy
 
 - Master/business history uses `RESTRICT` where deleting the referenced entity would destroy meaning.
 - Actor login references normally use `SET NULL`, while historical display/actor text is copied where the record must remain human-readable.
 - Authentication session rows may cascade with account deletion.
 - Operational master records are generally deactivated rather than physically deleted after they are referenced by history.
+- Site-scoped references use `(entity_id, site_code)` or a stronger composite key when site ownership matters.
+- Staff-scoped references use `(entity_id, site_code, staff_id)` where a valid foreign UUID owned by another employee would be semantically invalid.
+- A new feature must not rely on API validation alone for a relationship that PostgreSQL can enforce declaratively.
 
 ## 10. Index policy
 
 Every common site/date, staff/date, lifecycle/status and FK access path is indexed. Conditional business uniqueness uses partial unique indexes where applicable. New feature work must include query/index review in the same change when it introduces a new high-frequency access pattern.
 
-## 11. Migration policy
+Indexes are not added merely because a column exists. They are added for an identified lookup, join, uniqueness rule, ordering path, or operational cleanup path.
+
+## 11. Mutation and concurrency policy
+
+Business mutations that change multiple related rows must use a single PostgreSQL transaction. Read-modify-write flows that can race must use row locks, an optimistic `version`, a unique/exclusion invariant, or another database-enforced serialization mechanism.
+
+Retryable external/API mutations should use `api_idempotency_keys`:
+
+1. scope + idempotency key is unique;
+2. request hash must match when a key is reused;
+3. the key is reserved in the same transaction as the protected mutation;
+4. completed response metadata can be replayed instead of executing the mutation twice;
+5. expired rows may be cleaned by a controlled system job.
+
+Idempotency does not replace transaction isolation; it prevents duplicate execution caused by client/network retry.
+
+## 12. Effective-dated policy rule
+
+For the same site, two active payroll policies may not cover the same business date. PostgreSQL serializes policy-range writes per site and rejects an overlapping active range. Historical/inactive policy rows may remain for auditability.
+
+Future effective-dated rule tables should use the same principle: non-overlapping active periods unless the business specification explicitly supports stacking.
+
+## 13. Backup/restore policy
+
+A successful dump entry in `backup_history` proves only that a backup artifact was produced. Operational recoverability is proven by a separate `backup_restore_verifications` record created by a restore drill or automated verification environment.
+
+Restore verification records are immutable evidence. A failed verification is appended, not edited into success. A later successful verification creates a new record.
+
+## 14. Migration policy
 
 1. Never edit a migration already deployed to production.
 2. New changes use a new numbered migration.
@@ -144,8 +184,11 @@ Every common site/date, staff/date, lifecycle/status and FK access path is index
 4. Migrations must pass fresh PostgreSQL 16 application in CI.
 5. Migration-specific integrity regressions must cover important constraints.
 6. Destructive cleanup of compatibility data requires a separate, explicitly reviewed migration after production parity has been demonstrated.
+7. Backfills must be restartable/idempotent and record `data_migration_checkpoints` counts/checksums.
+8. A migration introducing a new invariant must include a regression proving invalid data is rejected.
+9. Production cutover and compatibility-data retirement are separate stages; schema availability alone is not authority cutover.
 
-## 12. Domain cutover checklist
+## 15. Domain cutover checklist
 
 For each JSONB domain being migrated:
 
@@ -161,3 +204,7 @@ For each JSONB domain being migrated:
 10. only then stop legacy authoritative writes.
 
 This sequence prevents silent divergence and makes rollback possible during the transition.
+
+## 16. Definition of done for future database changes
+
+A database-affecting feature is not complete merely because the UI works. It is complete only when its source of truth is explicit, migration is additive/reversible by backup restore, constraints model critical invariants, concurrency behavior is defined, history semantics are defined, indexes match access paths, PostgreSQL 16 regression is green, and the relevant SDD/spec documentation is updated.
