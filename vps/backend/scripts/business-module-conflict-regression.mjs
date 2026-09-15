@@ -76,7 +76,7 @@ async function verifyCorruptedRevisionBaseline(adminCookie) {
 
 const health = await call("/api/health");
 assert.equal(health.response.status, 200);
-assert.equal(health.data.schema, "012", "Database Core v2 migrations are not active");
+assert.equal(health.data.schema, "013", "Database Core v2 migrations are not active");
 
 const admin = await login("yangchuadmin");
 const manager = await login("managerfx");
