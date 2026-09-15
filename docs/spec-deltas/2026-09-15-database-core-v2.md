@@ -1,6 +1,6 @@
 # Database Core v2 normalization — 2026-09-15
 
-Status: implementation target for additive migration on top of production schema 001-009.
+Status: implementation target for additive migrations 010-013 on top of production schema 001-009.
 
 ## Goal
 
@@ -16,12 +16,15 @@ This change establishes the schema foundation only. Existing frontend/API behavi
 4. Existing `business_state` payloads remain readable during the transition.
 5. No existing inventory quantity, transaction, user, permission, schedule, attendance, payroll, SOP, reservation, preparation, or audit record may be deleted by this migration.
 6. Every future authoritative business record must have a stable primary key, site scope where applicable, timestamps, and referential integrity.
-7. Historical facts use append-only or revision/snapshot models rather than destructive overwrite where the business contract requires history.
-8. Account deletion must not destroy business history; historical actor references use `ON DELETE SET NULL` plus copied display/identity fields where needed.
-9. Monetary values use numeric columns and explicit currency codes. Floating point is prohibited for money.
-10. Service dates are stored separately from timestamps. Operational timestamps remain timezone-aware (`timestamptz`); site timezone defaults to `Asia/Taipei`.
-11. Soft deactivation is preferred for master data referenced by history.
-12. JSONB remains allowed for immutable snapshots, extension metadata, or compatibility payloads, but not as the long-term primary representation of core transactional entities.
+7. A syntactically valid foreign UUID is not sufficient when the relation is site- or employee-scoped. PostgreSQL must also enforce the owning site/staff identity where semantic drift is possible.
+8. Historical facts use append-only or revision/snapshot models rather than destructive overwrite where the business contract requires history.
+9. Account deletion must not destroy business history; historical actor references use `ON DELETE SET NULL` plus copied display/identity fields where needed.
+10. Monetary values use numeric columns and explicit currency codes. Floating point is prohibited for money.
+11. Service dates are stored separately from timestamps. Operational timestamps remain timezone-aware (`timestamptz`); site timezone defaults to `Asia/Taipei`.
+12. Soft deactivation is preferred for master data referenced by history.
+13. JSONB remains allowed for immutable snapshots, extension metadata, or compatibility payloads, but not as the long-term primary representation of core transactional entities.
+14. Mutations that can be retried by a client/network must support durable idempotency where duplicate execution can change business state.
+15. A backup artifact is not considered proven recoverable until a restore verification has been recorded.
 
 ## Domain boundaries
 
@@ -36,7 +39,9 @@ Relational source-of-truth tables:
 - `site_settings`
 - `system_settings`
 - `system_jobs`
+- `api_idempotency_keys`
 - `backup_history`
+- `backup_restore_verifications`
 - `data_migration_checkpoints`
 
 `app_users`, sessions, database-backed RBAC tables from schema 009, inventory tables, `audit_logs`, and `schema_migrations` remain authoritative and are reused.
@@ -67,6 +72,7 @@ Relational source-of-truth target tables:
 - `preparation_tasks`
 - `suppliers`
 - `supplier_site_rules`
+- `supplier_delivery_days`
 - `procurement_catalog_rules`
 - `procurement_orders`
 - `procurement_order_lines`
@@ -94,6 +100,8 @@ Current sites are seeded as `central`, `fuxing`, and `yongji`. New domain tables
 
 Existing inventory/location check constraints remain unchanged in this migration for compatibility; later branch-expansion work may migrate them explicitly.
 
+Site-scoped templates, publications and workforce source relations must not be linkable to a row owned by another site merely because its UUID exists.
+
 ## Workforce model
 
 ### Schedule draft and publication
@@ -107,9 +115,13 @@ Each entry is either:
 
 Split shifts are supported with `slot_no`. Publication is versioned by site. Each publish creates a `workforce_schedule_publications` row and an immutable snapshot in `workforce_schedule_publication_entries`.
 
+A publication snapshot must belong to the same site as the publication. When it retains a source schedule reference, that schedule must belong to the same site and employee represented by the snapshot.
+
 ### Requests and exceptions
 
 Leave/change requests are lifecycle records, not generic schedule JSON. Approved requests produce explicit schedule exceptions. A unique active exception per staff/service-date prevents ambiguous stacking.
+
+A request or exception may only reference a source schedule belonging to the same site and employee. An exception materialized from a request must preserve the request's site, employee and service date.
 
 ### Attendance
 
@@ -117,9 +129,13 @@ Leave/change requests are lifecycle records, not generic schedule JSON. Approved
 
 An employee may have at most one active open attendance row at a time. Completed rows remain addressable by stable UUID. Corrections are recorded in `attendance_corrections`; corrections do not erase the prior state.
 
+When an attendance record points to a schedule entry, that entry must belong to the same site and employee.
+
 ### Payroll
 
 `payroll_policies` stores effective-dated policy configuration. No new wage rule is invented by the schema.
+
+For one site, active payroll policy effective-date ranges must not overlap. PostgreSQL serializes competing policy-range writes for that site and rejects conflicting ranges.
 
 `payroll_periods` stores month lifecycle (`open`/`locked`) and lock/reopen metadata.
 
@@ -129,9 +145,32 @@ Every successful lock appends an immutable `payroll_snapshots` revision containi
 
 Reservations become booking records instead of aggregate JSON blobs. Preparation tasks distinguish templates from daily generated/manual task instances. Procurement separates supplier configuration, catalog ordering rules, order headers, and order lines. SOP uses document/version/step tables so an approved revision is immutable history. Skill assessments and SOP training link directly to staff identity.
 
+A preparation task or remote-job run may only reference a template owned by the same site.
+
+## Mutation idempotency
+
+`api_idempotency_keys` is the durable coordination ledger for future mutation endpoints where retries could duplicate a business action.
+
+Contract:
+
+- `(scope, idempotency_key)` is unique;
+- a stored request hash identifies the payload protected by the key;
+- a reused key with a different payload must be rejected by the API service;
+- key reservation and the protected business mutation occur in one transactional flow;
+- a completed response may be replayed instead of repeating the business mutation;
+- expired keys may be cleaned by a controlled maintenance job.
+
+The table being present does not automatically make existing endpoints idempotent; endpoints are cut over explicitly and tested individually.
+
+## Backup recoverability
+
+`backup_history` records creation of database backup artifacts. `backup_restore_verifications` records actual restore/drill outcomes and is immutable evidence.
+
+A failed restore verification is never edited into success. A later verification appends a new record. Production operations may report backup health and restore-verification health separately.
+
 ## Migration/cutover strategy
 
-1. **Schema foundation:** create normalized tables with constraints/indexes; do not switch reads/writes.
+1. **Schema foundation:** migrations 010-013 create normalized tables and hard integrity constraints; do not switch reads/writes.
 2. **Backfill adapters:** parse each current JSONB module into normalized tables using deterministic legacy IDs and migration checkpoints.
 3. **Dual-read verification:** compare relational projections with existing JSONB responses in regression/staging.
 4. **API cutover by domain:** backend becomes relational authority for one domain at a time.
@@ -147,22 +186,28 @@ No phase may silently create two independent writable sources of truth.
 - Site/date and staff/date access paths are indexed for workforce/operations tables.
 - Active/open uniqueness uses partial unique indexes where the business invariant is conditional.
 - Check constraints enforce non-negative wages/amounts/table counts/break minutes and valid lifecycle enums.
+- Composite foreign keys enforce site/staff ownership where a bare UUID would permit semantic cross-linking.
+- Active payroll policies for the same site cannot cover the same business date.
 - `updated_at` triggers are attached to mutable master/current-state tables.
 - Immutable history tables reject update/delete after insertion.
+- Restore-verification evidence is append-only.
 
 ## Admin Console contract
 
-The future Admin Console operates through API services, not raw arbitrary SQL from the browser. It may expose database health, migration version, backup history, jobs, settings, role/access model and safe maintenance actions.
+The future Admin Console operates through API services, not raw arbitrary SQL from the browser. It may expose database health, migration version, backup history, restore verification, jobs, settings, role/access model and safe maintenance actions.
 
 Production browser UI must not expose unrestricted `DROP`, `TRUNCATE`, arbitrary `DELETE`, or raw-SQL execution.
 
 ## Acceptance criteria for this schema phase
 
-- Fresh PostgreSQL 16 can apply migrations 001 through the new Core v2 migrations in lexical order.
+- Fresh PostgreSQL 16 can apply migrations 001 through 013 in lexical order.
 - Current regression setup can still seed users/inventory after the new migrations.
 - Existing production tables/columns are not dropped or rewritten.
 - New site/staff/workforce/operations/training tables have PK/FK/check/index coverage.
-- New history/snapshot tables are immutable where specified.
+- Cross-site/cross-staff semantic references covered by migration 013 are rejected by PostgreSQL.
+- Overlapping active payroll policy periods are rejected.
+- Duplicate mutation idempotency keys are rejected for the same scope.
+- New history/snapshot/restore-verification records are immutable where specified.
 - Current three sites are seeded idempotently.
 - No existing UI/API behavior changes solely because the schema exists.
 - A later data backfill can map legacy staff, attendance, schedule, payroll, SOP and operations records without relying on display names as persistent identity.
