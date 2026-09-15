@@ -1,6 +1,11 @@
 name: Workforce Staff Production Backfill
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/workforce-staff-production-backfill.yml"
   workflow_dispatch:
     inputs:
       mode:
@@ -34,6 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
+    env:
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'verify' }}
+      SITE: ${{ github.event_name == 'workflow_dispatch' && inputs.site || 'all' }}
     steps:
       - name: Require VPS SSH secret
         env:
@@ -50,21 +58,24 @@ jobs:
           chmod 600 "$HOME/.ssh/kitchen_actions"
           ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
 
-      - name: Require exact deployed main release
+      - name: Verify production release and maintenance script
         run: |
           set -euo pipefail
-          EXPECTED_RELEASE="${GITHUB_SHA:0:7}"
           ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
-          echo "Expected release: ${EXPECTED_RELEASE}"
+          REMOTE_RELEASE="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "git -C /opt/kitchen-os/repo rev-parse --short HEAD && test -f /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs")"
           echo "Production release: ${ACTUAL_RELEASE}"
-          test "$ACTUAL_RELEASE" = "$EXPECTED_RELEASE"
+          echo "Production repo: ${REMOTE_RELEASE}"
+          test "$ACTUAL_RELEASE" = "$REMOTE_RELEASE"
 
       - name: Verify or apply workforce staff backfill
-        env:
-          MODE: ${{ inputs.mode }}
-          SITE: ${{ inputs.site }}
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$MODE" != "verify" ]]; then
+            echo "Push-triggered maintenance is restricted to verify-only."
+            exit 64
+          fi
+
           SITE_ARG=""
           if [[ "$SITE" != "all" ]]; then
             SITE_ARG="--site=$SITE"
