@@ -25,6 +25,8 @@ function writeJson(key, value) {
 
 function policyRoleFromUser(user) {
   if (user?.policyRole) return String(user.policyRole);
+  if (user?.role === "admin") return "admin";
+  if (user?.role === "central") return "central";
   const caps = user?.capabilities || {};
   const perms = user?.permissions || {};
   if (caps["accounts.manage"]) return "admin";
