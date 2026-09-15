@@ -223,7 +223,8 @@ export async function registerWorkforceRequestRoutes(app) {
         const staff = Array.isArray(modules?.shared?.staff)
           ? modules.shared.staff.find((entry) => text(entry?.id) === staffId)
           : null;
-        if (!staff) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
+        const staffName = text(staff?.name) || actorName(user);
+        if (!staffName) return { ok:false, status:403, error:"WORKFORCE_STAFF_IDENTITY_REQUIRED" };
         if (module.requests.some((entry) => text(entry?.staffId) === staffId && text(entry?.date) === date && entry?.status === "pending")) {
           return { ok:false, status:409, error:"WORKFORCE_REQUEST_PENDING_EXISTS" };
         }
@@ -238,7 +239,7 @@ export async function registerWorkforceRequestRoutes(app) {
           id,
           type,
           staffId,
-          staffName:text(staff.name),
+          staffName,
           date,
           sourceScheduleId:text(source.schedule?.id),
           sourceSnapshot:source.schedule ? scheduleSnapshot(source.schedule) : null,
