@@ -70,7 +70,7 @@ try {
     approvedByUserId:manager.id, approvedByName:"managerfx",
   };
   const module = {
-    schedules:[day, recurring], publishedSchedules:[day, recurring],
+    schedules:[day, recurring], publishedSchedules:[structuredClone(day), structuredClone(recurring)],
     publication:{
       version:2, publishedAt:"2026-09-15T07:00:00.000Z", publishedByUserId:manager.id,
       publishedByName:"managerfx", scheduleCount:2, sourceModuleRevision:7,
