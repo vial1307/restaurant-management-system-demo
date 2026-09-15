@@ -75,6 +75,7 @@ create table if not exists public.staff_members (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (site_code,staff_code),
+  unique (id,site_code),
   foreign key (site_code,department_code)
     references public.organization_departments(site_code,code)
     on update cascade on delete restrict,
@@ -124,6 +125,7 @@ create table if not exists public.system_settings (
 );
 
 create table if not exists public.data_migration_checkpoints (
+  id uuid primary key default gen_random_uuid(),
   migration_key text not null,
   site_code text references public.sites(code) on update cascade on delete restrict,
   source_revision bigint,
@@ -136,11 +138,15 @@ create table if not exists public.data_migration_checkpoints (
   started_at timestamptz,
   completed_at timestamptz,
   updated_at timestamptz not null default now(),
-  primary key (migration_key,site_code),
   check (migration_key ~ '^[a-z][a-z0-9._-]{1,127}$'),
   check (jsonb_typeof(details) = 'object'),
   check (completed_at is null or started_at is null or completed_at >= started_at)
 );
+
+create unique index if not exists data_migration_checkpoints_scope_uidx
+  on public.data_migration_checkpoints(migration_key,coalesce(site_code,'__global__'));
+create index if not exists data_migration_checkpoints_status_idx
+  on public.data_migration_checkpoints(status,updated_at desc);
 
 create table if not exists public.system_jobs (
   id uuid primary key default gen_random_uuid(),
@@ -159,7 +165,6 @@ create table if not exists public.system_jobs (
   updated_at timestamptz not null default now(),
   check (job_type ~ '^[a-z][a-z0-9._-]{1,95}$'),
   check (jsonb_typeof(payload) = 'object'),
-  check (result is null or jsonb_typeof(result) in ('object','array','string','number','boolean','null')),
   check (finished_at is null or started_at is null or finished_at >= started_at)
 );
 
@@ -237,6 +242,21 @@ for each row execute function public.set_updated_at();
 drop trigger if exists user_staff_bindings_set_updated_at on public.user_staff_bindings;
 create trigger user_staff_bindings_set_updated_at
 before update on public.user_staff_bindings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists site_settings_set_updated_at on public.site_settings;
+create trigger site_settings_set_updated_at
+before update on public.site_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists system_settings_set_updated_at on public.system_settings;
+create trigger system_settings_set_updated_at
+before update on public.system_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists data_migration_checkpoints_set_updated_at on public.data_migration_checkpoints;
+create trigger data_migration_checkpoints_set_updated_at
+before update on public.data_migration_checkpoints
 for each row execute function public.set_updated_at();
 
 drop trigger if exists system_jobs_set_updated_at on public.system_jobs;
