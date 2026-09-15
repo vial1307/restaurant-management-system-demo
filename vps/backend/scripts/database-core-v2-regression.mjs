@@ -154,8 +154,10 @@ try {
 
   await expectPgError("cross-staff attendance source schedule", "23503", () => client.query(
     `insert into public.attendance_records(
-       site_code,staff_id,service_date,clock_in_at,hourly_rate,source,source_schedule_entry_id
-     ) values('fuxing',$1,'2026-09-21','2026-09-21T17:00:00+08',230,'manager',$2)`,
+       site_code,staff_id,service_date,clock_in_at,clock_out_at,hourly_rate,source,source_schedule_entry_id
+     ) values(
+       'fuxing',$1,'2026-09-21','2026-09-21T17:00:00+08','2026-09-21T18:00:00+08',230,'manager',$2
+     )`,
     [staffId,secondScheduleId]
   ));
 
