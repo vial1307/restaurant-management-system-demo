@@ -29,7 +29,7 @@ async function login(username) {
 
 const health = await request("/api/health");
 assert.equal(health.response.status,200);
-assert.equal(health.data.schema,"012");
+assert.equal(health.data.schema,"013");
 
 const admin = await login("yangchuadmin");
 const manager = await login("managerfx");
