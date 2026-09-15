@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import pg from "pg";
 
 const { Client } = pg;
 const env = { ...process.env };
+const productionWorkflow = fs.readFileSync(".github/workflows/workforce-staff-production-backfill.yml", "utf8");
 const client = new Client({
   host:env.DB_HOST || "127.0.0.1",
   port:Number(env.DB_PORT || 5432),
@@ -11,6 +13,17 @@ const client = new Client({
   user:env.POSTGRES_USER || "kitchen_test",
   password:env.POSTGRES_PASSWORD || "kitchen_test",
 });
+
+assert.match(productionWorkflow, /workflow_run:/, "production verification must be sequenced after a workflow completion");
+assert.match(productionWorkflow, /Deploy Kitchen OS to VPS/, "production verification must follow the canonical deploy workflow");
+assert.doesNotMatch(productionWorkflow, /\n  push:/, "production verification must not race deployment via an independent push trigger");
+assert.match(productionWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/, "automatic verification must require a successful deployment workflow");
+assert.match(productionWorkflow, /github\.event\.workflow_run\.head_branch == 'main'/, "automatic verification must remain main-only");
+assert.match(productionWorkflow, /github\.event\.workflow_run\.head_sha/, "automatic verification must pin the deployed SHA");
+assert.match(productionWorkflow, /LOCAL_SCRIPT_SHA/, "maintenance workflow must verify the local script checksum");
+assert.match(productionWorkflow, /REMOTE_SCRIPT_SHA/, "maintenance workflow must verify the deployed script checksum");
+assert.match(productionWorkflow, /Creating mandatory pre-backfill database backup/, "apply mode must retain mandatory backup");
+assert.match(productionWorkflow, /GITHUB_EVENT_NAME.*workflow_dispatch/, "automatic runs must remain verify-only");
 
 function runBackfill(...args) {
   const result = spawnSync(process.execPath, ["vps/backend/scripts/workforce-staff-backfill.mjs", ...args], {
