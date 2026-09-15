@@ -31,8 +31,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('kitchen-os-pr-{0}', github.event.pull_request.number) || 'kitchen-os-production' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: kitchen-os-production
+  cancel-in-progress: false
 
 jobs:
   preflight:
