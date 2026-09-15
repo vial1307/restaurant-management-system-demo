@@ -1,0 +1,100 @@
+name: Workforce Staff Production Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "verify reads production only; apply creates a DB backup then writes relational staff identity rows"
+        required: true
+        default: verify
+        type: choice
+        options:
+          - verify
+          - apply
+      site:
+        description: "Optional site code; all runs every active site"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - fuxing
+          - yongji
+          - central
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitchen-os-production-maintenance
+  cancel-in-progress: false
+
+jobs:
+  production-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Require exact deployed main release
+        run: |
+          set -euo pipefail
+          EXPECTED_RELEASE="${GITHUB_SHA:0:7}"
+          ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          echo "Expected release: ${EXPECTED_RELEASE}"
+          echo "Production release: ${ACTUAL_RELEASE}"
+          test "$ACTUAL_RELEASE" = "$EXPECTED_RELEASE"
+
+      - name: Verify or apply workforce staff backfill
+        env:
+          MODE: ${{ inputs.mode }}
+          SITE: ${{ inputs.site }}
+        run: |
+          set -euo pipefail
+          SITE_ARG=""
+          if [[ "$SITE" != "all" ]]; then
+            SITE_ARG="--site=$SITE"
+          fi
+
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "MODE='$MODE' SITE_ARG='$SITE_ARG' bash -s" <<'REMOTE'
+          set -euo pipefail
+          APP_DIR=/opt/kitchen-os
+          cd "$APP_DIR"
+
+          test -f repo/vps/backend/scripts/workforce-staff-backfill.mjs
+          docker compose --env-file .env ps app db
+
+          if [[ "$MODE" == "apply" ]]; then
+            echo "Creating mandatory pre-backfill database backup..."
+            bash repo/vps/scripts/backup.sh
+            echo "Applying transactional staff identity backfill..."
+            docker compose --env-file .env exec -T app \
+              node scripts/workforce-staff-backfill.mjs --apply ${SITE_ARG:+"$SITE_ARG"}
+          else
+            echo "Running read-only production backfill verification..."
+            docker compose --env-file .env exec -T app \
+              node scripts/workforce-staff-backfill.mjs ${SITE_ARG:+"$SITE_ARG"}
+          fi
+          REMOTE
+
+      - name: Verify production remains healthy
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          echo
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE
