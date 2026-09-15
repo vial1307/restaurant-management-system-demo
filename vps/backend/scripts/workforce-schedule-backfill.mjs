@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import pg from "pg";
 
 const { Client } = pg;
+pg.types.setTypeParser(1082, (value) => value);
 const APPLY = process.argv.includes("--apply");
 const SITE_FILTER = (() => {
   const flag = process.argv.find((arg) => arg.startsWith("--site="));
