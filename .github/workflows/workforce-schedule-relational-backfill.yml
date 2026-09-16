@@ -8,6 +8,7 @@ on:
       - "vps/database/**"
       - "vps/backend/scripts/workforce-schedule-backfill.mjs"
       - "vps/backend/scripts/workforce-schedule-backfill-regression.mjs"
+      - "vps/backend/scripts/workforce-schedule-central-compat-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-schedule-relational-backfill.yml"
   push:
@@ -16,6 +17,7 @@ on:
       - "vps/database/**"
       - "vps/backend/scripts/workforce-schedule-backfill.mjs"
       - "vps/backend/scripts/workforce-schedule-backfill-regression.mjs"
+      - "vps/backend/scripts/workforce-schedule-central-compat-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-schedule-relational-backfill.yml"
 
@@ -57,7 +59,10 @@ jobs:
         run: |
           node --check vps/backend/scripts/workforce-schedule-backfill.mjs
           node --check vps/backend/scripts/workforce-schedule-backfill-regression.mjs
+          node --check vps/backend/scripts/workforce-schedule-central-compat-regression.mjs
       - name: Apply canonical schema
         run: node vps/backend/scripts/regression-setup.mjs
       - name: Verify schedule relational backfill
         run: node vps/backend/scripts/workforce-schedule-backfill-regression.mjs
+      - name: Verify central schedule department compatibility
+        run: node vps/backend/scripts/workforce-schedule-central-compat-regression.mjs

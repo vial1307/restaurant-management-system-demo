@@ -73,8 +73,13 @@ function canonicalSource(site, module, revision) {
 }
 function checksum(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 function scheduleKey(entry) { return text(entry?.id); }
+function canonicalLegacyDepartment(site, value, departments, { defaultInside = false } = {}) {
+  const raw = text(value) || (defaultInside ? "inside" : "");
+  if (site === "central" && raw === "inside" && departments.has("kitchen")) return "kitchen";
+  return raw;
+}
 
-function inspectSchedule(entry, staffByLegacy, departments) {
+function inspectSchedule(entry, site, staffByLegacy, departments) {
   const legacyId = scheduleKey(entry);
   const staffLegacyId = text(entry?.staffId);
   const staffId = staffByLegacy.get(staffLegacyId) || null;
@@ -85,7 +90,7 @@ function inspectSchedule(entry, staffByLegacy, departments) {
   const start = text(entry?.start);
   const end = text(entry?.end);
   const shift = shiftType(entry?.shift);
-  const department = text(entry?.department) || "inside";
+  const department = canonicalLegacyDepartment(site, entry?.department, departments, { defaultInside:true });
   const errors = [];
   if (!legacyId) errors.push("missing_id");
   if (!staffLegacyId) errors.push("missing_staff_id");
@@ -181,7 +186,7 @@ function inspectRequest(item, staffByLegacy, scheduleByLegacy, knownUsers) {
   };
 }
 
-function inspectException(item, staffByLegacy, requestByLegacy, scheduleByLegacy, knownUsers, departments) {
+function inspectException(item, site, staffByLegacy, requestByLegacy, scheduleByLegacy, knownUsers, departments) {
   const legacyId = text(item?.id);
   const requestLegacyId = text(item?.requestId);
   const staffLegacyId = text(item?.staffId);
@@ -192,7 +197,7 @@ function inspectException(item, staffByLegacy, requestByLegacy, scheduleByLegacy
   const sourceLegacyId = text(item?.sourceScheduleId);
   const start = text(item?.start);
   const end = text(item?.end);
-  const department = text(item?.department);
+  const department = canonicalLegacyDepartment(site, item?.department, departments);
   const approvedAt = validIso(item?.approvedAt);
   const errors = [];
   if (!legacyId) errors.push("missing_id");
@@ -251,12 +256,12 @@ async function inspectSite(client, row, knownUsers) {
   const sourceRevision = Number(row.module_revision || 0);
   const staffByLegacy = await loadStaff(client, site);
   const departments = await loadDepartments(client, site);
-  const schedules = array(module.schedules).map((entry) => inspectSchedule(entry, staffByLegacy, departments));
+  const schedules = array(module.schedules).map((entry) => inspectSchedule(entry, site, staffByLegacy, departments));
   const scheduleByLegacy = new Map(schedules.filter((entry) => entry.legacyId).map((entry) => [entry.legacyId, entry]));
-  const published = array(module.publishedSchedules).map((entry) => inspectSchedule(entry, staffByLegacy, departments));
+  const published = array(module.publishedSchedules).map((entry) => inspectSchedule(entry, site, staffByLegacy, departments));
   const requests = array(module.requests).map((entry) => inspectRequest(entry, staffByLegacy, scheduleByLegacy, knownUsers));
   const requestByLegacy = new Map(requests.filter((entry) => entry.legacyId).map((entry) => [entry.legacyId, entry]));
-  const exceptions = array(module.exceptions).map((entry) => inspectException(entry, staffByLegacy, requestByLegacy, scheduleByLegacy, knownUsers, departments));
+  const exceptions = array(module.exceptions).map((entry) => inspectException(entry, site, staffByLegacy, requestByLegacy, scheduleByLegacy, knownUsers, departments));
   const collisions = scheduleCollisionDiagnostics(schedules);
   const diagnostics = diagnosticsFor({ schedules, published, requests, exceptions, collisions });
   const source = canonicalSource(site, module, sourceRevision);
