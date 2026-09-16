@@ -42,16 +42,11 @@ function checksum(value) {
 }
 
 function canonicalSource(site, module, revision) {
-  return {
-    site,
-    revision,
-    attendance:array(module.attendance),
-  };
+  return { site, revision, attendance:array(module.attendance) };
 }
 
 function scheduledTimestamp(serviceDate, scheduledStart, timezoneName) {
-  if (!scheduledStart) return null;
-  return `${serviceDate} ${scheduledStart}:00 ${timezoneName}`;
+  return scheduledStart ? `${serviceDate} ${scheduledStart}:00 ${timezoneName}` : null;
 }
 
 function databaseTimestamp(value) {
@@ -61,14 +56,6 @@ function databaseTimestamp(value) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(value);
 }
 
-function databaseDate(value) {
-  if (value === null || value === undefined || value === "") return null;
-  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
-  const raw = text(value);
-  const match = raw.match(/\d{4}-\d{2}-\d{2}/);
-  return match ? match[0] : raw.slice(0, 10);
-}
-
 function signature(row) {
   return {
     legacyId:text(row.legacyId),
@@ -76,7 +63,7 @@ function signature(row) {
     serviceDate:text(row.serviceDate),
     clockInAt:databaseTimestamp(row.clockInAt),
     clockOutAt:databaseTimestamp(row.clockOutAt),
-    scheduledStartAt:databaseTimestamp(row.scheduledStartAt),
+    scheduledStartLocal:row.scheduledStartLocal || null,
     breakMinutes:Number(row.breakMinutes),
     workArea:row.workArea || null,
     hourlyRate:Number(row.hourlyRate),
@@ -141,7 +128,7 @@ async function loadUsers(client) {
   return new Set(result.rows.map((row) => text(row.id)));
 }
 
-function inspectAttendance(entry, { site, timezoneName, currencyCode, staffByLegacy, scheduleByLegacy, knownUsers }) {
+function inspectAttendance(entry, { timezoneName, currencyCode, staffByLegacy, scheduleByLegacy, knownUsers }) {
   const legacyId = text(entry?.id);
   const staffLegacyId = text(entry?.staffId);
   const staffId = staffByLegacy.get(staffLegacyId) || null;
@@ -191,6 +178,7 @@ function inspectAttendance(entry, { site, timezoneName, currencyCode, staffByLeg
     scheduledStartAt:scheduledStart && DATE_RE.test(serviceDate)
       ? scheduledTimestamp(serviceDate, scheduledStart, timezoneName)
       : null,
+    scheduledStartLocal:scheduledStart && DATE_RE.test(serviceDate) ? `${serviceDate} ${scheduledStart}` : null,
     breakMinutes:Number.isInteger(breakMinutes) && breakMinutes >= 0 ? breakMinutes : 0,
     workArea:text(entry?.area) || null,
     hourlyRate:Number.isFinite(hourlyRate) && hourlyRate >= 0 ? hourlyRate : 0,
@@ -212,7 +200,6 @@ function diagnosticsFor(rows) {
   const invalidRows = rows
     .filter((row) => row.errors.length)
     .map((row) => ({ id:row.legacyId, errors:row.errors }));
-
   const seenIds = new Map();
   const duplicateIds = [];
   for (const row of rows) {
@@ -221,7 +208,6 @@ function diagnosticsFor(rows) {
     seenIds.set(row.legacyId, count);
     if (count === 2) duplicateIds.push(row.legacyId);
   }
-
   const openByStaff = new Map();
   const openShiftCollisions = [];
   for (const row of rows.filter((item) => item.staffId && item.recordStatus === "active" && !item.clockOutAt)) {
@@ -230,7 +216,6 @@ function diagnosticsFor(rows) {
     if (existing) openShiftCollisions.push({ staffLegacyId:row.staffLegacyId, legacyIds:[existing, row.legacyId] });
     else openByStaff.set(key, row.legacyId);
   }
-
   return {
     invalidRows,
     duplicateIds,
@@ -246,29 +231,28 @@ async function inspectSite(client, row, knownUsers) {
   const modules = object(row.modules);
   const module = object(modules.attendance);
   const sourceRevision = Number(row.module_revision || 0);
+  const timezoneName = text(siteConfig.timezone_name) || "Asia/Taipei";
+  const currencyCode = text(siteConfig.currency_code) || "TWD";
   const staffByLegacy = await loadStaff(client, site);
   const scheduleByLegacy = await loadSchedules(client, site);
   const rows = array(module.attendance).map((entry) => inspectAttendance(entry, {
-    site,
-    timezoneName:text(siteConfig.timezone_name) || "Asia/Taipei",
-    currencyCode:text(siteConfig.currency_code) || "TWD",
+    timezoneName,
+    currencyCode,
     staffByLegacy,
     scheduleByLegacy,
     knownUsers,
   }));
-  const source = canonicalSource(site, module, sourceRevision);
   return {
     site,
+    timezoneName,
     sourceRevision,
-    source,
-    checksum:checksum(source),
+    checksum:checksum(canonicalSource(site, module, sourceRevision)),
     rows,
     diagnostics:diagnosticsFor(rows),
   };
 }
 
 async function readTargetRows(client, plan) {
-  if (!plan.rows.length) return [];
   const legacyIds = plan.rows.map((row) => row.legacyId).filter(Boolean);
   if (!legacyIds.length) return [];
   const result = await client.query(
@@ -278,7 +262,8 @@ async function readTargetRows(client, plan) {
        service_date as "serviceDate",
        clock_in_at as "clockInAt",
        clock_out_at as "clockOutAt",
-       scheduled_start_at as "scheduledStartAt",
+       case when scheduled_start_at is null then null
+            else to_char(scheduled_start_at at time zone $3, 'YYYY-MM-DD HH24:MI') end as "scheduledStartLocal",
        break_minutes as "breakMinutes",
        work_area as "workArea",
        hourly_rate as "hourlyRate",
@@ -295,7 +280,7 @@ async function readTargetRows(client, plan) {
      from public.attendance_records
      where site_code=$1 and legacy_attendance_id = any($2::text[])
      order by legacy_attendance_id`,
-    [plan.site, legacyIds]
+    [plan.site, legacyIds, plan.timezoneName]
   );
   return result.rows;
 }
