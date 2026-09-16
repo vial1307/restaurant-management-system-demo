@@ -52,18 +52,15 @@ jobs:
       - name: Verify, backup, apply and re-verify staff backfill
         run: |
           set -euo pipefail
-          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          cd /opt/kitchen-os
+          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
           echo "Pre-apply verify..."
-          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs </dev/null
+          "${SSH[@]}" "cd /opt/kitchen-os && docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs </dev/null"
           echo "Mandatory database backup..."
-          bash repo/vps/scripts/backup.sh
+          "${SSH[@]}" "cd /opt/kitchen-os && bash repo/vps/scripts/backup.sh </dev/null"
           echo "Apply Staff v1..."
-          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs --apply </dev/null
+          "${SSH[@]}" "cd /opt/kitchen-os && docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs --apply </dev/null"
           echo "Post-apply verify..."
-          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs </dev/null
-          REMOTE
+          "${SSH[@]}" "cd /opt/kitchen-os && docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs </dev/null"
 
       - name: Verify production health and release
         run: |
