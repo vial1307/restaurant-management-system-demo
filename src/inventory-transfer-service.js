@@ -7,12 +7,18 @@ import {
 } from "./inventory-cloud.js";
 import { inventorySites } from "./inventory-master-data.js";
 
+// Compatibility bridge for older UI modules: the array identity stays stable,
+// but its values are refreshed from the PostgreSQL-backed site registry.
+export const INVENTORY_SITES = [];
+
 export function inventorySiteOptions() {
-  return inventorySites().map((site) => ({
+  const rows = inventorySites().map((site) => ({
     id: site.code,
     zh: site.name_zh_tw || site.code,
     vi: site.name_vi || site.name_zh_tw || site.code,
   }));
+  INVENTORY_SITES.splice(0, INVENTORY_SITES.length, ...rows);
+  return INVENTORY_SITES;
 }
 
 export function siteLabel(site, language = "vi") {
