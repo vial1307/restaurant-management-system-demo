@@ -78,3 +78,4 @@ await import("./receiving-default-permission-contract.mjs");
 await import("./inventory-date-cache-regression.mjs");
 await import("./action-feedback-contract-regression.mjs");
 await import("./workforce-module-contract-regression.mjs");
+await import("./workforce-schedule-production-workflow-regression.mjs");
