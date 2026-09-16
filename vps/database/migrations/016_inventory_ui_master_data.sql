@@ -12,6 +12,20 @@ end,
 updated_at = now()
 where active=true;
 
+-- Preserve the historical admin landing behavior (branch inventory first),
+-- but keep the choice in PostgreSQL master data instead of frontend constants.
+-- Future ordering changes are made through site master data without changing
+-- inventory rendering logic.
+update public.sites
+set sort_order = case code
+  when 'fuxing' then 10
+  when 'yongji' then 20
+  when 'central' then 30
+  else sort_order
+end,
+updated_at = now()
+where active=true;
+
 update public.inventory_locations
 set metadata = coalesce(metadata,'{}'::jsonb) || case code
   when 'central-freezer' then '{"ui_key":"央廚冷凍","storage_group":"primary"}'::jsonb
