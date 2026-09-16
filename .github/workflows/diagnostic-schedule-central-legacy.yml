@@ -56,10 +56,11 @@ jobs:
             `, [targetId]);
             console.log('TARGET_SCHEDULE');
             console.log(JSON.stringify(schedule.rows, null, 2));
+
             const legacyStaffId = String(schedule.rows[0]?.entry?.staffId || '').trim();
             if (legacyStaffId) {
               const matchingStaff = await client.query(`
-                select site_code, id, legacy_staff_id, active
+                select site_code, id, legacy_staff_id, display_name, department_code, default_work_area, active
                 from public.staff_members
                 where legacy_staff_id=$1
                 order by site_code, id
@@ -67,21 +68,43 @@ jobs:
               console.log('MATCHING_STAFF_MEMBERS');
               console.log(JSON.stringify(matchingStaff.rows, null, 2));
             }
+
+            const legacyRosters = await client.query(`
+              select site,
+                     coalesce((module_revisions->>'shared')::bigint,0) as shared_revision,
+                     coalesce(modules->'shared'->'staff','[]'::jsonb) as staff
+              from public.business_state
+              where site in ('central','fuxing')
+              order by site
+            `);
+            console.log('LEGACY_SHARED_STAFF');
+            console.log(JSON.stringify(legacyRosters.rows, null, 2));
+
+            const candidateUsers = await client.query(`
+              select id, username, display_name, role, location, active
+              from public.app_users
+              where active=true and (display_name='阿南' or location in ('central','all'))
+              order by username
+            `);
+            console.log('CANDIDATE_USERS');
+            console.log(JSON.stringify(candidateUsers.rows, null, 2));
+
             const centralStaff = await client.query(`
-              select id, legacy_staff_id, active
+              select id, legacy_staff_id, display_name, department_code, default_work_area, active
               from public.staff_members
               where site_code='central'
               order by legacy_staff_id nulls last, id
             `);
             console.log('CENTRAL_STAFF_MEMBERS');
             console.log(JSON.stringify(centralStaff.rows, null, 2));
+
             const departments = await client.query(`
-              select code, active
+              select site_code, code, name, active
               from public.organization_departments
-              where site_code='central'
-              order by code
+              where site_code in ('central','fuxing')
+              order by site_code, code
             `);
-            console.log('CENTRAL_DEPARTMENTS');
+            console.log('DEPARTMENTS');
             console.log(JSON.stringify(departments.rows, null, 2));
           } finally {
             await client.end();
