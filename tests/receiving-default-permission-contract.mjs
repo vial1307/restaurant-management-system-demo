@@ -26,7 +26,8 @@ assert(backend.includes('return user.role === "manager" && await isBranchSite(si
 assert(!backend.includes('["fuxing","yongji"].includes(site)'), "backend receiving-default permission must not hard-code branch site names");
 assert(backend.includes('reply.code(403).send({ error: "RECEIVE_DEFAULT_MANAGER_REQUIRED" });'), "backend must return an explicit receiving-default manager error");
 assert(backend.includes('if (!(await requireReceiveDefaultManager(user, site, reply))) return;') || backend.includes('if (!await requireReceiveDefaultManager(user, site, reply)) return;'), "receive-default endpoint is not using the dedicated manager boundary");
-assert(siteRegistry.includes("metadata->>'inventory_mode'"), "site registry must classify branch inventory mode from PostgreSQL metadata");
+assert(siteRegistry.includes("from public.sites") && siteRegistry.includes("metadata") && siteRegistry.includes("metadata?.inventory_mode"), "site registry must classify inventory mode from PostgreSQL site metadata");
+assert(siteRegistry.includes('=== "branch"'), "site registry must expose branch classification from inventory_mode");
 
 assert(spec.includes("receiving-default writes are restricted to the receiving site's manager or admin"), "canonical receiving-location ownership rule is not explicit about write authority");
 
