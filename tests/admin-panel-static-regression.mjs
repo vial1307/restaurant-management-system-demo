@@ -6,6 +6,7 @@ const js = fs.readFileSync("src/admin-panel.js", "utf8");
 const css = fs.readFileSync("src/admin-panel.css", "utf8");
 const routes = fs.readFileSync("vps/backend/src/master-data-routes.mjs", "utf8");
 const migration = fs.readFileSync("vps/database/migrations/015_operational_master_data.sql", "utf8");
+const deploy = fs.readFileSync("vps/scripts/deploy-api.sh", "utf8");
 
 assert.match(html, /id="admin-app"/);
 assert.match(html, /src\/admin-panel\.js/);
@@ -18,6 +19,8 @@ assert.match(js, /\/api\/master-data\/locations/, "location saves must use VPS A
 assert.match(js, /\/api\/master-data\/work-areas/, "work-area saves must use VPS API");
 assert.doesNotMatch(js, /localStorage\.setItem/, "Admin Panel must not persist master data to localStorage");
 assert.match(css, /@media\(max-width:600px\)/, "Admin Panel must include mobile layout");
+assert.match(deploy, /cp -a "\$\{REPO_DIR\}\/admin\.html"/, "deployment must publish Admin Panel");
+assert.match(deploy, /curl -fsS http:\/\/127\.0\.0\.1\/admin\.html/, "deployment must smoke Admin Panel before success");
 
 assert.match(routes, /LOCATION_HAS_POSITIVE_STOCK/);
 assert.match(routes, /LOCATION_IS_RECEIVE_DEFAULT/);
