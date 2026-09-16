@@ -118,15 +118,15 @@ try {
   assert.equal(createdLocation.data.location.code, "fuxing-regression-cold-room");
 
   const audit = await DB.query(
-    `select action,entity_type,metadata
+    `select action,entity_type,site,metadata
      from public.audit_logs
      where actor_user_id=$1 and entity_type='inventory_location'
      order by created_at desc
      limit 1`,
     [manager.user.id]
   );
-  assert.equal(audit.rows[0]?.action, "master_data.location.create");
-  assert.equal(audit.rows[0]?.metadata?.site, "fuxing");
+  assert.equal(audit.rows[0]?.action, "master_location_create");
+  assert.equal(audit.rows[0]?.site, "fuxing");
 
   const employeeWrite = await request("/api/master-data/locations", {
     method:"POST",
