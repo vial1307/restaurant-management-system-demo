@@ -199,6 +199,15 @@ export function vpsSchemaVersion() {
   return apiRequest("/api/inventory/schema-version");
 }
 
+export function vpsInventorySites() {
+  return apiRequest("/api/inventory/sites");
+}
+
+export function vpsMasterData(site, { includeInactive = false } = {}) {
+  const params = includeInactive ? "?includeInactive=true" : "";
+  return apiRequest(`/api/master-data/${encodeURIComponent(String(site || ""))}${params}`);
+}
+
 export function vpsInventory(site, { force = false } = {}) {
   const key = String(site || "");
   const now = Date.now();
