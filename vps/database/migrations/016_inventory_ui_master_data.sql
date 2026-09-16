@@ -42,17 +42,18 @@ end,
 updated_at = now()
 where active=true;
 
--- Existing and future active locations used by the inventory UI must expose a
--- stable ui_key. New rows can use their immutable location code as the key until
--- an administrator assigns a friendlier UI key.
+-- Existing active locations must expose a stable UI key. The key is data, not
+-- an application constant. Existing unknown/custom locations retain their
+-- immutable location code as a safe initial key and can later be renamed in
+-- metadata without changing source code.
 update public.inventory_locations
 set metadata = coalesce(metadata,'{}'::jsonb) || jsonb_build_object('ui_key',code),
     updated_at = now()
 where active=true
   and coalesce(nullif(btrim(metadata->>'ui_key'),''),'')='';
 
--- Work locations should point to work-area master data when their metadata can
--- be inferred from the existing canonical code.
+-- Work locations should point to work-area master data when their association
+-- can be inferred from the existing canonical code or UI key.
 update public.inventory_locations l
 set metadata = coalesce(l.metadata,'{}'::jsonb) || jsonb_build_object('work_area',w.code),
     updated_at = now()
@@ -63,6 +64,74 @@ where l.site=w.site_code
   and w.active=true
   and coalesce(nullif(btrim(l.metadata->>'work_area'),''),'')=''
   and (l.code=w.site_code||'-work-'||w.code or l.metadata->>'ui_key'=w.code);
+
+-- Storage grouping also belongs to master data. Unknown/new storage locations
+-- default to service storage; managers can later change the metadata through
+-- Admin Panel without a deployment.
+update public.inventory_locations
+set metadata = coalesce(metadata,'{}'::jsonb) || '{"storage_group":"service"}'::jsonb,
+    updated_at = now()
+where active=true
+  and kind='storage'
+  and coalesce(nullif(btrim(metadata->>'storage_group'),''),'')='';
+
+create or replace function public.inventory_location_ui_metadata_defaults()
+returns trigger
+language plpgsql
+as $$
+declare
+  candidate_work_area text;
+begin
+  new.metadata := coalesce(new.metadata,'{}'::jsonb);
+
+  if coalesce(nullif(btrim(new.metadata->>'ui_key'),''),'')='' then
+    new.metadata := new.metadata || jsonb_build_object('ui_key',new.code);
+  end if;
+
+  if new.kind='storage'
+     and coalesce(nullif(btrim(new.metadata->>'storage_group'),''),'')='' then
+    new.metadata := new.metadata || '{"storage_group":"service"}'::jsonb;
+  end if;
+
+  if new.kind='work'
+     and coalesce(nullif(btrim(new.metadata->>'work_area'),''),'')='' then
+    candidate_work_area := null;
+
+    if new.metadata->>'ui_key' is not null and exists (
+      select 1 from public.work_areas w
+      where w.site_code=new.site
+        and w.code=new.metadata->>'ui_key'
+        and w.active=true
+    ) then
+      candidate_work_area := new.metadata->>'ui_key';
+    elsif new.code like new.site||'-work-%' then
+      candidate_work_area := substring(new.code from char_length(new.site||'-work-') + 1);
+      if not exists (
+        select 1 from public.work_areas w
+        where w.site_code=new.site
+          and w.code=candidate_work_area
+          and w.active=true
+      ) then
+        candidate_work_area := null;
+      end if;
+    end if;
+
+    if candidate_work_area is not null then
+      new.metadata := new.metadata || jsonb_build_object(
+        'work_area',candidate_work_area,
+        'ui_key',candidate_work_area
+      );
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists inventory_locations_ui_metadata_defaults on public.inventory_locations;
+create trigger inventory_locations_ui_metadata_defaults
+before insert or update of code,site,kind,metadata on public.inventory_locations
+for each row execute function public.inventory_location_ui_metadata_defaults();
 
 create unique index if not exists inventory_locations_active_ui_key_uidx
   on public.inventory_locations(site,kind,(metadata->>'ui_key'))
