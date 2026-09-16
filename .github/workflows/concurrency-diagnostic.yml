@@ -1,0 +1,62 @@
+name: Concurrency Diagnostic
+
+on:
+  push:
+    branches:
+      - codex/database-driven-inventory-master-data
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - run: npm ci --prefix vps/backend
+      - name: Prepare DB
+        run: node vps/backend/scripts/regression-setup.mjs
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-api.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-api.log
+          exit 1
+      - name: Seed API regression state
+        run: node vps/backend/scripts/api-regression-v6.mjs
+      - name: Run first concurrency regression only
+        run: node --import ./vps/backend/scripts/business-state-regression-client.mjs vps/backend/scripts/concurrency-regression.mjs
+      - name: Run module conflict regression only
+        if: success()
+        run: node vps/backend/scripts/business-module-conflict-regression.mjs
