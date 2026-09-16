@@ -14,7 +14,7 @@ const storage = new Map([
     permissions: { inventory: { view: true, edit: true } },
   })],
   [CLOUD_FLAG_KEY, "ready"],
-  [CLOUD_SCHEMA_VERSION_KEY, "11"],
+  [CLOUD_SCHEMA_VERSION_KEY, "12"],
   [ACTIVE_SITE_KEY, "fuxing"],
 ]);
 
@@ -67,6 +67,23 @@ let releaseFuxing;
 let fuxingStarted = false;
 const inventoryRequests = [];
 const emptyInventory = () => ({ locations: [], stock: [], items: [] });
+const sites = [
+  { code: "central", name_vi: "Bếp trung tâm", name_zh_tw: "央廚", sort_order: 10, metadata: { inventory_mode: "central" } },
+  { code: "fuxing", name_vi: "Fuxing", name_zh_tw: "復興店", sort_order: 20, metadata: { inventory_mode: "branch" } },
+  { code: "yongji", name_vi: "Yongji", name_zh_tw: "永吉店", sort_order: 30, metadata: { inventory_mode: "branch" } },
+];
+function masterData(site) {
+  return {
+    site: sites.find((entry) => entry.code === site),
+    locations: [
+      { code: `${site}-large-freezer`, site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary" } },
+      { code: `${site}-work-noodles`, site, kind: "work", sort_order: 100, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles" } },
+    ],
+    workAreas: [
+      { code: "noodles", site_code: site, name_zh_tw: "麵區", name_vi: "Khu mì", sort_order: 10, active: true, metadata: {} },
+    ],
+  };
+}
 
 Object.defineProperty(globalThis, "fetch", {
   configurable: true,
@@ -75,7 +92,20 @@ Object.defineProperty(globalThis, "fetch", {
     const method = String(options.method || "GET").toUpperCase();
     if (method !== "GET") throw new Error(`Unexpected mutation in sync regression: ${method} ${url}`);
     if (url === "/api/inventory/schema-version") {
-      return new Response(JSON.stringify({ version: 11 }), {
+      return new Response(JSON.stringify({ version: 12 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url === "/api/inventory/sites") {
+      return new Response(JSON.stringify({ sites }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const masterMatch = url.match(/^\/api\/master-data\/(fuxing|yongji)$/);
+    if (masterMatch) {
+      return new Response(JSON.stringify(masterData(masterMatch[1])), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
