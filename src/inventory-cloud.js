@@ -20,8 +20,6 @@ import {
   inventoryLocationByCode,
   inventoryLocationByUiKey,
   inventoryLocationUiKey,
-  inventoryLocations,
-  inventoryMasterSnapshot,
   inventorySiteForLocationCode,
   inventorySites,
   inventoryUiGroups,
@@ -39,7 +37,7 @@ const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const RECEIVE_DEFAULT_KEY = "shitu-inventory-receive-defaults-v1";
 const POLL_MS = 60000;
-const REQUIRED_SCHEMA_VERSION = 12;
+const REQUIRED_SCHEMA_VERSION = 11;
 const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
 const MIGRATION_RETRY_MS = 5000;
 const AUTH_SYNC_RETRY_MS = 5500;
@@ -575,11 +573,10 @@ export async function getSiteInventoryRows(site = currentSite()) {
 export async function getSiteLocations(site = currentSite(), kind = "storage") {
   if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
   await ensureSiteRegistry();
-  if (!inventoryMasterSnapshot(site)) {
-    const master = await vpsMasterData(site);
-    syncUiMasterData(site, master || {});
-  }
-  return inventoryLocations(site, kind);
+  const master = await vpsMasterData(site);
+  syncUiMasterData(site, master || {});
+  const locations = master?.locations || [];
+  return kind ? locations.filter((entry)=>entry.kind===kind) : locations;
 }
 
 function applyCentral(rows) {
@@ -730,223 +727,377 @@ async function resolveIds(itemKey, locationCode) {
   let location = cache.locationsByCode.get(locationCode) || inventoryLocationByCode(locationCode);
   const site = location?.site || siteFromLocationCode(locationCode);
   if (!cache.itemsByKey.has(itemKey) || !cache.locationsByCode.has(locationCode)) {
-    await fetchSite(site);
+    if (site) await fetchSite(site);
     location = cache.locationsByCode.get(locationCode) || inventoryLocationByCode(locationCode);
   }
-  const item = cache.itemsByKey.get(itemKey);
-  if (!item || !location) return null;
-  return { itemId: item.id, locationId: location.id, site: location.site };
-}
-
-export async function cloudSetQuantity({itemKey,locationCode,quantity,note=""}){
-  const site=siteFromLocationCode(locationCode);
-  if(!site || !canDirectInventoryAdjust()) return {ok:false,fallback:false,error:new Error("INVENTORY_STOCKTAKE_NOT_ALLOWED")};
-  if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  const ids=await resolveIds(itemKey,locationCode);
-  if(!ids)return {ok:false,fallback:false,error:new Error("INVENTORY_ITEM_NOT_MAPPED")};
-  try{
-    await vpsSetQuantity({site,itemId:ids.itemId,locationId:ids.locationId,quantity:Math.max(0,Number(quantity)||0),note});
-    await syncInventoryNow(site);
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site,error:error.message});
-    return {ok:false,fallback:false,error};
-  }
-}
-
-export async function cloudSetMinimum({itemKey,locationCode,minimum,note=""}){
-  const site=siteFromLocationCode(locationCode);
-  if(!site || !canDirectInventoryAdjust()) return {ok:false,fallback:false,error:new Error("INVENTORY_STOCKTAKE_NOT_ALLOWED")};
-  if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  const ids=await resolveIds(itemKey,locationCode);
-  if(!ids)return {ok:false,fallback:false,error:new Error("INVENTORY_ITEM_NOT_MAPPED")};
-  try{
-    await vpsSetMinimum({site,itemId:ids.itemId,locationId:ids.locationId,minimum:Math.max(0,Number(minimum)||0),note});
-    await syncInventoryNow(site);
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site,error:error.message});
-    return {ok:false,fallback:false,error};
-  }
-}
-
-export async function cloudAdjustQuantity({itemKey,locationCode,direction="in",amount=1,note=""}){
-  const site=siteFromLocationCode(locationCode);
-  if(!site || !canInventoryEdit()) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
-  if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  const ids=await resolveIds(itemKey,locationCode);
-  if(!ids)return {ok:false,fallback:false,error:new Error("INVENTORY_ITEM_NOT_MAPPED")};
-  try{
-    await vpsAdjustInventory({site,itemId:ids.itemId,locationId:ids.locationId,direction,amount:Math.max(1,Number(amount)||1),note});
-    await syncInventoryNow(site);
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site,error:error.message});
-    return {ok:false,fallback:false,error};
-  }
-}
-
-export async function cloudTransferInventory({itemKey,sourceLocationCode,destinationLocationCode,amount=1,note=""}){
-  const sourceSite=siteFromLocationCode(sourceLocationCode);
-  const destinationSite=siteFromLocationCode(destinationLocationCode);
-  if(!sourceSite || !destinationSite || !canInventoryEdit()) return {ok:false,fallback:false,error:new Error("INVENTORY_EDIT_NOT_ALLOWED")};
-  if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  const source=await resolveIds(itemKey,sourceLocationCode);
-  const destination=await resolveIds(itemKey,destinationLocationCode);
-  if(!source||!destination)return {ok:false,fallback:false,error:new Error("INVENTORY_ITEM_NOT_MAPPED")};
-  if(source.itemId!==destination.itemId) return {ok:false,fallback:false,error:new Error("INVENTORY_ITEM_MISMATCH")};
-  try{
-    await vpsTransferInventory({sourceSite,destinationSite,itemId:source.itemId,sourceLocationId:source.locationId,destinationLocationId:destination.locationId,amount:Math.max(1,Number(amount)||1),note});
-    await syncInventoryNow(sourceSite);
-    if(destinationSite!==sourceSite) await syncInventoryNow(destinationSite);
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site:sourceSite,error:error.message});
-    return {ok:false,fallback:false,error};
-  }
-}
-
-function branchLocationCode(site, zone) {
-  return inventoryLocationByUiKey(site, zone, "storage")?.code || "";
-}
-
-function branchWorkLocationCode(site, area) {
-  return inventoryWorkLocation(site, area)?.code || "";
-}
-
-function centralLocationCode(zone) {
-  return inventoryLocationByUiKey("central", zone, "storage")?.code || "";
-}
-
-export { branchLocationCode, branchWorkLocationCode };
-
-export async function cloudSyncBranchCatalogItem({site,stockKey,zh,vi,unit="個",workArea="",storageOnly=false,locations=[]}){
-  if(!canManageBranchCatalog(site)) return {ok:false,fallback:false,error:new Error("INVENTORY_CATALOG_NOT_ALLOWED")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  const key=`${site}:${stockKey}`;
-  const payload={
-    site,
-    item:{
-      key,
-      catalog_key:catalogKey(zh),
-      zh,
-      vi:vi||zh,
-      unit:unit||"個",
-      work_area:workArea||WORK_AREAS[0]?.id||"",
-      storage_only:Boolean(storageOnly),
-      locations:(locations||[]).map((entry)=>({
-        code:branchLocationCode(site,entry.zone||entry.code),
-        quantity:Math.max(0,Number(entry.quantity)||0),
-        minimum:Math.max(0,Number(entry.minimum)||0),
-      })).filter((entry)=>entry.code),
-    },
+  return {
+    item: cache.itemsByKey.get(itemKey),
+    location,
   };
-  try{
-    await vpsSyncCatalog(payload);
-    await syncInventoryNow(site,{reloadBranch:false});
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site,error:error.message});
-    return {ok:false,fallback:false,error};
-  }
 }
 
-export async function cloudArchiveBranchItem({site,stockKey}){
-  if(!canManageBranchCatalog(site)) return {ok:false,fallback:false,error:new Error("INVENTORY_CATALOG_NOT_ALLOWED")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  try{
-    await vpsArchiveCatalogItem({site,itemKey:`${site}:${stockKey}`});
-    await syncInventoryNow(site,{reloadBranch:false});
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site,error:error.message});
-    return {ok:false,fallback:false,error};
+export async function cloudAdjustQuantity({
+  itemKey,
+  locationCode,
+  direction,
+  amount,
+  note = "",
+}) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
+  const resolved = await resolveIds(itemKey, locationCode);
+  if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  const value = Math.max(0, Number(amount) || 0);
+  if (!value) return { ok: false, fallback: false };
+  try {
+    await vpsAdjustInventory({
+      itemId: resolved.item.id,
+      locationId: resolved.location.id,
+      direction,
+      amount: value,
+      note,
+    });
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "adjust" });
+    return { ok: false, fallback: false, error };
   }
+  await syncInventoryNow(resolved.location.site, { reloadBranch: false });
+  return { ok: true };
 }
 
-export async function cloudSyncCentralCatalog(items){
-  if(!canManageCentralCatalog()) return {ok:false,fallback:false,error:new Error("INVENTORY_CATALOG_NOT_ALLOWED")};
-  if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
-  try{
-    await vpsSyncCatalog({site:"central",items:buildCentralCatalog(items)});
-    await syncInventoryNow("central");
-    return {ok:true,fallback:false};
-  }catch(error){
-    dispatchStatus("error",{site:"central",error:error.message});
-    return {ok:false,fallback:false,error};
+export async function cloudSetQuantity({
+  itemKey,
+  locationCode,
+  quantity,
+  note = "盤點調整 / Điều chỉnh kiểm kê",
+  sync = true,
+  allowInventoryEditor = false,
+}) {
+  void allowInventoryEditor;
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
+  const resolved = await resolveIds(itemKey, locationCode);
+  if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  try {
+    await vpsSetQuantity({
+      itemId: resolved.item.id,
+      locationId: resolved.location.id,
+      quantity: Math.max(0, Number(quantity) || 0),
+      note,
+    });
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "set-quantity" });
+    return { ok: false, fallback: false, error };
   }
+  if (sync) await syncInventoryNow(resolved.location.site, { reloadBranch: false });
+  return { ok: true };
 }
 
-export async function getCloudInventoryHistory(site,{limit=250}={}){
-  if(!(await verifyMigration()) || !hasInventoryPermission("view"))return [];
-  try{
-    const result=await vpsInventoryHistory(site,{limit});
-    return Array.isArray(result?.transactions)?result.transactions:[];
-  }catch{return [];}
+export async function cloudSetMinimum({
+  itemKey,
+  locationCode,
+  minimum,
+  sync = true,
+}) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
+  const resolved = await resolveIds(itemKey, locationCode);
+  if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  try {
+    await vpsSetMinimum({
+      itemId: resolved.item.id,
+      locationId: resolved.location.id,
+      minimum: Math.max(0, Number(minimum) || 0),
+    });
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "set-minimum" });
+    return { ok: false, fallback: false, error };
+  }
+  if (sync) await syncInventoryNow(resolved.location.site, { reloadBranch: false });
+  return { ok: true };
 }
 
-function startPolling(){
-  if(polling || !isInventoryBackendConfigured())return;
-  polling=window.setInterval(()=>{
-    const site=currentSite();
-    if(document.visibilityState==="visible" && site) void syncInventoryNow(site);
-  },POLL_MS);
+export async function cloudTransferInventory({
+  itemKey,
+  sourceLocationCode,
+  destinationLocationCode,
+  amount,
+  note = "庫存轉撥 / Chuyển kho",
+}) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
+
+  const source = await resolveIds(itemKey, sourceLocationCode);
+  const destination = await resolveIds(itemKey, destinationLocationCode);
+  if (!source.item || !source.location || !destination.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+
+  const value = Math.max(0, Number(amount) || 0);
+  if (!value) return { ok: false, fallback: false };
+
+  try {
+    await vpsTransferInventory({
+      itemId: source.item.id,
+      sourceLocationId: source.location.id,
+      destinationLocationId: destination.location.id,
+      amount: value,
+      note,
+    });
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "transfer" });
+    return { ok: false, fallback: false, error };
+  }
+
+  await syncInventoryNow(source.location.site, { reloadBranch: false });
+  return { ok: true };
 }
 
-async function handleAuthSynced(event){
-  const s=event?.detail?.session || session();
-  const userId=String(s?.id||"");
-  if(!userId){
-    bootedUserId="";
-    lastSite="";
-    return;
+export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
+  const site = "fuxing";
+  const rows = await fetchSite(site);
+  const { record } = selectedBranchRecord();
+  if (!record) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+
+  const local = new Map();
+  for (const entry of record.inventory || []) {
+    const stockKey = entry.stockKey || stockKeyFor(entry);
+    const code = branchLocationCode(site,entry.zone);
+    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
   }
-  const switched=userId!==bootedUserId;
-  bootedUserId=userId;
-  if(switched){
-    migrationAvailable=null;
-    migrationCheckedAt=0;
-    replaceInventorySites([]);
+  for (const entry of record.workInventory || []) {
+    const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
+    const code = branchWorkLocationCode(site,entry.workArea);
+    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
   }
-  try{
-    await ensureSiteRegistry({ force:switched });
-    const site=currentSite();
-    if(!site)return;
-    if(switched || site!==lastSite){
-      lastSite=site;
-      await syncInventoryNow(site);
+
+  const changes = [];
+  for (const row of rows) {
+    const key = `${row.item.item_key}|${row.location.code}`;
+    if (!local.has(key)) continue;
+    const target = local.get(key);
+    const current = Number(row.quantity) || 0;
+    if (target === current) continue;
+    changes.push({
+      itemId: row.item.id,
+      locationId: row.location.id,
+      direction: target > current ? "in" : "out",
+      amount: Math.abs(target - current),
+    });
+  }
+
+  if (!changes.length) return { ok: true, changed: 0 };
+
+  for (const change of changes) {
+    try {
+      await vpsAdjustInventory({
+        itemId: change.itemId,
+        locationId: change.locationId,
+        direction: change.direction,
+        amount: change.amount,
+        note,
+      });
+    } catch (error) {
+      dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
+      await syncInventoryNow(site, { reloadBranch: false });
+      return { ok: false, fallback: false, error };
     }
-    startPolling();
-  }catch(error){
-    dispatchStatus("error",{error:error?.message||String(error),stage:"auth-sync"});
-    scheduleAuthSyncRetry(currentSite());
+  }
+
+  await syncInventoryNow(site, { reloadBranch: false });
+  return { ok: true, changed: changes.length };
+}
+
+export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite()) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
+
+  const catalog = buildBranchCatalog(site);
+  const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
+  if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  try {
+    await vpsSyncCatalog(item);
+    await syncInventoryNow(site, { reloadBranch: false });
+    return { ok: true };
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
+    return { ok: false, fallback: false, error };
   }
 }
 
-window.addEventListener("shitu:auth-synced",(event)=>{ void handleAuthSynced(event); });
-window.addEventListener("shitu:vps-auth-ready",()=>{ void handleAuthSynced(); });
-window.addEventListener("shitu:active-site-changed",(event)=>{
-  const site=event.detail?.site||currentSite();
-  if(site){
-    lastSite=site;
-    void syncInventoryNow(site);
+export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, [])) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canManageCentralCatalog()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  const catalog = buildCentralCatalog(items);
+  const item = catalog.find((entry) => entry.key === itemKey);
+  if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  try {
+    await vpsSyncCatalog(item);
+    await syncInventoryNow("central", { reloadBranch: false });
+    return { ok: true };
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "central-catalog-sync" });
+    return { ok: false, fallback: false, error };
+  }
+}
+
+export async function cloudArchiveCentralItem(itemKey) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
+  if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
+  try {
+    const data = await vpsArchiveCatalogItem(itemKey);
+    await syncInventoryNow("central", { reloadBranch: false });
+    return { ok: Boolean(data?.archived), fallback: false };
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "central-catalog-archive" });
+    return { ok: false, fallback: false, error };
+  }
+}
+
+export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
+  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
+  if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
+
+  const itemKey = branchItemKey(site,stockKey);
+  try {
+    const data = await vpsArchiveCatalogItem(itemKey);
+    await syncInventoryNow(site, { reloadBranch: false });
+    return { ok: Boolean(data?.archived), fallback: false };
+  } catch (error) {
+    dispatchStatus("error", { error: error.message, stage: "catalog-archive" });
+    return { ok: false, fallback: false, error };
+  }
+}
+
+export function cloudSyncFuxingCatalogItem(stockKey) {
+  return cloudSyncBranchCatalogItem(stockKey,"fuxing");
+}
+
+export function cloudArchiveFuxingItem(stockKey) {
+  return cloudArchiveBranchItem(stockKey,"fuxing");
+}
+
+export function branchLocationCode(site, zone) {
+  return inventoryLocationByUiKey(site,zone,"storage")?.code || "";
+}
+
+export function branchWorkLocationCode(site, area) {
+  return inventoryWorkLocation(site,area)?.code || "";
+}
+
+export function branchItemKey(site, stockKey) {
+  return site && stockKey ? `${site}:${stockKey}` : "";
+}
+
+export function fuxingLocationCode(zone) {
+  return branchLocationCode("fuxing",zone);
+}
+
+export function fuxingWorkLocationCode(area) {
+  return branchWorkLocationCode("fuxing",area);
+}
+
+export function centralLocationCode(zone) {
+  return inventoryLocationByUiKey("central",zone,"storage")?.code || "";
+}
+
+export function fuxingItemKey(stockKey) {
+  return branchItemKey("fuxing",stockKey);
+}
+
+export function centralItemKey(id) {
+  return id ? `central:${id}` : "";
+}
+
+export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
+  if (!(await verifyMigration()) || role() !== "admin") return [];
+
+  try {
+    const [historyResult, rows] = await Promise.all([
+      vpsInventoryHistory(site, { limit }),
+      fetchSite(site),
+    ]);
+    const itemMap = new Map(rows.map((row) => [row.item.id, row.item]));
+    const locationMap = new Map(rows.map((row) => [row.location.id, row.location]));
+    const tx = historyResult?.transactions || [];
+
+    return tx.map((entry) => {
+      const locationId = entry.destination_location_id || entry.source_location_id || "";
+      const meta = entry.metadata || {};
+      const before = meta.before_quantity ?? meta.source_before ?? meta.destination_before ?? "";
+      const after = meta.after_quantity ?? meta.source_after ?? meta.destination_after ?? "";
+      return {
+        ...entry,
+        location_id: locationId,
+        direction: entry.action || "",
+        before_quantity: before,
+        after_quantity: after,
+        actor_id: entry.actor_user_id,
+        item: itemMap.get(entry.item_id),
+        location: locationMap.get(locationId),
+        actor: entry.actor_username ? {
+          id: entry.actor_user_id,
+          username: entry.actor_username,
+          display_name: entry.actor_username,
+        } : null,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function subscribeRealtime(site) {
+  if (!(await verifyMigration()) || !site) return;
+  lastSite = site;
+}
+
+async function boot() {
+  if (document.documentElement.dataset.vpsAuthReady !== "true") return;
+  const s = session();
+  if (!isInventoryBackendConfigured() || !s) return;
+  if (bootedUserId === s.id && polling) return;
+  if (!(await verifyMigration())) return;
+  await ensureSiteRegistry();
+  bootedUserId = s.id || "";
+
+  const site = currentSite();
+  if (site) {
+    await syncInventoryNow(site, { reloadBranch: false });
+    await subscribeRealtime(site);
+  }
+
+  polling = window.setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    const nextSite = currentSite();
+    if (!nextSite) return;
+    if (nextSite !== lastSite) void subscribeRealtime(nextSite);
+    void syncInventoryNow(nextSite);
+  }, POLL_MS);
+}
+
+window.addEventListener("shitu:auth-synced", () => { void boot(); });
+window.addEventListener("shitu:vps-auth-ready", () => { void boot(); });
+window.addEventListener("focus", () => {
+  if (document.documentElement.dataset.vpsAuthReady === "true") void syncInventoryNow(currentSite());
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && document.documentElement.dataset.vpsAuthReady === "true") {
+    void syncInventoryNow(currentSite());
   }
 });
-window.addEventListener("focus",()=>{
-  const site=currentSite();
-  if(site) void syncInventoryNow(site);
+window.addEventListener("hashchange", () => {
+  const site = currentSite();
+  if (site && site !== lastSite) void subscribeRealtime(site);
+  setTimeout(() => { void syncInventoryNow(site); }, 80);
 });
-document.addEventListener("visibilitychange",()=>{
-  if(document.visibilityState==="visible"){
-    const site=currentSite();
-    if(site) void syncInventoryNow(site);
-  }
+window.addEventListener("shitu:central-stock-ready", (event) => {
+  void event;
 });
 
-if(document.documentElement.dataset.vpsAuthReady==="true"){
-  void handleAuthSynced();
-}
+if (document.documentElement.dataset.vpsAuthReady === "true") void boot();
