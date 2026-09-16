@@ -1,0 +1,113 @@
+name: Master Data and Admin Panel Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "admin.html"
+      - "src/admin-panel.js"
+      - "src/admin-panel.css"
+      - "tests/admin-panel-static-regression.mjs"
+      - "vps/database/**"
+      - "vps/backend/src/admin-routes.mjs"
+      - "vps/backend/src/master-data-routes.mjs"
+      - "vps/backend/scripts/master-data-regression-client.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "docs/spec-deltas/2026-09-16-master-data-admin-panel.md"
+      - ".github/workflows/master-data-admin-regression.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "admin.html"
+      - "src/admin-panel.js"
+      - "src/admin-panel.css"
+      - "tests/admin-panel-static-regression.mjs"
+      - "vps/database/**"
+      - "vps/backend/src/admin-routes.mjs"
+      - "vps/backend/src/master-data-routes.mjs"
+      - "vps/backend/scripts/master-data-regression-client.mjs"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "docs/spec-deltas/2026-09-16-master-data-admin-panel.md"
+      - ".github/workflows/master-data-admin-regression.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: master-data-admin-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  master-data-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend packages
+        run: npm ci --prefix vps/backend
+
+      - name: Validate master-data JavaScript
+        run: |
+          node --check src/admin-panel.js
+          node --check tests/admin-panel-static-regression.mjs
+          node --check vps/backend/src/master-data-routes.mjs
+          node --check vps/backend/scripts/master-data-regression-client.mjs
+          node --check vps/backend/scripts/regression-setup.mjs
+
+      - name: Admin Panel static contract regression
+        run: node tests/admin-panel-static-regression.mjs
+
+      - name: Prepare isolated regression database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-master-data-api.log 2>&1 &
+          echo $! >/tmp/kitchen-master-data-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-master-data-api.log
+          exit 1
+
+      - name: Master data API and permission regression
+        run: node vps/backend/scripts/master-data-regression-client.mjs
+
+      - name: Dump API log on failure
+        if: failure()
+        run: cat /tmp/kitchen-master-data-api.log 2>/dev/null || true
