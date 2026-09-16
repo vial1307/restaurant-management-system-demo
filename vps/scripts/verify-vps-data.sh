@@ -23,6 +23,7 @@ select
   (select count(*) from public.inventory_transactions) as transactions,
   (select count(*) from public.inventory_receive_defaults) as receive_defaults,
   (select count(*) from public.business_state) as business_state_sites,
+  (select count(*) from public.work_areas where active=true) as active_work_areas,
   (select max(version) from public.schema_migrations) as schema_version;
 "
 
@@ -92,6 +93,49 @@ check_positive "inventory stock rows exist" "select count(*) from public.invento
 check_positive "Fuxing locations exist" "select count(*) from public.inventory_locations where site='fuxing' and active=true"
 check_positive "Yongji locations exist" "select count(*) from public.inventory_locations where site='yongji' and active=true"
 check_positive "Central locations exist" "select count(*) from public.inventory_locations where site='central' and active=true"
+check_positive "operational work areas exist" "select count(*) from public.work_areas where active=true"
+
+check_zero "missing canonical operational locations" "
+  with expected(code) as (
+    values
+      ('central-freezer'),('central-fridge'),('central-four-door'),('central-chest'),('central-work-use'),
+      ('fuxing-large-freezer'),('fuxing-large-fridge'),('fuxing-four-door'),('fuxing-kitchen'),
+      ('fuxing-work-noodles'),('fuxing-work-soup'),('fuxing-work-seafood'),('fuxing-work-meat'),
+      ('yongji-large-freezer'),('yongji-large-fridge'),('yongji-four-door'),('yongji-kitchen'),
+      ('yongji-work-noodles'),('yongji-work-soup'),('yongji-work-seafood'),('yongji-work-meat')
+  )
+  select count(*) from expected e
+  left join public.inventory_locations l on l.code=e.code and l.active=true
+  where l.id is null
+"
+check_zero "missing canonical work areas" "
+  with expected(site_code,code) as (
+    values
+      ('central','noodles'),('central','soup'),('central','seafood'),('central','meat'),
+      ('fuxing','noodles'),('fuxing','soup'),('fuxing','seafood'),('fuxing','meat'),
+      ('yongji','noodles'),('yongji','soup'),('yongji','seafood'),('yongji','meat')
+  )
+  select count(*) from expected e
+  left join public.work_areas w
+    on w.site_code=e.site_code and w.code=e.code and w.active=true
+  where w.code is null
+"
+check_zero "active inventory items missing active work-area master data" "
+  select count(*)
+  from public.inventory_items i
+  where i.active=true
+    and split_part(i.item_key,':',1) in ('central','fuxing','yongji')
+    and not exists (
+      select 1 from public.work_areas w
+      where w.site_code=split_part(i.item_key,':',1)
+        and w.code=i.work_area
+        and w.active=true
+    )
+"
+check_zero "invalid work-area master data labels" "
+  select count(*) from public.work_areas
+  where trim(name_vi)='' or trim(name_zh_tw)=''
+"
 
 check_zero "negative inventory quantities" "select count(*) from public.inventory_stock where quantity<0"
 check_zero "negative minimum quantities" "select count(*) from public.inventory_stock where minimum_quantity<0"
@@ -145,6 +189,18 @@ check_positive "primary admin yangchuadmin restored" "
   from public.app_users
   where lower(username)='yangchuadmin' and role='admin' and location='all' and active=true
 "
+check_positive "admin master-data capability grant exists" "
+  select count(*) from public.role_capabilities
+  where role_code='admin' and capability_key='system.master_data.manage' and allowed=true
+"
+check_positive "manager location-management grant exists" "
+  select count(*) from public.role_capabilities
+  where role_code='manager' and capability_key='inventory.locations.manage' and allowed=true
+"
+check_positive "manager work-area-management grant exists" "
+  select count(*) from public.role_capabilities
+  where role_code='manager' and capability_key='operations.work_areas.manage' and allowed=true
+"
 
 warn_nonzero "stock rows whose item key site differs from location site" "
   select count(*)
@@ -165,8 +221,8 @@ warn_nonzero "duplicate active catalog keys inside the same site" "
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "008" ]]; then
-  echo "ERROR: schema version ${schema} is older than 008"
+if [[ "${schema}" < "015" ]]; then
+  echo "ERROR: schema version ${schema} is older than 015"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
