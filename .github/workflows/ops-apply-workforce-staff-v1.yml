@@ -56,13 +56,13 @@ jobs:
           set -euo pipefail
           cd /opt/kitchen-os
           echo "Pre-apply verify..."
-          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs
+          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs </dev/null
           echo "Mandatory database backup..."
           bash repo/vps/scripts/backup.sh
           echo "Apply Staff v1..."
-          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs --apply
+          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs --apply </dev/null
           echo "Post-apply verify..."
-          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs
+          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs </dev/null
           REMOTE
 
       - name: Verify production health and release
