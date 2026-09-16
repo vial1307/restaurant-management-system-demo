@@ -1,4 +1,4 @@
-import { apiRequest, vpsHealth, vpsListUsers, vpsMe } from "./vps-api.js";
+import { apiRequest, vpsHealth, vpsInventorySites, vpsListUsers, vpsMe } from "./vps-api.js";
 
 const root = document.querySelector("#admin-app");
 const state = {
@@ -6,19 +6,13 @@ const state = {
   health: null,
   overview: null,
   users: [],
-  site: "fuxing",
+  sites: [],
+  site: "",
   master: null,
   loading: true,
   saving: false,
   error: "",
   success: "",
-};
-
-const SITES = ["central", "fuxing", "yongji"];
-const SITE_LABELS = {
-  central: { vi: "Bếp trung tâm", zh: "央廚" },
-  fuxing: { vi: "Chi nhánh Fuxing", zh: "復興店" },
-  yongji: { vi: "Chi nhánh Yongji", zh: "永吉店" },
 };
 
 const COPY = {
@@ -73,7 +67,7 @@ const COPY = {
     empty: "Chưa có dữ liệu.",
     healthOk: "Hoạt động bình thường",
     healthBad: "Có lỗi",
-    allDataNote: "Admin có thể quản trị Central / Fuxing / Yongji. Manager chi nhánh chỉ được API cho phép sửa site của mình.",
+    allDataNote: "Các site hiển thị ở đây được đọc trực tiếp từ PostgreSQL và quyền truy cập của tài khoản.",
   },
   "zh-TW": {
     title: "系統管理後台",
@@ -126,7 +120,7 @@ const COPY = {
     empty: "目前沒有資料。",
     healthOk: "運作正常",
     healthBad: "異常",
-    allDataNote: "Admin 可管理央廚 / 復興 / 永吉；分店 Manager 的寫入權限仍由後端限制在所屬據點。",
+    allDataNote: "此處據點直接來自 PostgreSQL，並依目前帳號權限顯示。",
   },
 };
 
@@ -147,9 +141,12 @@ function esc(value) {
     .replaceAll("'", "&#039;");
 }
 
-function siteLabel(site) {
-  const row = SITE_LABELS[site] || { vi: site, zh: site };
-  return locale() === "zh-TW" ? row.zh : `${row.vi} · ${row.zh}`;
+function siteLabel(siteCode) {
+  const row = state.sites.find((site) => site.code === siteCode);
+  if (!row) return siteCode;
+  return locale() === "zh-TW"
+    ? (row.name_zh_tw || row.code)
+    : `${row.name_vi || row.code} · ${row.name_zh_tw || row.code}`;
 }
 
 function capability(name) {
@@ -206,7 +203,7 @@ function renderOverviewCards() {
   const c = state.overview?.counts || {};
   const rows = [
     [t("users"), c.active_users ?? state.users.length ?? 0],
-    [t("sites"), c.active_sites ?? 0],
+    [t("sites"), c.active_sites ?? state.sites.length ?? 0],
     [t("locations"), c.active_locations ?? 0],
     [t("workAreas"), c.active_work_areas ?? 0],
     [t("items"), c.active_inventory_items ?? 0],
@@ -286,10 +283,10 @@ function render() {
     ${renderOverviewCards()}
     ${renderSystemCard()}
     <section class="admin-layout">
-      <aside class="admin-sidebar">${SITES.map((site) => `<button type="button" class="admin-site-button ${state.site === site ? "active" : ""}" data-site="${site}">${esc(siteLabel(site))}</button>`).join("")}</aside>
+      <aside class="admin-sidebar">${state.sites.map((site) => `<button type="button" class="admin-site-button ${state.site === site.code ? "active" : ""}" data-site="${esc(site.code)}">${esc(siteLabel(site.code))}</button>`).join("")}</aside>
       <main>
         <article class="admin-card">
-          <div class="admin-card-head"><div><h2>${esc(t("masterData"))} · ${esc(siteLabel(state.site))}</h2><p>${esc(t("masterSubtitle"))}</p></div><span class="admin-footnote">${esc(t("allDataNote"))}</span></div>
+          <div class="admin-card-head"><div><h2>${esc(t("masterData"))}${state.site ? ` · ${esc(siteLabel(state.site))}` : ""}</h2><p>${esc(t("masterSubtitle"))}</p></div><span class="admin-footnote">${esc(t("allDataNote"))}</span></div>
         </article>
         <article class="admin-card">
           <div class="admin-card-head"><div><h2>${esc(t("locations"))}</h2><p>${esc(state.master?.permissions?.manageLocations ? t("saved") : t("allDataNote"))}</p></div>${state.master?.permissions?.manageLocations ? `<button class="admin-btn primary" type="button" data-add-location>＋ ${esc(t("addLocation"))}</button>` : ""}</div>
@@ -310,8 +307,16 @@ async function loadAll({ keepMessage = false } = {}) {
     state.success = "";
   }
   try {
+    const siteResult = await vpsInventorySites();
+    state.sites = Array.isArray(siteResult?.sites) ? siteResult.sites : [];
+    if (!state.sites.some((site) => site.code === state.site)) {
+      state.site = state.sites[0]?.code || "";
+    }
     const [health, overview, users, master] = await Promise.all([
-      vpsHealth(), adminOverview(), vpsListUsers(), masterData(state.site),
+      vpsHealth(),
+      adminOverview(),
+      vpsListUsers(),
+      state.site ? masterData(state.site) : Promise.resolve(null),
     ]);
     state.health = health;
     state.overview = overview;
@@ -335,7 +340,7 @@ function modalShell(title, body) {
 
 function openLocationEditor(id = "") {
   const row = id ? state.master?.locations?.find((entry) => entry.id === id) : null;
-  const sitePrefix = `${state.site}-`;
+  const sitePrefix = state.site ? `${state.site}-` : "";
   const host = modalShell(t("locationEditor"), `<form data-location-form>
     <div class="admin-form-grid">
       <label class="admin-field wide"><span>${esc(t("code"))}</span><input name="code" required pattern="[a-z][a-z0-9._-]{1,39}" value="${esc(row?.code || sitePrefix)}" ${row ? "readonly" : ""}><small class="admin-footnote">${esc(t("createCodeHint"))}</small></label>
