@@ -168,7 +168,7 @@ try {
     body:{ action:"archive", site:"fuxing", code:"bar" },
   });
   assert.equal(archiveWorkArea.response.status, 200, JSON.stringify(archiveWorkArea.data));
-  assert.equal(archiveWorkArea.data.archived, true);
+  assert.equal(archiveWorkArea.data.workArea.active, false);
 
   const archiveLocation = await request("/api/master-data/locations", {
     method:"POST",
@@ -176,7 +176,7 @@ try {
     body:{ action:"archive", site:"fuxing", id:createdLocation.data.location.id },
   });
   assert.equal(archiveLocation.response.status, 200, JSON.stringify(archiveLocation.data));
-  assert.equal(archiveLocation.data.archived, true);
+  assert.equal(archiveLocation.data.location.active, false);
 
   console.log("MASTER_DATA_REGRESSION_OK");
 } finally {
