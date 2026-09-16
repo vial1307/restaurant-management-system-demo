@@ -198,12 +198,20 @@ try {
   employeePage.on("pageerror", (error) => employeeErrors.push(error.message));
   await browserLogin(employeePage, "employeefx");
   await selectPayrollMonth(employeePage, MONTH, {
-    entryId:ENTRY_ID,
-    approvalStatus:"approved",
     month:MONTH,
     periodStatus:"locked",
   });
   const employeePanel = employeePage.locator(`[data-workforce-approved-payroll][data-month="${MONTH}"]`);
+  const coworkerVisible = await employeePage.evaluate(({ stateKey, entryId }) => {
+    try {
+      const state = JSON.parse(localStorage.getItem(stateKey) || "null");
+      return (state?.operations?.attendance || []).some((entry) => String(entry?.id || "") === entryId);
+    } catch {
+      return true;
+    }
+  }, { stateKey:BUSINESS_STATE_KEY, entryId:ENTRY_ID });
+  assert.equal(coworkerVisible, false, "employee must not receive another staff member's attendance row");
+  assert.equal((await employeePanel.locator(".workforce-approval-stats .stat-card.stat-green .stat-value").innerText()).trim(), "0", "employee approved shift summary must contain only visible own attendance");
   assert.equal(await employeePanel.locator('[data-workforce-lock-period]').count(), 0, "employee must not receive payroll lock control");
   assert.equal(await employeePanel.locator('[data-workforce-reopen-form]').count(), 0, "employee must not receive payroll reopen control");
   assert.deepEqual(employeeErrors, [], `employee workforce payroll page errors: ${employeeErrors.join(" | ")}`);
