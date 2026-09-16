@@ -10,13 +10,18 @@ const body = match[0];
 
 assert.match(
   body,
-  /const inventory = Array\.isArray\(record\?\.inventory\)\s*\?\s*record\.inventory\s*:\s*DEFAULT_ITEMS;/,
-  "branch catalog must treat every inventory array, including [], as authoritative"
+  /const inventory = Array\.isArray\(record\?\.inventory\)\s*\?\s*record\.inventory\s*:\s*\[\];/,
+  "branch catalog must treat every inventory array, including [], as authoritative and must not synthesize DB master data from code"
+);
+assert.doesNotMatch(
+  body,
+  /\bDEFAULT_ITEMS\b/,
+  "production branch catalog must never fall back to DEFAULT_ITEMS"
 );
 assert.doesNotMatch(
   body,
   /Array\.isArray\(record\?\.inventory\)\s*&&\s*record\.inventory\.length/,
-  "branch catalog must not replace an authoritative empty inventory with DEFAULT_ITEMS"
+  "branch catalog must not replace an authoritative empty inventory with a fallback catalog"
 );
 
 console.log("BRANCH_EMPTY_CATALOG_FALLBACK_CONTRACT_OK");
