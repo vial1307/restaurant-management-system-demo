@@ -2,10 +2,9 @@ import { vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
 import {
   getInventoryReceiveDefaults,
   getSiteInventoryRows,
-  getSiteLocations,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { inventorySites } from "./inventory-master-data.js";
+import { inventoryLocations, inventorySites } from "./inventory-master-data.js";
 
 // Compatibility bridge for older UI modules: the array identity stays stable,
 // but its values are refreshed from the PostgreSQL-backed site registry.
@@ -28,14 +27,12 @@ export function siteLabel(site, language = "vi") {
 }
 
 export async function loadSiteOperationData(site, { includeDestinations = false } = {}) {
-  // Fetch the authoritative inventory snapshot first. That call hydrates the
-  // database-backed site/master-data registry, so the location reads below are
-  // served from the same snapshot instead of issuing duplicate master-data GETs.
+  // getSiteInventoryRows fetches inventory + master data together and hydrates
+  // the runtime registry. Reuse that exact DB snapshot instead of issuing two
+  // extra /api/master-data requests for storage/work locations.
   const rows = await getSiteInventoryRows(site);
-  const [locations, workLocations] = await Promise.all([
-    getSiteLocations(site, "storage"),
-    getSiteLocations(site, "work"),
-  ]);
+  const locations = inventoryLocations(site, "storage");
+  const workLocations = inventoryLocations(site, "work");
   const destinationSites = inventorySiteOptions().map((entry) => entry.id).filter((target) => target !== site);
   const destinationMetadata = includeDestinations
     ? await vpsInventoryDestinations(site, destinationSites)
