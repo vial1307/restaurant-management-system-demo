@@ -13,7 +13,11 @@ assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/, "
 assert.match(workflow, /github\.event\.workflow_run\.head_branch == 'main'/, "automatic schedule verification must only follow main deployments");
 assert.match(workflow, /MODE: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.mode \|\| 'verify' \}\}/, "automatic schedule maintenance must default to verify-only");
 assert.match(workflow, /GITHUB_EVENT_NAME" != "workflow_dispatch" && "\$MODE" != "verify"/, "automatic events must be prevented from applying data");
-assert.match(workflow, /if \[\[ "\$MODE" == "apply" \]\]; then[\s\S]*bash repo\/vps\/scripts\/backup\.sh[\s\S]*workforce-schedule-backfill\.mjs --apply/, "manual apply must create a database backup before schedule writes");
+assert.match(workflow, /if \[\[ "\$MODE" == "apply" \]\]; then[\s\S]*bash repo\/vps\/scripts\/backup\.sh <\/dev\/null[\s\S]*workforce-schedule-backfill\.mjs --apply \$SITE_ARG <\/dev\/null/, "manual apply must create a database backup before schedule writes and close remote stdin");
+assert.doesNotMatch(workflow, /bash -s["']?\s*<<['"]?REMOTE/, "production maintenance must not stream multiple commands through an SSH heredoc");
+assert.match(workflow, /SSH=\(ssh[\s\S]*deploy@82\.47\.180\.185\)/, "production maintenance must define an explicit SSH command array");
+assert.match(workflow, /"\$\{SSH\[@\]\}" "cd '\$APP_DIR' && bash repo\/vps\/scripts\/backup\.sh <\/dev\/null"/, "backup must run as an independent SSH invocation");
+assert.match(workflow, /"\$\{SSH\[@\]\}" "cd '\$APP_DIR' && docker compose --env-file \.env exec -T app node scripts\/workforce-schedule-backfill\.mjs --apply \$SITE_ARG <\/dev\/null"/, "apply must run as an independent SSH invocation after backup");
 assert.match(workflow, /test "\$ACTUAL_RELEASE" = "\$REMOTE_RELEASE"/, "production release must match the VPS repository HEAD");
 assert.match(workflow, /test "\$LOCAL_SCRIPT_SHA" = "\$REMOTE_SCRIPT_SHA"/, "local and VPS schedule backfill scripts must match");
 assert.match(workflow, /test "\$ACTUAL_RELEASE" = "\$EXPECTED_RELEASE"/, "workflow-run verification must pin the deployed commit");
