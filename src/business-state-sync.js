@@ -770,7 +770,7 @@ export function attachBusinessStateSync(store) {
   const resumeVisible = () => {
     if (document.visibilityState === "visible") saveThenReload();
   };
-  const liveRefreshTimer = window.setInterval(liveRefresh, LIVE_REFRESH_MS);
+  const liveRefreshTimer = setInterval(liveRefresh, LIVE_REFRESH_MS);
   window.addEventListener("shitu:auth-transition-preparing", captureAuthorizationRecovery);
   window.addEventListener("shitu:auth-synced", authReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
