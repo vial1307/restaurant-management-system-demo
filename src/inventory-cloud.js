@@ -4,6 +4,8 @@ import {
   vpsArchiveCatalogItem,
   vpsInventory,
   vpsInventoryHistory,
+  vpsInventorySites,
+  vpsMasterData,
   vpsReceiveDefaults,
   vpsSchemaVersion,
   vpsSetMinimum,
@@ -12,7 +14,21 @@ import {
   vpsSyncCatalog,
   vpsTransferInventory,
 } from "./vps-api.js";
-import { DEFAULT_ITEMS, STORAGE_KEY, stockKeyFor } from "./store.js";
+import { PRIMARY_ZONES, STORAGE_KEY, WORK_AREAS, ZONES, stockKeyFor } from "./store.js";
+import {
+  firstInventorySite,
+  inventoryLocationByCode,
+  inventoryLocationByUiKey,
+  inventoryLocationUiKey,
+  inventorySiteForLocationCode,
+  inventorySites,
+  inventoryUiGroups,
+  inventoryWorkLocation,
+  isBranchInventorySite,
+  isKnownInventorySite,
+  replaceInventoryMasterSnapshot,
+  replaceInventorySites,
+} from "./inventory-master-data.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
@@ -30,36 +46,6 @@ function isInventoryBackendConfigured() {
   return isVpsApiConfigured();
 }
 
-const FUXING_STORAGE_CODES = {
-  "large-freezer": "fuxing-large-freezer",
-  "large-fridge": "fuxing-large-fridge",
-  "four-door": "fuxing-four-door",
-  "kitchen": "fuxing-kitchen",
-};
-const FUXING_CODE_TO_ZONE = Object.fromEntries(
-  Object.entries(FUXING_STORAGE_CODES).map(([zone, code]) => [code, zone])
-);
-const YONGJI_STORAGE_CODES = {
-  "large-freezer": "yongji-large-freezer",
-  "large-fridge": "yongji-large-fridge",
-  "four-door": "yongji-four-door",
-  "kitchen": "yongji-kitchen",
-};
-const YONGJI_CODE_TO_ZONE = Object.fromEntries(
-  Object.entries(YONGJI_STORAGE_CODES).map(([zone, code]) => [code, zone])
-);
-const BRANCH_STORAGE_CODES = { fuxing: FUXING_STORAGE_CODES, yongji: YONGJI_STORAGE_CODES };
-const BRANCH_CODE_TO_ZONE = { fuxing: FUXING_CODE_TO_ZONE, yongji: YONGJI_CODE_TO_ZONE };
-const CENTRAL_ZONE_CODES = {
-  "央廚冷凍": "central-freezer",
-  "央廚4門": "central-four-door",
-  "央廚臥櫃": "central-chest",
-  "央廚冷藏": "central-fridge",
-};
-const CENTRAL_CODE_TO_ZONE = Object.fromEntries(
-  Object.entries(CENTRAL_ZONE_CODES).map(([zone, code]) => [code, zone])
-);
-
 let migrationAvailable = null;
 let migrationCheckedAt = 0;
 let polling = 0;
@@ -67,6 +53,7 @@ let authSyncRetryTimer = 0;
 let bootedUserId = "";
 let inventorySyncTail = Promise.resolve();
 let lastSite = "";
+let siteRegistryInFlight = null;
 const cache = {
   itemsByKey: new Map(),
   locationsByCode: new Map(),
@@ -105,6 +92,35 @@ function todayKey() {
   return `${y}-${m}-${day}`;
 }
 
+async function ensureSiteRegistry({ force = false } = {}) {
+  if (!force && inventorySites().length) return inventorySites();
+  if (siteRegistryInFlight) return siteRegistryInFlight;
+  let pending;
+  pending = vpsInventorySites()
+    .then((result) => replaceInventorySites(result?.sites || []))
+    .finally(() => {
+      if (siteRegistryInFlight === pending) siteRegistryInFlight = null;
+    });
+  siteRegistryInFlight = pending;
+  return pending;
+}
+
+function syncUiMasterData(site, snapshot) {
+  replaceInventoryMasterSnapshot(site, snapshot);
+  const groups = inventoryUiGroups(site);
+  ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
+    id:entry.id,
+    zh:entry.zh,
+    vi:entry.vi,
+    code:entry.code,
+    storageGroup:entry.storageGroup,
+  })));
+  WORK_AREAS.splice(0, WORK_AREAS.length, ...groups.workAreas);
+  PRIMARY_ZONES.splice(0, PRIMARY_ZONES.length, ...groups.storage
+    .filter((entry) => entry.storageGroup === "primary")
+    .map((entry) => entry.id));
+}
+
 export function isCurrentBranchInventoryDate() {
   const state = appState();
   const selectedDate = String(state?.selectedDate || "").trim();
@@ -124,7 +140,7 @@ export function canInventoryEdit() {
   if (inventoryCloudState() !== "ready") return false;
   if (globalThis.navigator?.onLine === false) return false;
   const site = currentSite();
-  return !["fuxing","yongji"].includes(site) || isCurrentBranchInventoryDate();
+  return !isBranchInventorySite(site) || isCurrentBranchInventoryDate();
 }
 
 export function canInventoryDraftCount() {
@@ -143,7 +159,7 @@ export function canManageCentralCatalog() {
 
 export function canViewBranchCatalogManagement(site = activeInventorySite()) {
   const s=session();
-  if (!hasInventoryPermission("edit") || !["fuxing","yongji"].includes(site)) return false;
+  if (!hasInventoryPermission("edit") || !isBranchInventorySite(site)) return false;
   // The inventory edit checkbox is the source of truth. A branch employee who
   // is explicitly granted edit access must receive the same operational and
   // catalogue entry points for their assigned site.
@@ -163,9 +179,9 @@ export function canManageReceiveDefault(site = activeInventorySite()) {
   const s = session();
   if (!s || !hasInventoryPermission("edit")) return false;
   const currentRole = role();
-  if (currentRole === "admin") return ["central","fuxing","yongji"].includes(site);
+  if (currentRole === "admin") return isKnownInventorySite(site);
   return currentRole === "manager"
-    && ["fuxing","yongji"].includes(site)
+    && isBranchInventorySite(site)
     && (s.location === site || s.location === "all");
 }
 
@@ -181,18 +197,15 @@ export function canDirectInventoryAdjust() {
 export function activeInventorySite() {
   const s = session();
   if (!s) return "";
-  if (["central","fuxing","yongji"].includes(s.location)) return s.location;
-  if (s.location === "all") {
-    const saved = localStorage.getItem(ACTIVE_SITE_KEY);
-    if (["central","fuxing","yongji"].includes(saved)) return saved;
-    return document.querySelector(".central-heading") ? "central" : "fuxing";
-  }
-  return "";
+  if (s.location !== "all") return String(s.location || "");
+  const saved = localStorage.getItem(ACTIVE_SITE_KEY) || "";
+  if (isKnownInventorySite(saved)) return saved;
+  return firstInventorySite();
 }
 
 export function setActiveInventorySite(site) {
   const s = session();
-  if (s?.location !== "all" || !["central","fuxing","yongji"].includes(site)) return false;
+  if (s?.location !== "all" || !isKnownInventorySite(site)) return false;
   localStorage.setItem(ACTIVE_SITE_KEY, site);
   window.dispatchEvent(new CustomEvent("shitu:active-site-changed", { detail:{ site } }));
   // A warehouse switch can keep the same #inventory route, so hashchange will
@@ -206,10 +219,7 @@ function currentSite() {
 }
 
 function siteFromLocationCode(code = "") {
-  const value = String(code);
-  if (value.startsWith("central-")) return "central";
-  if (value.startsWith("yongji-")) return "yongji";
-  return "fuxing";
+  return inventorySiteForLocationCode(code) || currentSite();
 }
 
 function dispatchStatus(status, detail = {}) {
@@ -266,7 +276,7 @@ function localReceiveDefaults() {
 
 function saveLocalReceiveDefault(site,catalogKeyValue,locationCode="") {
   const key=String(catalogKeyValue||"").trim();
-  if(!["central","fuxing","yongji"].includes(site) || !key) return;
+  if(!site || !key) return;
   const rows=localReceiveDefaults().filter((entry)=>!(entry.site===site&&entry.catalogKey===key));
   if(locationCode) rows.push({site,catalogKey:key,locationCode:String(locationCode),updatedAt:new Date().toISOString()});
   localStorage.setItem(RECEIVE_DEFAULT_KEY,JSON.stringify(rows.slice(-2000)));
@@ -292,7 +302,7 @@ async function fetchCloudReceiveDefaults(sites=[],catalogKeys=[]) {
 }
 
 export async function getInventoryReceiveDefaults({sites=[],catalogKeys=[]}={}) {
-  const wantedSites=(sites||[]).filter((site)=>["central","fuxing","yongji"].includes(site));
+  const wantedSites=(sites||[]).map(String).filter(Boolean);
   const wantedKeys=(catalogKeys||[]).map(String).filter(Boolean);
   if(inventoryCloudState()==="ready" && globalThis.navigator?.onLine!==false){
     try{
@@ -320,7 +330,7 @@ export async function getInventoryReceiveDefaults({sites=[],catalogKeys=[]}={}) 
 export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,locationCode=""}) {
   const key=String(catalogKeyValue||"").trim();
   const code=String(locationCode||"").trim();
-  if(!["central","fuxing","yongji"].includes(site)||!key) return {ok:false,fallback:false,error:new Error("INVALID_RECEIVE_DEFAULT")};
+  if(!site||!key) return {ok:false,fallback:false,error:new Error("INVALID_RECEIVE_DEFAULT")};
   if(!canManageReceiveDefault(site)) return {ok:false,fallback:false,error:new Error("RECEIVE_DEFAULT_MANAGER_REQUIRED")};
   if(globalThis.navigator?.onLine===false) return {ok:false,fallback:false,error:new Error("INVENTORY_OFFLINE")};
   if(!(await verifyMigration())) return {ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY")};
@@ -334,15 +344,12 @@ export async function cloudSetReceiveDefault({site,catalogKey:catalogKeyValue,lo
   }
 }
 
-function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
+function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {}) {
   const { record } = currentBranchRecord();
-  if (!record || !["fuxing","yongji"].includes(site)) return [];
-  const inventory = Array.isArray(record?.inventory)
-    ? record.inventory
-    : DEFAULT_ITEMS;
+  if (!record || !isBranchInventorySite(site)) return [];
+  const inventory = Array.isArray(record?.inventory) ? record.inventory : [];
   const work = Array.isArray(record?.workInventory) ? record.workInventory : [];
   const grouped = new Map();
-  const storageCodes = BRANCH_STORAGE_CODES[site];
 
   for (const entry of inventory) {
     const stockKey = entry.stockKey || stockKeyFor(entry);
@@ -353,7 +360,7 @@ function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
-        work_area: entry.workArea || "noodles",
+        work_area: entry.workArea || WORK_AREAS[0]?.id || "",
         storage_only: Boolean(entry.storageOnly),
         locations: [],
       });
@@ -365,7 +372,7 @@ function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
     item.unit = entry.unit || item.unit;
     item.work_area = entry.workArea || item.work_area;
     item.storage_only = Boolean(entry.storageOnly);
-    const code = storageCodes?.[entry.zone];
+    const code = branchLocationCode(site, entry.zone);
     if (code) {
       item.locations.push({
         code,
@@ -379,9 +386,11 @@ function buildBranchCatalog(site = "fuxing", { zeroQuantities = false } = {}) {
     const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
     const item = grouped.get(stockKey);
     if (!item) continue;
-    const area = entry.workArea || item.work_area || "noodles";
+    const area = entry.workArea || item.work_area || WORK_AREAS[0]?.id || "";
+    const code = branchWorkLocationCode(site, area);
+    if (!code) continue;
     item.locations.push({
-      code: `${site}-work-${area}`,
+      code,
       quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
       minimum: Math.max(0, Number(entry.minimum) || 0),
     });
@@ -403,13 +412,13 @@ function buildCentralCatalog(items) {
         zh:entry.zh || baseId,
         vi:entry.vi || entry.zh || baseId,
         unit:entry.unit || "個",
-        work_area:entry.workArea || entry.work_area || "noodles",
+        work_area:entry.workArea || entry.work_area || WORK_AREAS[0]?.id || "",
         storage_only:true,
         locations:[],
       });
     }
     const item=grouped.get(key);
-    const code=CENTRAL_ZONE_CODES[entry.zone];
+    const code=centralLocationCode(entry.zone);
     if(code && !item.locations.some((location)=>location.code===code)){
       item.locations.push({
         code,
@@ -482,6 +491,7 @@ async function verifyMigration({ force = false } = {}) {
 export async function refreshInventoryCloudState() {
   migrationAvailable = null;
   migrationCheckedAt = 0;
+  await ensureSiteRegistry({ force:true });
   return verifyMigration({ force: true });
 }
 
@@ -498,24 +508,42 @@ export async function bootstrapCentralInventory() {
 }
 
 async function fetchSite(site) {
-  if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
+  if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
 
-  const result = await vpsInventory(site);
-  const locations = Array.isArray(result?.locations) ? result.locations : null;
+  await ensureSiteRegistry();
+  const [result, master] = await Promise.all([
+    vpsInventory(site),
+    vpsMasterData(site),
+  ]);
+  syncUiMasterData(site, master || {});
+
+  const masterLocationByCode = new Map((master?.locations || []).map((location) => [location.code, location]));
+  const locations = Array.isArray(result?.locations)
+    ? result.locations.map((location) => ({
+        ...location,
+        ...(masterLocationByCode.get(location.code) || {}),
+        metadata:masterLocationByCode.get(location.code)?.metadata || location.metadata || {},
+      }))
+    : null;
   const stocks = Array.isArray(result?.stock) ? result.stock : null;
   const items = Array.isArray(result?.items) ? result.items : null;
 
   if (!locations || !stocks || !items) throw new Error("INVENTORY_SNAPSHOT_INVALID");
 
-  cache.locationsByCode.clear();
-  cache.itemsByKey.clear();
+  for (const [code, location] of [...cache.locationsByCode]) {
+    if (location?.site === site) cache.locationsByCode.delete(code);
+  }
+  for (const [key, item] of [...cache.itemsByKey]) {
+    if (String(item?.item_key || "").startsWith(`${site}:`)) cache.itemsByKey.delete(key);
+  }
+
+  for (const loc of locations) cache.locationsByCode.set(loc.code, loc);
+  for (const item of items) if (item.item_key) cache.itemsByKey.set(item.item_key, item);
 
   // A complete snapshot with no stock rows is authoritative: local mirrors
   // must be allowed to become empty. Non-empty stock requires valid master data.
   if (!stocks.length) return [];
   if (!locations.length || !items.length) throw new Error("INVENTORY_SNAPSHOT_INVALID");
-
-  for (const loc of locations) cache.locationsByCode.set(loc.code, loc);
 
   const catalogKeys=[...new Set(items.map((item)=>item.catalog_key).filter(Boolean))];
   let receiveDefaults=[];
@@ -524,7 +552,6 @@ async function fetchSite(site) {
   for(const item of items) item.receive_default_location_code=defaultByCatalog.get(item.catalog_key)||"";
 
   const itemMap = new Map(items.map((item) => [item.id, item]));
-  for (const item of items) if (item.item_key) cache.itemsByKey.set(item.item_key, item);
   const locMap = new Map(locations.map((loc) => [loc.id, loc]));
 
   const rows = stocks.map((stock) => ({
@@ -537,14 +564,18 @@ async function fetchSite(site) {
 }
 
 export async function getSiteInventoryRows(site = currentSite()) {
-  if (!["central","fuxing","yongji"].includes(site)) return [];
+  if (!site) return [];
+  await ensureSiteRegistry();
+  if (!isKnownInventorySite(site)) return [];
   return fetchSite(site);
 }
 
 export async function getSiteLocations(site = currentSite(), kind = "storage") {
-  if (!(await verifyMigration()) || !hasInventoryPermission("view")) return [];
-  const result = await vpsInventory(site);
-  const locations = result?.locations || [];
+  if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
+  await ensureSiteRegistry();
+  const master = await vpsMasterData(site);
+  syncUiMasterData(site, master || {});
+  const locations = master?.locations || [];
   return kind ? locations.filter((entry)=>entry.kind===kind) : locations;
 }
 
@@ -566,7 +597,7 @@ function applyCentral(rows) {
     }
     if (row.location.kind !== "storage") continue;
     const baseId = row.item.item_key.slice("central:".length);
-    const zone = CENTRAL_CODE_TO_ZONE[row.location.code];
+    const zone = inventoryLocationUiKey(row.location);
     if (!zone) continue;
     next.push({
       id:`${baseId}@${row.location.code}`,
@@ -576,7 +607,7 @@ function applyCentral(rows) {
       zh:row.item.name_zh_tw,
       vi:row.item.name_vi,
       unit:row.item.unit,
-      workArea:row.item.work_area || "noodles",
+      workArea:row.item.work_area || WORK_AREAS[0]?.id || "",
       zone,
       qty:Number(row.quantity)||0,
       minimum:Number(row.minimum_quantity)||0,
@@ -598,11 +629,10 @@ function applyCentral(rows) {
 }
 
 function applyBranch(rows, site) {
-  if (!["fuxing","yongji"].includes(site)) return false;
+  if (!isBranchInventorySite(site)) return false;
   const state=appState();
   if(!state?.records?.[state.selectedDate] || state.selectedDate!==todayKey()) return false;
   const record=state.records[state.selectedDate];
-  const codeToZone=BRANCH_CODE_TO_ZONE[site];
   const inventory=[];
   const workMap=new Map();
 
@@ -610,8 +640,10 @@ function applyBranch(rows, site) {
     const key=row.item.item_key||"";
     if(!key.startsWith(`${site}:`)) continue;
     const stockKey=key.slice(site.length+1);
+    const receiveLocation=inventoryLocationByCode(row.item.receive_default_location_code);
+    const receiveZone=receiveLocation ? inventoryLocationUiKey(receiveLocation) : "";
     if(row.location.kind==="storage"){
-      const zone=codeToZone?.[row.location.code];
+      const zone=inventoryLocationUiKey(row.location);
       if(!zone) continue;
       inventory.push({
         id:`${stockKey}-${zone}`,
@@ -619,9 +651,9 @@ function applyBranch(rows, site) {
         label:row.item.name_zh_tw,
         labelVi:row.item.name_vi,
         catalogKey:row.item.catalog_key || "",
-        receiveZone:codeToZone?.[row.item.receive_default_location_code] || "",
+        receiveZone,
         unit:row.item.unit,
-        workArea:row.item.work_area||"noodles",
+        workArea:row.item.work_area||WORK_AREAS[0]?.id||"",
         storageOnly:Boolean(row.item.storage_only),
         zone,
         quantity:Number(row.quantity)||0,
@@ -630,16 +662,16 @@ function applyBranch(rows, site) {
         cloudLocationId:row.location.id,
       });
     }else if(row.location.kind==="work"){
-      const area=row.location.code.replace(`${site}-work-`,"");
+      const area=String(row.location.metadata?.work_area || inventoryLocationUiKey(row.location) || row.item.work_area || "");
       workMap.set(stockKey,{
         id:`work-${stockKey}`,
         stockKey,
         label:row.item.name_zh_tw,
         labelVi:row.item.name_vi,
         catalogKey:row.item.catalog_key || "",
-        receiveZone:codeToZone?.[row.item.receive_default_location_code] || "",
+        receiveZone,
         unit:row.item.unit,
-        workArea:area||row.item.work_area||"noodles",
+        workArea:area||row.item.work_area||WORK_AREAS[0]?.id||"",
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
         cloudItemId:row.item.id,
@@ -663,14 +695,16 @@ function applyBranch(rows, site) {
 
 async function runInventorySync(site, { reloadBranch = false } = {}) {
   if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
-  if (["fuxing","yongji"].includes(site) && !isCurrentBranchInventoryDate()) {
+  await ensureSiteRegistry();
+  if (!isKnownInventorySite(site)) return false;
+  if (isBranchInventorySite(site) && !isCurrentBranchInventoryDate()) {
     dispatchStatus("historical-readonly", { site });
     return false;
   }
   try {
     const rows = await fetchSite(site);
     clearAuthSyncRetry();
-    const changed = site === "central" ? applyCentral(rows) : applyBranch(rows, site);
+    const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
     void reloadBranch;
     dispatchStatus("synced", { site, count: rows.length });
     return changed;
@@ -690,12 +724,15 @@ export function syncInventoryNow(site = currentSite(), { reloadBranch = false } 
 }
 
 async function resolveIds(itemKey, locationCode) {
+  let location = cache.locationsByCode.get(locationCode) || inventoryLocationByCode(locationCode);
+  const site = location?.site || siteFromLocationCode(locationCode);
   if (!cache.itemsByKey.has(itemKey) || !cache.locationsByCode.has(locationCode)) {
-    await fetchSite(siteFromLocationCode(locationCode));
+    if (site) await fetchSite(site);
+    location = cache.locationsByCode.get(locationCode) || inventoryLocationByCode(locationCode);
   }
   return {
     item: cache.itemsByKey.get(itemKey),
-    location: cache.locationsByCode.get(locationCode),
+    location,
   };
 }
 
@@ -724,7 +761,7 @@ export async function cloudAdjustQuantity({
     dispatchStatus("error", { error: error.message, stage: "adjust" });
     return { ok: false, fallback: false, error };
   }
-  await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
+  await syncInventoryNow(resolved.location.site, { reloadBranch: false });
   return { ok: true };
 }
 
@@ -736,6 +773,7 @@ export async function cloudSetQuantity({
   sync = true,
   allowInventoryEditor = false,
 }) {
+  void allowInventoryEditor;
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = await resolveIds(itemKey, locationCode);
@@ -751,7 +789,7 @@ export async function cloudSetQuantity({
     dispatchStatus("error", { error: error.message, stage: "set-quantity" });
     return { ok: false, fallback: false, error };
   }
-  if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
+  if (sync) await syncInventoryNow(resolved.location.site, { reloadBranch: false });
   return { ok: true };
 }
 
@@ -775,10 +813,9 @@ export async function cloudSetMinimum({
     dispatchStatus("error", { error: error.message, stage: "set-minimum" });
     return { ok: false, fallback: false, error };
   }
-  if (sync) await syncInventoryNow(siteFromLocationCode(locationCode), { reloadBranch: false });
+  if (sync) await syncInventoryNow(resolved.location.site, { reloadBranch: false });
   return { ok: true };
 }
-
 
 export async function cloudTransferInventory({
   itemKey,
@@ -810,27 +847,28 @@ export async function cloudTransferInventory({
     return { ok: false, fallback: false, error };
   }
 
-  await syncInventoryNow(siteFromLocationCode(sourceLocationCode), { reloadBranch: false });
+  await syncInventoryNow(source.location.site, { reloadBranch: false });
   return { ok: true };
 }
 
 export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
-  const rows = await fetchSite("fuxing");
+  const site = "fuxing";
+  const rows = await fetchSite(site);
   const { record } = selectedBranchRecord();
   if (!record) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
 
   const local = new Map();
   for (const entry of record.inventory || []) {
     const stockKey = entry.stockKey || stockKeyFor(entry);
-    const code = FUXING_STORAGE_CODES[entry.zone];
-    if (code) local.set(`fuxing:${stockKey}|${code}`, Number(entry.quantity) || 0);
+    const code = branchLocationCode(site,entry.zone);
+    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
   }
   for (const entry of record.workInventory || []) {
     const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
-    const code = fuxingWorkLocationCode(entry.workArea);
-    if (code) local.set(`fuxing:${stockKey}|${code}`, Number(entry.quantity) || 0);
+    const code = branchWorkLocationCode(site,entry.workArea);
+    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
   }
 
   const changes = [];
@@ -861,19 +899,19 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
       });
     } catch (error) {
       dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
-      await syncInventoryNow("fuxing", { reloadBranch: false });
+      await syncInventoryNow(site, { reloadBranch: false });
       return { ok: false, fallback: false, error };
     }
   }
 
-  await syncInventoryNow("fuxing", { reloadBranch: false });
+  await syncInventoryNow(site, { reloadBranch: false });
   return { ok: true, changed: changes.length };
 }
 
 export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
-  if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
+  if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const catalog = buildBranchCatalog(site);
   const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
@@ -923,7 +961,7 @@ export async function cloudArchiveCentralItem(itemKey) {
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
-  if (!["fuxing","yongji"].includes(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
+  if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const itemKey = branchItemKey(site,stockKey);
   try {
@@ -945,39 +983,35 @@ export function cloudArchiveFuxingItem(stockKey) {
 }
 
 export function branchLocationCode(site, zone) {
-  return BRANCH_STORAGE_CODES[site]?.[zone] || "";
+  return inventoryLocationByUiKey(site,zone,"storage")?.code || "";
 }
 
 export function branchWorkLocationCode(site, area) {
-  return ["fuxing","yongji"].includes(site) && ["noodles","soup","seafood","meat"].includes(area)
-    ? `${site}-work-${area}`
-    : "";
+  return inventoryWorkLocation(site,area)?.code || "";
 }
 
 export function branchItemKey(site, stockKey) {
-  return ["fuxing","yongji"].includes(site) ? `${site}:${stockKey}` : "";
+  return site && stockKey ? `${site}:${stockKey}` : "";
 }
 
 export function fuxingLocationCode(zone) {
-  return FUXING_STORAGE_CODES[zone] || "";
+  return branchLocationCode("fuxing",zone);
 }
 
 export function fuxingWorkLocationCode(area) {
-  return ["noodles", "soup", "seafood", "meat"].includes(area)
-    ? `fuxing-work-${area}`
-    : "";
+  return branchWorkLocationCode("fuxing",area);
 }
 
 export function centralLocationCode(zone) {
-  return CENTRAL_ZONE_CODES[zone] || "";
+  return inventoryLocationByUiKey("central",zone,"storage")?.code || "";
 }
 
 export function fuxingItemKey(stockKey) {
-  return `fuxing:${stockKey}`;
+  return branchItemKey("fuxing",stockKey);
 }
 
 export function centralItemKey(id) {
-  return `central:${id}`;
+  return id ? `central:${id}` : "";
 }
 
 export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
@@ -1029,6 +1063,7 @@ async function boot() {
   if (!isInventoryBackendConfigured() || !s) return;
   if (bootedUserId === s.id && polling) return;
   if (!(await verifyMigration())) return;
+  await ensureSiteRegistry();
   bootedUserId = s.id || "";
 
   const site = currentSite();
