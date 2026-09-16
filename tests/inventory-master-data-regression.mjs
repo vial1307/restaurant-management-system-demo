@@ -29,6 +29,7 @@ replaceInventoryMasterSnapshot("branch-a", {
 });
 
 assert.equal(firstInventorySite(), "central");
+assert.equal(firstInventorySite("branch"), "branch-a");
 assert.equal(isBranchInventorySite("branch-a"), true);
 assert.equal(inventoryLocationByUiKey("branch-a", "large-freezer")?.code, "branch-a-freezer");
 assert.equal(inventoryWorkLocation("branch-a", "noodles")?.code, "branch-a-work-noodles");
