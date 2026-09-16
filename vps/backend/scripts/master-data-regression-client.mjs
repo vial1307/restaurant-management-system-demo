@@ -62,6 +62,15 @@ try {
   );
   assert.equal(canonicalLocations.rowCount, canonicalCodes.length, "canonical location seed incomplete");
 
+  await assert.rejects(
+    DB.query(
+      `insert into public.inventory_items(item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active)
+       values('fuxing:invalid-area-regression','invalid-area-regression','錯誤工作區','Khu sai','包','missing-area',false,true)`,
+    ),
+    (error) => error?.code === "23503" && String(error?.message || "").includes("INVENTORY_WORK_AREA_NOT_FOUND"),
+    "inventory items must be rejected when work_area is not active master data for the site"
+  );
+
   const admin = await login("yangchuadmin");
   const manager = await login("managerfx");
   const employee = await login("employeefx");
@@ -149,6 +158,13 @@ try {
   assert.equal(areaUpdate.response.status, 200, JSON.stringify(areaUpdate.data));
   assert.equal(areaUpdate.data.workArea.name_zh_tw, "麵區測試");
 
+  const inUseAreaArchive = await request("/api/master-data/work-areas", {
+    method:"POST", cookie:manager.cookie,
+    body:{ action:"archive", site:"fuxing", code:"noodles" },
+  });
+  assert.equal(inUseAreaArchive.response.status, 409);
+  assert.equal(inUseAreaArchive.data.error, "WORK_AREA_REFERENCE_CONFLICT");
+
   const areaOther = await request("/api/master-data/work-areas", {
     method:"POST", cookie:manager.cookie,
     body:{ action:"save", site:"yongji", code:"noodles", name_zh_tw:"禁止", name_vi:"Forbidden", department_code:"inside", sort_order:11, active:true },
@@ -175,6 +191,7 @@ try {
   assert(archivedPersisted);
   assert.equal(archivedPersisted.active, false);
   assert.equal(persisted.data.workAreas.find((row)=>row.code === "noodles").name_zh_tw, "麵區測試");
+  assert.equal(persisted.data.workAreas.find((row)=>row.code === "noodles").active, true, "in-use work area must remain active after rejected archive");
 
   const audit = await DB.query(
     `select action from public.audit_logs where action like 'master_%' order by created_at`,
