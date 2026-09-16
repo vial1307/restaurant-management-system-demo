@@ -2,6 +2,7 @@ import { pool, withTransaction } from "./db.mjs";
 import { hashPassword } from "./password.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
 import { hydrateUserAccess, listAccessModel, resolveRoleProfile } from "./access-control.mjs";
+import { registerMasterDataRoutes } from "./master-data-routes.mjs";
 
 const VALID_LOCATIONS = new Set(["all","central","fuxing","yongji"]);
 
@@ -58,6 +59,8 @@ async function adminUserPayload(row, client = pool) {
 }
 
 export async function registerAdminRoutes(app) {
+  await registerMasterDataRoutes(app);
+
   app.get("/api/admin/access-model", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user || !requireAdmin(user, reply)) return;
