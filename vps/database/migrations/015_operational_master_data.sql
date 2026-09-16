@@ -177,6 +177,25 @@ begin
           updated_at=now()
       where id=legacy_id;
     elsif legacy_id is not null and canonical_id is not null then
+      -- If the same item carries positive quantity in both rows, we cannot know
+      -- whether the values are independent stock or a duplicated view of the
+      -- same physical stock. Refuse to guess and roll back the migration.
+      if exists (
+        select 1
+        from public.inventory_stock legacy_stock
+        join public.inventory_stock canonical_stock
+          on canonical_stock.item_id=legacy_stock.item_id
+         and canonical_stock.location_id=canonical_id
+        where legacy_stock.location_id=legacy_id
+          and legacy_stock.quantity > 0
+          and canonical_stock.quantity > 0
+      ) then
+        raise exception using
+          errcode='23514',
+          message='LOCATION_CANONICALIZATION_AMBIGUOUS_STOCK',
+          detail=format('site=%s legacy=%s canonical=%s',mapping.site_code,mapping.legacy_code,mapping.canonical_code);
+      end if;
+
       insert into public.inventory_stock(
         item_id,location_id,quantity,minimum_quantity,updated_at
       )
