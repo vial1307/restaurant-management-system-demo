@@ -1,0 +1,90 @@
+name: Diagnostic Central Schedule Legacy
+
+on:
+  push:
+    branches:
+      - diag/schedule-central-legacy
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Read blocked central schedule diagnostics
+        run: |
+          set -euo pipefail
+          echo "Production release: $(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          docker compose --env-file .env exec -T app node --input-type=module - <<'NODE'
+          import pg from 'pg';
+          const { Client } = pg;
+          const client = new Client({
+            host: process.env.DB_HOST || 'db',
+            port: Number(process.env.DB_PORT || 5432),
+            database: process.env.POSTGRES_DB || process.env.DB_NAME || 'kitchen',
+            user: process.env.POSTGRES_USER || process.env.DB_USER || 'kitchen',
+            password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD || '',
+          });
+          await client.connect();
+          try {
+            const targetId = 'schedule-1788927340330-i0gms';
+            const schedule = await client.query(`
+              select coalesce((b.module_revisions->>'schedule')::bigint,0) as revision, entry
+              from public.business_state b
+              cross join lateral jsonb_array_elements(coalesce(b.modules->'schedule'->'schedules','[]'::jsonb)) entry
+              where b.site='central' and entry->>'id'=$1
+            `, [targetId]);
+            console.log('TARGET_SCHEDULE');
+            console.log(JSON.stringify(schedule.rows, null, 2));
+            const legacyStaffId = String(schedule.rows[0]?.entry?.staffId || '').trim();
+            if (legacyStaffId) {
+              const matchingStaff = await client.query(`
+                select site_code, id, legacy_staff_id, active
+                from public.staff_members
+                where legacy_staff_id=$1
+                order by site_code, id
+              `, [legacyStaffId]);
+              console.log('MATCHING_STAFF_MEMBERS');
+              console.log(JSON.stringify(matchingStaff.rows, null, 2));
+            }
+            const centralStaff = await client.query(`
+              select id, legacy_staff_id, active
+              from public.staff_members
+              where site_code='central'
+              order by legacy_staff_id nulls last, id
+            `);
+            console.log('CENTRAL_STAFF_MEMBERS');
+            console.log(JSON.stringify(centralStaff.rows, null, 2));
+            const departments = await client.query(`
+              select code, active
+              from public.organization_departments
+              where site_code='central'
+              order by code
+            `);
+            console.log('CENTRAL_DEPARTMENTS');
+            console.log(JSON.stringify(departments.rows, null, 2));
+          } finally {
+            await client.end();
+          }
+          NODE
+          REMOTE
