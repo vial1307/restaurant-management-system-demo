@@ -60,6 +60,88 @@ on conflict(site_code,code) do update set
   sort_order=excluded.sort_order,
   updated_at=now();
 
+-- Preserve any valid legacy work-area code that already exists in inventory.
+-- These rows receive neutral display names and can then be renamed safely in Admin Panel.
+insert into public.work_areas(
+  site_code,code,department_code,name_vi,name_zh_tw,active,sort_order,metadata
+)
+select distinct
+  s.code,
+  btrim(i.work_area),
+  case when s.code='central' then 'kitchen' else 'inside' end,
+  btrim(i.work_area),
+  btrim(i.work_area),
+  true,
+  900,
+  jsonb_build_object('legacy_discovered',true)
+from public.inventory_items i
+join public.sites s on s.code=split_part(i.item_key,':',1) and s.active=true
+where btrim(i.work_area) ~ '^[a-z][a-z0-9._-]{1,39}$'
+on conflict(site_code,code) do nothing;
+
+create or replace function public.inventory_item_master_data_guard()
+returns trigger
+language plpgsql
+as $$
+declare
+  item_site text;
+begin
+  item_site := split_part(new.item_key,':',1);
+
+  if not exists (
+    select 1 from public.sites s where s.code=item_site and s.active=true
+  ) then
+    raise exception using
+      errcode='23514',
+      message='INVENTORY_ITEM_SITE_INVALID';
+  end if;
+
+  if not exists (
+    select 1
+    from public.work_areas w
+    where w.site_code=item_site
+      and w.code=new.work_area
+      and w.active=true
+  ) then
+    raise exception using
+      errcode='23503',
+      message='INVENTORY_WORK_AREA_NOT_FOUND';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists inventory_items_master_data_guard on public.inventory_items;
+create trigger inventory_items_master_data_guard
+before insert or update of item_key,work_area on public.inventory_items
+for each row execute function public.inventory_item_master_data_guard();
+
+create or replace function public.work_area_archive_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.active=true and new.active=false and exists (
+    select 1
+    from public.inventory_items i
+    where i.active=true
+      and split_part(i.item_key,':',1)=old.site_code
+      and i.work_area=old.code
+  ) then
+    raise exception using
+      errcode='23503',
+      message='WORK_AREA_IN_USE';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists work_areas_archive_guard on public.work_areas;
+create trigger work_areas_archive_guard
+before update of active on public.work_areas
+for each row execute function public.work_area_archive_guard();
+
 insert into public.inventory_locations(
   code,name_zh_tw,name_vi,site,kind,sort_order,active,metadata
 ) values
