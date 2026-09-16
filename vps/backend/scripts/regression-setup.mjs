@@ -154,7 +154,16 @@ try {
   ]) {
     const { rows } = await client.query(
       `insert into public.inventory_locations(code,name_zh_tw,name_vi,site,kind,sort_order,active)
-       values($1,$2,$3,$4,$5,$6,true) returning *`,
+       values($1,$2,$3,$4,$5,$6,true)
+       on conflict(code) do update set
+         name_zh_tw=excluded.name_zh_tw,
+         name_vi=excluded.name_vi,
+         site=excluded.site,
+         kind=excluded.kind,
+         sort_order=excluded.sort_order,
+         active=true,
+         updated_at=now()
+       returning *`,
       entry
     );
     locations[entry[0]] = rows[0];

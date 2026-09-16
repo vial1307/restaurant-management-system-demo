@@ -86,6 +86,7 @@ echo "[5/11] Preparing validated frontend release..."
 rm -rf "${WEB_NEXT}"
 mkdir -p "${WEB_NEXT}"
 cp -a "${REPO_DIR}/index.html" "${WEB_NEXT}/"
+cp -a "${REPO_DIR}/admin.html" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/vps-entry.html" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/manifest.webmanifest" "${WEB_NEXT}/"
 cp -a "${REPO_DIR}/sw.js" "${WEB_NEXT}/"
@@ -142,8 +143,9 @@ docker compose --env-file .env up -d --force-recreate web
 
 for attempt in $(seq 1 30); do
   if curl -fsS http://127.0.0.1/api/health >/dev/null \
-    && curl -fsS http://127.0.0.1/ >/dev/null; then
-    echo "Web/API edge healthy."
+    && curl -fsS http://127.0.0.1/ >/dev/null \
+    && curl -fsS http://127.0.0.1/admin.html >/dev/null; then
+    echo "Web/API/Admin Panel edge healthy."
     echo "Release: ${APP_RELEASE}"
     docker compose --env-file .env ps
     exit 0
