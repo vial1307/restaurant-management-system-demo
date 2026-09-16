@@ -1,0 +1,81 @@
+name: Ops Apply Workforce Schedule v1
+
+on:
+  push:
+    branches:
+      - ops/apply-workforce-schedule-v1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitchen-os-production-maintenance
+  cancel-in-progress: false
+
+jobs:
+  apply-schedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact maintenance source
+        uses: actions/checkout@v7
+        with:
+          ref: 84f53dddfa89564eceb4750a87a28dda0254ca09
+
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Verify exact deployed release and script
+        run: |
+          set -euo pipefail
+          ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          REMOTE_RELEASE="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 "git -C /opt/kitchen-os/repo rev-parse --short HEAD")"
+          LOCAL_SHA="$(sha256sum vps/backend/scripts/workforce-schedule-backfill.mjs | cut -d' ' -f1)"
+          REMOTE_SHA="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 "sha256sum /opt/kitchen-os/repo/vps/backend/scripts/workforce-schedule-backfill.mjs | cut -d' ' -f1")"
+          echo "Production release: $ACTUAL_RELEASE"
+          test "$ACTUAL_RELEASE" = "84f53dd"
+          test "$REMOTE_RELEASE" = "84f53dd"
+          test "$LOCAL_SHA" = "$REMOTE_SHA"
+
+      - name: Pre-apply verify
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "cd /opt/kitchen-os && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs </dev/null"
+
+      - name: Mandatory database backup
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "cd /opt/kitchen-os && bash repo/vps/scripts/backup.sh </dev/null"
+
+      - name: Apply Schedule v1
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "cd /opt/kitchen-os && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs --apply </dev/null"
+
+      - name: Post-apply verify
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "cd /opt/kitchen-os && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs </dev/null"
+
+      - name: Verify production health and release
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          echo
+          test "$(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')" = "84f53dd"
