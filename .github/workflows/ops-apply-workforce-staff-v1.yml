@@ -1,0 +1,73 @@
+name: Ops Apply Workforce Staff v1
+
+on:
+  push:
+    branches:
+      - ops/apply-workforce-staff-v1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitchen-os-production-maintenance
+  cancel-in-progress: false
+
+jobs:
+  apply-staff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact maintenance source
+        uses: actions/checkout@v7
+        with:
+          ref: 3215a15287c2286a6b21c7d3421947c3c6e5f776
+
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Verify exact deployed release and script
+        run: |
+          set -euo pipefail
+          ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          REMOTE_RELEASE="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 "git -C /opt/kitchen-os/repo rev-parse --short HEAD")"
+          LOCAL_SHA="$(sha256sum vps/backend/scripts/workforce-staff-backfill.mjs | cut -d' ' -f1)"
+          REMOTE_SHA="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 "sha256sum /opt/kitchen-os/repo/vps/backend/scripts/workforce-staff-backfill.mjs | cut -d' ' -f1")"
+          echo "Production release: $ACTUAL_RELEASE"
+          test "$ACTUAL_RELEASE" = "3215a15"
+          test "$REMOTE_RELEASE" = "3215a15"
+          test "$LOCAL_SHA" = "$REMOTE_SHA"
+
+      - name: Verify, backup, apply and re-verify staff backfill
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          echo "Pre-apply verify..."
+          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs
+          echo "Mandatory database backup..."
+          bash repo/vps/scripts/backup.sh
+          echo "Apply Staff v1..."
+          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs --apply
+          echo "Post-apply verify..."
+          docker compose --env-file .env exec -T app node scripts/workforce-staff-backfill.mjs
+          REMOTE
+
+      - name: Verify production health and release
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          echo
+          test "$(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')" = "3215a15"
