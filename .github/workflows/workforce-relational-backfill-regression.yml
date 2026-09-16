@@ -9,9 +9,12 @@ on:
       - "vps/database/**"
       - "vps/backend/scripts/workforce-staff-backfill.mjs"
       - "vps/backend/scripts/workforce-staff-backfill-regression.mjs"
+      - "vps/backend/scripts/workforce-attendance-backfill.mjs"
+      - "vps/backend/scripts/workforce-attendance-backfill-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-relational-backfill-regression.yml"
       - ".github/workflows/workforce-staff-production-backfill.yml"
+      - ".github/workflows/workforce-attendance-production-backfill.yml"
   push:
     branches:
       - main
@@ -19,9 +22,12 @@ on:
       - "vps/database/**"
       - "vps/backend/scripts/workforce-staff-backfill.mjs"
       - "vps/backend/scripts/workforce-staff-backfill-regression.mjs"
+      - "vps/backend/scripts/workforce-attendance-backfill.mjs"
+      - "vps/backend/scripts/workforce-attendance-backfill-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-relational-backfill-regression.yml"
       - ".github/workflows/workforce-staff-production-backfill.yml"
+      - ".github/workflows/workforce-attendance-production-backfill.yml"
 
 permissions:
   contents: read
@@ -66,9 +72,14 @@ jobs:
         run: |
           node --check vps/backend/scripts/workforce-staff-backfill.mjs
           node --check vps/backend/scripts/workforce-staff-backfill-regression.mjs
+          node --check vps/backend/scripts/workforce-attendance-backfill.mjs
+          node --check vps/backend/scripts/workforce-attendance-backfill-regression.mjs
 
       - name: Apply canonical schema and seed regression users
         run: node vps/backend/scripts/regression-setup.mjs
 
       - name: Verify deterministic staff identity backfill
         run: node vps/backend/scripts/workforce-staff-backfill-regression.mjs
+
+      - name: Verify deterministic attendance backfill
+        run: node vps/backend/scripts/workforce-attendance-backfill-regression.mjs
