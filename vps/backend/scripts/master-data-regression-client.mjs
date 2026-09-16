@@ -134,6 +134,7 @@ try {
   assert.equal(positiveArchive.data.error, "LOCATION_HAS_POSITIVE_STOCK");
 
   const yongjiDefault = await DB.query(`select id from public.inventory_locations where code='yongji-four'`);
+  await DB.query(`update public.inventory_stock set quantity=0 where location_id=$1`, [yongjiDefault.rows[0].id]);
   const defaultArchive = await request("/api/master-data/locations", {
     method:"POST", cookie:admin.cookie,
     body:{ action:"archive", site:"yongji", id:String(yongjiDefault.rows[0].id) },
