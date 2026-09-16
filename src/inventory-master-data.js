@@ -34,6 +34,17 @@ function normalizedWorkArea(row) {
   };
 }
 
+function assertMasterSnapshotReady(site, locations) {
+  const mode = String(site?.metadata?.inventory_mode || "");
+  if (!site?.code || !["central","branch"].includes(mode)) {
+    throw new Error("INVENTORY_MASTER_DATA_NOT_READY");
+  }
+  const invalidLocation = locations.find((location) =>
+    location.active !== false && !String(location.metadata?.ui_key || "").trim()
+  );
+  if (invalidLocation) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+}
+
 export function replaceInventorySites(rows = []) {
   sites.clear();
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -73,14 +84,15 @@ export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
   const code = String(siteCode || snapshot?.site?.code || "");
   if (!code) return null;
   const site = normalizedSite(snapshot.site || inventorySite(code) || { code });
-  if (site) sites.set(code, site);
   const locations = (Array.isArray(snapshot.locations) ? snapshot.locations : [])
     .map(normalizedLocation)
     .filter(Boolean);
   const workAreas = (Array.isArray(snapshot.workAreas) ? snapshot.workAreas : [])
     .map(normalizedWorkArea)
     .filter(Boolean);
-  const next = { site:sites.get(code) || site, locations, workAreas };
+  assertMasterSnapshotReady(site, locations);
+  sites.set(code, site);
+  const next = { site, locations, workAreas };
   snapshots.set(code, next);
   return next;
 }
@@ -92,7 +104,7 @@ export function inventoryMasterSnapshot(siteCode) {
 export function inventoryLocations(siteCode, kind = "") {
   const rows = inventoryMasterSnapshot(siteCode)?.locations || [];
   return rows
-    .filter((row) => !kind || row.kind === kind)
+    .filter((row) => row.active !== false && (!kind || row.kind === kind))
     .sort((a,b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || a.code.localeCompare(b.code));
 }
 
@@ -119,7 +131,7 @@ export function inventoryLocationByCode(code) {
   const wanted = String(code || "");
   if (!wanted) return null;
   for (const snapshot of snapshots.values()) {
-    const row = snapshot.locations.find((location) => location.code === wanted);
+    const row = snapshot.locations.find((location) => location.code === wanted && location.active !== false);
     if (row) return row;
   }
   return null;
