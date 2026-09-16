@@ -142,6 +142,68 @@ create trigger work_areas_archive_guard
 before update of active on public.work_areas
 for each row execute function public.work_area_archive_guard();
 
+-- Canonicalize historical branch location codes before inserting the complete
+-- master-data set. UUIDs are retained whenever only the legacy row exists, so
+-- stock, transaction and receive-default relationships stay intact.
+do $$
+declare
+  mapping record;
+  legacy_id uuid;
+  canonical_id uuid;
+begin
+  for mapping in
+    select * from (values
+      ('fuxing','fuxing-freezer','fuxing-large-freezer'),
+      ('fuxing','fuxing-four','fuxing-four-door'),
+      ('yongji','yongji-freezer','yongji-large-freezer'),
+      ('yongji','yongji-four','yongji-four-door')
+    ) as mappings(site_code,legacy_code,canonical_code)
+  loop
+    select id into legacy_id
+    from public.inventory_locations
+    where site=mapping.site_code and code=mapping.legacy_code;
+
+    select id into canonical_id
+    from public.inventory_locations
+    where site=mapping.site_code and code=mapping.canonical_code;
+
+    if legacy_id is not null and canonical_id is null then
+      update public.inventory_locations
+      set code=mapping.canonical_code,
+          metadata=metadata || jsonb_build_object(
+            'canonical',true,
+            'legacy_code',mapping.legacy_code
+          ),
+          updated_at=now()
+      where id=legacy_id;
+    elsif legacy_id is not null and canonical_id is not null then
+      insert into public.inventory_stock(
+        item_id,location_id,quantity,minimum_quantity,updated_at
+      )
+      select item_id,canonical_id,quantity,minimum_quantity,updated_at
+      from public.inventory_stock
+      where location_id=legacy_id
+      on conflict(item_id,location_id) do update set
+        quantity=public.inventory_stock.quantity + excluded.quantity,
+        minimum_quantity=greatest(public.inventory_stock.minimum_quantity,excluded.minimum_quantity),
+        updated_at=greatest(public.inventory_stock.updated_at,excluded.updated_at);
+
+      delete from public.inventory_stock where location_id=legacy_id;
+      update public.inventory_transactions
+        set source_location_id=canonical_id
+        where source_location_id=legacy_id;
+      update public.inventory_transactions
+        set destination_location_id=canonical_id
+        where destination_location_id=legacy_id;
+      update public.inventory_receive_defaults
+        set location_id=canonical_id, updated_at=now()
+        where location_id=legacy_id;
+      delete from public.inventory_locations where id=legacy_id;
+    end if;
+  end loop;
+end;
+$$;
+
 insert into public.inventory_locations(
   code,name_zh_tw,name_vi,site,kind,sort_order,active,metadata
 ) values

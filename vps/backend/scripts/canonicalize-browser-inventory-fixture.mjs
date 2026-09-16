@@ -18,6 +18,34 @@ const mappings = [
   ["yongji", "yongji-four", "yongji-four-door"],
 ];
 
+async function mergeLegacyLocation(legacyId, canonicalId) {
+  await client.query(
+    `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+     select item_id,$1,quantity,minimum_quantity,updated_at
+     from public.inventory_stock
+     where location_id=$2
+     on conflict(item_id,location_id) do update set
+       quantity=public.inventory_stock.quantity + excluded.quantity,
+       minimum_quantity=greatest(public.inventory_stock.minimum_quantity,excluded.minimum_quantity),
+       updated_at=greatest(public.inventory_stock.updated_at,excluded.updated_at)`,
+    [canonicalId, legacyId]
+  );
+  await client.query("delete from public.inventory_stock where location_id=$1", [legacyId]);
+  await client.query(
+    "update public.inventory_transactions set source_location_id=$1 where source_location_id=$2",
+    [canonicalId, legacyId]
+  );
+  await client.query(
+    "update public.inventory_transactions set destination_location_id=$1 where destination_location_id=$2",
+    [canonicalId, legacyId]
+  );
+  await client.query(
+    "update public.inventory_receive_defaults set location_id=$1,updated_at=now() where location_id=$2",
+    [canonicalId, legacyId]
+  );
+  await client.query("delete from public.inventory_locations where id=$1", [legacyId]);
+}
+
 await client.connect();
 try {
   await client.query("begin");
@@ -33,20 +61,26 @@ try {
     );
 
     assert.equal(
-      canonical.rowCount,
-      0,
-      `browser fixture unexpectedly contains both legacy and canonical location codes for ${site}: ${canonicalCode}`
-    );
-    assert.equal(
       legacy.rowCount,
       1,
       `browser fixture legacy location missing before canonicalization: ${legacyCode}`
     );
-
-    await client.query(
-      "update public.inventory_locations set code=$1 where id=$2",
-      [canonicalCode, legacy.rows[0].id]
+    assert(
+      canonical.rowCount <= 1,
+      `browser fixture has multiple canonical location rows for ${site}: ${canonicalCode}`
     );
+
+    if (canonical.rowCount === 0) {
+      await client.query(
+        `update public.inventory_locations
+         set code=$1,
+             metadata=coalesce(metadata,'{}'::jsonb) || jsonb_build_object('canonical',true,'legacy_code',$2)
+         where id=$3`,
+        [canonicalCode, legacyCode, legacy.rows[0].id]
+      );
+    } else {
+      await mergeLegacyLocation(legacy.rows[0].id, canonical.rows[0].id);
+    }
   }
 
   await client.query("commit");
