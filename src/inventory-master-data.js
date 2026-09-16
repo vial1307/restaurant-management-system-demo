@@ -83,7 +83,17 @@ export function firstInventorySite(mode = "") {
 export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
   const code = String(siteCode || snapshot?.site?.code || "");
   if (!code) return null;
-  const site = normalizedSite(snapshot.site || inventorySite(code) || { code });
+  const existing = inventorySite(code) || {};
+  const incoming = snapshot?.site && typeof snapshot.site === "object" ? snapshot.site : {};
+  const site = normalizedSite({
+    ...existing,
+    ...incoming,
+    code,
+    metadata:{
+      ...normalizedMetadata(existing.metadata),
+      ...normalizedMetadata(incoming.metadata),
+    },
+  });
   const locations = (Array.isArray(snapshot.locations) ? snapshot.locations : [])
     .map(normalizedLocation)
     .filter(Boolean);
