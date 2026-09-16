@@ -25,7 +25,7 @@ const session = {
 const storage = new Map([
   [AUTH_KEY, JSON.stringify(session)],
   [CLOUD_FLAG_KEY, "ready"],
-  [CLOUD_SCHEMA_VERSION_KEY, "11"],
+  [CLOUD_SCHEMA_VERSION_KEY, "12"],
   [STORAGE_KEY, JSON.stringify({
     version: 1,
     selectedDate: date,
@@ -104,6 +104,15 @@ class TestCustomEvent {
 }
 Object.defineProperty(globalThis, "CustomEvent", { configurable: true, value: TestCustomEvent });
 
+const site = { code: "fuxing", name_vi: "Fuxing", name_zh_tw: "復興店", sort_order: 20, metadata: { inventory_mode: "branch" } };
+const locations = [
+  { id: "loc-freezer", code: "fuxing-large-freezer", site: "fuxing", kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary" } },
+  { id: "loc-work-noodles", code: "fuxing-work-noodles", site: "fuxing", kind: "work", sort_order: 100, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles" } },
+];
+const workAreas = [
+  { code: "noodles", site_code: "fuxing", name_zh_tw: "麵區", name_vi: "Khu mì", sort_order: 10, active: true, metadata: {} },
+];
+
 let inventoryGets = 0;
 Object.defineProperty(globalThis, "fetch", {
   configurable: true,
@@ -114,7 +123,13 @@ Object.defineProperty(globalThis, "fetch", {
       return new Response(JSON.stringify({ user: session }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (url === "/api/inventory/schema-version") {
-      return new Response(JSON.stringify({ version: 11 }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ version: 12 }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url === "/api/inventory/sites") {
+      return new Response(JSON.stringify({ sites: [site] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url === "/api/master-data/fuxing") {
+      return new Response(JSON.stringify({ site, locations, workAreas }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (url === "/api/inventory/fuxing") {
       inventoryGets += 1;
@@ -122,7 +137,7 @@ Object.defineProperty(globalThis, "fetch", {
         return new Response(JSON.stringify({ error: "AUTH_REQUIRED" }), { status: 401, headers: { "content-type": "application/json" } });
       }
       return new Response(JSON.stringify({
-        locations: [{ id: "loc-freezer", code: "fuxing-large-freezer", site: "fuxing", kind: "storage" }],
+        locations,
         items: [{ id: "item-tofu", item_key: "fuxing:tofu", catalog_key: "tofu", name_zh_tw: "豆乾", name_vi: "Đậu khô", unit: "盒", work_area: "noodles", storage_only: false }],
         stock: [{ item_id: "item-tofu", location_id: "loc-freezer", quantity: 7, minimum_quantity: 2 }],
       }), { status: 200, headers: { "content-type": "application/json" } });
