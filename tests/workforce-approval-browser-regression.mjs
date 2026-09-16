@@ -29,11 +29,36 @@ async function apiLogin(username) {
   return result.cookie;
 }
 
+async function readBusinessState(adminCookie) {
+  const stateRead = await request(`/api/business-state/${SITE}`, { cookie:adminCookie });
+  assert.equal(stateRead.response.status, 200, `browser business-state read failed: ${JSON.stringify(stateRead.data)}`);
+  return stateRead;
+}
+
+async function ensurePayrollPeriodOpen(adminCookie, managerCookie) {
+  let stateRead = await readBusinessState(adminCookie);
+  const period = stateRead.data?.modules?.attendance?.payroll?.periods?.[MONTH];
+  if (period?.status !== "locked") return stateRead;
+
+  const reopen = await request(`/api/workforce/${SITE}/payroll-periods/${MONTH}/reopen`, {
+    method:"POST",
+    cookie:managerCookie,
+    body:{ reason:"approval regression fixture reset" },
+  });
+  assert.equal(reopen.response.status, 200, `browser payroll fixture reopen failed: ${JSON.stringify(reopen.data)}`);
+  stateRead = await readBusinessState(adminCookie);
+  assert.notEqual(
+    stateRead.data?.modules?.attendance?.payroll?.periods?.[MONTH]?.status,
+    "locked",
+    "approval regression fixture month must be open before seeding",
+  );
+  return stateRead;
+}
+
 async function seedApprovedMonth() {
   const adminCookie = await apiLogin("yangchuadmin");
   const managerCookie = await apiLogin("managerfx");
-  const stateRead = await request(`/api/business-state/${SITE}`, { cookie:adminCookie });
-  assert.equal(stateRead.response.status, 200);
+  const stateRead = await ensurePayrollPeriodOpen(adminCookie, managerCookie);
   const module = structuredClone(stateRead.data.modules.attendance || { attendance:[], payroll:{} });
   module.attendance ??= [];
   module.payroll ??= {};
@@ -90,7 +115,7 @@ async function selectPayrollMonth(page, month) {
   await page.locator(`[data-workforce-approved-payroll][data-month="${month}"]`).waitFor({ state:"visible", timeout:10000 });
 }
 
-const { managerCookie } = await seedApprovedMonth();
+const { adminCookie, managerCookie } = await seedApprovedMonth();
 const browser = await chromium.launch({ headless:true });
 try {
   const managerContext = await browser.newContext({ viewport:{ width:390, height:844 } });
@@ -137,6 +162,7 @@ try {
   await employeeContext.close();
 } finally {
   await browser.close();
+  await ensurePayrollPeriodOpen(adminCookie, managerCookie);
 }
 
 console.log("WORKFORCE_APPROVAL_BROWSER_REGRESSION_OK");
