@@ -5,26 +5,32 @@ import {
   getSiteLocations,
   syncInventoryNow,
 } from "./inventory-cloud.js";
+import { inventorySites } from "./inventory-master-data.js";
 
-export const INVENTORY_SITES = [
-  { id: "central", zh: "央廚", vi: "Bếp trung tâm" },
-  { id: "fuxing", zh: "復興店", vi: "Chi nhánh Fuxing" },
-  { id: "yongji", zh: "永吉店", vi: "Chi nhánh Yongji" },
-];
+export function inventorySiteOptions() {
+  return inventorySites().map((site) => ({
+    id: site.code,
+    zh: site.name_zh_tw || site.code,
+    vi: site.name_vi || site.name_zh_tw || site.code,
+  }));
+}
 
 export function siteLabel(site, language = "vi") {
-  const found = INVENTORY_SITES.find((entry) => entry.id === site);
+  const found = inventorySiteOptions().find((entry) => entry.id === site);
   if (!found) return site;
   return language === "zh" ? found.zh : `${found.vi} · ${found.zh}`;
 }
 
 export async function loadSiteOperationData(site, { includeDestinations = false } = {}) {
-  const [rows, locations, workLocations] = await Promise.all([
-    getSiteInventoryRows(site),
+  // Fetch the authoritative inventory snapshot first. That call hydrates the
+  // database-backed site/master-data registry, so the location reads below are
+  // served from the same snapshot instead of issuing duplicate master-data GETs.
+  const rows = await getSiteInventoryRows(site);
+  const [locations, workLocations] = await Promise.all([
     getSiteLocations(site, "storage"),
     getSiteLocations(site, "work"),
   ]);
-  const destinationSites = INVENTORY_SITES.map((entry) => entry.id).filter((target) => target !== site);
+  const destinationSites = inventorySiteOptions().map((entry) => entry.id).filter((target) => target !== site);
   const destinationMetadata = includeDestinations
     ? await vpsInventoryDestinations(site, destinationSites)
     : null;
@@ -40,7 +46,7 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
       zh: item.name_zh_tw,
       vi: item.name_vi,
       unit: item.unit,
-      workArea: item.work_area || "noodles",
+      workArea: item.work_area || "",
       locations: [],
       workLocations: [],
       total: 0,
