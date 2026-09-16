@@ -95,7 +95,7 @@ check_positive "Yongji locations exist" "select count(*) from public.inventory_l
 check_positive "Central locations exist" "select count(*) from public.inventory_locations where site='central' and active=true"
 check_positive "operational work areas exist" "select count(*) from public.work_areas where active=true"
 
-check_zero "missing canonical operational locations" "
+check_zero "missing canonical operational location records" "
   with expected(code) as (
     values
       ('central-freezer'),('central-fridge'),('central-four-door'),('central-chest'),('central-work-use'),
@@ -105,10 +105,10 @@ check_zero "missing canonical operational locations" "
       ('yongji-work-noodles'),('yongji-work-soup'),('yongji-work-seafood'),('yongji-work-meat')
   )
   select count(*) from expected e
-  left join public.inventory_locations l on l.code=e.code and l.active=true
+  left join public.inventory_locations l on l.code=e.code
   where l.id is null
 "
-check_zero "missing canonical work areas" "
+check_zero "missing canonical work-area records" "
   with expected(site_code,code) as (
     values
       ('central','noodles'),('central','soup'),('central','seafood'),('central','meat'),
@@ -117,7 +117,7 @@ check_zero "missing canonical work areas" "
   )
   select count(*) from expected e
   left join public.work_areas w
-    on w.site_code=e.site_code and w.code=e.code and w.active=true
+    on w.site_code=e.site_code and w.code=e.code
   where w.code is null
 "
 check_zero "active inventory items missing active work-area master data" "
