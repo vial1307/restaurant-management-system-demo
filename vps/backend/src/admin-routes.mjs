@@ -3,6 +3,7 @@ import { hashPassword } from "./password.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
 import { hydrateUserAccess, listAccessModel, resolveRoleProfile } from "./access-control.mjs";
 import { registerMasterDataRoutes } from "./master-data-routes.mjs";
+import { registerInventoryMasterRoutes } from "./inventory-master-routes.mjs";
 
 const VALID_LOCATIONS = new Set(["all","central","fuxing","yongji"]);
 
@@ -60,6 +61,7 @@ async function adminUserPayload(row, client = pool) {
 
 export async function registerAdminRoutes(app) {
   await registerMasterDataRoutes(app);
+  await registerInventoryMasterRoutes(app);
 
   app.get("/api/admin/access-model", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -154,7 +156,7 @@ export async function registerAdminRoutes(app) {
         }
         return updated.rows[0];
       });
-      return { user:await adminUserPayload(result) };
+      return await adminUserPayload(result).then((payload) => ({ user:payload }));
     } catch (error) {
       if (error?.code === "23505") return reply.code(409).send({ error: "USERNAME_EXISTS" });
       if (error?.code === "23503") return reply.code(400).send({ error: "INVALID_ROLE" });
