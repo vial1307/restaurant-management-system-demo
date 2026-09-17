@@ -4,8 +4,7 @@ import { hasCapability, requireUser } from "./auth.mjs";
 import { hydrateUserAccess, listAccessModel, resolveRoleProfile } from "./access-control.mjs";
 import { registerMasterDataRoutes } from "./master-data-routes.mjs";
 import { registerInventoryMasterRoutes } from "./inventory-master-routes.mjs";
-
-const VALID_LOCATIONS = new Set(["all","central","fuxing","yongji"]);
+import { activeSite } from "./site-registry.mjs";
 
 function requireAdmin(user, reply) {
   if (hasCapability(user, "accounts.manage")) return true;
@@ -23,14 +22,21 @@ function requestedPreferredLanguage(body) {
 }
 
 async function resolveRequestedRole(role, location, client = pool) {
-  if (!VALID_LOCATIONS.has(location)) {
-    throw Object.assign(new Error("INVALID_LOCATION"), { statusCode:400 });
-  }
   const profile = await resolveRoleProfile(role, location, client);
   if (!profile) throw Object.assign(new Error("INVALID_ROLE"), { statusCode:400 });
-  if (profile.scopePolicy === "assigned" && !["fuxing","yongji"].includes(location)) {
+
+  if (profile.scopePolicy === "all") return profile;
+
+  const effectiveLocation = String(profile.effectiveLocation || location || "").trim();
+  const site = await activeSite(effectiveLocation, client);
+  if (!site) {
+    throw Object.assign(new Error("INVALID_LOCATION"), { statusCode:400 });
+  }
+
+  if (profile.scopePolicy === "assigned" && String(site.metadata?.inventory_mode || "") !== "branch") {
     throw Object.assign(new Error("INVALID_LOCATION_FOR_ROLE"), { statusCode:400 });
   }
+
   return profile;
 }
 
@@ -92,7 +98,7 @@ export async function registerAdminRoutes(app) {
     const username = String(request.body?.username || "").trim().toLowerCase();
     const displayName = String(request.body?.display_name || request.body?.displayName || "").trim();
     const role = String(request.body?.role || "employee").trim();
-    const location = String(request.body?.location || "fuxing").trim();
+    const location = String(request.body?.location || "").trim();
     const preferredLanguage = requestedPreferredLanguage(request.body);
     const active = request.body?.active !== false;
     const password = String(request.body?.password || "");
