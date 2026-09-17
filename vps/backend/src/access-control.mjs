@@ -83,15 +83,12 @@ async function loadUserPermissionOverrides(user, client) {
   if (Object.prototype.hasOwnProperty.call(user, "permission_overrides")) {
     return jsonObject(user.permission_overrides);
   }
-  if (Object.prototype.hasOwnProperty.call(user, "permissions")) {
-    return jsonObject(user.permissions);
-  }
   if (!user.id) return {};
   const { rows } = await client.query(
-    "select permissions from public.app_users where id=$1 limit 1",
+    "select permission_overrides from public.app_users where id=$1 limit 1",
     [user.id]
   );
-  return jsonObject(rows[0]?.permissions);
+  return jsonObject(rows[0]?.permission_overrides);
 }
 
 export async function hydrateUserAccess(user, client = pool) {
