@@ -39,7 +39,7 @@ async function login(username) {
 await DB.connect();
 try {
   const schema = await DB.query(`select version from public.schema_migrations order by version desc limit 1`);
-  assert.equal(schema.rows[0]?.version, "016");
+  assert.equal(schema.rows[0]?.version, "017");
 
   for (const site of ["central","fuxing","yongji"]) {
     const workAreas = await DB.query(
@@ -177,6 +177,76 @@ try {
   });
   assert.equal(archiveLocation.response.status, 200, JSON.stringify(archiveLocation.data));
   assert.equal(archiveLocation.data.location.active, false);
+
+  // A brand-new branch exists only in PostgreSQL. No JS site enum is changed.
+  await DB.query(
+    `insert into public.sites(code,name_vi,name_zh_tw,timezone_name,currency_code,active,sort_order,metadata)
+     values('branch-regression','Chi nhánh regression','回歸分店','Asia/Taipei','TWD',true,90,'{"inventory_mode":"branch"}'::jsonb)`
+  );
+
+  const siteList = await request("/api/inventory/sites", { cookie:admin.cookie });
+  assert.equal(siteList.response.status, 200, JSON.stringify(siteList.data));
+  assert(siteList.data.sites.some((site)=>site.code === "branch-regression"), "DB-only branch missing from site API");
+
+  const dynamicAccount = await request("/api/admin/users", {
+    method:"POST",
+    cookie:admin.cookie,
+    body:{
+      action:"create",
+      username:"branchregression",
+      display_name:"Branch Regression Employee",
+      password:"KitchenTest!123",
+      role:"employee",
+      location:"branch-regression",
+      active:true,
+    },
+  });
+  assert.equal(dynamicAccount.response.status, 200, JSON.stringify(dynamicAccount.data));
+  assert.equal(dynamicAccount.data.user.location, "branch-regression");
+
+  const assignedCentralDenied = await request("/api/admin/users", {
+    method:"POST",
+    cookie:admin.cookie,
+    body:{
+      action:"create",
+      username:"assignedcentraldenied",
+      display_name:"Assigned Central Denied",
+      password:"KitchenTest!123",
+      role:"employee",
+      location:"central",
+      active:true,
+    },
+  });
+  assert.equal(assignedCentralDenied.response.status, 400, JSON.stringify(assignedCentralDenied.data));
+  assert.equal(assignedCentralDenied.data.error, "INVALID_LOCATION_FOR_ROLE");
+
+  const dynamicLocation = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:admin.cookie,
+    body:{
+      action:"save",
+      site:"branch-regression",
+      code:"branch-regression-cold-room",
+      name_zh_tw:"回歸冷藏",
+      name_vi:"Kho mát regression branch",
+      kind:"storage",
+      sort_order:10,
+      active:true,
+      metadata:{ storage_group:"primary" },
+    },
+  });
+  assert.equal(dynamicLocation.response.status, 200, JSON.stringify(dynamicLocation.data));
+  assert.equal(dynamicLocation.data.location.site, "branch-regression");
+  assert.equal(dynamicLocation.data.location.metadata?.ui_key, "branch-regression-cold-room");
+
+  await assert.rejects(
+    DB.query(
+      `insert into public.app_users(username,display_name,role,location)
+       values('unknown-site-regression','Unknown Site Regression','employee','site-does-not-exist')`
+    ),
+    (error) => error?.code === "23503" && String(error?.message || "").includes("APP_USER_SITE_NOT_FOUND"),
+    "app_users must reject locations that do not exist in public.sites"
+  );
 
   console.log("MASTER_DATA_REGRESSION_OK");
 } finally {
