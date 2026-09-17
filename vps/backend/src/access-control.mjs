@@ -79,12 +79,27 @@ export async function resolveRoleProfile(roleCode, requestedLocation = "", clien
   return { ...profile, compatibilityRole:compatibilityRole(profile) };
 }
 
+async function loadUserPermissionOverrides(user, client) {
+  if (Object.prototype.hasOwnProperty.call(user, "permission_overrides")) {
+    return jsonObject(user.permission_overrides);
+  }
+  if (Object.prototype.hasOwnProperty.call(user, "permissions")) {
+    return jsonObject(user.permissions);
+  }
+  if (!user.id) return {};
+  const { rows } = await client.query(
+    "select permissions from public.app_users where id=$1 limit 1",
+    [user.id]
+  );
+  return jsonObject(rows[0]?.permissions);
+}
+
 export async function hydrateUserAccess(user, client = pool) {
   if (!user) return null;
   const roleCode = String(user.role_code || user.role || "").trim();
   const role = await resolveRoleProfile(roleCode, user.location, client);
   if (!role) return null;
-  const permissionOverrides = jsonObject(user.permission_overrides ?? user.permissions);
+  const permissionOverrides = await loadUserPermissionOverrides(user, client);
   const permissions = mergePermissionOverrides(role.permissions, permissionOverrides);
   return {
     ...user,
