@@ -118,7 +118,7 @@ export async function registerAdminRoutes(app) {
     if (!user || !requireAdmin(user, reply)) return;
 
     const { rows } = await pool.query(
-      `select id,username,display_name,role,location,permissions as permission_overrides,
+      `select id,username,display_name,role,location,permission_overrides,
               preferred_language,active,created_at,updated_at,
               password_hash is not null as has_password
        from public.app_users
@@ -168,9 +168,9 @@ export async function registerAdminRoutes(app) {
           const inserted = await client.query(
             `insert into public.app_users(
                username,display_name,password_hash,password_changed_at,
-               role,location,permissions,preferred_language,active
+               role,location,permission_overrides,preferred_language,active
              ) values($1,$2,$3,now(),$4,$5,$6::jsonb,$7,$8)
-             returning id,username,display_name,role,location,permissions as permission_overrides,
+             returning id,username,display_name,role,location,permission_overrides,
                        preferred_language,active,created_at,updated_at,
                        password_hash is not null as has_password`,
             [username,displayName,passwordHash,role,effectiveLocation,JSON.stringify(permissionOverrides),preferredLanguage || "vi",active]
@@ -191,7 +191,7 @@ export async function registerAdminRoutes(app) {
       const passwordHash = password ? await hashPassword(password) : null;
       const result = await withTransaction(async (client) => {
         const current = (await client.query(
-          `select id,username,display_name,role,location,permissions as permission_overrides,preferred_language,active,created_at,updated_at,
+          `select id,username,display_name,role,location,permission_overrides,preferred_language,active,created_at,updated_at,
                   password_hash is not null as has_password
            from public.app_users where id=$1 for update`,[id]
         )).rows[0];
@@ -211,9 +211,9 @@ export async function registerAdminRoutes(app) {
                active=$7,
                password_hash=case when $8::text is null then password_hash else $8 end,
                password_changed_at=case when $8::text is null then password_changed_at else now() end,
-               permissions=coalesce($9::jsonb,permissions)
+               permission_overrides=coalesce($9::jsonb,permission_overrides)
            where id=$1
-           returning id,username,display_name,role,location,permissions as permission_overrides,
+           returning id,username,display_name,role,location,permission_overrides,
                      preferred_language,active,created_at,updated_at,
                      password_hash is not null as has_password`,
           [id,username,displayName,role,effectiveLocation,preferredLanguage,active,passwordHash,permissionOverrides === null ? null : JSON.stringify(permissionOverrides)]
@@ -241,7 +241,7 @@ export async function registerAdminRoutes(app) {
     try {
       const result = await withTransaction(async (client) => {
         const current = (await client.query(
-          `select id,username,display_name,role,location,permissions as permission_overrides,preferred_language,active,created_at,updated_at
+          `select id,username,display_name,role,location,permission_overrides,preferred_language,active,created_at,updated_at
            from public.app_users where id=$1 for update`,[id]
         )).rows[0];
         if (!current) throw Object.assign(new Error("USER_NOT_FOUND"),{statusCode:404});
