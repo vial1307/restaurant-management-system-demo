@@ -47,7 +47,7 @@ const migrated = source
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
 await import("./receiving-default-regression-client.mjs");
-await import("./database-rbac-regression-client.mjs");
+await import("./database-rbac-regression-v18.mjs");
 
 // The legacy API regression intentionally exercises historical fixture codes.
 // Browser certification must run against the canonical production location codes
