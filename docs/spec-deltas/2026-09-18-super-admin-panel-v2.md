@@ -14,6 +14,7 @@ Normal users, managers and ordinary `admin` accounts continue to use Kitchen OS 
 - Existing owner account `yangchuadmin` is promoted to `superadmin` during migration so the owner is not locked out.
 - The compatibility role presented to legacy Kitchen OS UI remains `admin` so existing operational admin behavior is preserved.
 - Ordinary `admin` keeps account-management and operational-master-data capabilities but cannot enter the standalone Super Admin Panel unless explicitly promoted.
+- New per-user overrides are stored only in `app_users.permission_overrides`; legacy `app_users.permissions` is not reactivated or reinterpreted.
 
 ## Super Admin Panel information architecture
 
@@ -50,7 +51,9 @@ The standalone panel contains only system-level administration:
    - List/create/configure/activate/deactivate sites
    - Site code is immutable after creation
    - Site metadata includes names, timezone, currency, ordering and optional business metadata
-   - Inventory synchronization/transfer remains handled by canonical inventory APIs, not direct quantity rewrites
+   - Admin Panel shows source/destination inventory and supports cross-site stock transfer directly in the Super Admin console
+   - Inventory transfer always calls the canonical atomic inventory transaction API; even Super Admin must not rewrite `inventory_stock.quantity` directly
+   - Existing destination-item routing obeys the destination branch's single-storage or configured receiving-default ownership rule
    - Menu rows are site-scoped and may hold site-specific prices; Super Admin may copy/synchronize menu data between sites while preserving intentional destination overrides when requested
 
 6. **System Settings**
@@ -79,17 +82,20 @@ Actual binary media storage is not moved into PostgreSQL. PostgreSQL stores meta
 - Sensitive account/site/content/settings/data writes create `audit_logs` records.
 - Normal `admin`, manager and user accounts cannot access Super Admin endpoints.
 - Existing Kitchen OS permissions, inventory atomicity and branch-scope rules remain unchanged.
+- Super Admin's extra capability is inherited on top of the normal admin capability profile; restriction-like capabilities such as `workforce.self_service` are not blindly enabled.
 
 ## Acceptance criteria
 
 1. `admin.html` rejects an ordinary `admin` account and allows `superadmin`.
-2. Owner account remains able to open the panel after migration.
+2. Owner account remains able to open the panel after migration and remains admin-compatible inside normal Kitchen OS.
 3. VPS overview reads live API/PostgreSQL values.
-4. User editor reads roles/modules from DB and saves per-user module overrides to `app_users.permissions`.
+4. User editor reads roles/modules from DB and saves explicit per-user module overrides to `app_users.permission_overrides` without mutating legacy `app_users.permissions`.
 5. Fresh sessions receive merged effective permissions from role + user override.
 6. Super Admin can manage sites and system settings with confirmed PostgreSQL persistence.
 7. Data tables support query, site/status filters where applicable, sorting and pagination.
 8. Announcements/media/products/SOP records are visible through the content/data-management surfaces.
 9. SOP approval/rejection updates the relational SOP version and audit log atomically.
 10. Audit log screen can export the selected/filterable dataset as Excel-compatible and PDF reports.
-11. Admin Panel remains responsive on desktop/mobile without exposing normal day-to-day Kitchen OS screens inside the console.
+11. Multi-store screen can read stock for two sites and execute a cross-site atomic transfer without bypassing receiving-location policy.
+12. Menu synchronization supports site-specific prices and can preserve destination price overrides.
+13. Admin Panel remains responsive on desktop/mobile without exposing normal day-to-day Kitchen OS screens inside the console.
