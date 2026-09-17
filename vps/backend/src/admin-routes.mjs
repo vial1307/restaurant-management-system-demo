@@ -164,7 +164,12 @@ export async function registerAdminRoutes(app) {
         if (password.length < 10) return reply.code(400).send({ error: "PASSWORD_TOO_SHORT" });
         const passwordHash = await hashPassword(password);
         const result = await withTransaction(async (client) => {
-          const permissionOverrides = await normalizePermissionOverrides(request.body?.permissions,client) || {};
+          // Administrative roles are authoritative role policies. Allowing a
+          // per-user override here can make the legacy Kitchen OS UI appear
+          // fully privileged while the backend silently denies modules.
+          const permissionOverrides = requestedRole.capabilities?.["accounts.manage"]
+            ? {}
+            : (await normalizePermissionOverrides(request.body?.permissions,client) || {});
           const inserted = await client.query(
             `insert into public.app_users(
                username,display_name,password_hash,password_changed_at,
@@ -200,7 +205,9 @@ export async function registerAdminRoutes(app) {
         if (currentRole?.capabilities?.["system.super_admin"] && !isSuperAdmin) {
           throw Object.assign(new Error("SUPER_ADMIN_REQUIRED"),{statusCode:403});
         }
-        const permissionOverrides = await normalizePermissionOverrides(request.body?.permissions,client);
+        const permissionOverrides = requestedRole.capabilities?.["accounts.manage"]
+          ? {}
+          : await normalizePermissionOverrides(request.body?.permissions,client);
         const updated = await client.query(
           `update public.app_users
            set username=$2,
