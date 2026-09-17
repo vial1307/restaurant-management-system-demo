@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Kitchen OS · Super Admin UI Preview</title>
+  <style>
+    :root{
+      color-scheme:light;
+      font-family:Inter,"Noto Sans TC","Noto Sans",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      --ink:#17211c;--muted:#68766f;--line:#dfe7e2;--bg:#f4f7f5;--panel:#fff;--green:#1f684a;--green-2:#2f7b5c;
+      --green-soft:#e7f4ed;--nav:#11261d;--nav-2:#173329;--amber:#a66b15;--amber-soft:#fff4dc;--red:#9a3c3c;--red-soft:#fceaea;
+      --shadow:0 8px 26px rgba(21,45,34,.07);
+    }
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink)}button,input,select{font:inherit}.app{min-height:100vh;display:grid;grid-template-columns:280px minmax(0,1fr)}
+    .sidebar{position:sticky;top:0;height:100vh;background:linear-gradient(180deg,var(--nav),#0d2119);color:#eff7f2;padding:18px 14px;display:flex;flex-direction:column;overflow:auto}
+    .brand{display:flex;align-items:center;gap:11px;padding:8px 8px 18px;border-bottom:1px solid rgba(255,255,255,.09)}.brand-mark{width:40px;height:40px;border-radius:12px;background:#2c7656;display:grid;place-items:center;font-weight:900}.brand strong,.brand small{display:block}.brand small{color:#a9bbb2;margin-top:2px}
+    .owner{margin:16px 6px 8px;padding:12px;border-radius:14px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08)}.owner-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:850;background:#d7f3e4;color:#195b3f}.owner small{display:block;color:#a9bbb2;margin-top:6px}
+    .nav-group{margin:18px 0 6px;padding:0 8px;color:#7f988c;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.nav{display:grid;gap:4px}.nav button{border:0;background:transparent;color:#dce8e1;padding:11px 12px;border-radius:11px;text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:700}.nav button:hover{background:rgba(255,255,255,.06)}.nav button.active{background:#245f47;color:#fff}.nav .ico{width:22px;text-align:center;opacity:.95}.nav .count{margin-left:auto;background:rgba(255,255,255,.12);padding:2px 7px;border-radius:999px;font-size:10px}.sidebar-foot{margin-top:auto;padding:16px 8px 4px;border-top:1px solid rgba(255,255,255,.09);color:#a9bbb2;font-size:12px}
+    .main{min-width:0}.topbar{position:sticky;top:0;z-index:20;min-height:76px;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px}.title h1{margin:0;font-size:21px}.title p{margin:4px 0 0;color:var(--muted);font-size:12px}.actions{display:flex;align-items:center;gap:8px}.btn{border:1px solid #cfd9d3;background:#fff;color:#223128;border-radius:10px;padding:9px 12px;font-weight:750;cursor:pointer}.btn.primary{background:var(--green);border-color:var(--green);color:#fff}.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#173329;color:#fff;font-size:12px;font-weight:900}.menu-btn{display:none}
+    .content{max-width:1680px;margin:0 auto;padding:24px}.hero{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,.8fr);gap:16px;margin-bottom:16px}.hero-card{background:linear-gradient(135deg,#17392b,#245f47);color:#fff;border-radius:20px;padding:22px;box-shadow:var(--shadow);position:relative;overflow:hidden}.hero-card:after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;background:rgba(255,255,255,.05);right:-80px;top:-90px}.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:850;opacity:.72}.hero h2{font-size:26px;margin:8px 0 8px;max-width:720px}.hero p{margin:0;color:#d8e8df;max-width:720px}.hero-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:20px}.hero-meta div small,.hero-meta div strong{display:block}.hero-meta small{color:#a9c7b8}.hero-meta strong{margin-top:4px}
+    .health{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow)}.health-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.health h3{margin:0}.status-dot{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#246745}.status-dot:before{content:"";width:8px;height:8px;border-radius:50%;background:#3ca56c;box-shadow:0 0 0 4px #e5f5eb}.health-list{display:grid;gap:10px;margin-top:15px}.health-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf1ee}.health-row:last-child{border-bottom:0}.health-row small{display:block;color:var(--muted);margin-top:2px}.pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;background:#edf2ef;color:#56645c;font-size:11px;font-weight:850}.pill.ok{background:#e5f5eb;color:#1f6c45}.pill.warn{background:var(--amber-soft);color:var(--amber)}.pill.off{background:var(--red-soft);color:var(--red)}
+    .stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px}.stat{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 2px 10px rgba(22,45,34,.035)}.stat .label{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}.stat strong{display:block;font-size:25px;margin:8px 0 3px}.stat small{color:var(--muted)}.trend{font-size:11px;font-weight:800;color:#24704b}.trend.warn{color:#a66b15}
+    .grid-2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:17px;padding:18px;box-shadow:0 3px 16px rgba(25,43,34,.045);min-width:0}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.card-head h3{margin:0;font-size:17px}.card-head p{margin:4px 0 0;color:var(--muted);font-size:12px}.link{border:0;background:transparent;color:var(--green);font-weight:800;cursor:pointer}
+    .quick-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.quick{border:1px solid var(--line);background:#fafcfb;border-radius:14px;padding:13px;text-align:left;cursor:pointer}.quick:hover{border-color:#9ec8b5;background:#f3faf6}.quick .qico{width:34px;height:34px;border-radius:10px;background:var(--green-soft);display:grid;place-items:center;margin-bottom:11px}.quick strong,.quick small{display:block}.quick small{color:var(--muted);margin-top:4px;line-height:1.35}
+    .activity{display:grid}.event{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;padding:11px 0;border-bottom:1px solid #edf1ee;align-items:start}.event:last-child{border-bottom:0}.event-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:#eef4f0}.event strong,.event small{display:block}.event small{color:var(--muted);margin-top:3px}.event time{font-size:11px;color:#849089;white-space:nowrap}
+    .store-list{display:grid;gap:9px}.store{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:13px}.store-main{display:flex;align-items:center;gap:11px}.store-icon{width:38px;height:38px;border-radius:11px;background:#eef5f1;display:grid;place-items:center}.store strong,.store small{display:block}.store small{color:var(--muted);margin-top:3px}.store-metrics{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}.mini{padding:4px 7px;border-radius:999px;background:#f1f4f2;font-size:10px;font-weight:800;color:#58645e}
+    .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:13px}.table{width:100%;border-collapse:collapse;min-width:760px}.table th,.table td{padding:11px 12px;text-align:left;border-bottom:1px solid #edf1ee}.table th{background:#f8faf9;font-size:11px;color:#67756d;text-transform:uppercase;letter-spacing:.03em}.table tr:last-child td{border-bottom:0}.table small{display:block;color:var(--muted);margin-top:3px}
+    .section{display:none}.section.active{display:block}.section-placeholder{min-height:420px;display:grid;place-items:center;text-align:center}.placeholder-box{max-width:520px}.placeholder-box .big{width:64px;height:64px;border-radius:18px;background:var(--green-soft);display:grid;place-items:center;margin:0 auto 14px;font-size:26px}.placeholder-box h2{margin:0 0 8px}.placeholder-box p{color:var(--muted);line-height:1.55}
+    @media(max-width:1280px){.stats{grid-template-columns:repeat(3,minmax(0,1fr))}.quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:980px){.app{grid-template-columns:1fr}.sidebar{position:fixed;left:0;top:0;bottom:0;width:280px;transform:translateX(-105%);transition:.2s;z-index:50}.app.nav-open .sidebar{transform:translateX(0)}.menu-btn{display:inline-flex}.hero,.grid-2{grid-template-columns:1fr}.topbar{padding:11px 14px}.content{padding:16px}}
+    @media(max-width:640px){.stats{grid-template-columns:1fr 1fr}.quick-grid{grid-template-columns:1fr}.actions .desktop-only{display:none}.hero-card{padding:18px}.hero h2{font-size:22px}.content{padding:12px}.card{padding:14px}.store{grid-template-columns:1fr}.store-metrics{justify-content:flex-start}.topbar{align-items:flex-start}.title h1{font-size:17px}}
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">KO</div><div><strong>Kitchen OS</strong><small>System Console</small></div></div>
+    <div class="owner"><div class="owner-top"><strong>Super Admin</strong><span class="badge">● ROOT</span></div><small>Platform owner · 全系統管理</small></div>
+    <div class="nav-group">System</div>
+    <nav class="nav">
+      <button class="active" data-section="overview"><span class="ico">⌂</span>Tổng quan<span class="count">Live</span></button>
+      <button data-section="users"><span class="ico">♙</span>Users & RBAC</button>
+      <button data-section="logs"><span class="ico">≡</span>Logs & Reports</button>
+    </nav>
+    <div class="nav-group">Business</div>
+    <nav class="nav">
+      <button data-section="stores"><span class="ico">▦</span>Chuỗi & chi nhánh<span class="count">3</span></button>
+      <button data-section="content"><span class="ico">◇</span>Nội dung & duyệt<span class="count">4</span></button>
+      <button data-section="data"><span class="ico">▤</span>Data Tables</button>
+    </nav>
+    <div class="nav-group">Configuration</div>
+    <nav class="nav"><button data-section="settings"><span class="ico">⚙</span>System Settings</button></nav>
+    <div class="sidebar-foot">UI Preview · không ghi dữ liệu thật<br>Super Admin Panel v2</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0"><button class="btn menu-btn" id="menuBtn">☰</button><div class="title"><h1 id="pageTitle">Tổng quan hệ thống</h1><p>Super Admin · PostgreSQL / VPS · Kitchen OS</p></div></div>
+      <div class="actions"><button class="btn desktop-only">↻ Làm mới</button><button class="btn primary desktop-only">＋ Tạo mới</button><div class="avatar">SA</div></div>
+    </header>
+
+    <div class="content">
+      <section class="section active" data-view="overview">
+        <div class="hero">
+          <article class="hero-card">
+            <div class="eyebrow">Kitchen OS Control Center</div>
+            <h2>Toàn bộ hệ thống đang hoạt động bình thường</h2>
+            <p>Quản lý VPS, PostgreSQL, tài khoản, chi nhánh, dữ liệu vận hành và nhật ký hệ thống từ một nơi.</p>
+            <div class="hero-meta"><div><small>Release</small><strong>v2.18.0</strong></div><div><small>Schema</small><strong>018</strong></div><div><small>Uptime</small><strong>12d 7h</strong></div><div><small>Last backup</small><strong>02:10 hôm nay</strong></div></div>
+          </article>
+          <article class="health">
+            <div class="health-head"><div><div class="eyebrow" style="color:#718078">System Health</div><h3>Trạng thái dịch vụ</h3></div><span class="status-dot">Healthy</span></div>
+            <div class="health-list">
+              <div class="health-row"><div><strong>API / VPS</strong><small>Node runtime · 48 ms</small></div><span class="pill ok">ONLINE</span></div>
+              <div class="health-row"><div><strong>PostgreSQL</strong><small>18 connections · 246 MB</small></div><span class="pill ok">CONNECTED</span></div>
+              <div class="health-row"><div><strong>Backup</strong><small>Completed 02:10</small></div><span class="pill ok">OK</span></div>
+              <div class="health-row"><div><strong>Pending SOP</strong><small>Cần Super Admin duyệt</small></div><span class="pill warn">3 WAITING</span></div>
+            </div>
+          </article>
+        </div>
+
+        <section class="stats">
+          <article class="stat"><div class="label"><span>Người dùng</span><span class="trend">↑ 2</span></div><strong>18</strong><small>16 đang hoạt động</small></article>
+          <article class="stat"><div class="label"><span>Chi nhánh</span><span class="trend">100%</span></div><strong>3</strong><small>tất cả online</small></article>
+          <article class="stat"><div class="label"><span>Kho / Products</span><span class="trend">Live</span></div><strong>124</strong><small>master items</small></article>
+          <article class="stat"><div class="label"><span>SOP chờ duyệt</span><span class="trend warn">Action</span></div><strong>3</strong><small>2 từ chi nhánh</small></article>
+          <article class="stat"><div class="label"><span>Audit hôm nay</span><span class="trend">+28</span></div><strong>86</strong><small>không có lỗi nghiêm trọng</small></article>
+          <article class="stat"><div class="label"><span>Thông báo</span><span class="trend">Published</span></div><strong>4</strong><small>2 global · 2 site</small></article>
+        </section>
+
+        <div class="grid-2">
+          <article class="card">
+            <div class="card-head"><div><h3>Thao tác nhanh</h3><p>Các tác vụ Super Admin dùng nhiều nhất</p></div></div>
+            <div class="quick-grid">
+              <button class="quick" data-jump="users"><span class="qico">♙</span><strong>Tạo tài khoản</strong><small>Thêm user, role và phạm vi chi nhánh</small></button>
+              <button class="quick" data-jump="stores"><span class="qico">⇄</span><strong>Điều chuyển kho</strong><small>Chuyển tồn giữa các cơ sở bằng transaction</small></button>
+              <button class="quick" data-jump="content"><span class="qico">✓</span><strong>Duyệt SOP</strong><small>Xem phiên bản đang chờ phê duyệt</small></button>
+              <button class="quick" data-jump="logs"><span class="qico">≡</span><strong>Audit Logs</strong><small>Tra cứu lịch sử thay đổi hệ thống</small></button>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-head"><div><h3>Hoạt động gần nhất</h3><p>Audit stream toàn hệ thống</p></div><button class="link" data-jump="logs">Xem tất cả →</button></div>
+            <div class="activity">
+              <div class="event"><div class="event-ico">⇄</div><div><strong>Điều chuyển tồn kho</strong><small>Fuxing → Yongji · 牛肉 × 4</small></div><time>2 phút</time></div>
+              <div class="event"><div class="event-ico">♙</div><div><strong>Cập nhật quyền tài khoản</strong><small>Role Manager · Fuxing</small></div><time>18 phút</time></div>
+              <div class="event"><div class="event-ico">✓</div><div><strong>Duyệt SOP phiên bản mới</strong><small>湯區 · v1.8</small></div><time>43 phút</time></div>
+              <div class="event"><div class="event-ico">⚙</div><div><strong>System setting updated</strong><small>inventory.receiving_policy</small></div><time>1 giờ</time></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="card">
+            <div class="card-head"><div><h3>Chuỗi & chi nhánh</h3><p>Tình trạng cơ sở và dữ liệu kho</p></div><button class="link" data-jump="stores">Quản lý →</button></div>
+            <div class="store-list">
+              <div class="store"><div class="store-main"><div class="store-icon">工</div><div><strong>Central Kitchen · 央廚</strong><small>Warehouse authority</small></div></div><div class="store-metrics"><span class="mini">4 kho</span><span class="pill ok">ONLINE</span></div></div>
+              <div class="store"><div class="store-main"><div class="store-icon">復</div><div><strong>Fuxing · 復興</strong><small>Branch · Taipei</small></div></div><div class="store-metrics"><span class="mini">4 kho</span><span class="mini">62 items</span><span class="pill ok">ONLINE</span></div></div>
+              <div class="store"><div class="store-main"><div class="store-icon">永</div><div><strong>Yongji · 永吉</strong><small>Branch · Taipei</small></div></div><div class="store-metrics"><span class="mini">4 kho</span><span class="mini">59 items</span><span class="pill ok">ONLINE</span></div></div>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-head"><div><h3>Backup & Database</h3><p>PostgreSQL authority</p></div></div>
+            <div class="table-wrap"><table class="table"><tbody>
+              <tr><td><strong>Database</strong><small>kitchen_os</small></td><td><span class="pill ok">CONNECTED</span></td></tr>
+              <tr><td><strong>PostgreSQL</strong><small>16.x</small></td><td>246 MB</td></tr>
+              <tr><td><strong>Schema migration</strong><small>018_super_admin_panel_v2.sql</small></td><td><span class="pill ok">CURRENT</span></td></tr>
+              <tr><td><strong>Latest backup</strong><small>2026-09-18 02:10</small></td><td>84.2 MB</td></tr>
+            </tbody></table></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" data-view="users"><div class="card section-placeholder"><div class="placeholder-box"><div class="big">♙</div><h2>Users & RBAC</h2><p>Bản production sẽ dùng bảng người dùng hiện tại, thêm bộ lọc role/site, trạng thái account, permission summary và modal quyền chi tiết.</p><button class="btn primary">＋ Thêm user</button></div></div></section>
+      <section class="section" data-view="stores"><div class="card section-placeholder"><div class="placeholder-box"><div class="big">⇄</div><h2>Multi-store Control</h2><p>Quản lý 央廚 / chi nhánh, tồn kho theo vị trí, điều chuyển hàng và đồng bộ menu trên cùng một màn hình.</p><button class="btn primary">Tạo điều chuyển</button></div></div></section>
+      <section class="section" data-view="content"><div class="card section-placeholder"><div class="placeholder-box"><div class="big">✓</div><h2>Content & Approval</h2><p>Thông báo, SOP chờ duyệt, media và dữ liệu menu được gom thành một hàng đợi quản trị rõ ràng.</p><button class="btn primary">Xem SOP chờ duyệt</button></div></div></section>
+      <section class="section" data-view="data"><div class="card section-placeholder"><div class="placeholder-box"><div class="big">▤</div><h2>Data Tables & CRUD</h2><p>Giao diện dữ liệu server-backed với search, filter, sort, pagination và thao tác create/update/archive có kiểm soát.</p></div></div></section>
+      <section class="section" data-view="settings"><div class="card section-placeholder"><div class="placeholder-box"><div class="big">⚙</div><h2>System Settings</h2><p>Tách rõ cấu hình toàn hệ thống và cấu hình từng chi nhánh, chỉ hiển thị thành công sau khi PostgreSQL xác nhận.</p></div></div></section>
+      <section class="section" data-view="logs"><div class="card section-placeholder"><div class="placeholder-box"><div class="big">≡</div><h2>Logs & Reports</h2><p>Timeline audit, lọc theo người thao tác / chi nhánh / action và export Excel/PDF theo đúng dataset đã lọc.</p><button class="btn primary">Export report</button></div></div></section>
+    </div>
+  </main>
+</div>
+<script>
+  const app=document.querySelector('#app');
+  const titles={overview:'Tổng quan hệ thống',users:'Users & RBAC',stores:'Chuỗi & chi nhánh',content:'Nội dung & duyệt',data:'Data Tables & CRUD',settings:'System Settings',logs:'Logs & Reports'};
+  function show(section){
+    document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===section));
+    document.querySelectorAll('.nav button[data-section]').forEach(el=>el.classList.toggle('active',el.dataset.section===section));
+    document.querySelector('#pageTitle').textContent=titles[section]||section;
+    app.classList.remove('nav-open');
+  }
+  document.addEventListener('click',event=>{
+    const nav=event.target.closest('[data-section]');if(nav){show(nav.dataset.section);return;}
+    const jump=event.target.closest('[data-jump]');if(jump){show(jump.dataset.jump);return;}
+    if(event.target.closest('#menuBtn'))app.classList.toggle('nav-open');
+  });
+</script>
+</body>
+</html>
