@@ -47,7 +47,7 @@ function ensureLoginScreen() {
     host.id = "auth-layer";
     document.body.append(host);
   }
-  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚、復興店或永吉店帳號登入。</p><form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">VPS Auth · 帳號與權限由 VPS 管理</div></section></div>`;
+  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用系統管理員指派給您的帳號登入。</p><form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">VPS Auth · 帳號與權限由 VPS 管理</div></section></div>`;
 }
 
 function permissionsFromForm(data) {
@@ -66,7 +66,7 @@ function normalizeVpsUser(user) {
     name: user.displayName || user.display_name || user.username,
     role: accountRole === "admin" ? "admin" : accountRole === "central" ? "central" : "branch",
     accountRole,
-    location: accountRole === "admin" ? "all" : (user.location || "fuxing"),
+    location: accountRole === "admin" ? "all" : String(user.location || ""),
     permissions: normalizeAccountPermissions(accountRole, user.permissions),
     preferredLanguage: user.preferredLanguage || user.preferred_language || "vi",
     provider: "vps",
@@ -77,10 +77,10 @@ function mirrorVpsSession(user) {
   const normalized = normalizeVpsUser(user);
   if (normalized) {
     localStorage.setItem(AUTH_KEY, JSON.stringify(normalized));
-    // A site-scoped account must repair any stale/tampered admin-site preference
-    // before inventory bootstrap can observe it. Only the all-site administrator
-    // is allowed to preserve and switch the saved active warehouse.
-    if (["central", "fuxing", "yongji"].includes(normalized.location)) {
+    // Backend authorization already validates the assigned site. Any site-scoped
+    // account therefore repairs a stale/tampered active-site preference without
+    // requiring the frontend to know the list of branch codes.
+    if (normalized.location && normalized.location !== "all") {
       localStorage.setItem(ACTIVE_SITE_KEY, normalized.location);
     }
   }
@@ -88,7 +88,7 @@ function mirrorVpsSession(user) {
 }
 
 function initialRoute(profile) {
-  if (profile?.location === "central" && profile.permissions?.inventory?.view !== false) return "#inventory";
+  if (profile?.role === "central" && profile.permissions?.inventory?.view !== false) return "#inventory";
   if (profile?.permissions?.dashboard?.view !== false) return "#dashboard";
   const first = ACCOUNT_MODULES.find((key) => profile?.permissions?.[key]?.view);
   return first ? `#${first}` : "#inventory";
@@ -266,8 +266,8 @@ document.addEventListener("submit", async (event) => {
       username: String(data.get("username") || "").trim().toLowerCase(),
       password: String(data.get("password") || ""),
       display_name: String(data.get("name") || "").trim(),
-      role: String(data.get("role") || "employee"),
-      location: String(data.get("location") || "fuxing"),
+      role: String(data.get("role") || ""),
+      location: String(data.get("location") || ""),
       active: data.has("active"),
       permissions: permissionsFromForm(data),
     };
