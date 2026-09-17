@@ -371,13 +371,13 @@ export async function registerSuperAdminRoutes(app) {
         const valid = await client.query("select code from public.sites where code=any($1::text[])",[[source,destination]]);
         if (valid.rowCount !== 2) throw Object.assign(new Error("SITE_NOT_FOUND"),{statusCode:404});
         const result = await client.query(`insert into public.menu_items(site_code,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata)
-          select $2,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata || jsonb_build_object('synced_from',$1)
+          select $2,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata || jsonb_build_object('synced_from',$1::text)
           from public.menu_items where site_code=$1
           on conflict(site_code,item_code) do update set
             name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,category=excluded.category,work_area=excluded.work_area,
             price=case when $3::boolean then excluded.price else public.menu_items.price end,
             currency_code=case when $3::boolean then excluded.currency_code else public.menu_items.currency_code end,
-            active=excluded.active,metadata=public.menu_items.metadata || jsonb_build_object('last_synced_from',$1),updated_at=now()
+            active=excluded.active,metadata=public.menu_items.metadata || jsonb_build_object('last_synced_from',$1::text),updated_at=now()
           returning id`,[source,destination,overwritePrices]);
         await audit(client,user,{ action:"super_admin_menu_sync",entityType:"menu",entityId:`${source}->${destination}`,site:destination,metadata:{source,destination,overwritePrices,count:result.rowCount} });
         return result.rowCount;
