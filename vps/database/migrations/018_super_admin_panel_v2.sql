@@ -50,6 +50,18 @@ on conflict(role_code,capability_key) do update set
   allowed=false,
   updated_at=now();
 
+-- Do not reinterpret the legacy app_users.permissions JSON as new RBAC data.
+-- The dedicated column starts empty and only receives explicit Super Admin/user
+-- editor overrides from this release onward.
+alter table public.app_users
+  add column if not exists permission_overrides jsonb not null default '{}'::jsonb;
+
+alter table public.app_users
+  drop constraint if exists app_users_permission_overrides_object_check;
+alter table public.app_users
+  add constraint app_users_permission_overrides_object_check
+  check (jsonb_typeof(permission_overrides) = 'object');
+
 -- Preserve access for the canonical owner account without changing password.
 update public.app_users
 set role='superadmin',location='all',active=true,updated_at=now()
