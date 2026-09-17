@@ -93,11 +93,13 @@ export function siteAllowed(user, site) {
 }
 
 export function publicUser(user) {
+  const roleCode = user.role_code || user.role;
   return {
     id: user.id,
     username: user.username,
     displayName: user.display_name,
-    role: user.role_code || user.role,
+    role: roleCode === "superadmin" ? user.role : roleCode,
+    roleCode,
     policyRole: user.role,
     location: user.location,
     permissionOverrides: user.permission_overrides || {},
