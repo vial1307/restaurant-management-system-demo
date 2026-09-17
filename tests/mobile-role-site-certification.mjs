@@ -66,7 +66,15 @@ async function sessionSnapshot(page) {
 }
 
 async function gotoInventory(page) {
-  await page.goto(`${BASE}/#inventory`, { waitUntil:"domcontentloaded", timeout:30000 });
+  const appMounted = await page.locator(".app-shell").count();
+  if (appMounted) {
+    await page.evaluate(() => {
+      if (location.hash !== "#inventory") location.hash = "#inventory";
+    });
+  } else {
+    await page.goto(`${BASE}/#inventory`, { waitUntil:"domcontentloaded", timeout:30000 });
+  }
+  await page.waitForFunction(() => location.hash === "#inventory", null, { timeout:10000 });
   await page.waitForSelector(".page-content", { state:"visible", timeout:15000 });
   await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, { timeout:15000 });
 }
