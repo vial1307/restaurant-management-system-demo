@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const html = fs.readFileSync("admin.html", "utf8");
+const html = fs.readFileSync(".admindev.html", "utf8");
+const legacyAdmin = fs.readFileSync("admin.html", "utf8");
 const js = fs.readFileSync("src/admin-panel.js", "utf8");
 const inventoryJs = fs.readFileSync("src/admin-panel-inventory.js", "utf8");
 const css = fs.readFileSync("src/admin-panel.css", "utf8");
@@ -11,6 +12,7 @@ const accessControl = fs.readFileSync("vps/backend/src/access-control.mjs", "utf
 const auth = fs.readFileSync("vps/backend/src/auth.mjs", "utf8");
 const migration = fs.readFileSync("vps/database/migrations/018_super_admin_panel_v2.sql", "utf8");
 const deploy = fs.readFileSync("vps/scripts/deploy-api.sh", "utf8");
+const caddy = fs.readFileSync("vps/Caddyfile", "utf8");
 
 assert.match(html, /id="admin-app"/);
 assert.match(html, /Kitchen OS · Super Admin/);
@@ -19,6 +21,9 @@ assert.match(html, /src\/admin-panel-inventory\.js/);
 assert.match(html, /src\/admin-panel\.css/);
 assert.doesNotMatch(html, /inventory-master-admin\.js/, "standalone Super Admin console must not load the old inventory master-data panel");
 assert.match(html, /noindex,nofollow/);
+assert.match(legacyAdmin, /\.admindev\.html/, "legacy admin URL must redirect to the dedicated Super Admin entry");
+assert.match(caddy, /@legacyAdmin path \/admin\.html/);
+assert.match(caddy, /redir @legacyAdmin \/\.admindev\.html 308/);
 
 assert.match(js, /vpsMe\(\)/, "Super Admin Panel must authenticate against VPS session");
 assert.match(js, /system\.super_admin/, "Super Admin Panel must require the dedicated system-owner capability");
@@ -54,6 +59,7 @@ assert.match(superRoutes, /audit_logs/);
 assert.match(superRoutes, /application\/vnd\.ms-excel/);
 assert.match(superRoutes, /application\/pdf/);
 assert.match(superRoutes, /super_admin_menu_sync/);
+assert.match(superRoutes, /jsonb_build_object\('synced_from',\$1::text\)/, "menu sync metadata parameter must be explicitly typed for PostgreSQL");
 assert.match(superRoutes, /for update/, "sensitive Super Admin updates must preserve transaction locking where applicable");
 
 assert.match(adminRoutes, /permission_overrides/, "user overrides must persist in the dedicated RBAC column");
@@ -79,7 +85,8 @@ assert.match(migration, /add column if not exists price numeric/);
 assert.match(migration, /website\.brand_name/);
 assert.doesNotMatch(migration, /select 'superadmin',capability_key,true\s+from public\.permission_capabilities/, "restriction-like capabilities must not be blindly granted to Super Admin");
 
-assert.match(deploy, /cp -a "\$\{REPO_DIR\}\/admin\.html"/, "deployment must publish Admin Panel");
-assert.match(deploy, /curl -fsS http:\/\/127\.0\.0\.1\/admin\.html/, "deployment must smoke Admin Panel before success");
+assert.match(deploy, /cp -a "\$\{REPO_DIR\}\/\.admindev\.html"/, "deployment must publish the dedicated Super Admin entry");
+assert.match(deploy, /cp -a "\$\{REPO_DIR\}\/admin\.html"/, "deployment must keep the legacy redirect file available");
+assert.match(deploy, /curl -fsS http:\/\/127\.0\.0\.1\/\.admindev\.html/, "deployment must smoke the dedicated Super Admin entry before success");
 
 console.log("SUPER_ADMIN_PANEL_STATIC_REGRESSION_OK");
