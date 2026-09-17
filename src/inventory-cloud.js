@@ -545,10 +545,34 @@ async function fetchSite(site) {
   if (!stocks.length) return [];
   if (!locations.length || !items.length) throw new Error("INVENTORY_SNAPSHOT_INVALID");
 
-  const catalogKeys=[...new Set(items.map((item)=>item.catalog_key).filter(Boolean))];
-  let receiveDefaults=[];
-  try{ receiveDefaults=await getInventoryReceiveDefaults({sites:[site],catalogKeys}); }catch{}
-  const defaultByCatalog=new Map(receiveDefaults.map((entry)=>[entry.catalogKey,entry.locationCode]));
+  // /api/inventory/:site already returns the receiving defaults for this
+  // site as part of the same authoritative inventory snapshot. Reuse that
+  // payload instead of issuing a second request here. Besides saving a round
+  // trip, this prevents duplicate inventory renders from racing an otherwise
+  // redundant receive-default request on WebKit/Safari.
+  let receiveDefaults = Array.isArray(result?.receiveDefaults) ? result.receiveDefaults : null;
+  if (!receiveDefaults) {
+    // Backward-compatible fallback for an older backend that did not include
+    // receiveDefaults in the inventory snapshot.
+    const catalogKeys=[...new Set(items.map((item)=>item.catalog_key).filter(Boolean))];
+    try{
+      const cloud=await getInventoryReceiveDefaults({sites:[site],catalogKeys});
+      receiveDefaults=cloud.map((entry)=>({
+        catalog_key:entry.catalogKey,
+        location_code:entry.locationCode,
+      }));
+    }catch{
+      receiveDefaults=[];
+    }
+  }
+  const defaultByCatalog=new Map(
+    receiveDefaults
+      .map((entry)=>[
+        String(entry.catalog_key || entry.catalogKey || ""),
+        String(entry.location_code || entry.locationCode || ""),
+      ])
+      .filter(([catalogKeyValue])=>catalogKeyValue)
+  );
   for(const item of items) item.receive_default_location_code=defaultByCatalog.get(item.catalog_key)||"";
 
   const itemMap = new Map(items.map((item) => [item.id, item]));
