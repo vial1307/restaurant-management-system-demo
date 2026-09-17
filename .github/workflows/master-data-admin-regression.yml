@@ -8,6 +8,7 @@ on:
     paths:
       - "admin.html"
       - "src/admin-panel.js"
+      - "src/admin-panel-inventory.js"
       - "src/admin-panel.css"
       - "tests/admin-panel-static-regression.mjs"
       - "vps/database/**"
@@ -28,6 +29,7 @@ on:
     paths:
       - "admin.html"
       - "src/admin-panel.js"
+      - "src/admin-panel-inventory.js"
       - "src/admin-panel.css"
       - "tests/admin-panel-static-regression.mjs"
       - "vps/database/**"
@@ -93,6 +95,7 @@ jobs:
       - name: Validate master-data and Super Admin JavaScript
         run: |
           node --check src/admin-panel.js
+          node --check src/admin-panel-inventory.js
           node --check tests/admin-panel-static-regression.mjs
           node --check vps/backend/src/admin-routes.mjs
           node --check vps/backend/src/super-admin-routes.mjs
