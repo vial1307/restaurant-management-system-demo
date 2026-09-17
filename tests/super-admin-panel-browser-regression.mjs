@@ -5,6 +5,7 @@ import { chromium, webkit } from "playwright";
 
 let BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 if (BASE === "http://localhost:3000") BASE = "http://127.0.0.1:3000";
+const API_BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const PASSWORD = "KitchenTest!123";
 const OUTPUT = path.resolve("tests/artifacts/full-device");
 fs.mkdirSync(OUTPUT, { recursive:true });
@@ -21,11 +22,31 @@ const PROFILES = [
 const ENGINES = { chromium, webkit };
 
 async function login(context, username) {
-  const response = await context.request.post(`${BASE}/api/auth/login`, {
+  const response = await context.request.post(`${API_BASE}/api/auth/login`, {
     data:{ username, password:PASSWORD },
     failOnStatusCode:false,
   });
   assert.equal(response.status(), 200, `${username}: login failed with HTTP ${response.status()}`);
+
+  // Playwright/WebKit can drop an APIRequestContext cookie in containerized CI.
+  // Seed the session explicitly onto the frontend origin, matching the proven
+  // full-device login fallback used by the main Kitchen OS regression suite.
+  const setCookie = response.headersArray()
+    .filter((header) => header.name.toLowerCase() === "set-cookie")
+    .map((header) => header.value)
+    .find((value) => /^kitchen_session=/i.test(value));
+  const token = setCookie?.match(/^kitchen_session=([^;]+)/i)?.[1] || "";
+  assert(token, `${username}: login did not return kitchen_session`);
+  const target = new URL(BASE);
+  await context.addCookies([{
+    name:"kitchen_session",
+    value:token,
+    domain:target.hostname,
+    path:"/",
+    httpOnly:true,
+    secure:target.protocol === "https:",
+    sameSite:"Lax",
+  }]);
 }
 
 async function assertFit(page, label) {
@@ -39,11 +60,12 @@ async function assertFit(page, label) {
       const rect = modal.getBoundingClientRect();
       modalRect = { top:rect.top,left:rect.left,right:rect.right,bottom:rect.bottom };
     }
-    const smallTargets = [...document.querySelectorAll("button,a,input,select")]
+    const smallTargets = [...document.querySelectorAll('button,a,input:not([type="checkbox"]):not([type="radio"]),select')]
       .filter((node) => {
         const style = getComputedStyle(node);
         const rect = node.getBoundingClientRect();
-        if (style.display === "none" || style.visibility === "hidden" || node.disabled) return false;
+        if (node.hidden || node.getAttribute("aria-hidden") === "true" || node.hasAttribute("inert")) return false;
+        if (style.display === "none" || style.visibility === "hidden" || style.pointerEvents === "none" || node.disabled) return false;
         if (rect.width <= 0 || rect.height <= 0) return false;
         return rect.height < 28 || rect.width < 24;
       })
@@ -68,6 +90,19 @@ async function assertFit(page, label) {
 async function gotoSection(page, section) {
   const button = page.locator(`[data-section="${section}"]`);
   await button.waitFor({ state:"visible", timeout:15000 });
+
+  // At <=960px the sidebar is intentionally off-canvas. Open it before
+  // interacting with a navigation item; switchSection() re-renders the app
+  // and therefore closes it again after each navigation.
+  const menu = page.locator("[data-toggle-nav]");
+  if (await menu.isVisible()) {
+    const navOpen = await page.locator("#admin-app").evaluate((node) => node.classList.contains("nav-open"));
+    if (!navOpen) {
+      await menu.click();
+      await page.waitForFunction(() => document.querySelector("#admin-app")?.classList.contains("nav-open"));
+    }
+  }
+
   await button.click();
   await page.waitForFunction((target) => location.hash === `#${target}`, section, { timeout:10000 });
   await page.waitForTimeout(120);
@@ -99,6 +134,7 @@ async function runSuperAdminProfile(profile) {
       await menu.click();
       await page.waitForFunction(() => document.querySelector("#admin-app")?.classList.contains("nav-open"));
       await menu.click();
+      await page.waitForFunction(() => !document.querySelector("#admin-app")?.classList.contains("nav-open"));
     }
 
     await gotoSection(page, "users");
