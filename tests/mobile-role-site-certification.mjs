@@ -3,6 +3,7 @@ import { chromium, webkit } from "playwright";
 import { ACCOUNT_MODULES } from "../src/account-permissions.js";
 
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
+const API_BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const PASSWORD = "KitchenTest!123";
 const ENGINES = { chromium, webkit };
 
@@ -28,7 +29,41 @@ function inventorySiteFromUrl(url) {
   }
 }
 
+async function seedSessionCookie(context, username, label) {
+  const response = await context.request.post(`${API_BASE}/api/auth/login`, {
+    data:{ username, password:PASSWORD },
+    failOnStatusCode:false,
+  });
+  assert.equal(response.status(), 200, `${label}: session seed failed with HTTP ${response.status()}`);
+  const setCookie = response.headersArray()
+    .filter((header) => header.name.toLowerCase() === "set-cookie")
+    .map((header) => header.value)
+    .find((value) => /^kitchen_session=/i.test(value));
+  const token = setCookie?.match(/^kitchen_session=([^;]+)/i)?.[1] || "";
+  assert(token, `${label}: session seed did not return kitchen_session`);
+  const target = new URL(BASE);
+  await context.addCookies([{
+    name:"kitchen_session",
+    value:token,
+    domain:target.hostname,
+    path:"/",
+    httpOnly:true,
+    secure:target.protocol === "https:",
+    sameSite:"Lax",
+  }]);
+}
+
 async function login(page, context, username, foreignSite, label) {
+  if (label.startsWith("webkit-")) {
+    await seedSessionCookie(context, username, label);
+    await page.goto(BASE + "/", { waitUntil:"domcontentloaded", timeout:30000 });
+    await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
+    await page.waitForSelector(".app-shell", { state:"visible", timeout:15000 });
+    await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:15000 });
+    await page.evaluate((site) => localStorage.setItem("shitu-admin-active-site-v1", site), foreignSite);
+    return;
+  }
+
   await page.goto(BASE + "/", { waitUntil:"domcontentloaded", timeout:30000 });
   await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
   await page.evaluate((site) => localStorage.setItem("shitu-admin-active-site-v1", site), foreignSite);
@@ -43,9 +78,6 @@ async function login(page, context, username, foreignSite, label) {
     await page.waitForSelector(".app-shell", { state:"visible", timeout:12000 });
     await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:12000 });
   } catch (uiError) {
-    // WebKit in CI can occasionally drop the login cookie during a form navigation.
-    // Re-seed the same account through the browser context so cookie/session scope
-    // remains identical to the page origin, then let the auth bridge rebuild local state.
     const response = await context.request.post(`${BASE}/api/auth/login`, {
       data:{ username, password:PASSWORD },
       failOnStatusCode:false,
@@ -276,10 +308,6 @@ async function runAdminMobile(browser) {
     const session = await sessionSnapshot(page);
     assert.equal(session?.accountRole || session?.role, "admin");
 
-    // Match the readiness contract used by every scoped role case before
-    // certifying navigation permissions. The inventory route gives the auth,
-    // stable-shell and workforce compatibility bridges time to reconcile the
-    // current session without weakening any permission assertion.
     await gotoInventory(page);
     await assertPermissionNavigation(page, session, label);
 
