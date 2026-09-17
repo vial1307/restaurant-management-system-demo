@@ -6,11 +6,14 @@ on:
     branches:
       - main
     paths:
+      - ".admindev.html"
       - "admin.html"
       - "src/admin-panel.js"
       - "src/admin-panel-inventory.js"
       - "src/admin-panel.css"
       - "tests/admin-panel-static-regression.mjs"
+      - "vps/Caddyfile"
+      - "vps/scripts/deploy-api.sh"
       - "vps/database/**"
       - "vps/backend/src/admin-routes.mjs"
       - "vps/backend/src/super-admin-routes.mjs"
@@ -27,11 +30,14 @@ on:
     branches:
       - main
     paths:
+      - ".admindev.html"
       - "admin.html"
       - "src/admin-panel.js"
       - "src/admin-panel-inventory.js"
       - "src/admin-panel.css"
       - "tests/admin-panel-static-regression.mjs"
+      - "vps/Caddyfile"
+      - "vps/scripts/deploy-api.sh"
       - "vps/database/**"
       - "vps/backend/src/admin-routes.mjs"
       - "vps/backend/src/super-admin-routes.mjs"
