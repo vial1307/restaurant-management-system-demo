@@ -184,10 +184,14 @@ done
 if [[ "${missing_admin}" != "0" ]]; then errors=$((errors+missing_admin)); else echo "OK: all admin module permissions"; fi
 
 check_zero "admin accounts outside global scope" "select count(*) from public.app_users where role='admin' and location<>'all'"
-check_positive "primary admin yangchuadmin restored" "
+check_positive "primary super admin yangchuadmin restored" "
   select count(*)
   from public.app_users
-  where lower(username)='yangchuadmin' and role='admin' and location='all' and active=true
+  where lower(username)='yangchuadmin' and role='superadmin' and location='all' and active=true
+"
+check_positive "superadmin system-owner capability grant exists" "
+  select count(*) from public.role_capabilities
+  where role_code='superadmin' and capability_key='system.super_admin' and allowed=true
 "
 check_positive "admin master-data capability grant exists" "
   select count(*) from public.role_capabilities
