@@ -16,6 +16,23 @@ const MIME = {
   ".webmanifest":"application/manifest+json; charset=utf-8",
 };
 
+const PROXY_RESPONSE_HEADERS = new Set([
+  "cache-control",
+  "content-disposition",
+  "content-type",
+  "etag",
+  "last-modified",
+  "set-cookie",
+]);
+
+function proxyResponseHeaders(headers = {}) {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name, value]) =>
+      value !== undefined && PROXY_RESPONSE_HEADERS.has(String(name).toLowerCase())
+    )
+  );
+}
+
 const server = http.createServer((req,res) => {
   if (req.url?.startsWith("/api/")) {
     const proxy = http.request({
@@ -25,7 +42,15 @@ const server = http.createServer((req,res) => {
       method:req.method,
       headers:{...req.headers,host:`127.0.0.1:${apiPort}`},
     }, (upstream) => {
-      res.writeHead(upstream.statusCode || 500, upstream.headers);
+      // The test server is a same-origin reverse proxy. Do not forward
+      // hop-by-hop or CORS transport headers from the API server: WebKit can
+      // interpret those headers against the proxy origin and reject an
+      // otherwise successful same-origin response. Keep only application
+      // response metadata that the browser/tests actually need.
+      res.writeHead(
+        upstream.statusCode || 500,
+        proxyResponseHeaders(upstream.headers)
+      );
       upstream.pipe(res);
     });
     proxy.on("error", (error) => {
