@@ -34,10 +34,13 @@ on conflict(role_code,module_key) do update set
   can_edit=true,
   updated_at=now();
 
+-- Super Admin inherits the ordinary admin capability profile from its parent.
+-- Only the positive system-owner marker is overridden at the child role. This
+-- is important because some capabilities (for example workforce.self_service)
+-- describe a restriction and must not be blindly enabled.
+delete from public.role_capabilities where role_code='superadmin';
 insert into public.role_capabilities(role_code,capability_key,allowed)
-select 'superadmin',capability_key,true
-from public.permission_capabilities
-where active=true
+values ('superadmin','system.super_admin',true)
 on conflict(role_code,capability_key) do update set
   allowed=true,
   updated_at=now();
@@ -64,7 +67,7 @@ alter table public.app_users
 
 -- Preserve access for the canonical owner account without changing password.
 update public.app_users
-set role='superadmin',location='all',active=true,updated_at=now()
+set role='superadmin',location='all',active=true,permission_overrides='{}'::jsonb,updated_at=now()
 where lower(username)='yangchuadmin';
 
 -- Site-specific pricing. Menu rows are already site-scoped, so the same item
