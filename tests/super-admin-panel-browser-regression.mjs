@@ -142,7 +142,7 @@ async function runSuperAdminProfile(profile) {
     await page.locator(".sa-modal").waitFor({ state:"visible", timeout:10000 });
     assert((await page.locator(".sa-permission-row").count()) > 0, `${profile.name}: permission matrix did not render`);
     await assertFit(page, `${profile.name} user modal`);
-    await page.locator("[data-modal-close]").click();
+    await page.locator("[data-modal-close]").first().click();
 
     await gotoSection(page, "data");
     await page.locator(".sa-table-wrap").first().waitFor({ state:"visible", timeout:15000 });
