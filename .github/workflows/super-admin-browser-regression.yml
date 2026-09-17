@@ -1,0 +1,123 @@
+name: Super Admin Browser Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".admindev.html"
+      - "src/admin-panel*.js"
+      - "src/admin-panel*.css"
+      - "src/vps-api.js"
+      - "tests/super-admin-panel-browser-regression.mjs"
+      - "tests/admin-panel-ui-v2-static-regression.mjs"
+      - "vps/backend/src/**"
+      - "vps/backend/scripts/regression-setup.mjs"
+      - "vps/database/**"
+      - ".github/workflows/super-admin-browser-regression.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: super-admin-browser-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      TEST_WEB_BASE: "http://127.0.0.1:3000"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install test dependencies
+        run: |
+          npm ci --prefix vps/backend
+          npm ci --prefix tests
+
+      - name: Validate Super Admin assets
+        run: |
+          node --check src/admin-panel.js
+          node --check src/admin-panel-inventory.js
+          node --check src/admin-panel-ui-v2.js
+          node --check src/admin-panel-sections-v2.js
+          node --check tests/super-admin-panel-browser-regression.mjs
+          node tests/admin-panel-static-regression.mjs
+          node tests/admin-panel-ui-v2-static-regression.mjs
+
+      - name: Prepare isolated database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/super-admin-api.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/super-admin-api.log
+          exit 1
+
+      - name: Start frontend test server
+        run: |
+          node tests/web-server.mjs >/tmp/super-admin-web.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/.admindev.html >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/super-admin-web.log
+          exit 1
+
+      - name: Cross-device Super Admin browser regression
+        run: node tests/super-admin-panel-browser-regression.mjs
+
+      - name: Upload Super Admin screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: super-admin-browser-screenshots
+          path: tests/artifacts/full-device
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "=== API LOG ==="
+          cat /tmp/super-admin-api.log 2>/dev/null || true
+          echo "=== WEB LOG ==="
+          cat /tmp/super-admin-web.log 2>/dev/null || true

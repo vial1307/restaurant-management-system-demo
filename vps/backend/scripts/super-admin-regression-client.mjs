@@ -1,0 +1,215 @@
+import assert from "node:assert/strict";
+import pg from "pg";
+
+const { Client } = pg;
+const BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
+const DB = new Client({
+  host:process.env.DB_HOST || "127.0.0.1",
+  port:Number(process.env.DB_PORT || 5432),
+  database:process.env.POSTGRES_DB || "kitchen_test",
+  user:process.env.POSTGRES_USER || "kitchen_test",
+  password:process.env.POSTGRES_PASSWORD || "kitchen_test",
+});
+
+async function request(path, { method="GET", cookie="", body } = {}) {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    headers:{
+      ...(cookie ? { cookie } : {}),
+      ...(body === undefined ? {} : { "content-type":"application/json" }),
+    },
+    body:body === undefined ? undefined : JSON.stringify(body),
+  });
+  const type = response.headers.get("content-type") || "";
+  const data = type.includes("application/json") ? await response.json().catch(() => null) : null;
+  return { response, data };
+}
+
+async function login(username, password="KitchenTest!123") {
+  const { response, data } = await request("/api/auth/login", {
+    method:"POST",
+    body:{ username, password },
+  });
+  assert.equal(response.status, 200, `login failed for ${username}: ${JSON.stringify(data)}`);
+  const cookie = (response.headers.get("set-cookie") || "").split(";")[0];
+  assert(cookie.includes("kitchen_session="), `session cookie missing for ${username}`);
+  return { cookie, user:data.user };
+}
+
+async function removeUser(cookie, id) {
+  if (!id) return;
+  const result = await request(`/api/admin/users/${encodeURIComponent(id)}`, { method:"DELETE",cookie });
+  assert.equal(result.response.status, 200, JSON.stringify(result.data));
+}
+
+await DB.connect();
+try {
+  const schema = await DB.query("select version from public.schema_migrations order by version desc limit 1");
+  assert.equal(schema.rows[0]?.version, "018");
+
+  const ownerDb = await DB.query("select role,location,permission_overrides from public.app_users where username='yangchuadmin'");
+  assert.equal(ownerDb.rows[0]?.role, "superadmin");
+  assert.equal(ownerDb.rows[0]?.location, "all");
+  assert.deepEqual(ownerDb.rows[0]?.permission_overrides, {});
+
+  const owner = await login("yangchuadmin");
+  assert.equal(owner.user.role, "admin", "legacy Kitchen OS role must remain admin-compatible");
+  assert.equal(owner.user.roleCode, "superadmin");
+  assert.equal(owner.user.policyRole, "admin");
+  assert.equal(owner.user.capabilities["system.super_admin"], true);
+  assert.equal(owner.user.capabilities["workforce.self_service"], false, "Super Admin must not inherit restrictive self-service capability");
+
+  const overview = await request("/api/admin/super/overview", { cookie:owner.cookie });
+  assert.equal(overview.response.status, 200, JSON.stringify(overview.data));
+  assert.equal(overview.data.database.database_name, process.env.POSTGRES_DB || "kitchen_test");
+  assert.equal(overview.data.schema.version, "018");
+  assert(Number(overview.data.api.uptime_seconds) >= 0);
+
+  const accessModel = await request("/api/admin/access-model", { cookie:owner.cookie });
+  assert.equal(accessModel.response.status, 200);
+  const superRole = accessModel.data.roles.find((role) => role.code === "superadmin");
+  assert(superRole, "superadmin role missing from owner access model");
+  assert.equal(superRole.capabilities["system.super_admin"], true);
+  assert.equal(superRole.capabilities["workforce.self_service"], false);
+
+  const ordinaryAdminCreate = await request("/api/admin/users", {
+    method:"POST",cookie:owner.cookie,
+    body:{
+      action:"create",username:"ordinaryadmin",display_name:"Ordinary Admin",password:"KitchenTest!123",
+      role:"admin",location:"all",active:true,permissions:{},
+    },
+  });
+  assert.equal(ordinaryAdminCreate.response.status, 200, JSON.stringify(ordinaryAdminCreate.data));
+  const ordinaryAdminId = ordinaryAdminCreate.data.user.id;
+  const ordinary = await login("ordinaryadmin");
+  assert.equal(ordinary.user.capabilities["system.super_admin"], false);
+  const ordinaryDenied = await request("/api/admin/super/overview", { cookie:ordinary.cookie });
+  assert.equal(ordinaryDenied.response.status, 403);
+  assert.equal(ordinaryDenied.data.error, "SUPER_ADMIN_REQUIRED");
+  const ordinaryModel = await request("/api/admin/access-model", { cookie:ordinary.cookie });
+  assert.equal(ordinaryModel.response.status, 200);
+  assert.equal(ordinaryModel.data.roles.some((role) => role.code === "superadmin"), false, "ordinary admin must not see promotable Super Admin role");
+
+  const overrideCreate = await request("/api/admin/users", {
+    method:"POST",cookie:owner.cookie,
+    body:{
+      action:"create",username:"rbacoverride",display_name:"RBAC Override",password:"KitchenTest!123",
+      role:"employee",location:"fuxing",active:true,
+      permissions:{ inventory:{view:false,edit:true},dashboard:{view:true,edit:false} },
+    },
+  });
+  assert.equal(overrideCreate.response.status, 200, JSON.stringify(overrideCreate.data));
+  const overrideId = overrideCreate.data.user.id;
+  assert.deepEqual(overrideCreate.data.user.permission_overrides.inventory,{view:false,edit:false});
+  const overrideLogin = await login("rbacoverride");
+  assert.equal(overrideLogin.user.permissions.inventory.view, false, "explicit override must beat employee role default");
+  assert.equal(overrideLogin.user.permissions.inventory.edit, false, "edit must never survive when view=false");
+  assert.equal(overrideLogin.user.permissions.dashboard.view, true);
+  const overrideDb = await DB.query("select permission_overrides,permissions from public.app_users where id=$1",[overrideId]);
+  assert.deepEqual(overrideDb.rows[0].permission_overrides.inventory,{view:false,edit:false});
+  assert.notDeepEqual(overrideDb.rows[0].permissions, overrideDb.rows[0].permission_overrides, "new RBAC overrides must not overwrite legacy permissions column");
+
+  const siteCode = "regression-super-site";
+  const saveSite = await request("/api/admin/super/sites", {
+    method:"POST",cookie:owner.cookie,
+    body:{ code:siteCode,name_vi:"Chi nhánh Regression",name_zh_tw:"回歸分店",timezone_name:"Asia/Taipei",currency_code:"TWD",active:true,sort_order:999,metadata:{regression:true} },
+  });
+  assert.equal(saveSite.response.status, 200, JSON.stringify(saveSite.data));
+  assert.equal(saveSite.data.site.code, siteCode);
+  const disableSite = await request("/api/admin/super/sites", {
+    method:"POST",cookie:owner.cookie,
+    body:{ ...saveSite.data.site,active:false },
+  });
+  assert.equal(disableSite.response.status, 200, JSON.stringify(disableSite.data));
+  assert.equal(disableSite.data.site.active, false);
+
+  const settingSave = await request("/api/admin/super/settings", {
+    method:"POST",cookie:owner.cookie,
+    body:{ setting_key:"website.regression_banner",value:{enabled:true,text:"regression"} },
+  });
+  assert.equal(settingSave.response.status, 200, JSON.stringify(settingSave.data));
+  assert.equal(Number(settingSave.data.setting.version), 1);
+  const settingUpdate = await request("/api/admin/super/settings", {
+    method:"POST",cookie:owner.cookie,
+    body:{ setting_key:"website.regression_banner",value:{enabled:false,text:"regression-2"} },
+  });
+  assert.equal(settingUpdate.response.status, 200, JSON.stringify(settingUpdate.data));
+  assert.equal(Number(settingUpdate.data.setting.version), 2);
+
+  const announcement = await request("/api/admin/super/data/announcements", {
+    method:"POST",cookie:owner.cookie,
+    body:{ action:"save",values:{site_code:"fuxing",title_vi:"Thông báo regression",title_zh_tw:"回歸公告",body_vi:"Nội dung",body_zh_tw:"內容",status:"published"} },
+  });
+  assert.equal(announcement.response.status, 200, JSON.stringify(announcement.data));
+  const announcementId = announcement.data.row.id;
+  const table = await request("/api/admin/super/data/announcements?q=regression&site=fuxing&status=published&page=1&pageSize=10&sort=updated_at&direction=desc", { cookie:owner.cookie });
+  assert.equal(table.response.status, 200, JSON.stringify(table.data));
+  assert(table.data.rows.some((row) => row.id === announcementId));
+  assert.equal(table.data.pagination.page, 1);
+  assert(table.data.columns.includes("title_vi"));
+  const archiveAnnouncement = await request("/api/admin/super/data/announcements", {
+    method:"POST",cookie:owner.cookie,body:{action:"archive",id:announcementId},
+  });
+  assert.equal(archiveAnnouncement.response.status, 200, JSON.stringify(archiveAnnouncement.data));
+  assert.equal(archiveAnnouncement.data.row.status, "archived");
+
+  const menuSeed = await DB.query(
+    `insert into public.menu_items(site_code,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata)
+     values('fuxing','super-regression-menu','Món Regression','回歸菜品','test','noodles',120,'TWD',true,'{}'::jsonb)
+     on conflict(site_code,item_code) do update set price=excluded.price,name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,active=true
+     returning id`
+  );
+  assert.equal(menuSeed.rowCount,1);
+  const menuSync = await request("/api/admin/super/menu-sync", {
+    method:"POST",cookie:owner.cookie,body:{source:"fuxing",destination:"yongji",overwritePrices:true},
+  });
+  assert.equal(menuSync.response.status, 200, JSON.stringify(menuSync.data));
+  const yongjiMenu = await DB.query("select price from public.menu_items where site_code='yongji' and item_code='super-regression-menu'");
+  assert.equal(Number(yongjiMenu.rows[0]?.price),120);
+  await DB.query("update public.menu_items set price=155 where site_code='yongji' and item_code='super-regression-menu'");
+  const preservePrice = await request("/api/admin/super/menu-sync", {
+    method:"POST",cookie:owner.cookie,body:{source:"fuxing",destination:"yongji",overwritePrices:false},
+  });
+  assert.equal(preservePrice.response.status, 200, JSON.stringify(preservePrice.data));
+  const preserved = await DB.query("select price from public.menu_items where site_code='yongji' and item_code='super-regression-menu'");
+  assert.equal(Number(preserved.rows[0]?.price),155,"destination-specific menu price must survive non-price sync");
+
+  const document = await DB.query(
+    `insert into public.sop_documents(site_code,sop_code,work_area,name_vi,name_zh_tw,active)
+     values('fuxing','super-regression-sop','noodles','SOP Regression','回歸SOP',true)
+     on conflict(site_code,sop_code) do update set active=true
+     returning id`
+  );
+  const version = await DB.query(
+    `insert into public.sop_versions(document_id,version_no,status,revision_note)
+     values($1,99,'draft','super-admin regression') returning id`,[document.rows[0].id]
+  );
+  const review = await request(`/api/admin/super/sop-versions/${version.rows[0].id}/review`, {
+    method:"POST",cookie:owner.cookie,body:{decision:"approved"},
+  });
+  assert.equal(review.response.status,200,JSON.stringify(review.data));
+  assert.equal(review.data.version.status,"approved");
+  assert(review.data.version.approved_at);
+
+  const audit = await request("/api/admin/super/audit?q=super_admin&page=1&pageSize=100", { cookie:owner.cookie });
+  assert.equal(audit.response.status, 200, JSON.stringify(audit.data));
+  assert(audit.data.rows.some((row) => row.action === "super_admin_menu_sync"));
+  assert(audit.data.rows.some((row) => row.action === "super_admin_setting_save"));
+
+  const excel = await fetch(`${BASE}/api/admin/super/audit/export?format=excel&limit=50`, { headers:{cookie:owner.cookie} });
+  assert.equal(excel.status,200);
+  assert.match(excel.headers.get("content-type") || "",/application\/vnd\.ms-excel/);
+  assert((await excel.arrayBuffer()).byteLength > 10);
+  const pdf = await fetch(`${BASE}/api/admin/super/audit/export?format=pdf&limit=50`, { headers:{cookie:owner.cookie} });
+  assert.equal(pdf.status,200);
+  assert.match(pdf.headers.get("content-type") || "",/application\/pdf/);
+  const pdfBytes = new Uint8Array(await pdf.arrayBuffer());
+  assert.equal(new TextDecoder("ascii").decode(pdfBytes.slice(0,8)),"%PDF-1.4");
+
+  await removeUser(owner.cookie, overrideId);
+  await removeUser(owner.cookie, ordinaryAdminId);
+
+  console.log("SUPER_ADMIN_API_REGRESSION_OK");
+} finally {
+  await DB.end();
+}

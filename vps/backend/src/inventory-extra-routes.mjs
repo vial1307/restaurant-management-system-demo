@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { pool, withTransaction } from "./db.mjs";
 import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
-
-const SITES = new Set(["central","fuxing","yongji"]);
+import { activeSite, activeSiteCodes, isBranchSite } from "./site-registry.mjs";
 
 function requireInventory(user, site, action, reply) {
   if (siteAllowed(user, site) && hasPermission(user, "inventory", action)) return true;
@@ -29,15 +28,15 @@ function requireCatalogManager(user, site, reply) {
   return requireInventory(user, site, "edit", reply);
 }
 
-function canManageReceiveDefault(user, site) {
+async function canManageReceiveDefault(user, site) {
   if (!siteAllowed(user, site) || !hasPermission(user, "inventory", "edit")) return false;
   if (user.role === "admin") return true;
-  return user.role === "manager" && ["fuxing","yongji"].includes(site);
+  return user.role === "manager" && await isBranchSite(site);
 }
 
-function requireReceiveDefaultManager(user, site, reply) {
+async function requireReceiveDefaultManager(user, site, reply) {
   if (!requireInventory(user, site, "edit", reply)) return false;
-  if (canManageReceiveDefault(user, site)) return true;
+  if (await canManageReceiveDefault(user, site)) return true;
   reply.code(403).send({ error: "RECEIVE_DEFAULT_MANAGER_REQUIRED" });
   return false;
 }
@@ -46,7 +45,7 @@ export async function registerInventoryExtraRoutes(app) {
   app.get("/api/inventory/schema-version", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
-    return { version: 11 };
+    return { version: 12 };
   });
 
   app.get("/api/inventory/destinations", async (request, reply) => {
@@ -54,11 +53,12 @@ export async function registerInventoryExtraRoutes(app) {
     if (!user) return;
 
     const source = String(request.query?.source || "").trim();
+    const allowedSites = new Set(await activeSiteCodes());
     const sites = [...new Set(String(request.query?.sites || "")
       .split(",")
       .map((value) => value.trim())
-      .filter((value) => SITES.has(value) && value !== source))];
-    if (!SITES.has(source)) return reply.code(400).send({ error:"INVALID_SITE" });
+      .filter((value) => allowedSites.has(value) && value !== source))];
+    if (!(await activeSite(source))) return reply.code(400).send({ error:"INVALID_SITE" });
     if (!requireInventory(user, source, "edit", reply)) return;
     if (!sites.length) return { locations:[], catalog:[] };
 
@@ -66,7 +66,7 @@ export async function registerInventoryExtraRoutes(app) {
     // remain protected by the normal site-scoped inventory endpoint.
     const [locationResult, catalogResult] = await Promise.all([
       pool.query(
-        `select id,code,name_zh_tw,name_vi,site,kind,sort_order
+        `select id,code,name_zh_tw,name_vi,site,kind,sort_order,metadata
          from public.inventory_locations
          where site=any($1::text[]) and kind='storage' and active=true
          order by site,sort_order,code`,
@@ -75,7 +75,7 @@ export async function registerInventoryExtraRoutes(app) {
       pool.query(
         `select i.id as item_id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,
                 l.id as location_id,l.code as location_code,l.name_zh_tw as location_zh,
-                l.name_vi as location_vi,l.site
+                l.name_vi as location_vi,l.site,l.metadata as location_metadata
          from public.inventory_items i
          join public.inventory_stock s on s.item_id=i.id
          join public.inventory_locations l on l.id=s.location_id
@@ -110,6 +110,7 @@ export async function registerInventoryExtraRoutes(app) {
         name_zh_tw:row.location_zh,
         name_vi:row.location_vi,
         site:row.site,
+        metadata:row.location_metadata || {},
       });
     }
 
@@ -123,10 +124,11 @@ export async function registerInventoryExtraRoutes(app) {
       return reply.code(403).send({ error: "INVENTORY_VIEW_NOT_ALLOWED" });
     }
 
+    const allowedSites = new Set(await activeSiteCodes());
     const sites = String(request.query?.sites || "")
       .split(",")
       .map((value) => value.trim())
-      .filter((value) => SITES.has(value));
+      .filter((value) => allowedSites.has(value));
     const catalogKeys = String(request.query?.catalogKeys || "")
       .split(",")
       .map((value) => value.trim())
@@ -145,7 +147,7 @@ export async function registerInventoryExtraRoutes(app) {
 
     const { rows } = await pool.query(
       `select d.site,d.catalog_key,d.location_id,d.updated_at,
-              l.code as location_code,l.name_zh_tw,l.name_vi,l.kind,l.active
+              l.code as location_code,l.name_zh_tw,l.name_vi,l.kind,l.active,l.metadata
        from public.inventory_receive_defaults d
        join public.inventory_locations l on l.id=d.location_id
        ${where.length ? "where " + where.join(" and ") : ""}
@@ -164,10 +166,10 @@ export async function registerInventoryExtraRoutes(app) {
     const catalogKey = String(request.body?.catalogKey || "").trim();
     const locationCode = String(request.body?.locationCode || "").trim();
 
-    if (!SITES.has(site) || !catalogKey) {
+    if (!(await activeSite(site)) || !catalogKey) {
       return reply.code(400).send({ error: "INVALID_RECEIVE_DEFAULT" });
     }
-    if (!requireReceiveDefaultManager(user, site, reply)) return;
+    if (!(await requireReceiveDefaultManager(user, site, reply))) return;
 
     if (!locationCode) {
       await pool.query(
@@ -329,7 +331,7 @@ export async function registerInventoryExtraRoutes(app) {
     const item = request.body?.item;
     const itemKey = String(item?.key || "");
     const site = itemKey.split(":")[0];
-    if (!item || !SITES.has(site)) {
+    if (!item || !(await activeSite(site))) {
       return reply.code(400).send({ error: "INVALID_CATALOG_ITEM" });
     }
     if (!requireCatalogManager(user,site,reply)) return;
@@ -356,7 +358,7 @@ export async function registerInventoryExtraRoutes(app) {
             String(item.zh || itemKey),
             String(item.vi || item.zh || itemKey),
             String(item.unit || "個"),
-            String(item.work_area || "noodles"),
+            String(item.work_area || ""),
             Boolean(item.storage_only),
           ]
         );

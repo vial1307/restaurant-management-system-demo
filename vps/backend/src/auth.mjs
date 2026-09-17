@@ -47,6 +47,7 @@ export async function resolveSession(request) {
   const { rows } = await pool.query(
     `select
        u.id,u.username,u.display_name,u.role as role_code,u.location,
+       u.permission_overrides,
        u.preferred_language,u.active,
        s.id as session_id,s.expires_at
      from public.sessions s
@@ -92,13 +93,16 @@ export function siteAllowed(user, site) {
 }
 
 export function publicUser(user) {
+  const roleCode = user.role_code || user.role;
   return {
     id: user.id,
     username: user.username,
     displayName: user.display_name,
-    role: user.role_code || user.role,
+    role: roleCode === "superadmin" ? user.role : roleCode,
+    roleCode,
     policyRole: user.role,
     location: user.location,
+    permissionOverrides: user.permission_overrides || {},
     permissions: user.permissions || {},
     capabilities: user.capabilities || {},
     hierarchyLevel: Number(user.hierarchy_level || 0),

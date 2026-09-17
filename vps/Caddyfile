@@ -6,10 +6,15 @@
   @legacyEntry path /vps-entry.html
   redir @legacyEntry / 308
 
-  # Always revalidate the application shell so every device sees the newest
+  # Super Admin has a dedicated non-navigation entry. Keep the former URL only
+  # as a compatibility redirect so old bookmarks cannot drift to another shell.
+  @legacyAdmin path /admin.html
+  redir @legacyAdmin /.admindev.html 308
+
+  # Always revalidate application shells so every device sees the newest
   # release from the same URL. Static assets may be kept locally, but must be
   # revalidated by Caddy before reuse.
-  @freshShell path / /index.html /manifest.webmanifest /sw.js /RELEASE
+  @freshShell path / /index.html /.admindev.html /manifest.webmanifest /sw.js /RELEASE
   header @freshShell Cache-Control "no-store, no-cache, must-revalidate"
 
   @appAssets path /src/*

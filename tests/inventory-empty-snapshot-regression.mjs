@@ -24,7 +24,7 @@ const storage = new Map([
     permissions: { inventory: { view: true, edit: true } },
   })],
   [CLOUD_FLAG_KEY, "ready"],
-  [CLOUD_SCHEMA_VERSION_KEY, "11"],
+  [CLOUD_SCHEMA_VERSION_KEY, "12"],
   [ACTIVE_SITE_KEY, "fuxing"],
   [STORAGE_KEY, JSON.stringify({ selectedDate: today, records: { [today]: structuredClone(staleBranchRecord) } })],
   [CENTRAL_KEY, JSON.stringify([{ id: "stale@central-freezer", zh: "舊央廚", zone: "央廚冷凍", qty: 9 }])],
@@ -70,6 +70,34 @@ class TestCustomEvent {
 }
 Object.defineProperty(globalThis, "CustomEvent", { configurable: true, value: TestCustomEvent });
 
+const sites = [
+  { code: "central", name_vi: "Bếp trung tâm", name_zh_tw: "央廚", sort_order: 10, metadata: { inventory_mode: "central" } },
+  { code: "fuxing", name_vi: "Fuxing", name_zh_tw: "復興店", sort_order: 20, metadata: { inventory_mode: "branch" } },
+];
+function masterData(site) {
+  if (site === "central") {
+    return {
+      site: sites[0],
+      locations: [
+        { code: "central-freezer", site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "央廚冷凍", name_vi: "Tủ đông bếp trung tâm", metadata: { ui_key: "央廚冷凍", storage_group: "primary" } },
+      ],
+      workAreas: [
+        { code: "noodles", site_code: site, name_zh_tw: "麵區", name_vi: "Khu mì", sort_order: 10, active: true, metadata: {} },
+      ],
+    };
+  }
+  return {
+    site: sites[1],
+    locations: [
+      { code: "fuxing-large-freezer", site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary" } },
+      { code: "fuxing-work-noodles", site, kind: "work", sort_order: 100, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles" } },
+    ],
+    workAreas: [
+      { code: "noodles", site_code: site, name_zh_tw: "麵區", name_vi: "Khu mì", sort_order: 10, active: true, metadata: {} },
+    ],
+  };
+}
+
 let centralMalformed = true;
 Object.defineProperty(globalThis, "fetch", {
   configurable: true,
@@ -78,7 +106,20 @@ Object.defineProperty(globalThis, "fetch", {
     const method = String(options.method || "GET").toUpperCase();
     if (method !== "GET") throw new Error(`Unexpected mutation: ${method} ${url}`);
     if (url === "/api/inventory/schema-version") {
-      return new Response(JSON.stringify({ version: 11 }), {
+      return new Response(JSON.stringify({ version: 12 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url === "/api/inventory/sites") {
+      return new Response(JSON.stringify({ sites }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const masterMatch = url.match(/^\/api\/master-data\/(fuxing|central)$/);
+    if (masterMatch) {
+      return new Response(JSON.stringify(masterData(masterMatch[1])), {
         status: 200,
         headers: { "content-type": "application/json" },
       });

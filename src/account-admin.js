@@ -1,5 +1,5 @@
 import { tr, currentLocale } from './locales.js';
-import { isVpsApiConfigured, vpsListUsers } from './vps-api.js';
+import { apiRequest, isVpsApiConfigured, vpsInventorySites, vpsListUsers } from './vps-api.js';
 import {
   ACCOUNT_MODULES,
   ACCOUNT_ROLE_DEFAULTS,
@@ -13,7 +13,9 @@ const AUTH_KEY = 'shitu-kitchen-auth-v1';
 // the account editor while the browser refreshes the module graph.
 const PERMISSION_MODULES = ['dashboard', ...ACCOUNT_MODULES.filter((key)=>key!=='dashboard')];
 
-const DEFAULT_ACCOUNTS = []
+const DEFAULT_ACCOUNTS = [];
+const accountMaster = { sites:[], roles:[] };
+let accountMasterLoading = null;
 
 function clone(v){ return JSON.parse(JSON.stringify(v)); }
 function loadAccounts(){
@@ -30,6 +32,29 @@ function loadAccounts(){
   return seeded;
 }
 function saveAccounts(list){ localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list)); }
+
+function session(){ try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch{return null} }
+function localeIsZh(){ return String(currentLocale?.() || '').toLowerCase().startsWith('zh'); }
+function roleRecord(code){ return accountMaster.roles.find((row)=>row.code===code) || null; }
+function siteRecord(code){ return accountMaster.sites.find((row)=>row.code===code) || null; }
+function siteMode(row){ return String(row?.metadata?.inventory_mode || ''); }
+
+async function refreshAccountMasterData(){
+  if(!isVpsApiConfigured()) return accountMaster;
+  if(accountMasterLoading) return accountMasterLoading;
+  accountMasterLoading=(async()=>{
+    try{
+      const [siteResult, accessModel] = await Promise.all([
+        vpsInventorySites(),
+        apiRequest('/api/admin/access-model'),
+      ]);
+      accountMaster.sites = Array.isArray(siteResult?.sites) ? siteResult.sites : [];
+      accountMaster.roles = Array.isArray(accessModel?.roles) ? accessModel.roles : [];
+    }catch{}
+    return accountMaster;
+  })().finally(()=>{ accountMasterLoading=null; });
+  return accountMasterLoading;
+}
 
 let cloudAccountsLoading = null;
 async function refreshAccountsFromCloud(){
@@ -62,15 +87,71 @@ async function refreshAccountsFromCloud(){
   })();
   return cloudAccountsLoading;
 }
-function session(){ try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch{return null} }
+
+function roleScope(role){ return String(roleRecord(role)?.scope_policy || ''); }
+function rolePermissions(role){
+  const fromDatabase = roleRecord(role)?.permissions;
+  if(fromDatabase && typeof fromDatabase==='object') return clone(fromDatabase);
+  return clone(ACCOUNT_ROLE_DEFAULTS[role] || ACCOUNT_ROLE_DEFAULTS.employee || {});
+}
+function roleChoices(){
+  if(accountMaster.roles.length) return accountMaster.roles;
+  return Object.keys(ACCOUNT_ROLE_DEFAULTS).map((code)=>({ code, name_vi:label(code), name_zh_tw:label(code), scope_policy:'' }));
+}
+function siteChoicesForRole(role, current=''){
+  const scope=roleScope(role);
+  let rows=[];
+  if(scope==='all') {
+    return [{ code:'all', name_vi:label('allLocations'), name_zh_tw:label('allLocations'), metadata:{} }];
+  }
+  if(accountMaster.sites.length){
+    rows = scope==='central'
+      ? accountMaster.sites.filter((row)=>siteMode(row)==='central')
+      : scope==='assigned'
+        ? accountMaster.sites.filter((row)=>siteMode(row)==='branch')
+        : [...accountMaster.sites];
+  } else {
+    const localCodes=[...new Set(loadAccounts().map((row)=>row.location).filter((code)=>code && code!=='all'))];
+    const active=session()?.location;
+    if(active && active!=='all' && !localCodes.includes(active)) localCodes.push(active);
+    rows=localCodes.map((code)=>({ code, name_vi:code, name_zh_tw:code, metadata:{} }));
+  }
+  if(current && current!=='all' && !rows.some((row)=>row.code===current)){
+    const known=siteRecord(current);
+    rows.push(known || { code:current, name_vi:current, name_zh_tw:current, metadata:{} });
+  }
+  return rows;
+}
+function defaultRole(){
+  const roles=roleChoices();
+  return roles.find((row)=>row.compatibility_role==='employee')?.code
+    || roles.find((row)=>row.scope_policy==='assigned')?.code
+    || roles[0]?.code
+    || '';
+}
+function defaultLocationForRole(role){ return siteChoicesForRole(role)[0]?.code || ''; }
+
 function setSession(account){
-  const authRole = account.role === 'admin' ? 'admin' : account.role === 'central' ? 'central' : 'branch';
+  const scope=roleScope(account.role);
+  const authRole = isAdminAccount(account) || scope==='all' ? 'admin' : scope==='central' ? 'central' : 'branch';
   localStorage.setItem(AUTH_KEY, JSON.stringify({ id:account.id, username:account.username, name:account.name, role:authRole, accountRole:account.role, location:account.location, permissions:account.permissions }));
 }
 function esc(v){ return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
 function label(key){ return tr(key); }
-function roleLabel(role){ return label(role); }
-function locationLabel(location){ return label(location === 'central' ? 'centralKitchen' : location === 'fuxing' ? 'fuxing' : location === 'yongji' ? 'yongji' : 'allLocations'); }
+function roleLabel(role){
+  const row=roleRecord(role);
+  if(row) return localeIsZh() ? (row.name_zh_tw||row.code) : (row.name_vi||row.code);
+  const translated=label(role);
+  return translated && translated!==role ? translated : role;
+}
+function locationLabel(location){
+  if(location==='all') return label('allLocations');
+  const row=siteRecord(location);
+  if(!row) return location || '—';
+  return localeIsZh()
+    ? (row.name_zh_tw||row.code)
+    : `${row.name_vi||row.code}${row.name_zh_tw ? ` · ${row.name_zh_tw}` : ''}`;
+}
 function moduleLabel(k){ return label(k); }
 
 function normalizePermissions(role, input){
@@ -116,7 +197,7 @@ function interceptLogin(){
     setSession(account);
     document.body.classList.remove('auth-locked');
     document.querySelector('#auth-layer')?.remove();
-    location.hash = account.location === 'central' ? '#inventory' : (account.permissions?.dashboard?.view === false ? '#inventory' : '#dashboard');
+    location.hash = roleScope(account.role)==='central' ? '#inventory' : (account.permissions?.dashboard?.view === false ? '#inventory' : '#dashboard');
     location.reload();
   }, true);
 }
@@ -125,10 +206,10 @@ function accountCard(){
   const s=session();
   const account=loadAccounts().find(a=>a.id===s?.id) || (s?.id ? {
     id:s.id, username:s.username || '', name:s.name || '', role:s.accountRole || s.role || 'employee',
-    location:s.location || 'fuxing', active:true, permissions:s.permissions || {}, password:''
+    location:s.location || '', active:true, permissions:s.permissions || {}, password:''
   } : null);
   if(!account) return '';
-  return `<article class="card account-self-card"><div class="account-card-head"><div><h2>${esc(label('accountSettings'))}</h2><p>${esc(account.name)} · ${esc(account.username)}</p></div></div><form data-account-self-password><div class="account-form-grid"><label><span>${esc(label('currentPassword'))}</span><input type="password" name="current" required autocomplete="current-password"></label><label><span>${esc(label('newPassword'))}</span><input type="password" name="next" required minlength="10" autocomplete="new-password"></label><label><span>${esc(label('confirmPassword'))}</span><input type="password" name="confirm" required minlength="10" autocomplete="new-password"></label></div><div class="account-form-actions"><button class="primary-button" type="submit">${esc(label('changePassword'))}</button></div><p class="account-form-message" data-account-self-message></p></form></article>`;
+  return `<article class="card account-self-card"><div class="account-card-head"><div><h2>${esc(label('accountSettings'))}</h2><p>${esc(account.name)} · ${esc(account.username)}</p></div></div><form data-account-self-password><div class="account-form-grid"><label><span>${esc(label('currentPassword'))}</span><input type="password" name="current" required autocomplete="current-password"></label><label><span>${esc(label('newPassword'))}</span><input name="next" type="password" required minlength="10" autocomplete="new-password"></label><label><span>${esc(label('confirmPassword'))}</span><input name="confirm" type="password" required minlength="10" autocomplete="new-password"></label></div><div class="account-form-actions"><button class="primary-button" type="submit">${esc(label('changePassword'))}</button></div><p class="account-form-message" data-account-self-message></p></form></article>`;
 }
 
 function adminPanel(){
@@ -148,24 +229,42 @@ function renderSettingsAccounts(){
   bindSettings();
   if(session()?.role==='admin' && !settingsCloudSynced){
     settingsCloudSynced=true;
-    void refreshAccountsFromCloud().then(()=>{
+    void Promise.all([refreshAccountsFromCloud(),refreshAccountMasterData()]).then(()=>{
       if(location.hash.startsWith('#settings')) refreshSettings();
     });
   }
 }
 
 function permissionGrid(account){
-  const p=normalizePermissions(account.role, account.permissions);
+  const p=account.permissions && Object.keys(account.permissions).length ? account.permissions : rolePermissions(account.role);
   return `<div class="permission-grid"><div class="permission-head"><span>${esc(label('permissions'))}</span><span>${esc(label('view'))}</span><span>${esc(label('edit'))}</span></div>${PERMISSION_MODULES.map(k=>`<div class="permission-row" data-permission-module="${esc(k)}"><span>${esc(moduleLabel(k))}</span><label class="permission-toggle" title="${esc(label('view'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:view" ${p[k]?.view?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label><label class="permission-toggle" title="${esc(label('edit'))}"><input class="permission-checkbox" type="checkbox" name="perm:${k}:edit" ${p[k]?.edit?'checked':''}><span class="permission-toggle-ui" aria-hidden="true"></span></label></div>`).join('')}</div>`;
 }
 
+function roleOptions(selected){
+  return roleChoices().map((row)=>`<option value="${esc(row.code)}" ${selected===row.code?'selected':''}>${esc(roleLabel(row.code))}</option>`).join('');
+}
+function locationOptions(role, selected){
+  return siteChoicesForRole(role, selected).map((row)=>`<option value="${esc(row.code)}" ${selected===row.code?'selected':''}>${esc(row.code==='all' ? label('allLocations') : locationLabel(row.code))}</option>`).join('');
+}
+function replaceLocationOptions(host, role, selected=''){
+  const select=host.querySelector('select[name="location"]');
+  if(!select) return;
+  const choices=siteChoicesForRole(role, selected);
+  const next=choices.some((row)=>row.code===selected) ? selected : (choices[0]?.code || '');
+  select.innerHTML=locationOptions(role,next);
+  select.value=next;
+}
+
 async function openEditor(id=''){
-  const list=await refreshAccountsFromCloud();
-  const account=id?list.find(a=>a.id===id):{id:'',username:'',password:'',name:'',role:'employee',location:'fuxing',active:true,permissions:clone(ACCOUNT_ROLE_DEFAULTS.employee)};
+  const [list] = await Promise.all([refreshAccountsFromCloud(),refreshAccountMasterData()]);
+  const fallbackRole=defaultRole();
+  const account=id
+    ? list.find(a=>a.id===id)
+    : {id:'',username:'',password:'',name:'',role:fallbackRole,location:defaultLocationForRole(fallbackRole),active:true,permissions:rolePermissions(fallbackRole)};
   if(!account) return;
   const editing=Boolean(id);
   const host=document.createElement('div'); host.className='account-modal-backdrop'; host.dataset.accountModal='';
-  host.innerHTML=`<section class="account-modal"><div class="account-card-head"><div><h2>${esc(editing?label('editAccount'):label('addAccount'))}</h2><p>${editing?esc(account.username):''}</p></div><button class="icon-button" data-account-close>×</button></div><form data-account-form data-edit-id="${esc(id)}"><div class="account-form-grid"><label><span>${esc(label('employeeName'))}</span><input name="name" required value="${esc(account.name)}"></label><label><span>${esc(label('account'))}</span><input name="username" required value="${esc(account.username)}" autocomplete="off"></label><label><span>${esc(editing?label('newPassword'):label('password'))}</span><input name="password" type="password" minlength="10" ${editing?'':'required'} autocomplete="new-password" placeholder="${editing?'••••••':''}"></label><label><span>${esc(label('role'))}</span><select name="role">${['admin','manager','supervisor','employee','parttime','central'].map(r=>`<option value="${r}" ${account.role===r?'selected':''}>${esc(roleLabel(r))}</option>`).join('')}</select></label><label><span>${esc(label('location'))}</span><select name="location"><option value="all" ${account.location==='all'?'selected':''}>${esc(label('allLocations'))}</option><option value="fuxing" ${account.location==='fuxing'?'selected':''}>${esc(label('fuxing'))}</option><option value="yongji" ${account.location==='yongji'?'selected':''}>${esc(label('yongji'))}</option><option value="central" ${account.location==='central'?'selected':''}>${esc(label('centralKitchen'))}</option></select></label><label class="account-active-toggle"><span>${esc(label('status'))}</span><span class="account-switch"><input name="active" type="checkbox" ${account.active?'checked':''}><span class="account-switch-ui" aria-hidden="true"></span><strong>${esc(label('active'))}</strong></span></label></div>${permissionGrid(account)}<p class="account-form-message" data-account-form-message></p><div class="account-form-actions">${editing&&account.id!==session()?.id?`<button type="button" class="danger-button" data-account-delete="${esc(account.id)}">${esc(label('delete'))}</button>`:''}<button type="button" class="secondary-button" data-account-close>${esc(label('cancel'))}</button><button type="submit" class="primary-button">${esc(label('save'))}</button></div></form></section>`;
+  host.innerHTML=`<section class="account-modal"><div class="account-card-head"><div><h2>${esc(editing?label('editAccount'):label('addAccount'))}</h2><p>${editing?esc(account.username):''}</p></div><button class="icon-button" data-account-close>×</button></div><form data-account-form data-edit-id="${esc(id)}"><div class="account-form-grid"><label><span>${esc(label('employeeName'))}</span><input name="name" required value="${esc(account.name)}"></label><label><span>${esc(label('account'))}</span><input name="username" required value="${esc(account.username)}" autocomplete="off"></label><label><span>${esc(editing?label('newPassword'):label('password'))}</span><input name="password" type="password" minlength="10" ${editing?'':'required'} autocomplete="new-password" placeholder="${editing?'••••••':''}"></label><label><span>${esc(label('role'))}</span><select name="role" required>${roleOptions(account.role)}</select></label><label><span>${esc(label('location'))}</span><select name="location" required>${locationOptions(account.role,account.location)}</select></label><label class="account-active-toggle"><span>${esc(label('status'))}</span><span class="account-switch"><input name="active" type="checkbox" ${account.active?'checked':''}><span class="account-switch-ui" aria-hidden="true"></span><strong>${esc(label('active'))}</strong></span></label></div>${permissionGrid(account)}<p class="account-form-message" data-account-form-message></p><div class="account-form-actions">${editing&&account.id!==session()?.id?`<button type="button" class="danger-button" data-account-delete="${esc(account.id)}">${esc(label('delete'))}</button>`:''}<button type="button" class="secondary-button" data-account-close>${esc(label('cancel'))}</button><button type="submit" class="primary-button">${esc(label('save'))}</button></div></form></section>`;
   document.body.append(host);
   bindModal(host);
 }
@@ -186,12 +285,9 @@ function bindModal(host){
   });
   const roleSelect=host.querySelector('select[name="role"]');
   roleSelect?.addEventListener('change',()=>{
-    const fake={role:roleSelect.value,permissions:clone(ACCOUNT_ROLE_DEFAULTS[roleSelect.value]||ACCOUNT_ROLE_DEFAULTS.employee)};
+    const fake={role:roleSelect.value,permissions:rolePermissions(roleSelect.value)};
     host.querySelector('.permission-grid').outerHTML=permissionGrid(fake);
-    const locationSelect=host.querySelector('select[name="location"]');
-    if(locationSelect && roleSelect.value==='admin') locationSelect.value='all';
-    if(locationSelect && roleSelect.value==='central') locationSelect.value='central';
-    if(locationSelect && !['admin','central'].includes(roleSelect.value) && ['all','central'].includes(locationSelect.value)) locationSelect.value='fuxing';
+    replaceLocationOptions(host,roleSelect.value,'');
   });
   host.querySelector('[data-account-delete]')?.addEventListener('click',e=>{
     if(isVpsApiConfigured()) return;
@@ -213,7 +309,7 @@ function bindModal(host){
     const role=String(data.get('role'));
     const permissions={};
     for(const k of PERMISSION_MODULES){ const view=data.has(`perm:${k}:view`), edit=data.has(`perm:${k}:edit`); permissions[k]={view,edit:view&&edit}; }
-    const next={ id:existing?.id||`acct-${Date.now()}`, username, password:password||existing?.password||'', name:String(data.get('name')||'').trim(), role, location:String(data.get('location')), active:data.has('active'), permissions };
+    const next={ id:existing?.id||`acct-${Date.now()}`, username, password:password||existing?.password||'', name:String(data.get('name')||'').trim(), role, location:String(data.get('location')||''), active:data.has('active'), permissions };
     if(existing) list[list.findIndex(a=>a.id===existing.id)]=next; else list.push(next);
     saveAccounts(list); host.remove(); refreshSettings();
   });

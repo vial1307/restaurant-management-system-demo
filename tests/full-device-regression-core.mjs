@@ -136,7 +136,16 @@ async function login(page, context, label) {
 }
 
 async function gotoRoute(page, route) {
-  await page.goto(`${BASE}/#${route}`, { waitUntil:"domcontentloaded", timeout:30000 });
+  const appMounted = await page.locator(".app-shell").count();
+  if (appMounted) {
+    await page.evaluate((target) => {
+      const nextHash = `#${target}`;
+      if (location.hash !== nextHash) location.hash = nextHash;
+    }, route);
+  } else {
+    await page.goto(`${BASE}/#${route}`, { waitUntil:"domcontentloaded", timeout:30000 });
+  }
+  await page.waitForFunction((target) => location.hash === `#${target}`, route, { timeout:10000 });
   await page.waitForSelector(".page-content", { timeout:15000 });
   await page.waitForTimeout(60);
   assert.equal(await page.locator(".access-empty-state").count(), 0, `admin unexpectedly blocked from ${route}`);

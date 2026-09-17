@@ -7,6 +7,7 @@ import { registerAdminRoutes } from "./admin-routes.mjs";
 import { registerInventoryExtraRoutes } from "./inventory-extra-routes.mjs";
 import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
 import { hydrateUserAccess } from "./access-control.mjs";
+import { activeSite } from "./site-registry.mjs";
 import {
   createSession,
   destroySession,
@@ -141,7 +142,7 @@ app.get("/api/inventory/:site", async (request, reply) => {
   if (!user) return;
 
   const site = String(request.params.site || "");
-  if (!["central", "fuxing", "yongji"].includes(site)) {
+  if (!(await activeSite(site))) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
   if (!siteAllowed(user, site) || !hasPermission(user, "inventory", "view")) {
@@ -150,7 +151,7 @@ app.get("/api/inventory/:site", async (request, reply) => {
 
   const [locations, items, stock, defaults] = await Promise.all([
     pool.query(
-      `select id,code,name_zh_tw,name_vi,site,kind,sort_order,active
+      `select id,code,name_zh_tw,name_vi,site,kind,sort_order,active,metadata
        from public.inventory_locations
        where site=$1 and active=true
        order by sort_order,code`,
@@ -196,7 +197,7 @@ app.get("/api/inventory/:site/transactions", async (request, reply) => {
   if (!user) return;
 
   const site = String(request.params.site || "");
-  if (!["central", "fuxing", "yongji"].includes(site)) {
+  if (!(await activeSite(site))) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
   if (!hasCapability(user, "inventory.history.full")) {

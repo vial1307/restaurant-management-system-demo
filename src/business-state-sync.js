@@ -6,6 +6,7 @@ const RECOVERY_KEY = "shitu-business-recovery-v1";
 const PENDING_KEY = "shitu-business-pending-v1";
 const MAX_RECOVERY_DRAFTS = 12;
 const MAX_PENDING_DRAFTS = 12;
+const LIVE_REFRESH_MS = 5000;
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || "null"); }
@@ -269,6 +270,7 @@ export function attachBusinessStateSync(store) {
   let saveInFlightKey = "";
   let saveInFlightSnapshot = "";
   let authorizationTransitionPending = false;
+  let liveRefreshInFlight = false;
 
   const identityKey = () => {
     const user = readSession();
@@ -516,8 +518,8 @@ export function attachBusinessStateSync(store) {
             if (recoverySaved) {
               const baseline = snapshotModules(lastSavedSnapshot);
               const authoritativeModules = Object.fromEntries(
-                conflictingNames.map((name) => [name, structuredClone(serverModules[name])])
-              );
+                conflictingNames.map((name) => [name, structuredClone(serverModules[name])]
+              ));
               applyingRemote = true;
               try {
                 applyAuthorizedServerModules(authoritativeModules);
@@ -744,6 +746,18 @@ export function attachBusinessStateSync(store) {
   const unsubscribe = store.subscribe(scheduleSave);
   const reload = () => { void load(); };
   const saveThenReload = () => { void (async () => { const saved = await save(); if (saved !== false) await load(); })(); };
+  const liveRefresh = () => {
+    if (document.visibilityState !== "visible" || navigator.onLine === false || liveRefreshInFlight) return;
+    liveRefreshInFlight = true;
+    void (async () => {
+      try {
+        const saved = await save();
+        if (saved !== false) await load();
+      } finally {
+        liveRefreshInFlight = false;
+      }
+    })();
+  };
   const authReload = (event) => {
     if (event.detail?.authorizationChanged) authorizationTransitionPending = true;
     if (event.detail?.safeReloadRequested) return;
@@ -756,6 +770,7 @@ export function attachBusinessStateSync(store) {
   const resumeVisible = () => {
     if (document.visibilityState === "visible") saveThenReload();
   };
+  const liveRefreshTimer = setInterval(liveRefresh, LIVE_REFRESH_MS);
   window.addEventListener("shitu:auth-transition-preparing", captureAuthorizationRecovery);
   window.addEventListener("shitu:auth-synced", authReload);
   window.addEventListener("shitu:vps-auth-ready", saveThenReload);
@@ -770,6 +785,7 @@ export function attachBusinessStateSync(store) {
   return () => {
     unsubscribe();
     clearTimeout(saveTimer);
+    clearInterval(liveRefreshTimer);
     window.removeEventListener("shitu:auth-transition-preparing", captureAuthorizationRecovery);
     window.removeEventListener("shitu:auth-synced", authReload);
     window.removeEventListener("shitu:vps-auth-ready", saveThenReload);

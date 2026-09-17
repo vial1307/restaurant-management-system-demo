@@ -7,6 +7,7 @@ const PASSWORD = "KitchenTest!123";
 const SITE = "fuxing";
 const MONTH = "2026-11";
 const ENTRY_ID = "workforce-approval-browser-regression";
+const BUSINESS_STATE_KEY = "shitu-kitchen-os-v1";
 
 async function request(path, { method="GET", body, cookie } = {}) {
   const response = await fetch(API + path, {
@@ -106,13 +107,44 @@ async function browserLogin(page, username) {
   await page.waitForSelector(".app-shell", { timeout:30000 });
 }
 
-async function selectPayrollMonth(page, month) {
+async function waitForBrowserBusinessState(page, {
+  entryId="",
+  approvalStatus="",
+  month="",
+  periodStatus="",
+} = {}) {
+  await page.waitForFunction(({ stateKey, entryId, approvalStatus, month, periodStatus }) => {
+    try {
+      const state = JSON.parse(localStorage.getItem(stateKey) || "null");
+      if (!state?.operations) return false;
+      if (entryId) {
+        const entry = (state.operations.attendance || []).find((item) => String(item?.id || "") === entryId);
+        if (!entry) return false;
+        if (approvalStatus && entry.approvalStatus !== approvalStatus) return false;
+      }
+      if (month && periodStatus) {
+        if (state.operations.payroll?.periods?.[month]?.status !== periodStatus) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, { stateKey:BUSINESS_STATE_KEY, entryId, approvalStatus, month, periodStatus }, { timeout:30000 });
+}
+
+async function selectPayrollMonth(page, month, expectedState = {}) {
   await page.goto(`${WEB}/#attendance?workforce=payroll`, { waitUntil:"domcontentloaded" });
   const input = page.locator("[data-workforce-payroll-month]");
   await input.waitFor({ state:"visible", timeout:30000 });
+  await waitForBrowserBusinessState(page, expectedState);
   await input.fill(month);
   await input.evaluate((element) => element.dispatchEvent(new Event("change", { bubbles:true })));
-  await page.locator(`[data-workforce-approved-payroll][data-month="${month}"]`).waitFor({ state:"visible", timeout:10000 });
+  const approvedPanel = page.locator(`[data-workforce-approved-payroll][data-month="${month}"]`);
+  await approvedPanel.waitFor({ state:"visible", timeout:10000 });
+  await page.waitForFunction((selectedMonth) => {
+    const panel = document.querySelector(`[data-workforce-approved-payroll][data-month="${selectedMonth}"]`);
+    return Boolean(panel?.dataset.signature?.startsWith(`${selectedMonth}|`));
+  }, month, { timeout:10000 });
 }
 
 const { adminCookie, managerCookie } = await seedApprovedMonth();
@@ -123,7 +155,7 @@ try {
   const managerErrors = [];
   managerPage.on("pageerror", (error) => managerErrors.push(error.message));
   await browserLogin(managerPage, "managerfx");
-  await selectPayrollMonth(managerPage, MONTH);
+  await selectPayrollMonth(managerPage, MONTH, { entryId:ENTRY_ID, approvalStatus:"approved" });
 
   const approvedPanel = managerPage.locator(`[data-workforce-approved-payroll][data-month="${MONTH}"]`);
   assert.equal(await managerPage.locator(".workforce-payroll-stats").isHidden(), true, "legacy all-attendance payroll stats must be hidden");
@@ -140,10 +172,21 @@ try {
     cookie:managerCookie,
   });
   assert.equal(lock.response.status, 200, `browser payroll lock failed: ${JSON.stringify(lock.data)}`);
+  const lockedState = await readBusinessState(adminCookie);
+  assert.equal(
+    lockedState.data?.modules?.attendance?.payroll?.periods?.[MONTH]?.status,
+    "locked",
+    "payroll period must be locked in VPS state before browser verification",
+  );
 
-  await managerPage.reload({ waitUntil:"domcontentloaded" });
-  await selectPayrollMonth(managerPage, MONTH);
+  await selectPayrollMonth(managerPage, MONTH, {
+    entryId:ENTRY_ID,
+    approvalStatus:"approved",
+    month:MONTH,
+    periodStatus:"locked",
+  });
   const lockedPanel = managerPage.locator(`[data-workforce-approved-payroll][data-month="${MONTH}"]`);
+  await lockedPanel.locator('[data-workforce-reopen-form]').waitFor({ state:"visible", timeout:10000 });
   assert.equal(await lockedPanel.locator('[data-workforce-reopen-form]').count(), 1, "manager must get reopen control for a locked payroll period");
   assert.equal(await lockedPanel.locator('[data-workforce-lock-period]').count(), 0, "locked payroll period must not keep the lock button");
   assert.match(await lockedPanel.innerText(), /Đã khóa|已鎖定/, "locked payroll status missing");
@@ -154,8 +197,21 @@ try {
   const employeeErrors = [];
   employeePage.on("pageerror", (error) => employeeErrors.push(error.message));
   await browserLogin(employeePage, "employeefx");
-  await selectPayrollMonth(employeePage, MONTH);
+  await selectPayrollMonth(employeePage, MONTH, {
+    month:MONTH,
+    periodStatus:"locked",
+  });
   const employeePanel = employeePage.locator(`[data-workforce-approved-payroll][data-month="${MONTH}"]`);
+  const coworkerVisible = await employeePage.evaluate(({ stateKey, entryId }) => {
+    try {
+      const state = JSON.parse(localStorage.getItem(stateKey) || "null");
+      return (state?.operations?.attendance || []).some((entry) => String(entry?.id || "") === entryId);
+    } catch {
+      return true;
+    }
+  }, { stateKey:BUSINESS_STATE_KEY, entryId:ENTRY_ID });
+  assert.equal(coworkerVisible, false, "employee must not receive another staff member's attendance row");
+  assert.equal((await employeePanel.locator(".workforce-approval-stats .stat-card.stat-green .stat-value").innerText()).trim(), "0", "employee approved shift summary must contain only visible own attendance");
   assert.equal(await employeePanel.locator('[data-workforce-lock-period]').count(), 0, "employee must not receive payroll lock control");
   assert.equal(await employeePanel.locator('[data-workforce-reopen-form]').count(), 0, "employee must not receive payroll reopen control");
   assert.deepEqual(employeeErrors, [], `employee workforce payroll page errors: ${employeeErrors.join(" | ")}`);

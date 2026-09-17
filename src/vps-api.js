@@ -1,8 +1,10 @@
 const VPS_HOSTS = new Set(["82.47.180.185"]);
 const LEGACY_STATIC_HOSTS = new Set(["vial1307.github.io"]);
 const inventoryCache = new Map();
+const masterDataCache = new Map();
 const receiveDefaultsCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
+const MASTER_DATA_CACHE_MS = 5000;
 const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
 const AUTH_LOGIN_GRACE_MS = 5000;
@@ -15,12 +17,24 @@ export function invalidateVpsInventoryCache(site = "") {
   else inventoryCache.clear();
 }
 
+export function invalidateVpsMasterDataCache(site = "") {
+  const prefix = `${String(site || "")}|`;
+  if (!site) {
+    masterDataCache.clear();
+    return;
+  }
+  for (const key of masterDataCache.keys()) {
+    if (key.startsWith(prefix)) masterDataCache.delete(key);
+  }
+}
+
 export function invalidateVpsReceiveDefaultsCache() {
   receiveDefaultsCache.clear();
 }
 
 function clearRuntimeCaches() {
   invalidateVpsInventoryCache("");
+  invalidateVpsMasterDataCache("");
   invalidateVpsReceiveDefaultsCache();
   authMeInFlight = null;
   adminUsersInFlight = null;
@@ -197,6 +211,30 @@ export async function vpsSaveBusinessState(site, modules, expectedModuleRevision
 
 export function vpsSchemaVersion() {
   return apiRequest("/api/inventory/schema-version");
+}
+
+export function vpsInventorySites() {
+  return apiRequest("/api/inventory/sites");
+}
+
+export function vpsMasterData(site, { includeInactive = false, force = false } = {}) {
+  const normalizedSite = String(site || "");
+  const key = `${normalizedSite}|${includeInactive ? "inactive" : "active"}`;
+  const now = Date.now();
+  const cached = masterDataCache.get(key);
+  if (!force && cached && now - cached.at < MASTER_DATA_CACHE_MS) {
+    return cached.promise;
+  }
+
+  const params = includeInactive ? "?includeInactive=true" : "";
+  const promise = apiRequest(`/api/master-data/${encodeURIComponent(normalizedSite)}${params}`)
+    .catch((error) => {
+      masterDataCache.delete(key);
+      throw error;
+    });
+
+  masterDataCache.set(key, { at: now, promise });
+  return promise;
 }
 
 export function vpsInventory(site, { force = false } = {}) {

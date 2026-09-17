@@ -2,29 +2,38 @@ import { vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
 import {
   getInventoryReceiveDefaults,
   getSiteInventoryRows,
-  getSiteLocations,
   syncInventoryNow,
 } from "./inventory-cloud.js";
+import { inventoryLocations, inventorySites } from "./inventory-master-data.js";
 
-export const INVENTORY_SITES = [
-  { id: "central", zh: "央廚", vi: "Bếp trung tâm" },
-  { id: "fuxing", zh: "復興店", vi: "Chi nhánh Fuxing" },
-  { id: "yongji", zh: "永吉店", vi: "Chi nhánh Yongji" },
-];
+// Compatibility bridge for older UI modules: the array identity stays stable,
+// but its values are refreshed from the PostgreSQL-backed site registry.
+export const INVENTORY_SITES = [];
+
+export function inventorySiteOptions() {
+  const rows = inventorySites().map((site) => ({
+    id: site.code,
+    zh: site.name_zh_tw || site.code,
+    vi: site.name_vi || site.name_zh_tw || site.code,
+  }));
+  INVENTORY_SITES.splice(0, INVENTORY_SITES.length, ...rows);
+  return INVENTORY_SITES;
+}
 
 export function siteLabel(site, language = "vi") {
-  const found = INVENTORY_SITES.find((entry) => entry.id === site);
+  const found = inventorySiteOptions().find((entry) => entry.id === site);
   if (!found) return site;
   return language === "zh" ? found.zh : `${found.vi} · ${found.zh}`;
 }
 
 export async function loadSiteOperationData(site, { includeDestinations = false } = {}) {
-  const [rows, locations, workLocations] = await Promise.all([
-    getSiteInventoryRows(site),
-    getSiteLocations(site, "storage"),
-    getSiteLocations(site, "work"),
-  ]);
-  const destinationSites = INVENTORY_SITES.map((entry) => entry.id).filter((target) => target !== site);
+  // getSiteInventoryRows fetches inventory + master data together and hydrates
+  // the runtime registry. Reuse that exact DB snapshot instead of issuing two
+  // extra /api/master-data requests for storage/work locations.
+  const rows = await getSiteInventoryRows(site);
+  const locations = inventoryLocations(site, "storage");
+  const workLocations = inventoryLocations(site, "work");
+  const destinationSites = inventorySiteOptions().map((entry) => entry.id).filter((target) => target !== site);
   const destinationMetadata = includeDestinations
     ? await vpsInventoryDestinations(site, destinationSites)
     : null;
@@ -40,7 +49,7 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
       zh: item.name_zh_tw,
       vi: item.name_vi,
       unit: item.unit,
-      workArea: item.work_area || "noodles",
+      workArea: item.work_area || "",
       locations: [],
       workLocations: [],
       total: 0,

@@ -8,3 +8,4 @@ if (process.env.TEST_WEB_BASE === "http://localhost:3000") {
 await import("./stable-shell-browser-regression.mjs");
 await import("./mobile-role-site-certification.mjs");
 await import("./full-device-regression-core.mjs");
+await import("./super-admin-panel-browser-regression.mjs");

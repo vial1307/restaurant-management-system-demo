@@ -1,7 +1,7 @@
 import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser, siteAllowed } from "./auth.mjs";
+import { activeSite } from "./site-registry.mjs";
 
-const SITES = new Set(["central", "fuxing", "yongji"]);
 const LOCATION_KINDS = new Set(["storage", "work"]);
 const CODE_RE = /^[a-z][a-z0-9._-]{1,39}$/;
 
@@ -36,28 +36,28 @@ function canManageWorkAreas(user, site) {
     && (canManageAll(user) || hasCapability(user, "operations.work_areas.manage"));
 }
 
-function validateSite(site, reply) {
-  if (SITES.has(site)) return true;
+async function validateSite(site, reply) {
+  if (await activeSite(site)) return true;
   reply.code(400).send({ error: "INVALID_SITE" });
   return false;
 }
 
-function requireSiteRead(user, site, reply) {
-  if (!validateSite(site, reply)) return false;
+async function requireSiteRead(user, site, reply) {
+  if (!(await validateSite(site, reply))) return false;
   if (siteAllowed(user, site)) return true;
   reply.code(403).send({ error: "SITE_NOT_ALLOWED" });
   return false;
 }
 
-function requireLocationManager(user, site, reply) {
-  if (!requireSiteRead(user, site, reply)) return false;
+async function requireLocationManager(user, site, reply) {
+  if (!(await requireSiteRead(user, site, reply))) return false;
   if (canManageLocations(user, site)) return true;
   reply.code(403).send({ error: "LOCATION_MANAGE_NOT_ALLOWED" });
   return false;
 }
 
-function requireWorkAreaManager(user, site, reply) {
-  if (!requireSiteRead(user, site, reply)) return false;
+async function requireWorkAreaManager(user, site, reply) {
+  if (!(await requireSiteRead(user, site, reply))) return false;
   if (canManageWorkAreas(user, site)) return true;
   reply.code(403).send({ error: "WORK_AREA_MANAGE_NOT_ALLOWED" });
   return false;
@@ -184,7 +184,7 @@ export async function registerMasterDataRoutes(app) {
     const user = await requireUser(request, reply);
     if (!user) return;
     const site = text(request.params?.site);
-    if (!requireSiteRead(user, site, reply)) return;
+    if (!(await requireSiteRead(user, site, reply))) return;
 
     const includeInactiveRequested = ["1", "true", "yes"].includes(text(request.query?.includeInactive).toLowerCase());
     const manageLocations = canManageLocations(user, site);
@@ -209,7 +209,7 @@ export async function registerMasterDataRoutes(app) {
     const action = text(request.body?.action || "save");
     const id = text(request.body?.id);
     const site = text(request.body?.site);
-    if (!requireLocationManager(user, site, reply)) return;
+    if (!(await requireLocationManager(user, site, reply))) return;
 
     try {
       const saved = await withTransaction(async (client) => {
@@ -324,7 +324,7 @@ export async function registerMasterDataRoutes(app) {
     const action = text(request.body?.action || "save");
     const site = text(request.body?.site);
     const code = text(request.body?.code);
-    if (!requireWorkAreaManager(user, site, reply)) return;
+    if (!(await requireWorkAreaManager(user, site, reply))) return;
 
     try {
       const saved = await withTransaction(async (client) => {

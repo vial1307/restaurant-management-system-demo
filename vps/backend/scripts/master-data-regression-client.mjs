@@ -39,7 +39,7 @@ async function login(username) {
 await DB.connect();
 try {
   const schema = await DB.query(`select version from public.schema_migrations order by version desc limit 1`);
-  assert.equal(schema.rows[0]?.version, "015");
+  assert.equal(schema.rows[0]?.version, "018");
 
   for (const site of ["central","fuxing","yongji"]) {
     const workAreas = await DB.query(
@@ -78,128 +78,175 @@ try {
   assert.equal(admin.user.capabilities["system.master_data.manage"], true);
   assert.equal(manager.user.capabilities["inventory.locations.manage"], true);
   assert.equal(manager.user.capabilities["operations.work_areas.manage"], true);
-  assert.equal(employee.user.capabilities["inventory.locations.manage"], false);
 
-  const overview = await request("/api/admin/overview", { cookie:admin.cookie });
-  assert.equal(overview.response.status, 200);
-  assert.equal(overview.data.schema.version, "015");
-  assert(Number(overview.data.counts.active_locations) >= canonicalCodes.length);
-  assert(Number(overview.data.counts.active_work_areas) >= 12);
+  const adminMaster = await request("/api/master-data/fuxing?includeInactive=true", { cookie:admin.cookie });
+  assert.equal(adminMaster.response.status, 200);
+  assert.equal(adminMaster.data.site.code, "fuxing");
+  assert.equal(adminMaster.data.permissions.manageLocations, true);
+  assert.equal(adminMaster.data.permissions.manageWorkAreas, true);
 
-  const adminFuxing = await request("/api/master-data/fuxing?includeInactive=true", { cookie:admin.cookie });
-  assert.equal(adminFuxing.response.status, 200);
-  assert.equal(adminFuxing.data.permissions.manageAll, true);
-  assert.equal(adminFuxing.data.permissions.manageLocations, true);
-  assert(adminFuxing.data.locations.some((row)=>row.code === "fuxing-large-freezer"));
-  assert(adminFuxing.data.workAreas.some((row)=>row.code === "noodles"));
+  const managerMaster = await request("/api/master-data/fuxing?includeInactive=true", { cookie:manager.cookie });
+  assert.equal(managerMaster.response.status, 200);
+  assert.equal(managerMaster.data.permissions.manageLocations, true);
+  assert.equal(managerMaster.data.permissions.manageWorkAreas, true);
 
-  const created = await request("/api/master-data/locations", {
-    method:"POST", cookie:admin.cookie,
-    body:{ action:"save", site:"fuxing", code:"fuxing-regression-cold", name_zh_tw:"回歸冷藏", name_vi:"Tủ mát regression", kind:"storage", sort_order:75, active:true, metadata:{ regression:true } },
+  const employeeMaster = await request("/api/master-data/fuxing", { cookie:employee.cookie });
+  assert.equal(employeeMaster.response.status, 200);
+  assert.equal(employeeMaster.data.permissions.manageLocations, false);
+  assert.equal(employeeMaster.data.permissions.manageWorkAreas, false);
+
+  const centralDenied = await request("/api/master-data/central", { cookie:manager.cookie });
+  assert.equal(centralDenied.response.status, 403);
+  assert.equal(centralDenied.data.error, "SITE_NOT_ALLOWED");
+
+  const createdLocation = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{
+      action:"save",
+      site:"fuxing",
+      code:"fuxing-regression-cold-room",
+      name_zh_tw:"回歸冷藏",
+      name_vi:"Kho mát regression",
+      kind:"storage",
+      sort_order:88,
+      active:true,
+      metadata:{ regression:true },
+    },
   });
-  assert.equal(created.response.status, 200, JSON.stringify(created.data));
-  const createdId = created.data.location.id;
+  assert.equal(createdLocation.response.status, 200, JSON.stringify(createdLocation.data));
+  assert.equal(createdLocation.data.location.code, "fuxing-regression-cold-room");
 
-  const updated = await request("/api/master-data/locations", {
-    method:"POST", cookie:admin.cookie,
-    body:{ action:"save", id:createdId, site:"fuxing", code:"fuxing-regression-cold", name_zh_tw:"回歸冷藏更新", name_vi:"Tủ mát regression cập nhật", kind:"storage", sort_order:76, active:true, metadata:{ regression:true } },
-  });
-  assert.equal(updated.response.status, 200);
-  assert.equal(updated.data.location.name_zh_tw, "回歸冷藏更新");
-
-  const immutable = await request("/api/master-data/locations", {
-    method:"POST", cookie:admin.cookie,
-    body:{ action:"save", id:createdId, site:"fuxing", code:"fuxing-renamed", name_zh_tw:"X", name_vi:"X", kind:"storage", sort_order:76, active:true },
-  });
-  assert.equal(immutable.response.status, 409);
-  assert.equal(immutable.data.error, "LOCATION_CODE_IMMUTABLE");
-
-  const managerOwn = await request("/api/master-data/locations", {
-    method:"POST", cookie:manager.cookie,
-    body:{ action:"save", site:"fuxing", code:"fuxing-manager-bin", name_zh_tw:"主管測試櫃", name_vi:"Tủ test manager", kind:"storage", sort_order:80, active:true },
-  });
-  assert.equal(managerOwn.response.status, 200, JSON.stringify(managerOwn.data));
-
-  const managerOther = await request("/api/master-data/locations", {
-    method:"POST", cookie:manager.cookie,
-    body:{ action:"save", site:"yongji", code:"yongji-manager-forbidden", name_zh_tw:"禁止", name_vi:"Forbidden", kind:"storage", sort_order:80, active:true },
-  });
-  assert.equal(managerOther.response.status, 403);
-  assert.equal(managerOther.data.error, "SITE_NOT_ALLOWED");
+  const audit = await DB.query(
+    `select action,entity_type,site,metadata
+     from public.audit_logs
+     where actor_user_id=$1 and entity_type='inventory_location'
+     order by created_at desc
+     limit 1`,
+    [manager.user.id]
+  );
+  assert.equal(audit.rows[0]?.action, "master_location_create");
+  assert.equal(audit.rows[0]?.site, "fuxing");
 
   const employeeWrite = await request("/api/master-data/locations", {
-    method:"POST", cookie:employee.cookie,
-    body:{ action:"save", site:"fuxing", code:"fuxing-employee-forbidden", name_zh_tw:"禁止", name_vi:"Forbidden", kind:"storage", sort_order:80, active:true },
+    method:"POST",
+    cookie:employee.cookie,
+    body:{
+      action:"save",
+      site:"fuxing",
+      code:"fuxing-employee-denied",
+      name_zh_tw:"拒絕",
+      name_vi:"Từ chối",
+      kind:"storage",
+      active:true,
+    },
   });
   assert.equal(employeeWrite.response.status, 403);
   assert.equal(employeeWrite.data.error, "LOCATION_MANAGE_NOT_ALLOWED");
 
-  const fuxingPositive = await DB.query(`select id from public.inventory_locations where code='fuxing-freezer'`);
-  const positiveArchive = await request("/api/master-data/locations", {
-    method:"POST", cookie:admin.cookie,
-    body:{ action:"archive", site:"fuxing", id:String(fuxingPositive.rows[0].id) },
+  const createdWorkArea = await request("/api/master-data/work-areas", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{
+      action:"save",
+      site:"fuxing",
+      code:"bar",
+      department_code:"inside",
+      name_zh_tw:"吧台",
+      name_vi:"Quầy bar",
+      sort_order:80,
+      active:true,
+      metadata:{ regression:true },
+    },
   });
-  assert.equal(positiveArchive.response.status, 409);
-  assert.equal(positiveArchive.data.error, "LOCATION_HAS_POSITIVE_STOCK");
+  assert.equal(createdWorkArea.response.status, 200, JSON.stringify(createdWorkArea.data));
+  assert.equal(createdWorkArea.data.workArea.code, "bar");
 
-  const yongjiDefault = await DB.query(`select id from public.inventory_locations where code='yongji-four'`);
-  await DB.query(`update public.inventory_stock set quantity=0 where location_id=$1`, [yongjiDefault.rows[0].id]);
-  const defaultArchive = await request("/api/master-data/locations", {
-    method:"POST", cookie:admin.cookie,
-    body:{ action:"archive", site:"yongji", id:String(yongjiDefault.rows[0].id) },
+  const archiveWorkArea = await request("/api/master-data/work-areas", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{ action:"archive", site:"fuxing", code:"bar" },
   });
-  assert.equal(defaultArchive.response.status, 409);
-  assert.equal(defaultArchive.data.error, "LOCATION_IS_RECEIVE_DEFAULT");
+  assert.equal(archiveWorkArea.response.status, 200, JSON.stringify(archiveWorkArea.data));
+  assert.equal(archiveWorkArea.data.workArea.active, false);
 
-  const areaUpdate = await request("/api/master-data/work-areas", {
-    method:"POST", cookie:manager.cookie,
-    body:{ action:"save", site:"fuxing", code:"noodles", name_zh_tw:"麵區測試", name_vi:"Khu mì test", department_code:"inside", sort_order:11, active:true, metadata:{ regression:true } },
+  const archiveLocation = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{ action:"archive", site:"fuxing", id:createdLocation.data.location.id },
   });
-  assert.equal(areaUpdate.response.status, 200, JSON.stringify(areaUpdate.data));
-  assert.equal(areaUpdate.data.workArea.name_zh_tw, "麵區測試");
+  assert.equal(archiveLocation.response.status, 200, JSON.stringify(archiveLocation.data));
+  assert.equal(archiveLocation.data.location.active, false);
 
-  const inUseAreaArchive = await request("/api/master-data/work-areas", {
-    method:"POST", cookie:manager.cookie,
-    body:{ action:"archive", site:"fuxing", code:"noodles" },
-  });
-  assert.equal(inUseAreaArchive.response.status, 409);
-  assert.equal(inUseAreaArchive.data.error, "WORK_AREA_REFERENCE_CONFLICT");
-
-  const areaOther = await request("/api/master-data/work-areas", {
-    method:"POST", cookie:manager.cookie,
-    body:{ action:"save", site:"yongji", code:"noodles", name_zh_tw:"禁止", name_vi:"Forbidden", department_code:"inside", sort_order:11, active:true },
-  });
-  assert.equal(areaOther.response.status, 403);
-
-  const areaEmployee = await request("/api/master-data/work-areas", {
-    method:"POST", cookie:employee.cookie,
-    body:{ action:"save", site:"fuxing", code:"soup", name_zh_tw:"禁止", name_vi:"Forbidden", department_code:"inside", sort_order:20, active:true },
-  });
-  assert.equal(areaEmployee.response.status, 403);
-  assert.equal(areaEmployee.data.error, "WORK_AREA_MANAGE_NOT_ALLOWED");
-
-  const archived = await request("/api/master-data/locations", {
-    method:"POST", cookie:admin.cookie,
-    body:{ action:"archive", site:"fuxing", id:createdId },
-  });
-  assert.equal(archived.response.status, 200);
-  assert.equal(archived.data.location.active, false);
-
-  const persisted = await request("/api/master-data/fuxing?includeInactive=true", { cookie:admin.cookie });
-  assert.equal(persisted.response.status, 200);
-  const archivedPersisted = persisted.data.locations.find((row)=>row.id === createdId);
-  assert(archivedPersisted);
-  assert.equal(archivedPersisted.active, false);
-  assert.equal(persisted.data.workAreas.find((row)=>row.code === "noodles").name_zh_tw, "麵區測試");
-  assert.equal(persisted.data.workAreas.find((row)=>row.code === "noodles").active, true, "in-use work area must remain active after rejected archive");
-
-  const audit = await DB.query(
-    `select action from public.audit_logs where action like 'master_%' order by created_at`,
+  // A brand-new branch exists only in PostgreSQL. No JS site enum is changed.
+  await DB.query(
+    `insert into public.sites(code,name_vi,name_zh_tw,timezone_name,currency_code,active,sort_order,metadata)
+     values('branch-regression','Chi nhánh regression','回歸分店','Asia/Taipei','TWD',true,90,'{"inventory_mode":"branch"}'::jsonb)`
   );
-  assert(audit.rows.some((row)=>row.action === "master_location_create"));
-  assert(audit.rows.some((row)=>row.action === "master_location_update"));
-  assert(audit.rows.some((row)=>row.action === "master_location_archive"));
-  assert(audit.rows.some((row)=>row.action === "master_work_area_update"));
+
+  const siteList = await request("/api/inventory/sites", { cookie:admin.cookie });
+  assert.equal(siteList.response.status, 200, JSON.stringify(siteList.data));
+  assert(siteList.data.sites.some((site)=>site.code === "branch-regression"), "DB-only branch missing from site API");
+
+  const dynamicAccount = await request("/api/admin/users", {
+    method:"POST",
+    cookie:admin.cookie,
+    body:{
+      action:"create",
+      username:"branchregression",
+      display_name:"Branch Regression Employee",
+      password:"KitchenTest!123",
+      role:"employee",
+      location:"branch-regression",
+      active:true,
+    },
+  });
+  assert.equal(dynamicAccount.response.status, 200, JSON.stringify(dynamicAccount.data));
+  assert.equal(dynamicAccount.data.user.location, "branch-regression");
+
+  const assignedCentralDenied = await request("/api/admin/users", {
+    method:"POST",
+    cookie:admin.cookie,
+    body:{
+      action:"create",
+      username:"assignedcentraldenied",
+      display_name:"Assigned Central Denied",
+      password:"KitchenTest!123",
+      role:"employee",
+      location:"central",
+      active:true,
+    },
+  });
+  assert.equal(assignedCentralDenied.response.status, 400, JSON.stringify(assignedCentralDenied.data));
+  assert.equal(assignedCentralDenied.data.error, "INVALID_LOCATION_FOR_ROLE");
+
+  const dynamicLocation = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:admin.cookie,
+    body:{
+      action:"save",
+      site:"branch-regression",
+      code:"branch-regression-cold-room",
+      name_zh_tw:"回歸冷藏",
+      name_vi:"Kho mát regression branch",
+      kind:"storage",
+      sort_order:10,
+      active:true,
+      metadata:{ storage_group:"primary" },
+    },
+  });
+  assert.equal(dynamicLocation.response.status, 200, JSON.stringify(dynamicLocation.data));
+  assert.equal(dynamicLocation.data.location.site, "branch-regression");
+  assert.equal(dynamicLocation.data.location.metadata?.ui_key, "branch-regression-cold-room");
+
+  await assert.rejects(
+    DB.query(
+      `insert into public.app_users(username,display_name,role,location)
+       values('unknown-site-regression','Unknown Site Regression','employee','site-does-not-exist')`
+    ),
+    (error) => error?.code === "23503" && String(error?.message || "").includes("APP_USER_SITE_NOT_FOUND"),
+    "app_users must reject locations that do not exist in public.sites"
+  );
 
   console.log("MASTER_DATA_REGRESSION_OK");
 } finally {

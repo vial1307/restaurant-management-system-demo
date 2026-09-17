@@ -4,6 +4,25 @@ function jsonObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function mergePermissionOverrides(basePermissions, rawOverrides) {
+  const base = jsonObject(basePermissions);
+  const overrides = jsonObject(rawOverrides);
+  const keys = new Set([...Object.keys(base), ...Object.keys(overrides)]);
+  const merged = {};
+  for (const key of keys) {
+    const roleRule = jsonObject(base[key]);
+    const override = jsonObject(overrides[key]);
+    const view = Object.prototype.hasOwnProperty.call(override, "view")
+      ? Boolean(override.view)
+      : Boolean(roleRule.view);
+    const requestedEdit = Object.prototype.hasOwnProperty.call(override, "edit")
+      ? Boolean(override.edit)
+      : Boolean(roleRule.edit);
+    merged[key] = { view, edit:view && requestedEdit };
+  }
+  return merged;
+}
+
 function compatibilityRole(role) {
   const permissions = role.permissions || {};
   const capabilities = role.capabilities || {};
@@ -60,17 +79,32 @@ export async function resolveRoleProfile(roleCode, requestedLocation = "", clien
   return { ...profile, compatibilityRole:compatibilityRole(profile) };
 }
 
+async function loadUserPermissionOverrides(user, client) {
+  if (Object.prototype.hasOwnProperty.call(user, "permission_overrides")) {
+    return jsonObject(user.permission_overrides);
+  }
+  if (!user.id) return {};
+  const { rows } = await client.query(
+    "select permission_overrides from public.app_users where id=$1 limit 1",
+    [user.id]
+  );
+  return jsonObject(rows[0]?.permission_overrides);
+}
+
 export async function hydrateUserAccess(user, client = pool) {
   if (!user) return null;
   const roleCode = String(user.role_code || user.role || "").trim();
   const role = await resolveRoleProfile(roleCode, user.location, client);
   if (!role) return null;
+  const permissionOverrides = await loadUserPermissionOverrides(user, client);
+  const permissions = mergePermissionOverrides(role.permissions, permissionOverrides);
   return {
     ...user,
     role: role.compatibilityRole,
     role_code: role.code,
     location: role.effectiveLocation,
-    permissions: role.permissions,
+    permission_overrides: permissionOverrides,
+    permissions,
     capabilities: role.capabilities,
     hierarchy_level: role.hierarchyLevel,
     role_parent: role.parentRoleCode,
@@ -119,7 +153,7 @@ export async function listAccessModel(client = pool) {
 
   const roles = [];
   for (const row of rolesResult.rows) {
-    const resolved = await resolveRoleProfile(row.code, row.scope_policy === "central" ? "central" : row.scope_policy === "all" ? "all" : "fuxing", client);
+    const resolved = await resolveRoleProfile(row.code, "", client);
     if (!resolved) continue;
     roles.push({
       code: row.code,

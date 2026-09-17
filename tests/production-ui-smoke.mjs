@@ -16,6 +16,38 @@ const admin = {
   preferred_language: "vi",
   active: true,
 };
+const sites = [
+  { code:"central", name_vi:"Bếp trung tâm", name_zh_tw:"央廚", sort_order:10, metadata:{ inventory_mode:"central" } },
+  { code:"fuxing", name_vi:"Fuxing", name_zh_tw:"復興店", sort_order:20, metadata:{ inventory_mode:"branch" } },
+  { code:"yongji", name_vi:"Yongji", name_zh_tw:"永吉店", sort_order:30, metadata:{ inventory_mode:"branch" } },
+];
+function masterData(siteCode) {
+  const site = sites.find((entry) => entry.code === siteCode);
+  const branch = site?.metadata?.inventory_mode === "branch";
+  const storageLocations = branch
+    ? [
+        { code:`${siteCode}-large-freezer`, site:siteCode, kind:"storage", sort_order:10, active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+        { code:`${siteCode}-large-fridge`, site:siteCode, kind:"storage", sort_order:20, active:true, name_zh_tw:"大冷藏", name_vi:"Tủ mát lớn", metadata:{ ui_key:"large-fridge", storage_group:"primary" } },
+        { code:`${siteCode}-four-door`, site:siteCode, kind:"storage", sort_order:30, active:true, name_zh_tw:"四門冰箱", name_vi:"Tủ lạnh 4 cánh", metadata:{ ui_key:"four-door", storage_group:"service" } },
+        { code:`${siteCode}-kitchen`, site:siteCode, kind:"storage", sort_order:40, active:true, name_zh_tw:"廚房冰箱", name_vi:"Tủ lạnh bếp", metadata:{ ui_key:"kitchen", storage_group:"service" } },
+      ]
+    : [
+        { code:"central-freezer", site:siteCode, kind:"storage", sort_order:10, active:true, name_zh_tw:"央廚冷凍", name_vi:"Tủ đông bếp trung tâm", metadata:{ ui_key:"央廚冷凍", storage_group:"primary" } },
+        { code:"central-fridge", site:siteCode, kind:"storage", sort_order:20, active:true, name_zh_tw:"央廚冷藏", name_vi:"Tủ mát bếp trung tâm", metadata:{ ui_key:"央廚冷藏", storage_group:"primary" } },
+        { code:"central-four-door", site:siteCode, kind:"storage", sort_order:30, active:true, name_zh_tw:"央廚4門", name_vi:"Tủ lạnh 4 cánh bếp trung tâm", metadata:{ ui_key:"央廚4門", storage_group:"service" } },
+        { code:"central-chest", site:siteCode, kind:"storage", sort_order:40, active:true, name_zh_tw:"央廚臥櫃", name_vi:"Tủ đông nằm bếp trung tâm", metadata:{ ui_key:"央廚臥櫃", storage_group:"service" } },
+      ];
+  const workAreas = ["noodles","soup","seafood","meat"].map((code, index) => ({
+    code, site_code:siteCode, name_zh_tw:code, name_vi:code, sort_order:(index + 1) * 10, active:true, metadata:{},
+  }));
+  const workLocations = branch
+    ? workAreas.map((area, index) => ({
+        code:`${siteCode}-work-${area.code}`, site:siteCode, kind:"work", sort_order:100 + index * 10, active:true,
+        name_zh_tw:area.name_zh_tw, name_vi:area.name_vi, metadata:{ ui_key:area.code, work_area:area.code },
+      }))
+    : [];
+  return { site, locations:[...storageLocations, ...workLocations], workAreas, departments:[], permissions:{ manageAll:true, manageLocations:true, manageWorkAreas:true } };
+}
 
 const browser = await chromium.launch({ headless: true });
 try {
@@ -36,7 +68,16 @@ try {
       return;
     }
     if (url.pathname === "/api/inventory/schema-version") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: 11 }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: 12 }) });
+      return;
+    }
+    if (url.pathname === "/api/inventory/sites") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sites }) });
+      return;
+    }
+    const masterMatch = url.pathname.match(/^\/api\/master-data\/(central|fuxing|yongji)$/);
+    if (masterMatch) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(masterData(masterMatch[1])) });
       return;
     }
     if (url.pathname === "/api/inventory/receive-defaults") {
@@ -108,8 +149,6 @@ try {
   assert.match(await recoveryBanner.innerText(), /settings/i, "Production recovery banner does not identify changed module metadata");
   assert.doesNotMatch(await page.locator("body").innerText(), new RegExp(RECOVERY_SECRET), "Production recovery banner leaked stored business payload");
 
-  // Conflict UI is smoke-tested with a local browser event only; this must never
-  // POST synthetic smoke data into the production business-state database.
   await page.evaluate((userId) => {
     window.dispatchEvent(new CustomEvent("shitu:business-persistence-status", {
       detail: {
@@ -161,9 +200,6 @@ try {
   assert.equal(await modal.locator('input[name="perm:dashboard:edit"]').count(), 1);
   await modal.locator("[data-account-close]").first().click();
 
-  // Workforce production certification uses the deployed frontend with all API
-  // traffic intercepted above. It verifies the real production bundle and mobile
-  // route composition without writing synthetic attendance/schedule/payroll data.
   await page.goto(`${BASE}/#attendance`, { waitUntil: "domcontentloaded", timeout: 30000 });
   const workforceTabs = page.locator("[data-workforce-tabs]");
   await workforceTabs.waitFor({ state: "visible", timeout: 10000 });
@@ -203,8 +239,6 @@ try {
   const publishButton = page.locator("[data-workforce-schedule-publish]");
   await publishButton.waitFor({ state: "visible", timeout: 10000 });
   assert.equal(await publishButton.count(), 1, "Production schedule page does not expose a single manager publish control");
-  // Never click the publish button in production smoke: all schedule publication
-  // mutations must come from an explicit real manager action, not CI synthetic data.
   const scheduleRulesButton = page.locator("[data-workforce-schedule-rules-open]");
   await scheduleRulesButton.waitFor({ state: "visible", timeout: 10000 });
   await scheduleRulesButton.click();

@@ -1,466 +1,296 @@
-import { apiRequest, vpsHealth, vpsListUsers, vpsMe } from "./vps-api.js";
+import { apiRequest, vpsListUsers, vpsMe } from "./vps-api.js";
 
 const root = document.querySelector("#admin-app");
+const SECTIONS = ["overview","users","content","data","stores","settings","logs"];
+const DATASET_META = {
+  announcements:{ label:"Thông báo · 公告", archive:"Lưu trữ · 封存", fields:[
+    ["site_code","Chi nhánh · 據點","site"],["title_vi","Tiêu đề VI","text"],["title_zh_tw","中文標題","text"],
+    ["body_vi","Nội dung VI","textarea"],["body_zh_tw","中文內容","textarea"],["status","Trạng thái · 狀態","announcement-status"],
+    ["starts_at","Bắt đầu · 開始","datetime"],["ends_at","Kết thúc · 結束","datetime"],
+  ]},
+  media:{ label:"Hình ảnh / Media · 媒體", archive:"Ngừng dùng · 停用", fields:[
+    ["site_code","Chi nhánh · 據點","site"],["asset_type","Loại · 類型","asset-type"],["label","Tên hiển thị · 名稱","text"],
+    ["asset_url","URL","url"],["alt_vi","Alt VI","text"],["alt_zh_tw","中文 Alt","text"],
+    ["entity_type","Loại liên kết · 關聯類型","text"],["entity_id","ID liên kết · 關聯 ID","text"],["active","Hoạt động · 啟用","boolean"],
+    ["metadata","Metadata JSON","json"],
+  ]},
+  "menu-items":{ label:"Sản phẩm / Menu · 菜單品項", archive:"Ngừng dùng · 停用", fields:[
+    ["site_code","Chi nhánh · 據點","site"],["item_code","Mã món · 品項代碼","text"],["name_vi","Tên VI","text"],["name_zh_tw","中文名稱","text"],
+    ["category","Danh mục · 分類","text"],["work_area","Khu làm việc · 工作區","text"],["price","Giá · 售價","number"],["currency_code","Tiền tệ · 幣別","text"],
+    ["active","Hoạt động · 啟用","boolean"],["metadata","Metadata JSON","json"],
+  ]},
+  "inventory-products":{ label:"Nguyên liệu kho · 庫存品項", archive:"Ngừng dùng · 停用", fields:[
+    ["item_key","Item key","text"],["catalog_key","Catalog key","text"],["name_vi","Tên VI","text"],["name_zh_tw","中文名稱","text"],
+    ["unit","Đơn vị · 單位","text"],["work_area","Khu làm việc · 工作區","text"],["storage_only","Chỉ lưu kho · 僅倉儲","boolean"],["active","Hoạt động · 啟用","boolean"],
+  ]},
+  "sop-documents":{ label:"SOP Documents", archive:"Ngừng dùng · 停用", fields:[
+    ["site_code","Chi nhánh · 據點","site"],["sop_code","Mã SOP","text"],["menu_item_id","Menu item UUID","text"],["work_area","Khu làm việc · 工作區","text"],
+    ["name_vi","Tên VI","text"],["name_zh_tw","中文名稱","text"],["active","Hoạt động · 啟用","boolean"],
+  ]},
+};
+const LABELS = {
+  overview:"Tổng quan VPS · VPS 總覽",users:"Quản lý người dùng · 使用者管理",content:"Nội dung & duyệt · 內容審核",
+  data:"Data Tables & CRUD · 資料管理",stores:"Chuỗi & chi nhánh · 多店管理",settings:"Settings · 系統設定",logs:"Logs & Reports · 日誌報表",
+};
+
 const state = {
-  me: null,
-  health: null,
-  overview: null,
-  users: [],
-  site: "fuxing",
-  master: null,
-  loading: true,
-  saving: false,
-  error: "",
-  success: "",
+  me:null, loading:true, error:"", success:"", section:"overview",
+  overview:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
+  data:{ name:"announcements",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
+  audit:{ q:"",site:"",action:"",actor:"",page:1,pageSize:25,result:null,loading:false },
 };
-
-const SITES = ["central", "fuxing", "yongji"];
-const SITE_LABELS = {
-  central: { vi: "Bếp trung tâm", zh: "央廚" },
-  fuxing: { vi: "Chi nhánh Fuxing", zh: "復興店" },
-  yongji: { vi: "Chi nhánh Yongji", zh: "永吉店" },
-};
-
-const COPY = {
-  vi: {
-    title: "Admin Panel",
-    subtitle: "Quản trị dữ liệu nền tảng · PostgreSQL là nguồn dữ liệu chuẩn",
-    back: "Về Kitchen OS",
-    accounts: "Quản lý tài khoản",
-    refresh: "Làm mới",
-    users: "Tài khoản hoạt động",
-    sites: "Chi nhánh",
-    locations: "Vị trí kho",
-    workAreas: "Khu làm việc",
-    items: "Mặt hàng kho",
-    transactions: "Giao dịch kho",
-    system: "Tình trạng hệ thống",
-    release: "Phiên bản",
-    schema: "Database schema",
-    database: "Database",
-    latestBackup: "Backup gần nhất",
-    noBackup: "Chưa có bản ghi backup",
-    masterData: "Dữ liệu nền tảng",
-    masterSubtitle: "Chỉnh sửa tên hiển thị, trạng thái và cấu trúc dùng chung của chi nhánh.",
-    addLocation: "Thêm vị trí",
-    addWorkArea: "Thêm khu làm việc",
-    code: "Mã cố định",
-    zh: "Tên tiếng Hoa",
-    vi: "Tên tiếng Việt",
-    kind: "Loại",
-    department: "Bộ phận",
-    order: "Thứ tự",
-    status: "Trạng thái",
-    actions: "Thao tác",
-    storage: "Kho / tủ",
-    work: "Khu sử dụng",
-    active: "Đang dùng",
-    inactive: "Ngừng dùng",
-    edit: "Sửa",
-    archive: "Ngừng dùng",
-    save: "Lưu vào Database",
-    cancel: "Hủy",
-    close: "Đóng",
-    locationEditor: "Vị trí kho",
-    workAreaEditor: "Khu làm việc",
-    createCodeHint: "Mã chỉ tạo một lần và không thể đổi sau khi lưu.",
-    archiveConfirm: "Xác nhận ngừng sử dụng mục này? Dữ liệu lịch sử sẽ được giữ lại.",
-    forbidden: "Tài khoản này không có quyền mở Admin Panel.",
-    loginRequired: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại Kitchen OS.",
-    loadFailed: "Không thể tải dữ liệu quản trị.",
-    saved: "Đã lưu vào PostgreSQL và tải lại dữ liệu xác nhận.",
-    archived: "Đã ngừng sử dụng và dữ liệu lịch sử vẫn được giữ lại.",
-    empty: "Chưa có dữ liệu.",
-    healthOk: "Hoạt động bình thường",
-    healthBad: "Có lỗi",
-    allDataNote: "Admin có thể quản trị Central / Fuxing / Yongji. Manager chi nhánh chỉ được API cho phép sửa site của mình.",
-  },
-  "zh-TW": {
-    title: "系統管理後台",
-    subtitle: "主資料管理 · PostgreSQL 為唯一共享資料來源",
-    back: "返回 Kitchen OS",
-    accounts: "帳號管理",
-    refresh: "重新整理",
-    users: "啟用帳號",
-    sites: "據點",
-    locations: "庫存儲位",
-    workAreas: "工作區",
-    items: "庫存品項",
-    transactions: "庫存異動",
-    system: "系統狀態",
-    release: "版本",
-    schema: "資料庫 Schema",
-    database: "資料庫",
-    latestBackup: "最近備份",
-    noBackup: "尚無備份紀錄",
-    masterData: "主資料",
-    masterSubtitle: "管理分店共用的顯示名稱、啟用狀態與結構。",
-    addLocation: "新增儲位",
-    addWorkArea: "新增工作區",
-    code: "固定代碼",
-    zh: "中文名稱",
-    vi: "越文名稱",
-    kind: "類型",
-    department: "部門",
-    order: "排序",
-    status: "狀態",
-    actions: "操作",
-    storage: "倉儲 / 冰箱",
-    work: "使用區",
-    active: "啟用",
-    inactive: "停用",
-    edit: "編輯",
-    archive: "停用",
-    save: "儲存至資料庫",
-    cancel: "取消",
-    close: "關閉",
-    locationEditor: "庫存儲位",
-    workAreaEditor: "工作區",
-    createCodeHint: "代碼建立後即固定，不可透過一般編輯修改。",
-    archiveConfirm: "確定停用此項目？歷史資料會保留。",
-    forbidden: "此帳號沒有管理後台權限。",
-    loginRequired: "登入已失效，請重新登入 Kitchen OS。",
-    loadFailed: "無法載入管理資料。",
-    saved: "已寫入 PostgreSQL，並重新讀取資料確認。",
-    archived: "已停用，歷史資料仍保留。",
-    empty: "目前沒有資料。",
-    healthOk: "運作正常",
-    healthBad: "異常",
-    allDataNote: "Admin 可管理央廚 / 復興 / 永吉；分店 Manager 的寫入權限仍由後端限制在所屬據點。",
-  },
-};
-
-function locale() {
-  return state.me?.preferredLanguage === "zh-TW" ? "zh-TW" : "vi";
-}
-
-function t(key) {
-  return COPY[locale()]?.[key] || COPY.vi[key] || key;
-}
 
 function esc(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+  return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
-
-function siteLabel(site) {
-  const row = SITE_LABELS[site] || { vi: site, zh: site };
-  return locale() === "zh-TW" ? row.zh : `${row.vi} · ${row.zh}`;
+function json(value) { try { return JSON.stringify(value ?? {},null,2); } catch { return "{}"; } }
+function display(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "✓" : "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  const str = String(value); return str.length > 120 ? `${str.slice(0,117)}…` : str;
 }
-
-function capability(name) {
-  return Boolean(state.me?.capabilities?.[name]);
+function fmtBytes(value) {
+  let n = Number(value || 0); const units=["B","KB","MB","GB","TB"]; let i=0;
+  while(n>=1024 && i<units.length-1){n/=1024;i+=1;} return `${n.toFixed(i?1:0)} ${units[i]}`;
 }
-
-function canOpenAdmin() {
-  return state.me?.role === "admin" || capability("system.master_data.manage");
+function fmtUptime(seconds) {
+  let s=Math.max(0,Number(seconds)||0); const d=Math.floor(s/86400); s%=86400; const h=Math.floor(s/3600); const m=Math.floor((s%3600)/60);
+  return `${d?`${d}d `:""}${h}h ${m}m`;
 }
-
 function fmtDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return esc(value);
-  return new Intl.DateTimeFormat(locale() === "zh-TW" ? "zh-TW" : "vi-VN", {
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-  }).format(date);
+  if (!value) return "—"; const date=new Date(value); if (!Number.isFinite(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("vi-VN",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(date);
+}
+function isSuperAdmin() { return Boolean(state.me?.capabilities?.["system.super_admin"]); }
+function roleByCode(code) { return state.accessModel.roles.find((role)=>role.code===code); }
+function siteName(code) {
+  if (!code || code==="all") return code==="all" ? "Tất cả · 全部" : "Toàn hệ thống · 全系統";
+  const site=state.sites.find((row)=>row.code===code); return site ? `${site.name_vi} · ${site.name_zh_tw}` : code;
+}
+function currentSection() {
+  const hash=location.hash.replace(/^#/,""); return SECTIONS.includes(hash) ? hash : state.section;
+}
+function flash(type,message) { state.error=type==="error"?message:""; state.success=type==="success"?message:""; render(); }
+function errorText(error) { return error?.payload?.error || error?.code || error?.message || "UNKNOWN_ERROR"; }
+
+async function api(path,options) { return apiRequest(path,options); }
+async function loadDataset() {
+  state.data.loading=true; render();
+  const params=new URLSearchParams({ page:String(state.data.page),pageSize:String(state.data.pageSize) });
+  if(state.data.q)params.set("q",state.data.q); if(state.data.site)params.set("site",state.data.site); if(state.data.status)params.set("status",state.data.status);
+  if(state.data.sort)params.set("sort",state.data.sort); if(state.data.direction)params.set("direction",state.data.direction);
+  try { state.data.result=await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}?${params}`); }
+  catch(error){ state.error=errorText(error); }
+  state.data.loading=false; render();
+}
+async function loadAudit() {
+  state.audit.loading=true; render();
+  const params=new URLSearchParams({page:String(state.audit.page),pageSize:String(state.audit.pageSize)});
+  for(const key of ["q","site","action","actor"]) if(state.audit[key])params.set(key,state.audit[key]);
+  try { state.audit.result=await api(`/api/admin/super/audit?${params}`); }
+  catch(error){state.error=errorText(error);} state.audit.loading=false; render();
+}
+async function loadCore() {
+  const [overview,users,accessModel,sites,settings,content]=await Promise.all([
+    api("/api/admin/super/overview"),vpsListUsers(),api("/api/admin/access-model"),api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),
+  ]);
+  state.overview=overview; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
+  state.sites=sites?.sites||[]; state.settings=settings?.settings||[]; state.content=content||null;
+}
+async function refreshCurrent() {
+  state.error=""; state.success="";
+  try { await loadCore(); if(currentSection()==="data")await loadDataset(); if(currentSection()==="logs")await loadAudit(); }
+  catch(error){state.error=errorText(error);} render();
 }
 
-async function masterData(site = state.site) {
-  return apiRequest(`/api/master-data/${encodeURIComponent(site)}?includeInactive=true`);
+function nav() {
+  return `<aside class="sa-sidebar"><div class="sa-owner"><span class="sa-owner-badge">SUPER</span><strong>${esc(state.me?.displayName||state.me?.username||"")}</strong><small>${esc(state.me?.username||"")}</small></div>
+  <nav>${SECTIONS.map((id)=>`<button type="button" data-section="${id}" class="sa-nav-item ${state.section===id?"active":""}"><span>${esc(LABELS[id])}</span></button>`).join("")}</nav>
+  <div class="sa-sidebar-foot"><a href="./">← Kitchen OS</a></div></aside>`;
+}
+function topbar() {
+  return `<header class="sa-topbar"><div><button class="sa-menu-button" type="button" data-toggle-nav>☰</button><h1>${esc(LABELS[state.section])}</h1><p>Super Admin · PostgreSQL / VPS</p></div><div class="sa-top-actions"><button class="sa-btn" type="button" data-refresh>↻ Làm mới</button></div></header>`;
+}
+function notices() { return `${state.error?`<div class="sa-alert error">${esc(state.error)}</div>`:""}${state.success?`<div class="sa-alert success">${esc(state.success)}</div>`:""}`; }
+function stat(label,value,note="") { return `<article class="sa-stat"><small>${esc(label)}</small><strong>${esc(value)}</strong>${note?`<span>${esc(note)}</span>`:""}</article>`; }
+
+function renderOverview() {
+  const o=state.overview||{}; const c=o.counts||{}; const db=o.database||{}; const apiInfo=o.api||{}; const backup=o.latestBackup;
+  return `<section class="sa-stat-grid">
+    ${stat("Users",`${c.active_users??0} / ${c.users??0}`,"active / total")}${stat("Chi nhánh · 據點",`${c.active_sites??0} / ${c.sites??0}`)}
+    ${stat("Products",c.products??0)}${stat("SOP chờ duyệt",c.pending_sops??0)}${stat("Audit logs",c.audit_logs??0)}${stat("Thông báo đang đăng",c.announcements??0)}
+  </section>
+  <section class="sa-two-col">
+    <article class="sa-card"><div class="sa-card-head"><div><h2>VPS / API</h2><p>Trạng thái runtime trực tiếp</p></div><span class="sa-pill ok">ONLINE</span></div>
+      <div class="sa-kv-grid"><div><small>Release</small><strong>${esc(o.release||"dev")}</strong></div><div><small>Node</small><strong>${esc(apiInfo.node_version||"—")}</strong></div>
+      <div><small>Uptime</small><strong>${esc(fmtUptime(apiInfo.uptime_seconds))}</strong></div><div><small>PID</small><strong>${esc(apiInfo.pid||"—")}</strong></div>
+      <div><small>RAM RSS</small><strong>${esc(fmtBytes(apiInfo.memory_rss_bytes))}</strong></div><div><small>Heap</small><strong>${esc(fmtBytes(apiInfo.memory_heap_used_bytes))} / ${esc(fmtBytes(apiInfo.memory_heap_total_bytes))}</strong></div></div>
+    </article>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>PostgreSQL</h2><p>Database authority</p></div><span class="sa-pill ok">CONNECTED</span></div>
+      <div class="sa-kv-grid"><div><small>Database</small><strong>${esc(db.database_name||"—")}</strong></div><div><small>PostgreSQL</small><strong>${esc(db.server_version||"—")}</strong></div>
+      <div><small>DB size</small><strong>${esc(fmtBytes(db.size_bytes))}</strong></div><div><small>Connections</small><strong>${esc(db.connections??"—")}</strong></div>
+      <div><small>Schema</small><strong>${esc(o.schema?.version||"—")}</strong></div><div><small>Migration</small><strong>${esc(o.schema?.filename||"—")}</strong></div></div>
+    </article>
+  </section>
+  <article class="sa-card"><div class="sa-card-head"><div><h2>Backup</h2><p>Bản sao gần nhất · 最近備份</p></div></div>
+  ${backup?`<div class="sa-kv-grid"><div><small>Backup key</small><strong>${esc(backup.backup_key)}</strong></div><div><small>Status</small><strong>${esc(backup.status)}</strong></div><div><small>Size</small><strong>${esc(fmtBytes(backup.size_bytes))}</strong></div><div><small>Completed</small><strong>${esc(fmtDate(backup.completed_at||backup.started_at))}</strong></div></div>`:`<div class="sa-empty">Chưa có bản ghi backup.</div>`}</article>`;
 }
 
-async function adminOverview() {
-  return apiRequest("/api/admin/overview");
+function renderUsers() {
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Users & RBAC</h2><p>Role + quyền override theo từng user, đọc/ghi trực tiếp PostgreSQL.</p></div><button class="sa-btn primary" type="button" data-user-new>＋ Thêm user</button></div>
+  <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>User</th><th>Vai trò</th><th>Chi nhánh</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+  ${state.users.map((user)=>`<tr><td><strong>${esc(user.display_name)}</strong><small>@${esc(user.username)}</small></td><td>${esc(user.role_name_vi||user.role)}<small>${esc(user.role)}</small></td><td>${esc(siteName(user.location))}</td>
+  <td><span class="sa-pill">${esc(Object.values(user.permissions||{}).filter((p)=>p?.view).length)} view</span> <span class="sa-pill">${esc(Object.values(user.permissions||{}).filter((p)=>p?.edit).length)} edit</span></td>
+  <td><span class="sa-pill ${user.active?"ok":"off"}">${user.active?"Active":"Disabled"}</span></td><td><div class="sa-row-actions"><button class="sa-btn small" type="button" data-user-edit="${esc(user.id)}">Sửa</button>${user.id!==state.me?.id?`<button class="sa-btn small danger" type="button" data-user-delete="${esc(user.id)}">Archive</button>`:""}</div></td></tr>`).join("")}
+  </tbody></table></div></article>`;
 }
 
-async function saveLocation(body) {
-  return apiRequest("/api/master-data/locations", { method: "POST", body });
+function renderContent() {
+  const c=state.content||{}; const counts=c.counts||{};
+  return `<section class="sa-stat-grid compact">${stat("Thông báo",counts.announcements??0)}${stat("SOP chờ duyệt",counts.pending_sops??0)}${stat("Nguyên liệu",counts.inventory_products??0)}${stat("Menu",counts.menu_items??0)}${stat("Media",counts.media_assets??0)}</section>
+  <section class="sa-two-col">
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Thông báo · 公告</h2><p>Đăng, chỉnh sửa và lưu trữ thông báo.</p></div><button class="sa-btn primary" type="button" data-open-dataset="announcements" data-new-row>＋ Đăng</button></div>
+      <div class="sa-list">${(c.announcements||[]).map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.title_vi||row.title_zh_tw)}</strong><small>${esc(siteName(row.site_code))} · ${esc(row.status)} · ${esc(fmtDate(row.updated_at))}</small></div><button class="sa-btn small" data-open-dataset="announcements">Mở bảng</button></div>`).join("")||`<div class="sa-empty">Chưa có thông báo.</div>`}</div>
+    </article>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Media / Hình ảnh</h2><p>Metadata hình ảnh và tài liệu.</p></div><button class="sa-btn" type="button" data-open-dataset="media">Quản lý</button></div>
+      <div class="sa-list">${(c.media||[]).map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label)}</strong><small>${esc(row.asset_type)} · ${esc(siteName(row.site_code))}</small></div><a class="sa-link" href="${esc(row.asset_url)}" target="_blank" rel="noreferrer">Mở</a></div>`).join("")||`<div class="sa-empty">Chưa có media.</div>`}</div>
+    </article>
+  </section>
+  <article class="sa-card"><div class="sa-card-head"><div><h2>Duyệt SOP · SOP 審核</h2><p>Chỉ version đang ở trạng thái draft mới có thể duyệt/từ chối.</p></div><button class="sa-btn" data-open-dataset="sop-documents">Danh sách SOP</button></div>
+    <div class="sa-list">${(c.pendingSops||[]).map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.name_vi)} · ${esc(row.name_zh_tw)}</strong><small>${esc(row.sop_code)} · v${esc(row.version_no)} · ${esc(siteName(row.site_code))} · ${esc(fmtDate(row.created_at))}</small></div><div class="sa-row-actions"><button class="sa-btn small primary" data-sop-review="${esc(row.version_id)}" data-decision="approved">Duyệt</button><button class="sa-btn small danger" data-sop-review="${esc(row.version_id)}" data-decision="rejected">Từ chối</button></div></div>`).join("")||`<div class="sa-empty">Không có SOP chờ duyệt.</div>`}</div>
+  </article>
+  <article class="sa-card"><div class="sa-card-head"><div><h2>Sản phẩm · 品項</h2><p>Menu và nguyên liệu kho là hai dataset riêng.</p></div><div class="sa-row-actions"><button class="sa-btn" data-open-dataset="menu-items">Menu / Giá</button><button class="sa-btn" data-open-dataset="inventory-products">Nguyên liệu kho</button></div></div></article>`;
 }
 
-async function saveWorkArea(body) {
-  return apiRequest("/api/master-data/work-areas", { method: "POST", body });
+function renderDataFilters() {
+  const statusOptions=state.data.name==="announcements"
+    ? `<option value="">Tất cả trạng thái</option><option value="draft">draft</option><option value="published">published</option><option value="archived">archived</option>`
+    : `<option value="">Tất cả trạng thái</option><option value="active">active</option><option value="inactive">inactive</option>`;
+  return `<form class="sa-filterbar" data-data-filter><input name="q" value="${esc(state.data.q)}" placeholder="Tìm kiếm…"><select name="site"><option value="">Tất cả site</option>${state.sites.map((site)=>`<option value="${esc(site.code)}" ${state.data.site===site.code?"selected":""}>${esc(siteName(site.code))}</option>`).join("")}</select><select name="status">${statusOptions.replace(`value="${esc(state.data.status)}"`,`value="${esc(state.data.status)}" selected`)}</select><button class="sa-btn" type="submit">Lọc</button></form>`;
+}
+function renderData() {
+  const result=state.data.result; const rows=result?.rows||[]; const columns=result?.columns||[]; const p=result?.pagination||{page:1,pages:1,total:0};
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Data Tables & CRUD</h2><p>Chỉ các bảng/column nằm trong whitelist backend mới được truy cập.</p></div><button class="sa-btn primary" type="button" data-data-new>＋ Thêm dữ liệu</button></div>
+  <div class="sa-tabs">${Object.entries(DATASET_META).map(([key,meta])=>`<button type="button" class="sa-tab ${state.data.name===key?"active":""}" data-dataset="${esc(key)}">${esc(meta.label)}</button>`).join("")}</div>
+  ${renderDataFilters()}
+  ${state.data.loading?`<div class="sa-empty">Đang tải…</div>`:`<div class="sa-table-wrap"><table class="sa-table data-table"><thead><tr>${columns.map((column)=>`<th><button type="button" class="sa-sort" data-sort="${esc(column)}">${esc(column)}${state.data.sort===column?(state.data.direction==="asc"?" ↑":" ↓"):""}</button></th>`).join("")}<th></th></tr></thead><tbody>${rows.map((row)=>`<tr>${columns.map((column)=>`<td title="${esc(typeof row[column]==="object"?json(row[column]):row[column])}">${esc(display(row[column]))}</td>`).join("")}<td><div class="sa-row-actions"><button class="sa-btn small" data-data-edit="${esc(row.id)}">Sửa</button><button class="sa-btn small danger" data-data-archive="${esc(row.id)}">${esc(DATASET_META[state.data.name]?.archive||"Archive")}</button></div></td></tr>`).join("")}</tbody></table></div>`}
+  <div class="sa-pagination"><span>${esc(p.total||0)} rows · page ${esc(p.page||1)}/${esc(p.pages||1)}</span><div><button class="sa-btn small" data-page="${Math.max(1,(p.page||1)-1)}" ${(p.page||1)<=1?"disabled":""}>←</button><button class="sa-btn small" data-page="${Math.min(p.pages||1,(p.page||1)+1)}" ${(p.page||1)>=(p.pages||1)?"disabled":""}>→</button></div></div></article>`;
 }
 
-function errorText(error) {
-  const code = error?.code || error?.message || "UNKNOWN_ERROR";
-  const map = {
-    LOCATION_HAS_POSITIVE_STOCK: "Không thể ngừng dùng: vị trí vẫn còn tồn kho > 0. / 無法停用：此儲位仍有庫存。",
-    LOCATION_IS_RECEIVE_DEFAULT: "Không thể ngừng dùng: vị trí đang là nơi nhận hàng mặc định. / 無法停用：此儲位仍是預設收貨位置。",
-    LOCATION_KIND_IN_USE: "Không thể đổi loại vì vị trí đã được sử dụng. / 儲位已被使用，無法變更類型。",
-    LOCATION_CODE_EXISTS: "Mã vị trí đã tồn tại. / 儲位代碼已存在。",
-    LOCATION_CODE_IMMUTABLE: "Không thể thay đổi mã vị trí sau khi tạo. / 建立後不可修改儲位代碼。",
-    WORK_AREA_DEPARTMENT_NOT_FOUND: "Bộ phận không hợp lệ cho chi nhánh này. / 此部門不屬於目前據點。",
-    LOCATION_MANAGE_NOT_ALLOWED: "Không có quyền chỉnh sửa vị trí kho. / 無儲位管理權限。",
-    WORK_AREA_MANAGE_NOT_ALLOWED: "Không có quyền chỉnh sửa khu làm việc. / 無工作區管理權限。",
-    SITE_NOT_ALLOWED: "Không có quyền truy cập chi nhánh này. / 無此據點權限。",
-    AUTH_REQUIRED: t("loginRequired"),
-  };
-  return map[code] || `${code}`;
+function renderStores() {
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Danh sách chi nhánh · 據點清單</h2><p>Thêm, cấu hình và bật/tắt từng cơ sở. Site code cố định sau khi tạo.</p></div><button class="sa-btn primary" data-site-new>＋ Thêm chi nhánh</button></div>
+  <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>Code</th><th>Tên</th><th>Timezone</th><th>Currency</th><th>Trạng thái</th><th></th></tr></thead><tbody>${state.sites.map((site)=>`<tr><td class="mono">${esc(site.code)}</td><td><strong>${esc(site.name_vi)}</strong><small>${esc(site.name_zh_tw)}</small></td><td>${esc(site.timezone_name)}</td><td>${esc(site.currency_code)}</td><td><span class="sa-pill ${site.active?"ok":"off"}">${site.active?"Active":"Inactive"}</span></td><td><button class="sa-btn small" data-site-edit="${esc(site.code)}">Cấu hình</button></td></tr>`).join("")}</tbody></table></div></article>
+  <section class="sa-two-col"><article class="sa-card"><div class="sa-card-head"><div><h2>Đồng bộ menu / giá</h2><p>Copy menu từ site nguồn sang site đích; có thể giữ giá riêng của site đích.</p></div></div>
+    <form class="sa-form-grid" data-menu-sync><label><span>Nguồn</span><select name="source" required>${state.sites.filter((s)=>s.active).map((s)=>`<option value="${esc(s.code)}">${esc(siteName(s.code))}</option>`).join("")}</select></label><label><span>Đích</span><select name="destination" required>${state.sites.filter((s)=>s.active).map((s)=>`<option value="${esc(s.code)}">${esc(siteName(s.code))}</option>`).join("")}</select></label><label class="sa-check wide"><input type="checkbox" name="overwritePrices"><span>Đồng bộ cả giá / 覆蓋價格</span></label><div class="wide"><button class="sa-btn primary" type="submit">Đồng bộ</button></div></form>
+  </article><article class="sa-card"><div class="sa-card-head"><div><h2>Kho tổng & điều chuyển</h2><p>Không sửa quantity trực tiếp từ bảng hệ thống. Điều chuyển phải đi qua transaction kho chuẩn để đảm bảo atomic và audit.</p></div></div><a class="sa-btn primary inline" href="./#inventory">Mở Inventory / 出貨</a></article></section>`;
 }
 
-function renderOverviewCards() {
-  const c = state.overview?.counts || {};
-  const rows = [
-    [t("users"), c.active_users ?? state.users.length ?? 0],
-    [t("sites"), c.active_sites ?? 0],
-    [t("locations"), c.active_locations ?? 0],
-    [t("workAreas"), c.active_work_areas ?? 0],
-    [t("items"), c.active_inventory_items ?? 0],
-    [t("transactions"), c.inventory_transactions ?? 0],
-  ];
-  return `<section class="admin-grid">${rows.map(([label, value]) => `
-    <article class="admin-stat"><small>${esc(label)}</small><strong>${esc(value)}</strong></article>
-  `).join("")}</section>`;
+function renderSettings() {
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Cấu hình website · 網站設定</h2><p>Giá trị lưu trong <code>system_settings</code>, version tăng sau mỗi lần lưu.</p></div><button class="sa-btn primary" data-setting-new>＋ Thêm setting</button></div>
+  <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>Key</th><th>Value</th><th>Version</th><th>Updated</th><th></th></tr></thead><tbody>${state.settings.map((row)=>`<tr><td class="mono">${esc(row.setting_key)}</td><td><code>${esc(display(row.value))}</code></td><td>${esc(row.version)}</td><td>${esc(fmtDate(row.updated_at))}</td><td><button class="sa-btn small" data-setting-edit="${esc(row.setting_key)}">Sửa</button></td></tr>`).join("")}</tbody></table></div></article>`;
 }
 
-function renderSystemCard() {
-  const ok = state.health?.app === "ok" && state.health?.database === "ok";
-  const latestBackup = state.overview?.latestBackup;
-  return `<article class="admin-card">
-    <div class="admin-card-head"><div><h2>${esc(t("system"))}</h2><p>${esc(t("subtitle"))}</p></div></div>
-    <div class="admin-meta">
-      <div><small>${esc(t("database"))}</small><strong class="${ok ? "admin-health-ok" : "admin-health-bad"}">${esc(ok ? t("healthOk") : t("healthBad"))}</strong></div>
-      <div><small>${esc(t("release"))}</small><strong>${esc(state.overview?.release || state.health?.release || "—")}</strong></div>
-      <div><small>${esc(t("schema"))}</small><strong>${esc(state.overview?.schema?.version || state.health?.schema || "—")}</strong></div>
-      <div><small>${esc(t("latestBackup"))}</small><strong>${esc(latestBackup?.backup_key || t("noBackup"))}</strong>${latestBackup ? `<br><span class="admin-footnote">${esc(fmtDate(latestBackup.completed_at || latestBackup.started_at))} · ${esc(latestBackup.status || "")}</span>` : ""}</div>
-    </div>
-  </article>`;
+function auditParams(format="") {
+  const params=new URLSearchParams(); for(const key of ["q","site","action","actor"])if(state.audit[key])params.set(key,state.audit[key]); if(format)params.set("format",format); return params;
+}
+function renderLogs() {
+  const r=state.audit.result; const rows=r?.rows||[]; const p=r?.pagination||{page:1,pages:1,total:0};
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Audit Logs</h2><p>Lịch sử thao tác user và thay đổi hệ thống.</p></div><div class="sa-row-actions"><button class="sa-btn" data-export="excel">Excel</button><button class="sa-btn" data-export="pdf">PDF</button></div></div>
+  <form class="sa-filterbar" data-audit-filter><input name="q" value="${esc(state.audit.q)}" placeholder="Search action/entity…"><input name="actor" value="${esc(state.audit.actor)}" placeholder="User…"><input name="action" value="${esc(state.audit.action)}" placeholder="Action…"><select name="site"><option value="">Tất cả site</option>${state.sites.map((s)=>`<option value="${esc(s.code)}" ${state.audit.site===s.code?"selected":""}>${esc(siteName(s.code))}</option>`).join("")}</select><button class="sa-btn" type="submit">Lọc</button></form>
+  ${state.audit.loading?`<div class="sa-empty">Đang tải…</div>`:`<div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Site</th><th>Metadata</th></tr></thead><tbody>${rows.map((row)=>`<tr><td>${esc(fmtDate(row.created_at))}</td><td>${esc(row.actor_username||"system")}</td><td class="mono">${esc(row.action)}</td><td>${esc(row.entity_type)}<small>${esc(row.entity_id||"")}</small></td><td>${esc(row.site||"—")}</td><td><code>${esc(display(row.metadata))}</code></td></tr>`).join("")}</tbody></table></div>`}
+  <div class="sa-pagination"><span>${esc(p.total||0)} logs · page ${esc(p.page||1)}/${esc(p.pages||1)}</span><div><button class="sa-btn small" data-audit-page="${Math.max(1,(p.page||1)-1)}" ${(p.page||1)<=1?"disabled":""}>←</button><button class="sa-btn small" data-audit-page="${Math.min(p.pages||1,(p.page||1)+1)}" ${(p.page||1)>=(p.pages||1)?"disabled":""}>→</button></div></div></article>`;
 }
 
-function renderLocationRows() {
-  const rows = state.master?.locations || [];
-  if (!rows.length) return `<div class="admin-empty">${esc(t("empty"))}</div>`;
-  return `<div class="admin-table-wrap"><table class="admin-table"><thead><tr>
-    <th>${esc(t("code"))}</th><th>${esc(t("zh"))}</th><th>${esc(t("vi"))}</th><th>${esc(t("kind"))}</th><th>${esc(t("order"))}</th><th>${esc(t("status"))}</th><th>${esc(t("actions"))}</th>
-  </tr></thead><tbody>${rows.map((row) => `<tr>
-    <td class="admin-code">${esc(row.code)}</td><td>${esc(row.name_zh_tw)}</td><td>${esc(row.name_vi)}</td>
-    <td>${esc(row.kind === "work" ? t("work") : t("storage"))}</td><td>${esc(row.sort_order)}</td>
-    <td><span class="admin-status ${row.active ? "on" : "off"}">${esc(row.active ? t("active") : t("inactive"))}</span></td>
-    <td><div class="admin-row-actions"><button class="admin-btn" type="button" data-edit-location="${esc(row.id)}">${esc(t("edit"))}</button>${row.active ? `<button class="admin-btn danger" type="button" data-archive-location="${esc(row.id)}">${esc(t("archive"))}</button>` : ""}</div></td>
-  </tr>`).join("")}</tbody></table></div>`;
+function sectionHtml() {
+  if(state.section==="overview")return renderOverview(); if(state.section==="users")return renderUsers(); if(state.section==="content")return renderContent();
+  if(state.section==="data")return renderData(); if(state.section==="stores")return renderStores(); if(state.section==="settings")return renderSettings(); return renderLogs();
 }
-
-function renderWorkAreaRows() {
-  const rows = state.master?.workAreas || [];
-  if (!rows.length) return `<div class="admin-empty">${esc(t("empty"))}</div>`;
-  return `<div class="admin-table-wrap"><table class="admin-table"><thead><tr>
-    <th>${esc(t("code"))}</th><th>${esc(t("zh"))}</th><th>${esc(t("vi"))}</th><th>${esc(t("department"))}</th><th>${esc(t("order"))}</th><th>${esc(t("status"))}</th><th>${esc(t("actions"))}</th>
-  </tr></thead><tbody>${rows.map((row) => `<tr>
-    <td class="admin-code">${esc(row.code)}</td><td>${esc(row.name_zh_tw)}</td><td>${esc(row.name_vi)}</td><td class="admin-code">${esc(row.department_code || "—")}</td><td>${esc(row.sort_order)}</td>
-    <td><span class="admin-status ${row.active ? "on" : "off"}">${esc(row.active ? t("active") : t("inactive"))}</span></td>
-    <td><div class="admin-row-actions"><button class="admin-btn" type="button" data-edit-work-area="${esc(row.code)}">${esc(t("edit"))}</button>${row.active ? `<button class="admin-btn danger" type="button" data-archive-work-area="${esc(row.code)}">${esc(t("archive"))}</button>` : ""}</div></td>
-  </tr>`).join("")}</tbody></table></div>`;
-}
-
 function render() {
-  if (!root) return;
-  document.documentElement.lang = locale() === "zh-TW" ? "zh-Hant" : "vi";
-  if (state.loading) {
-    root.className = "admin-loading";
-    root.textContent = "Kitchen OS · Admin Panel…";
-    return;
-  }
-  if (!state.me) {
-    root.className = "admin-loading";
-    root.innerHTML = `<div><h1>${esc(t("loginRequired"))}</h1><a class="admin-btn primary" href="./">${esc(t("back"))}</a></div>`;
-    return;
-  }
-  if (!canOpenAdmin()) {
-    root.className = "admin-loading";
-    root.innerHTML = `<div><h1>${esc(t("forbidden"))}</h1><a class="admin-btn primary" href="./">${esc(t("back"))}</a></div>`;
-    return;
-  }
-
-  root.className = "admin-shell";
-  root.innerHTML = `
-    <header class="admin-topbar">
-      <div class="admin-brand"><h1>Kitchen OS · ${esc(t("title"))}</h1><p>${esc(t("subtitle"))}</p></div>
-      <div class="admin-actions"><a class="admin-btn" href="./#settings">${esc(t("accounts"))}</a><a class="admin-btn" href="./">${esc(t("back"))}</a><button class="admin-btn primary" type="button" data-refresh>${esc(t("refresh"))}</button></div>
-    </header>
-    ${state.error ? `<div class="admin-error">${esc(state.error)}</div>` : ""}
-    ${state.success ? `<div class="admin-success">${esc(state.success)}</div>` : ""}
-    ${renderOverviewCards()}
-    ${renderSystemCard()}
-    <section class="admin-layout">
-      <aside class="admin-sidebar">${SITES.map((site) => `<button type="button" class="admin-site-button ${state.site === site ? "active" : ""}" data-site="${site}">${esc(siteLabel(site))}</button>`).join("")}</aside>
-      <main>
-        <article class="admin-card">
-          <div class="admin-card-head"><div><h2>${esc(t("masterData"))} · ${esc(siteLabel(state.site))}</h2><p>${esc(t("masterSubtitle"))}</p></div><span class="admin-footnote">${esc(t("allDataNote"))}</span></div>
-        </article>
-        <article class="admin-card">
-          <div class="admin-card-head"><div><h2>${esc(t("locations"))}</h2><p>${esc(state.master?.permissions?.manageLocations ? t("saved") : t("allDataNote"))}</p></div>${state.master?.permissions?.manageLocations ? `<button class="admin-btn primary" type="button" data-add-location>＋ ${esc(t("addLocation"))}</button>` : ""}</div>
-          ${renderLocationRows()}
-        </article>
-        <article class="admin-card">
-          <div class="admin-card-head"><div><h2>${esc(t("workAreas"))}</h2><p>${esc(t("masterSubtitle"))}</p></div>${state.master?.permissions?.manageWorkAreas ? `<button class="admin-btn primary" type="button" data-add-work-area>＋ ${esc(t("addWorkArea"))}</button>` : ""}</div>
-          ${renderWorkAreaRows()}
-        </article>
-      </main>
-    </section>`;
-  bind();
+  if(!root)return;
+  if(state.loading){root.className="admin-loading";root.textContent="Kitchen OS · Super Admin…";return;}
+  if(!state.me){root.className="admin-loading";root.innerHTML=`<div class="sa-gate"><h1>Phiên đăng nhập không hợp lệ</h1><a class="sa-btn primary" href="./">Đăng nhập Kitchen OS</a></div>`;return;}
+  if(!isSuperAdmin()){root.className="admin-loading";root.innerHTML=`<div class="sa-gate"><span class="sa-owner-badge">403</span><h1>Super Admin only</h1><p>Tài khoản admin thông thường không được truy cập cổng hệ thống này.</p><a class="sa-btn primary" href="./">Về Kitchen OS</a></div>`;return;}
+  root.className="sa-app"; root.innerHTML=`${nav()}<div class="sa-main">${topbar()}<main class="sa-content">${notices()}${sectionHtml()}</main></div>`; bind();
 }
 
-async function loadAll({ keepMessage = false } = {}) {
-  if (!keepMessage) {
-    state.error = "";
-    state.success = "";
-  }
-  try {
-    const [health, overview, users, master] = await Promise.all([
-      vpsHealth(), adminOverview(), vpsListUsers(), masterData(state.site),
-    ]);
-    state.health = health;
-    state.overview = overview;
-    state.users = users?.users || [];
-    state.master = master;
-  } catch (error) {
-    state.error = `${t("loadFailed")} ${errorText(error)}`;
-  }
-  render();
+function modal(title,body) {
+  const host=document.createElement("div"); host.className="sa-modal-backdrop"; host.innerHTML=`<section class="sa-modal" role="dialog" aria-modal="true"><div class="sa-modal-head"><h2>${esc(title)}</h2><button type="button" class="sa-icon" data-modal-close>×</button></div>${body}</section>`; document.body.append(host);
+  host.addEventListener("click",(event)=>{if(event.target===host||event.target.closest?.("[data-modal-close]"))host.remove();}); return host;
+}
+function siteOptions(value="",allowAll=true) {
+  return `${allowAll?`<option value="all" ${value==="all"?"selected":""}>Tất cả · 全部</option>`:""}${state.sites.map((s)=>`<option value="${esc(s.code)}" ${value===s.code?"selected":""}>${esc(siteName(s.code))}</option>`).join("")}`;
 }
 
-function modalShell(title, body) {
-  const host = document.createElement("div");
-  host.className = "admin-modal-backdrop";
-  host.innerHTML = `<section class="admin-modal" role="dialog" aria-modal="true"><div class="admin-modal-head"><h2>${esc(title)}</h2><button class="admin-btn" type="button" data-modal-close>×</button></div>${body}</section>`;
-  document.body.append(host);
-  host.querySelectorAll("[data-modal-close]").forEach((button) => button.addEventListener("click", () => host.remove()));
-  host.addEventListener("click", (event) => { if (event.target === host) host.remove(); });
-  return host;
+function openUserEditor(user=null) {
+  const defaultRole=roleByCode(user?.role||"employee")||state.accessModel.roles[0]; const overrides=user?.permission_overrides||{}; const effective=user?.permissions||defaultRole?.permissions||{}; const custom=Object.keys(overrides).length>0;
+  const host=modal(user?"Sửa user · 編輯使用者":"Thêm user · 新增使用者",`<form data-user-form data-permission-mode="${custom?"custom":"default"}"><div class="sa-form-grid">
+    <label><span>Username</span><input required name="username" pattern="[a-z0-9._-]{2,40}" value="${esc(user?.username||"")}"></label><label><span>Tên hiển thị · 顯示名稱</span><input required name="display_name" value="${esc(user?.display_name||"")}"></label>
+    <label><span>Role</span><select name="role">${state.accessModel.roles.map((r)=>`<option value="${esc(r.code)}" ${(user?.role||defaultRole?.code)===r.code?"selected":""}>${esc(r.name_vi)} · ${esc(r.name_zh_tw)}</option>`).join("")}</select></label>
+    <label><span>Chi nhánh · 據點</span><select name="location">${siteOptions(user?.location||defaultRole?.effective_location||"fuxing",true)}</select></label>
+    <label><span>Ngôn ngữ · 語言</span><select name="preferred_language"><option value="vi" ${user?.preferred_language==="vi"?"selected":""}>Tiếng Việt</option><option value="zh-TW" ${user?.preferred_language==="zh-TW"?"selected":""}>繁體中文</option></select></label>
+    <label><span>${user?"Mật khẩu mới (để trống nếu giữ nguyên)":"Mật khẩu"}</span><input name="password" type="password" ${user?"":"required"} minlength="10"></label>
+    <label class="sa-check wide"><input type="checkbox" name="active" ${user?.active!==false?"checked":""}><span>Active</span></label>
+  </div><div class="sa-permission-head"><div><h3>Quyền module · 模組權限</h3><p>View/Edit hiệu lực theo từng user.</p></div><button class="sa-btn small" type="button" data-role-defaults>Dùng mặc định Role</button></div>
+  <div class="sa-permission-grid">${state.accessModel.modules.map((m)=>{const p=effective[m.module_key]||{};return `<div class="sa-permission-row" data-module="${esc(m.module_key)}"><div><strong>${esc(m.name_vi)}</strong><small>${esc(m.name_zh_tw)} · ${esc(m.module_key)}</small></div><label><input type="checkbox" data-perm="view" ${p.view?"checked":""}> View</label><label><input type="checkbox" data-perm="edit" ${p.edit?"checked":""}> Edit</label></div>`;}).join("")}</div>
+  <p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu vào Database</button></div></form>`);
+  const form=host.querySelector("[data-user-form]");
+  const applyRoleDefaults=()=>{const role=roleByCode(form.role.value);form.querySelectorAll("[data-module]").forEach((row)=>{const p=role?.permissions?.[row.dataset.module]||{};row.querySelector('[data-perm="view"]').checked=Boolean(p.view);row.querySelector('[data-perm="edit"]').checked=Boolean(p.edit);});form.dataset.permissionMode="default"; if(role?.scope_policy==="all")form.location.value="all"; else if(role?.scope_policy==="central")form.location.value="central";};
+  host.querySelector("[data-role-defaults]").addEventListener("click",applyRoleDefaults); form.role.addEventListener("change",()=>{if(form.dataset.permissionMode==="default")applyRoleDefaults();});
+  form.querySelectorAll("[data-perm]").forEach((box)=>box.addEventListener("change",()=>{form.dataset.permissionMode="custom";const row=box.closest("[data-module]");const view=row.querySelector('[data-perm="view"]');const edit=row.querySelector('[data-perm="edit"]');if(box.dataset.perm==="edit"&&edit.checked)view.checked=true;if(box.dataset.perm==="view"&&!view.checked)edit.checked=false;}));
+  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const permissions={};if(form.dataset.permissionMode!=="default")form.querySelectorAll("[data-module]").forEach((row)=>{permissions[row.dataset.module]={view:row.querySelector('[data-perm="view"]').checked,edit:row.querySelector('[data-perm="edit"]').checked};});const submit=form.querySelector('button[type="submit"]');submit.disabled=true;try{await api("/api/admin/users",{method:"POST",body:{action:user?"update":"create",id:user?.id,username:String(fd.get("username")||""),display_name:String(fd.get("display_name")||""),role:String(fd.get("role")||"employee"),location:String(fd.get("location")||""),preferred_language:String(fd.get("preferred_language")||"vi"),password:String(fd.get("password")||""),active:fd.has("active"),permissions}});host.remove();state.success="Đã lưu user và quyền vào PostgreSQL.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);submit.disabled=false;}});
 }
 
-function openLocationEditor(id = "") {
-  const row = id ? state.master?.locations?.find((entry) => entry.id === id) : null;
-  const sitePrefix = `${state.site}-`;
-  const host = modalShell(t("locationEditor"), `<form data-location-form>
-    <div class="admin-form-grid">
-      <label class="admin-field wide"><span>${esc(t("code"))}</span><input name="code" required pattern="[a-z][a-z0-9._-]{1,39}" value="${esc(row?.code || sitePrefix)}" ${row ? "readonly" : ""}><small class="admin-footnote">${esc(t("createCodeHint"))}</small></label>
-      <label class="admin-field"><span>${esc(t("zh"))}</span><input name="name_zh_tw" required value="${esc(row?.name_zh_tw || "")}"></label>
-      <label class="admin-field"><span>${esc(t("vi"))}</span><input name="name_vi" required value="${esc(row?.name_vi || "")}"></label>
-      <label class="admin-field"><span>${esc(t("kind"))}</span><select name="kind"><option value="storage" ${row?.kind !== "work" ? "selected" : ""}>${esc(t("storage"))}</option><option value="work" ${row?.kind === "work" ? "selected" : ""}>${esc(t("work"))}</option></select></label>
-      <label class="admin-field"><span>${esc(t("order"))}</span><input name="sort_order" type="number" step="1" value="${esc(row?.sort_order ?? 0)}"></label>
-      <label class="admin-checkbox"><input name="active" type="checkbox" ${row?.active !== false ? "checked" : ""}><span>${esc(t("active"))}</span></label>
-    </div><p class="admin-form-message" data-form-message></p><div class="admin-form-actions"><button class="admin-btn" type="button" data-modal-close>${esc(t("cancel"))}</button><button class="admin-btn primary" type="submit">${esc(t("save"))}</button></div>
-  </form>`);
-  const form = host.querySelector("[data-location-form]");
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const submit = form.querySelector('button[type="submit"]');
-    const message = form.querySelector("[data-form-message]");
-    submit.disabled = true;
-    message.textContent = "";
-    try {
-      await saveLocation({
-        action: "save", id: row?.id || undefined, site: state.site,
-        code: String(data.get("code") || "").trim(), name_zh_tw: String(data.get("name_zh_tw") || "").trim(), name_vi: String(data.get("name_vi") || "").trim(),
-        kind: String(data.get("kind") || "storage"), sort_order: Number(data.get("sort_order") || 0), active: data.has("active"), metadata: row?.metadata || {},
-      });
-      host.remove();
-      state.success = t("saved"); state.error = "";
-      await loadAll({ keepMessage: true });
-    } catch (error) {
-      message.textContent = errorText(error);
-      submit.disabled = false;
-    }
-  });
+function fieldControl(name,label,type,value) {
+  if(type==="site")return `<label><span>${esc(label)}</span><select name="${esc(name)}"><option value="">Toàn hệ thống / —</option>${state.sites.map((s)=>`<option value="${esc(s.code)}" ${value===s.code?"selected":""}>${esc(siteName(s.code))}</option>`).join("")}</select></label>`;
+  if(type==="announcement-status")return `<label><span>${esc(label)}</span><select name="${esc(name)}">${["draft","published","archived"].map((v)=>`<option value="${v}" ${value===v?"selected":""}>${v}</option>`).join("")}</select></label>`;
+  if(type==="asset-type")return `<label><span>${esc(label)}</span><select name="${esc(name)}">${["image","document","other"].map((v)=>`<option value="${v}" ${value===v?"selected":""}>${v}</option>`).join("")}</select></label>`;
+  if(type==="boolean")return `<label class="sa-check"><input type="checkbox" name="${esc(name)}" ${value!==false?"checked":""}><span>${esc(label)}</span></label>`;
+  if(type==="textarea"||type==="json")return `<label class="wide"><span>${esc(label)}</span><textarea name="${esc(name)}" rows="${type==="json"?5:4}">${esc(type==="json"?json(value||{}):(value||""))}</textarea></label>`;
+  const val=type==="datetime"&&value?new Date(value).toISOString().slice(0,16):(value??"");return `<label><span>${esc(label)}</span><input name="${esc(name)}" type="${type==="datetime"?"datetime-local":type}" value="${esc(val)}"></label>`;
+}
+function openDataEditor(row=null) {
+  const meta=DATASET_META[state.data.name]; const host=modal(`${row?"Sửa":"Thêm"} · ${meta.label}`,`<form data-data-form><div class="sa-form-grid">${meta.fields.map(([name,label,type])=>fieldControl(name,label,type,row?.[name])).join("")}</div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu Database</button></div></form>`); const form=host.querySelector("[data-data-form]");
+  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const values={};try{for(const [name,,type] of meta.fields){if(type==="boolean")values[name]=form.elements[name].checked;else if(type==="number")values[name]=fd.get(name)===""?null:Number(fd.get(name));else if(type==="json")values[name]=JSON.parse(String(fd.get(name)||"{}"));else if(type==="datetime")values[name]=fd.get(name)?new Date(String(fd.get(name))).toISOString():null;else values[name]=String(fd.get(name)||"");}await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"save",id:row?.id,values}});host.remove();state.success="Đã lưu dữ liệu.";await Promise.all([loadDataset(),loadCore()]);}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
+}
+function openSiteEditor(site=null) {
+  const host=modal(site?"Cấu hình chi nhánh":"Thêm chi nhánh",`<form data-site-form><div class="sa-form-grid"><label><span>Code</span><input required name="code" pattern="[a-z][a-z0-9._-]{1,39}" value="${esc(site?.code||"")}" ${site?"readonly":""}></label><label><span>Sort order</span><input type="number" name="sort_order" value="${esc(site?.sort_order??0)}"></label><label><span>Tên VI</span><input required name="name_vi" value="${esc(site?.name_vi||"")}"></label><label><span>中文名稱</span><input required name="name_zh_tw" value="${esc(site?.name_zh_tw||"")}"></label><label><span>Timezone</span><input name="timezone_name" value="${esc(site?.timezone_name||"Asia/Taipei")}"></label><label><span>Currency</span><input name="currency_code" maxlength="3" value="${esc(site?.currency_code||"TWD")}"></label><label class="sa-check wide"><input type="checkbox" name="active" ${site?.active!==false?"checked":""}><span>Active</span></label><label class="wide"><span>Metadata JSON</span><textarea name="metadata" rows="5">${esc(json(site?.metadata||{}))}</textarea></label></div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu</button></div></form>`);const form=host.querySelector("[data-site-form]");form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);try{await api("/api/admin/super/sites",{method:"POST",body:{code:String(fd.get("code")||""),name_vi:String(fd.get("name_vi")||""),name_zh_tw:String(fd.get("name_zh_tw")||""),timezone_name:String(fd.get("timezone_name")||"Asia/Taipei"),currency_code:String(fd.get("currency_code")||"TWD"),sort_order:Number(fd.get("sort_order")||0),active:fd.has("active"),metadata:JSON.parse(String(fd.get("metadata")||"{}"))}});host.remove();state.success="Đã lưu chi nhánh.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
+}
+function openSettingEditor(row=null) {
+  const host=modal(row?"Sửa setting":"Thêm setting",`<form data-setting-form><div class="sa-form-grid"><label class="wide"><span>Setting key</span><input required name="setting_key" pattern="[a-z][a-z0-9._-]{1,95}" value="${esc(row?.setting_key||"")}" ${row?"readonly":""}></label><label class="wide"><span>JSON value (chuỗi có thể nhập trực tiếp)</span><textarea name="value" rows="6">${esc(typeof row?.value==="string"?row.value:json(row?.value??""))}</textarea></label></div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu</button></div></form>`);const form=host.querySelector("[data-setting-form]");form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);let value=String(fd.get("value")||"");try{try{value=JSON.parse(value);}catch{}await api("/api/admin/super/settings",{method:"POST",body:{setting_key:String(fd.get("setting_key")||""),value}});host.remove();state.success="Đã lưu setting.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
 }
 
-function openWorkAreaEditor(code = "") {
-  const row = code ? state.master?.workAreas?.find((entry) => entry.code === code) : null;
-  const departments = state.master?.departments || [];
-  const host = modalShell(t("workAreaEditor"), `<form data-work-area-form>
-    <div class="admin-form-grid">
-      <label class="admin-field wide"><span>${esc(t("code"))}</span><input name="code" required pattern="[a-z][a-z0-9._-]{1,39}" value="${esc(row?.code || "")}" ${row ? "readonly" : ""}><small class="admin-footnote">${esc(t("createCodeHint"))}</small></label>
-      <label class="admin-field"><span>${esc(t("zh"))}</span><input name="name_zh_tw" required value="${esc(row?.name_zh_tw || "")}"></label>
-      <label class="admin-field"><span>${esc(t("vi"))}</span><input name="name_vi" required value="${esc(row?.name_vi || "")}"></label>
-      <label class="admin-field"><span>${esc(t("department"))}</span><select name="department_code"><option value="">—</option>${departments.map((department) => `<option value="${esc(department.code)}" ${row?.department_code === department.code ? "selected" : ""}>${esc(locale() === "zh-TW" ? department.name_zh_tw : `${department.name_vi} · ${department.name_zh_tw}`)}</option>`).join("")}</select></label>
-      <label class="admin-field"><span>${esc(t("order"))}</span><input name="sort_order" type="number" step="1" value="${esc(row?.sort_order ?? 0)}"></label>
-      <label class="admin-checkbox"><input name="active" type="checkbox" ${row?.active !== false ? "checked" : ""}><span>${esc(t("active"))}</span></label>
-    </div><p class="admin-form-message" data-form-message></p><div class="admin-form-actions"><button class="admin-btn" type="button" data-modal-close>${esc(t("cancel"))}</button><button class="admin-btn primary" type="submit">${esc(t("save"))}</button></div>
-  </form>`);
-  const form = host.querySelector("[data-work-area-form]");
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const submit = form.querySelector('button[type="submit"]');
-    const message = form.querySelector("[data-form-message]");
-    submit.disabled = true;
-    message.textContent = "";
-    try {
-      await saveWorkArea({
-        action: "save", site: state.site, code: String(data.get("code") || "").trim(),
-        name_zh_tw: String(data.get("name_zh_tw") || "").trim(), name_vi: String(data.get("name_vi") || "").trim(),
-        department_code: String(data.get("department_code") || "").trim(), sort_order: Number(data.get("sort_order") || 0), active: data.has("active"), metadata: row?.metadata || {},
-      });
-      host.remove();
-      state.success = t("saved"); state.error = "";
-      await loadAll({ keepMessage: true });
-    } catch (error) {
-      message.textContent = errorText(error);
-      submit.disabled = false;
-    }
-  });
+async function switchSection(section) {
+  if(!SECTIONS.includes(section))return;state.section=section;location.hash=section;state.error="";state.success="";render();if(section==="data"&&!state.data.result)await loadDataset();if(section==="logs"&&!state.audit.result)await loadAudit();
 }
-
-async function archiveLocation(id) {
-  if (!confirm(t("archiveConfirm"))) return;
-  try {
-    await saveLocation({ action: "archive", id, site: state.site });
-    state.success = t("archived"); state.error = "";
-    await loadAll({ keepMessage: true });
-  } catch (error) {
-    state.error = errorText(error); state.success = ""; render();
-  }
-}
-
-async function archiveWorkArea(code) {
-  if (!confirm(t("archiveConfirm"))) return;
-  try {
-    await saveWorkArea({ action: "archive", code, site: state.site });
-    state.success = t("archived"); state.error = "";
-    await loadAll({ keepMessage: true });
-  } catch (error) {
-    state.error = errorText(error); state.success = ""; render();
-  }
-}
-
 function bind() {
-  root.querySelector("[data-refresh]")?.addEventListener("click", () => void loadAll());
-  root.querySelectorAll("[data-site]").forEach((button) => button.addEventListener("click", async () => {
-    state.site = button.dataset.site;
-    state.master = null; state.error = ""; state.success = ""; render();
-    try { state.master = await masterData(state.site); } catch (error) { state.error = errorText(error); }
-    render();
-  }));
-  root.querySelector("[data-add-location]")?.addEventListener("click", () => openLocationEditor());
-  root.querySelector("[data-add-work-area]")?.addEventListener("click", () => openWorkAreaEditor());
-  root.querySelectorAll("[data-edit-location]").forEach((button) => button.addEventListener("click", () => openLocationEditor(button.dataset.editLocation)));
-  root.querySelectorAll("[data-edit-work-area]").forEach((button) => button.addEventListener("click", () => openWorkAreaEditor(button.dataset.editWorkArea)));
-  root.querySelectorAll("[data-archive-location]").forEach((button) => button.addEventListener("click", () => void archiveLocation(button.dataset.archiveLocation)));
-  root.querySelectorAll("[data-archive-work-area]").forEach((button) => button.addEventListener("click", () => void archiveWorkArea(button.dataset.archiveWorkArea)));
+  root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
+  root.querySelector("[data-refresh]")?.addEventListener("click",()=>void refreshCurrent()); root.querySelector("[data-toggle-nav]")?.addEventListener("click",()=>root.classList.toggle("nav-open"));
+  root.querySelector("[data-user-new]")?.addEventListener("click",()=>openUserEditor()); root.querySelectorAll("[data-user-edit]").forEach((b)=>b.addEventListener("click",()=>openUserEditor(state.users.find((u)=>u.id===b.dataset.userEdit))));
+  root.querySelectorAll("[data-user-delete]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Archive user này?"))return;try{await api(`/api/admin/users/${encodeURIComponent(b.dataset.userDelete)}`,{method:"DELETE"});state.success="Đã archive user.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
+  root.querySelectorAll("[data-open-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.openDataset;state.data.page=1;state.data.result=null;await switchSection("data");await loadDataset();if(b.hasAttribute("data-new-row"))openDataEditor();}));
+  root.querySelectorAll("[data-sop-review]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm(b.dataset.decision==="approved"?"Duyệt version SOP này?":"Từ chối version SOP này?"))return;try{await api(`/api/admin/super/sop-versions/${encodeURIComponent(b.dataset.sopReview)}/review`,{method:"POST",body:{decision:b.dataset.decision}});state.success="Đã cập nhật SOP.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
+  root.querySelectorAll("[data-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.dataset;state.data.page=1;state.data.q="";state.data.site="";state.data.status="";state.data.sort="";state.data.result=null;await loadDataset();}));
+  root.querySelector("[data-data-filter]")?.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(event.currentTarget);state.data.q=String(fd.get("q")||"");state.data.site=String(fd.get("site")||"");state.data.status=String(fd.get("status")||"");state.data.page=1;await loadDataset();});
+  root.querySelectorAll("[data-sort]").forEach((b)=>b.addEventListener("click",async()=>{state.data.direction=state.data.sort===b.dataset.sort&&state.data.direction==="asc"?"desc":"asc";state.data.sort=b.dataset.sort;await loadDataset();}));
+  root.querySelectorAll("[data-page]").forEach((b)=>b.addEventListener("click",async()=>{state.data.page=Number(b.dataset.page)||1;await loadDataset();}));
+  root.querySelector("[data-data-new]")?.addEventListener("click",()=>openDataEditor()); root.querySelectorAll("[data-data-edit]").forEach((b)=>b.addEventListener("click",()=>openDataEditor(state.data.result?.rows?.find((r)=>String(r.id)===b.dataset.dataEdit))));
+  root.querySelectorAll("[data-data-archive]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Xác nhận archive/ngừng dùng bản ghi này?"))return;try{await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"archive",id:b.dataset.dataArchive}});state.success="Đã cập nhật trạng thái bản ghi.";await Promise.all([loadDataset(),loadCore()]);}catch(error){flash("error",errorText(error));}}));
+  root.querySelector("[data-site-new]")?.addEventListener("click",()=>openSiteEditor()); root.querySelectorAll("[data-site-edit]").forEach((b)=>b.addEventListener("click",()=>openSiteEditor(state.sites.find((s)=>s.code===b.dataset.siteEdit))));
+  root.querySelector("[data-menu-sync]")?.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(event.currentTarget);const source=String(fd.get("source")||"");const destination=String(fd.get("destination")||"");if(source===destination){flash("error","Site nguồn và site đích phải khác nhau.");return;}try{const result=await api("/api/admin/super/menu-sync",{method:"POST",body:{source,destination,overwritePrices:fd.has("overwritePrices")}});state.success=`Đã đồng bộ ${result.count||0} menu items.`;await loadCore();render();}catch(error){flash("error",errorText(error));}});
+  root.querySelector("[data-setting-new]")?.addEventListener("click",()=>openSettingEditor()); root.querySelectorAll("[data-setting-edit]").forEach((b)=>b.addEventListener("click",()=>openSettingEditor(state.settings.find((s)=>s.setting_key===b.dataset.settingEdit))));
+  root.querySelector("[data-audit-filter]")?.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(event.currentTarget);for(const key of ["q","site","action","actor"])state.audit[key]=String(fd.get(key)||"");state.audit.page=1;await loadAudit();});
+  root.querySelectorAll("[data-audit-page]").forEach((b)=>b.addEventListener("click",async()=>{state.audit.page=Number(b.dataset.auditPage)||1;await loadAudit();}));
+  root.querySelectorAll("[data-export]").forEach((b)=>b.addEventListener("click",()=>{const params=auditParams(b.dataset.export);window.location.href=`/api/admin/super/audit/export?${params}`;}));
 }
 
 async function boot() {
-  try {
-    const me = await vpsMe();
-    state.me = me?.user || null;
-  } catch (error) {
-    state.loading = false;
-    state.error = errorText(error);
-    render();
-    return;
-  }
-  state.loading = false;
-  if (!canOpenAdmin()) {
-    render();
-    return;
-  }
-  await loadAll();
+  state.section=currentSection();
+  try { const me=await vpsMe(); state.me=me?.user||null; }
+  catch(error){state.error=errorText(error);state.loading=false;render();return;}
+  state.loading=false; if(!isSuperAdmin()){render();return;}
+  try { await loadCore(); if(state.section==="data")await loadDataset(); if(state.section==="logs")await loadAudit(); }
+  catch(error){state.error=errorText(error);} render();
 }
-
+window.addEventListener("hashchange",()=>{const section=currentSection();if(section!==state.section)void switchSection(section);});
 void boot();
