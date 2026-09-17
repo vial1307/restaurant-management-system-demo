@@ -51,10 +51,27 @@ const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");
 assert.equal(/SITE_LABELS/.test(adminSource), false, "Admin Panel site labels must come from PostgreSQL");
 
+const adminRoutes = fs.readFileSync(new URL("../vps/backend/src/admin-routes.mjs", import.meta.url), "utf8");
+assert.equal(adminRoutes.includes("VALID_LOCATIONS"), false, "account site validation must not use a closed JS enum");
+assert.equal(adminRoutes.includes('["fuxing","yongji"].includes(location)'), false, "assigned account roles must not hard-code branch names");
+assert.match(adminRoutes, /activeSite\(effectiveLocation, client\)/, "account site validation must resolve through PostgreSQL sites");
+assert.match(adminRoutes, /metadata\?\.inventory_mode/, "assigned account roles must use DB site classification");
+
+const accessControl = fs.readFileSync(new URL("../vps/backend/src/access-control.mjs", import.meta.url), "utf8");
+assert.equal(accessControl.includes('scope_policy === "central" ? "central"'), false, "access model must not choose a hard-coded sample site");
+assert.equal(accessControl.includes(': "fuxing"'), false, "access model must not require Fuxing to resolve role permissions");
+
 const migration = fs.readFileSync(new URL("../vps/database/migrations/016_inventory_ui_master_data.sql", import.meta.url), "utf8");
 assert.match(migration, /inventory_mode/);
 assert.match(migration, /ui_key/);
 assert.match(migration, /storage_group/);
 assert.match(migration, /work_area/);
+
+const dynamicSiteMigration = fs.readFileSync(new URL("../vps/database/migrations/017_dynamic_site_scope.sql", import.meta.url), "utf8");
+assert.match(dynamicSiteMigration, /drop constraint if exists inventory_locations_site_check/);
+assert.match(dynamicSiteMigration, /drop constraint if exists inventory_receive_defaults_site_check/);
+assert.match(dynamicSiteMigration, /drop constraint if exists app_users_location_check/);
+assert.match(dynamicSiteMigration, /APP_USER_SITE_NOT_FOUND/);
+assert.match(dynamicSiteMigration, /from public\.sites/);
 
 console.log("INVENTORY_MASTER_DATA_REGRESSION_OK");
