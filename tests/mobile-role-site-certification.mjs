@@ -56,11 +56,13 @@ async function seedSessionCookie(context, username, label) {
 async function login(page, context, username, foreignSite, label) {
   if (label.startsWith("webkit-")) {
     await seedSessionCookie(context, username, label);
+    await page.addInitScript((site) => {
+      localStorage.setItem("shitu-admin-active-site-v1", site);
+    }, foreignSite);
     await page.goto(BASE + "/", { waitUntil:"domcontentloaded", timeout:30000 });
     await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
     await page.waitForSelector(".app-shell", { state:"visible", timeout:15000 });
     await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:15000 });
-    await page.evaluate((site) => localStorage.setItem("shitu-admin-active-site-v1", site), foreignSite);
     return;
   }
 
