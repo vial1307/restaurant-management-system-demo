@@ -119,7 +119,10 @@ export async function listAccessModel(client = pool) {
 
   const roles = [];
   for (const row of rolesResult.rows) {
-    const resolved = await resolveRoleProfile(row.code, row.scope_policy === "central" ? "central" : row.scope_policy === "all" ? "all" : "fuxing", client);
+    // Permissions and capabilities are role data; they do not require a
+    // hard-coded branch just to resolve the access model. Scope-specific
+    // effective locations are validated when an account is saved.
+    const resolved = await resolveRoleProfile(row.code, "", client);
     if (!resolved) continue;
     roles.push({
       code: row.code,
