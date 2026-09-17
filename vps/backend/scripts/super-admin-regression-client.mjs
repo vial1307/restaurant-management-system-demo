@@ -128,7 +128,7 @@ try {
     body:{ setting_key:"website.regression_banner",value:{enabled:true,text:"regression"} },
   });
   assert.equal(settingSave.response.status, 200, JSON.stringify(settingSave.data));
-  assert.equal(settingSave.data.setting.version, 1);
+  assert.equal(Number(settingSave.data.setting.version), 1);
   const settingUpdate = await request("/api/admin/super/settings", {
     method:"POST",cookie:owner.cookie,
     body:{ setting_key:"website.regression_banner",value:{enabled:false,text:"regression-2"} },
