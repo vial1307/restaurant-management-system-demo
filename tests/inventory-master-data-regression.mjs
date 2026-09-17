@@ -51,6 +51,30 @@ const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");
 assert.equal(/SITE_LABELS/.test(adminSource), false, "Admin Panel site labels must come from PostgreSQL");
 
+const accountAdmin = fs.readFileSync(new URL("../src/account-admin.js", import.meta.url), "utf8");
+assert.match(accountAdmin, /vpsInventorySites/,
+  "account editor must load site choices from PostgreSQL");
+assert.match(accountAdmin, /\/api\/admin\/access-model/,
+  "account editor must load role choices from the database access model");
+assert.equal(accountAdmin.includes('<option value="fuxing"'), false,
+  "account editor must not hard-code Fuxing as a location option");
+assert.equal(accountAdmin.includes('<option value="yongji"'), false,
+  "account editor must not hard-code Yongji as a location option");
+assert.equal(accountAdmin.includes("location:'fuxing'"), false,
+  "new accounts must not default to a hard-coded branch");
+assert.equal(accountAdmin.includes("['admin','manager','supervisor','employee','parttime','central']"), false,
+  "account editor role choices must come from the database access model");
+
+const authBridge = fs.readFileSync(new URL("../src/vps-auth-bridge.js", import.meta.url), "utf8");
+assert.equal(authBridge.includes('["central", "fuxing", "yongji"].includes(normalized.location)'), false,
+  "auth session must accept any backend-authorized site");
+assert.equal(authBridge.includes('user.location || "fuxing"'), false,
+  "auth session must not fall back to Fuxing");
+assert.equal(authBridge.includes('data.get("location") || "fuxing"'), false,
+  "account submissions must not invent a Fuxing location");
+assert.match(authBridge, /normalized\.location && normalized\.location !== "all"/,
+  "site-scoped sessions must mirror the backend-authorized site dynamically");
+
 const adminRoutes = fs.readFileSync(new URL("../vps/backend/src/admin-routes.mjs", import.meta.url), "utf8");
 assert.equal(adminRoutes.includes("VALID_LOCATIONS"), false, "account site validation must not use a closed JS enum");
 assert.equal(adminRoutes.includes('["fuxing","yongji"].includes(location)'), false, "assigned account roles must not hard-code branch names");
