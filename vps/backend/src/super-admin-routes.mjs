@@ -498,6 +498,70 @@ export async function registerSuperAdminRoutes(app) {
     catch (error) { return reply.code(500).send({ error:error.message || "INVENTORY_CATALOG_AUDIT_FAILED" }); }
   });
 
+  app.post("/api/admin/super/inventory-catalog-identity", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    const catalogKey = text(request.body?.catalogKey);
+    const nameVi = request.body?.nameVi === undefined ? undefined : text(request.body.nameVi);
+    const nameZhTw = request.body?.nameZhTw === undefined ? undefined : text(request.body.nameZhTw);
+    if (!catalogKey || (nameVi === undefined && nameZhTw === undefined)) {
+      return reply.code(400).send({ error:"INVENTORY_IDENTITY_VALUES_REQUIRED" });
+    }
+    if (nameVi === "" || nameZhTw === "") {
+      return reply.code(400).send({ error:"INVENTORY_IDENTITY_EMPTY_NAME" });
+    }
+    try {
+      const result = await withTransaction(async (client) => {
+        const locked = await client.query(
+          `select i.*
+           from public.inventory_items i
+           join public.sites s
+             on s.code=split_part(i.item_key,':',1)
+            and s.active=true
+            and coalesce(s.metadata->>'inventory_mode','') in ('central','branch')
+           where i.active=true and i.catalog_key=$1
+           order by split_part(i.item_key,':',1),i.item_key
+           for update of i`,
+          [catalogKey]
+        );
+        if (!locked.rowCount) throw Object.assign(new Error("INVENTORY_CATALOG_NOT_FOUND"), { statusCode:404 });
+
+        const changed = [];
+        for (const before of locked.rows) {
+          const nextVi = nameVi === undefined ? before.name_vi : nameVi;
+          const nextZh = nameZhTw === undefined ? before.name_zh_tw : nameZhTw;
+          if (before.name_vi === nextVi && before.name_zh_tw === nextZh) continue;
+          const after = (await client.query(
+            `update public.inventory_items
+             set name_vi=$2,name_zh_tw=$3,updated_at=now()
+             where id=$1
+             returning *`,
+            [before.id,nextVi,nextZh]
+          )).rows[0];
+          await audit(client,user,{
+            action:"super_admin_inventory_identity_resolve",
+            entityType:"inventory_item",
+            entityId:before.id,
+            site:before.item_key.split(":")[0] || null,
+            before:{ catalog_key:before.catalog_key,name_vi:before.name_vi,name_zh_tw:before.name_zh_tw },
+            after:{ catalog_key:after.catalog_key,name_vi:after.name_vi,name_zh_tw:after.name_zh_tw },
+            metadata:{ catalogKey,fields:{ name_vi:nameVi !== undefined,name_zh_tw:nameZhTw !== undefined } },
+          });
+          changed.push({
+            id:after.id,
+            itemKey:after.item_key,
+            site:after.item_key.split(":")[0] || "",
+            nameVi:after.name_vi,
+            nameZhTw:after.name_zh_tw,
+          });
+        }
+        return { changed, matched:locked.rowCount };
+      });
+      return { ok:true,catalogKey,matched:result.matched,changed:result.changed };
+    } catch (error) {
+      return reply.code(error.statusCode || 500).send({ error:error.message || "INVENTORY_IDENTITY_RESOLVE_FAILED" });
+    }
+  });
+
   app.get("/api/admin/super/sites", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
     const { rows } = await pool.query(`select code,name_vi,name_zh_tw,timezone_name,currency_code,active,sort_order,metadata,created_at,updated_at from public.sites order by sort_order,code`);
