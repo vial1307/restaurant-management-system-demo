@@ -224,6 +224,74 @@ warn_nonzero "duplicate active catalog keys inside the same site" "
   ) q
 "
 
+warn_nonzero "cross-site inventory catalog metadata variants" "
+  select count(*)
+  from (
+    select catalog_key
+    from public.inventory_items
+    where active=true
+      and split_part(item_key,':',1) in (
+        select code from public.sites
+        where active=true
+          and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+      )
+    group by catalog_key
+    having count(distinct split_part(item_key,':',1)) > 1
+       and (
+         count(distinct name_vi) > 1
+         or count(distinct name_zh_tw) > 1
+         or count(distinct unit) > 1
+         or count(distinct work_area) > 1
+         or count(distinct storage_only) > 1
+       )
+  ) q
+"
+warn_nonzero "branch multi-location items missing fixed receive default" "
+  with configured as (
+    select
+      i.id,
+      split_part(i.item_key,':',1) as site,
+      i.catalog_key,
+      count(distinct l.id) filter (
+        where l.active=true and l.kind='storage'
+      ) as storage_locations
+    from public.inventory_items i
+    left join public.inventory_stock s on s.item_id=i.id
+    left join public.inventory_locations l on l.id=s.location_id
+    where i.active=true
+    group by i.id,i.item_key,i.catalog_key
+  )
+  select count(*)
+  from configured c
+  join public.sites site on site.code=c.site
+  where site.active=true
+    and site.metadata->>'inventory_mode'='branch'
+    and c.storage_locations > 1
+    and not exists (
+      select 1
+      from public.inventory_receive_defaults d
+      where d.site=c.site and d.catalog_key=c.catalog_key
+    )
+"
+warn_nonzero "active inventory items without configured storage" "
+  select count(*)
+  from public.inventory_items i
+  where i.active=true
+    and split_part(i.item_key,':',1) in (
+      select code from public.sites
+      where active=true
+        and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+    )
+    and not exists (
+      select 1
+      from public.inventory_stock s
+      join public.inventory_locations l on l.id=s.location_id
+      where s.item_id=i.id
+        and l.active=true
+        and l.kind='storage'
+    )
+"
+
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
 if [[ "${schema}" < "015" ]]; then
   echo "ERROR: schema version ${schema} is older than 015"
