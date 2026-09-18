@@ -452,6 +452,177 @@ export async function registerInventoryExtraRoutes(app) {
     return { archived:Boolean(result.rowCount) };
   });
 
+  app.post("/api/inventory/relocate-storage", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const itemId = String(request.body?.itemId || "");
+    const sourceLocationId = String(request.body?.sourceLocationId || "");
+    const destinationLocationId = String(request.body?.destinationLocationId || "");
+    const note = String(request.body?.note || "儲位移動 / Chuyển vị trí lưu");
+
+    if (!itemId || !sourceLocationId || !destinationLocationId || sourceLocationId === destinationLocationId) {
+      return reply.code(400).send({ error:"INVALID_STORAGE_RELOCATION" });
+    }
+
+    try {
+      const data = await withTransaction(async (client) => {
+        const ctx = await client.query(
+          `select
+             i.id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,i.unit,
+             s.id as source_location_id,s.site as source_site,s.code as source_code,
+             d.id as destination_location_id,d.site as destination_site,d.code as destination_code
+           from public.inventory_items i
+           join public.inventory_locations s
+             on s.id=$2 and s.active=true and s.kind='storage'
+           join public.inventory_locations d
+             on d.id=$3 and d.active=true and d.kind='storage'
+           where i.id=$1 and i.active=true
+           limit 1`,
+          [itemId,sourceLocationId,destinationLocationId]
+        );
+        const row = ctx.rows[0];
+        if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
+        if (row.source_site !== row.destination_site) {
+          throw Object.assign(new Error("RELOCATION_MUST_STAY_IN_SITE"), { statusCode:400 });
+        }
+        if (!requireCatalogManager(user,row.source_site,reply)) {
+          throw Object.assign(new Error("CATALOG_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        }
+        if (!String(row.item_key || "").startsWith(row.source_site + ":")) {
+          throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
+        }
+
+        const sourceResult = await client.query(
+          `select quantity,minimum_quantity
+           from public.inventory_stock
+           where item_id=$1 and location_id=$2
+           for update`,
+          [itemId,sourceLocationId]
+        );
+        if (!sourceResult.rowCount) {
+          throw Object.assign(new Error("SOURCE_STORAGE_NOT_CONFIGURED"), { statusCode:409 });
+        }
+
+        await client.query(
+          `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+           values($1,$2,0,0,now())
+           on conflict(item_id,location_id) do nothing`,
+          [itemId,destinationLocationId]
+        );
+
+        const destinationResult = await client.query(
+          `select quantity,minimum_quantity
+           from public.inventory_stock
+           where item_id=$1 and location_id=$2
+           for update`,
+          [itemId,destinationLocationId]
+        );
+
+        const sourceBefore = Number(sourceResult.rows[0].quantity || 0);
+        const sourceMinimum = Number(sourceResult.rows[0].minimum_quantity || 0);
+        const destinationBefore = Number(destinationResult.rows[0]?.quantity || 0);
+        const destinationMinimumBefore = Number(destinationResult.rows[0]?.minimum_quantity || 0);
+        const destinationAfter = destinationBefore + sourceBefore;
+        const destinationMinimumAfter = Math.max(destinationMinimumBefore,sourceMinimum);
+
+        await client.query(
+          `update public.inventory_stock
+           set quantity=$3,minimum_quantity=$4,updated_at=now()
+           where item_id=$1 and location_id=$2`,
+          [itemId,destinationLocationId,destinationAfter,destinationMinimumAfter]
+        );
+        await client.query(
+          `delete from public.inventory_stock
+           where item_id=$1 and location_id=$2`,
+          [itemId,sourceLocationId]
+        );
+
+        const receiveDefault = await client.query(
+          `update public.inventory_receive_defaults
+           set location_id=$3,updated_by=$4,updated_at=now()
+           where site=$1 and catalog_key=$2 and location_id=$5
+           returning site,catalog_key,location_id`,
+          [row.source_site,row.catalog_key,destinationLocationId,user.id,sourceLocationId]
+        );
+
+        let transaction = null;
+        if (sourceBefore > 0) {
+          transaction = (await client.query(
+            `insert into public.inventory_transactions(
+               item_id,source_location_id,destination_location_id,action,amount,note,
+               actor_user_id,actor_username,metadata
+             ) values(
+               $1,$2,$3,'transfer',$4,$5,$6,$7,
+               jsonb_build_object(
+                 'operation','relocate_storage',
+                 'source_before',$8::numeric,'source_after',0::numeric,
+                 'destination_before',$9::numeric,'destination_after',$10::numeric,
+                 'source_minimum',$11::numeric,'destination_minimum_before',$12::numeric,
+                 'destination_minimum_after',$13::numeric
+               )
+             )
+             returning id,created_at`,
+            [
+              itemId,sourceLocationId,destinationLocationId,sourceBefore,note,
+              user.id,user.username,
+              sourceBefore,destinationBefore,destinationAfter,
+              sourceMinimum,destinationMinimumBefore,destinationMinimumAfter
+            ]
+          )).rows[0];
+        }
+
+        await client.query(
+          `insert into public.audit_logs(
+             actor_user_id,actor_username,action,entity_type,entity_id,site,
+             before_data,after_data,metadata
+           ) values(
+             $1,$2,'inventory_storage_relocate','inventory_item',$3,$4,
+             jsonb_build_object(
+               'location_id',$5::uuid,'location_code',$6::text,
+               'quantity',$7::numeric,'minimum',$8::numeric
+             ),
+             jsonb_build_object(
+               'location_id',$9::uuid,'location_code',$10::text,
+               'quantity',$11::numeric,'minimum',$12::numeric
+             ),
+             jsonb_build_object(
+               'catalog_key',$13::text,
+               'receive_default_moved',$14::boolean
+             )
+           )`,
+          [
+            user.id,user.username,itemId,row.source_site,
+            sourceLocationId,row.source_code,sourceBefore,sourceMinimum,
+            destinationLocationId,row.destination_code,destinationAfter,destinationMinimumAfter,
+            row.catalog_key,Boolean(receiveDefault.rowCount)
+          ]
+        );
+
+        return {
+          ok:true,
+          site:row.source_site,
+          item_id:itemId,
+          source_location_id:sourceLocationId,
+          destination_location_id:destinationLocationId,
+          source_before:sourceBefore,
+          source_after:0,
+          destination_before:destinationBefore,
+          destination_after:destinationAfter,
+          source_minimum:sourceMinimum,
+          destination_minimum_before:destinationMinimumBefore,
+          destination_minimum_after:destinationMinimumAfter,
+          receive_default_moved:Boolean(receiveDefault.rowCount),
+          transaction,
+        };
+      });
+      return data;
+    } catch (error) {
+      if (error.alreadySent) return;
+      return reply.code(error.statusCode || 500).send({ error:error.message || "STORAGE_RELOCATION_FAILED" });
+    }
+  });
+
   app.post("/api/inventory/direct-transfer", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
