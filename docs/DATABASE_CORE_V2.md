@@ -218,7 +218,7 @@ Generic administrative CRUD is allowed only when the backend owns an explicit da
 
 Persistent identity columns are create-time identity, not casual edit fields. Examples include menu `(site_code,item_code)`, inventory `(item_key,catalog_key)`, and SOP `(site_code,sop_code)`. Changing identity requires an explicit migration/domain operation with referential-integrity review rather than a generic row edit.
 
-Admin updates and archives must reject stale writes. The current implementation uses the row's `updated_at` value as an optimistic concurrency token while holding the target row `FOR UPDATE`; a client editing an older version receives a conflict and must reload before retrying. A future domain that cannot guarantee monotonic `updated_at` must use an explicit version column instead.
+Admin updates and archives must reject stale writes. Migration `021_admin_row_revisions.sql` adds a database-owned `revision bigint` to each generic Super Admin dataset and increments it with a PostgreSQL `BEFORE UPDATE` trigger. The UI sends the row's current `expectedRevision`; the API locks the row `FOR UPDATE` and requires an exact revision match before mutating it. This avoids timestamp-precision ambiguity and also detects changes made by dedicated domain routes. `updated_at` remains a human/audit timestamp, not the concurrency token.
 
 Inventory generic CRUD may edit approved catalog metadata but must not bypass stock invariants. In particular, an item with non-zero relational stock cannot be archived through generic CRUD; quantity/location changes continue through dedicated inventory transactions so history remains auditable.
 
