@@ -1,7 +1,7 @@
 const root = document.querySelector("#admin-app");
 
 const NAV_GROUPS = [
-  { label: "System", items: [["overview", "⌂"], ["users", "♙"], ["logs", "≡"]] },
+  { label: "System", items: [["overview", "⌂"], ["development", "⌘"], ["users", "♙"], ["logs", "≡"]] },
   { label: "Business", items: [["stores", "▦"], ["content", "◇"], ["data", "▤"]] },
   { label: "Configuration", items: [["settings", "⚙"]] },
 ];
