@@ -1,61 +1,82 @@
 # Kitchen OS Engineering Status
 
-> Read this after `docs/CURRENT_HANDOFF.md`. This file is the short operational workboard; `docs/WORK_LOG.md` remains the chronological log.
+> Read this after `docs/CURRENT_HANDOFF.md`. This is the short operational workboard; `docs/WORK_LOG.md` remains the chronological log.
 
 ## Current authority
 
 - Repository: `vial1307/restaurant-management-system-demo`
-- Production data authority: Browser/UI -> VPS API -> PostgreSQL
-- PostgreSQL is private to the VPS Docker network; browsers never connect to PostgreSQL directly.
-- Last verified production runtime before this workstream: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`, Deploy Kitchen OS to VPS #691.
-- Current production schema before this workstream: `020`.
-- Inventory state baseline: cross-site refresh and storage relocation are green; do not replace them with browser/localStorage authority.
+- Production data authority: Browser/UI -> VPS API -> PostgreSQL.
+- PostgreSQL stays private behind the VPS/API boundary.
+- Last verified production runtime: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`, Deploy Kitchen OS to VPS #691.
+- Last verified production schema: `020`.
+- Main now contains the secure Admin/Data + metrics candidate through merge commit `d2acef474866460c75ce66b6f5675306481bb65b`, including schema `021`.
+- Do **not** call `d2acef47…` production: its production deploy failed before migration/restart.
 
-## Active workstream — 2026-09-18
+## Active work — 2026-09-19
 
-Branch: `fix/secure-admin-data-vps-metrics-20260918`
+- Branch: `fix/host-metrics-deploy-resilience-20260919`
+- Draft PR: #108 — Add Super Admin GitHub handoff and repair host-metrics deploy
+- Current work URL: `https://github.com/vial1307/restaurant-management-system-demo/pull/108`
+- Status: **BLOCKED at deploy telemetry setup; application/database migration was not started.**
 
-### Implemented on branch
+### Exact stopping point
 
-- Hardened Super Admin Data Tables:
-  - explicit server-side dataset/column allowlist remains the only generic CRUD surface;
-  - unknown fields are rejected rather than silently ignored;
-  - dataset-specific validation and text limits;
-  - identity columns such as menu `site_code/item_code`, inventory `item_key/catalog_key`, and SOP `site_code/sop_code` become immutable after creation;
-  - update/archive requires the row's current database `row_revision` token to prevent stale overwrite;
-  - inventory items with non-zero stock cannot be archived through generic CRUD;
-  - every successful mutation still writes `audit_logs`.
-- Added Super Admin-only system metrics endpoint:
-  - host CPU/load/uptime;
-  - RAM/swap;
-  - root disk and inode use;
-  - Kitchen OS / backup / PostgreSQL storage footprint;
-  - Docker service status for API, PostgreSQL and Caddy;
-  - host network RX/TX counters, recent transfer rate and NIC link speed;
-  - PostgreSQL logical database size, connection usage and top table/index sizes.
-- Host metrics are collected outside the app container and exposed to the API through one filtered read-only snapshot file. No Docker socket, host filesystem, shell, or PostgreSQL port is exposed to the browser.
-- Deployment installs a systemd metrics timer and mounts only the filtered runtime directory read-only into the API container.
-- Regression fixtures/tests cover Super Admin authorization, metrics rendering, stale-write protection, immutable identity fields and unknown-field rejection.
+Main deploy workflow run `35372160924` passed preflight and full regression, then failed at:
 
-### In progress
+`Deploy exact tested commit -> Installing filtered host metrics snapshot`
 
-- CI / browser / API regression for this branch.
-- Production deployment and post-deploy verification.
-- Capture actual VPS capacity/network counters from production after deploy.
-- Final handoff/log update with deployed SHA and workflow result.
+Root cause observed in the deploy log:
+
+- `kitchen-os-host-metrics.timer` was installed/enabled;
+- the first `kitchen-os-host-metrics.service` run exited 1;
+- deploy stopped **before** backup, schema migration, container restart, release verification and production UI smoke.
+
+Immediate code focus:
+
+- `vps/scripts/collect-host-metrics.sh`
+- `vps/scripts/install-host-metrics-timer.sh`
+- `vps/scripts/deploy.sh`
+
+### Super Admin GitHub / Handoff section
+
+Implemented on PR #108:
+
+- new **System -> GitHub & Handoff · 開發交接** section;
+- protected `GET /api/admin/super/development-status`;
+- current branch + current PR link;
+- main baseline commit + failed workflow link;
+- verified production SHA/schema separate from candidate main SHA/schema;
+- exact stopping point and code-focus files;
+- ordered next steps;
+- direct links to `CURRENT_HANDOFF.md`, `WORK_LOG.md`, `STATUS.md`, `DEVELOPMENT_RULES.md`;
+- metadata endpoint returns no credentials, SSH keys, environment dumps or raw host access.
+
+## Completed in previous candidate
+
+- Generic Super Admin CRUD remains server allowlisted.
+- Unknown fields fail closed.
+- Durable identity columns are immutable after creation.
+- Update/archive uses DB-owned integer `row_revision` from schema 021.
+- Non-zero inventory stock cannot be archived through generic CRUD.
+- Host metrics are filtered before reaching the API.
+- `/api/admin/super/system-metrics` requires `system.super_admin`.
+- Monthly provider bandwidth quota is not guessed from host counters.
 
 ## Next queue
 
-1. Finish normalized-domain cutover from `business_state.modules` one domain at a time. Never introduce a second writable authority.
-2. Add restore-verification evidence/off-site encrypted backup when the VPS backup workflow is extended.
-3. Add an optional provider bandwidth-quota setting if the VPS vendor plan includes a monthly traffic cap. Host OS counters alone cannot prove provider billing quota.
-4. Continue Super Admin data editors with domain-specific forms where generic CRUD would bypass business invariants.
+1. Make the host metrics collector/deploy path resilient and diagnosable; telemetry must not corrupt or bypass release safety.
+2. Run PR #108 API/static/browser/full-device gates.
+3. Merge only when all gates are green.
+4. Deploy exact tested SHA and verify release + schema 021 + production UI smoke.
+5. Update `CURRENT_HANDOFF.md`, `WORK_LOG.md`, this file and Super Admin development metadata with the final production SHA/run.
+6. Continue normalized-domain/database redesign one business domain at a time without creating a second writable authority.
 
 ## Handoff rule
 
 Before stopping work:
 
-1. update this file with `DONE / IN PROGRESS / NEXT / BLOCKED`;
+1. update this file with DONE / IN PROGRESS / NEXT / BLOCKED;
 2. append the session to `docs/WORK_LOG.md`;
 3. update `docs/CURRENT_HANDOFF.md` with the exact production SHA and verification result;
-4. never label a SHA as production until the production release check and smoke tests are green.
+4. keep Super Admin `development-status` metadata aligned with the current branch/PR/stopping point;
+5. never label a SHA as production until deploy release verification and production smoke are green.
