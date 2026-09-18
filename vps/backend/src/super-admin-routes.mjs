@@ -297,6 +297,154 @@ function pdfBuffer(rows) {
   return Buffer.from(pdf,"ascii");
 }
 
+async function inventoryCatalogAudit() {
+  const siteResult = await pool.query(
+    \`select code,name_vi,name_zh_tw,metadata
+     from public.sites
+     where active=true
+       and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+     order by sort_order,code\`
+  );
+  const sites = siteResult.rows;
+  const siteCodes = sites.map((site) => site.code);
+  if (!siteCodes.length) {
+    return {
+      generatedAt:new Date().toISOString(),
+      sites:[],
+      summary:{ activeItems:0,catalogKeys:0,partialCoverage:0,metadataVariants:0,duplicatesWithinSite:0,multiLocationMissingReceiveDefault:0,unconfiguredStorage:0 },
+      coverage:[],
+      metadataVariants:[],
+      duplicatesWithinSite:[],
+      multiLocationMissingReceiveDefault:[],
+      unconfiguredStorage:[],
+    };
+  }
+
+  const itemResult = await pool.query(
+    \`select
+       i.id,i.item_key,split_part(i.item_key,':',1) as site,i.catalog_key,
+       i.name_vi,i.name_zh_tw,i.unit,i.work_area,i.storage_only,i.updated_at,
+       count(distinct l.id) filter (where l.active=true and l.kind='storage')::int as storage_location_count,
+       coalesce(
+         jsonb_agg(distinct jsonb_build_object(
+           'id',l.id,'code',l.code,'name_vi',l.name_vi,'name_zh_tw',l.name_zh_tw,'sort_order',l.sort_order
+         )) filter (where l.id is not null and l.active=true and l.kind='storage'),
+         '[]'::jsonb
+       ) as storage_locations,
+       d.location_id as receive_default_location_id,
+       dl.code as receive_default_location_code,
+       dl.name_vi as receive_default_name_vi,
+       dl.name_zh_tw as receive_default_name_zh_tw
+     from public.inventory_items i
+     left join public.inventory_stock s on s.item_id=i.id
+     left join public.inventory_locations l on l.id=s.location_id
+     left join public.inventory_receive_defaults d
+       on d.site=split_part(i.item_key,':',1) and d.catalog_key=i.catalog_key
+     left join public.inventory_locations dl on dl.id=d.location_id
+     where i.active=true
+       and split_part(i.item_key,':',1)=any($1::text[])
+     group by
+       i.id,i.item_key,i.catalog_key,i.name_vi,i.name_zh_tw,i.unit,i.work_area,i.storage_only,i.updated_at,
+       d.location_id,dl.code,dl.name_vi,dl.name_zh_tw
+     order by i.catalog_key,site,i.item_key\`,
+    [siteCodes]
+  );
+
+  const items = itemResult.rows;
+  const byCatalog = new Map();
+  for (const item of items) {
+    const key = text(item.catalog_key);
+    if (!key) continue;
+    const rows = byCatalog.get(key) || [];
+    rows.push(item);
+    byCatalog.set(key, rows);
+  }
+
+  const coverage = [];
+  const metadataVariants = [];
+  for (const [catalogKey, rows] of byCatalog) {
+    const presentSites = [...new Set(rows.map((row) => row.site))].sort();
+    const missingSites = siteCodes.filter((site) => !presentSites.includes(site));
+    const variants = {
+      name_vi:[...new Set(rows.map((row) => text(row.name_vi)).filter(Boolean))],
+      name_zh_tw:[...new Set(rows.map((row) => text(row.name_zh_tw)).filter(Boolean))],
+      unit:[...new Set(rows.map((row) => text(row.unit)).filter(Boolean))],
+      work_area:[...new Set(rows.map((row) => text(row.work_area)).filter(Boolean))],
+      storage_only:[...new Set(rows.map((row) => Boolean(row.storage_only)))],
+    };
+    const hasVariance = Object.values(variants).some((values) => values.length > 1);
+    const detail = {
+      catalogKey,
+      presentSites,
+      missingSites,
+      variants,
+      items:rows.map((row) => ({
+        id:row.id,itemKey:row.item_key,site:row.site,nameVi:row.name_vi,nameZhTw:row.name_zh_tw,
+        unit:row.unit,workArea:row.work_area,storageOnly:row.storage_only,
+        storageLocationCount:Number(row.storage_location_count || 0),
+        storageLocations:row.storage_locations || [],
+        receiveDefaultLocationCode:row.receive_default_location_code || "",
+      })),
+    };
+    if (missingSites.length) coverage.push(detail);
+    if (hasVariance) metadataVariants.push(detail);
+  }
+
+  const duplicateMap = new Map();
+  for (const item of items) {
+    const key = \`\${item.site}|\${item.catalog_key}\`;
+    const rows = duplicateMap.get(key) || [];
+    rows.push(item);
+    duplicateMap.set(key, rows);
+  }
+  const duplicatesWithinSite = [...duplicateMap.entries()]
+    .filter(([,rows]) => rows.length > 1)
+    .map(([key,rows]) => ({
+      site:key.split("|")[0],
+      catalogKey:key.slice(key.indexOf("|") + 1),
+      items:rows.map((row) => ({ id:row.id,itemKey:row.item_key,nameVi:row.name_vi,nameZhTw:row.name_zh_tw,unit:row.unit })),
+    }));
+
+  const branchSites = new Set(sites.filter((site) => site.metadata?.inventory_mode === "branch").map((site) => site.code));
+  const multiLocationMissingReceiveDefault = items
+    .filter((item) =>
+      branchSites.has(item.site)
+      && Number(item.storage_location_count || 0) > 1
+      && !item.receive_default_location_id
+    )
+    .map((item) => ({
+      id:item.id,itemKey:item.item_key,site:item.site,catalogKey:item.catalog_key,
+      nameVi:item.name_vi,nameZhTw:item.name_zh_tw,unit:item.unit,
+      storageLocations:item.storage_locations || [],
+    }));
+
+  const unconfiguredStorage = items
+    .filter((item) => Number(item.storage_location_count || 0) === 0)
+    .map((item) => ({
+      id:item.id,itemKey:item.item_key,site:item.site,catalogKey:item.catalog_key,
+      nameVi:item.name_vi,nameZhTw:item.name_zh_tw,unit:item.unit,workArea:item.work_area,
+    }));
+
+  return {
+    generatedAt:new Date().toISOString(),
+    sites,
+    summary:{
+      activeItems:items.length,
+      catalogKeys:byCatalog.size,
+      partialCoverage:coverage.length,
+      metadataVariants:metadataVariants.length,
+      duplicatesWithinSite:duplicatesWithinSite.length,
+      multiLocationMissingReceiveDefault:multiLocationMissingReceiveDefault.length,
+      unconfiguredStorage:unconfiguredStorage.length,
+    },
+    coverage:coverage.slice(0,250),
+    metadataVariants:metadataVariants.slice(0,250),
+    duplicatesWithinSite:duplicatesWithinSite.slice(0,250),
+    multiLocationMissingReceiveDefault:multiLocationMissingReceiveDefault.slice(0,250),
+    unconfiguredStorage:unconfiguredStorage.slice(0,250),
+  };
+}
+
 export async function registerSuperAdminRoutes(app) {
   app.get("/api/admin/super/overview", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
@@ -327,6 +475,12 @@ export async function registerSuperAdminRoutes(app) {
       latestBackup:backup.rows[0] || null,
       counts:counts.rows[0] || {},
     };
+  });
+
+  app.get("/api/admin/super/inventory-catalog-audit", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    try { return await inventoryCatalogAudit(); }
+    catch (error) { return reply.code(500).send({ error:error.message || "INVENTORY_CATALOG_AUDIT_FAILED" }); }
   });
 
   app.get("/api/admin/super/sites", async (request, reply) => {
