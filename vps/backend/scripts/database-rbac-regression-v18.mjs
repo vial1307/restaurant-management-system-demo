@@ -10,15 +10,15 @@ const oldSchema = 'assert.equal(health.data.schema,"017");';
 const oldCreatedPermission = 'assert.equal(created.data.user.permissions.settings?.view,false,"client permission JSON must not override database rank");';
 const oldCreatedLogin = 'assert.equal(createdLogin.data.user.permissions.settings?.view,false);';
 
-assert(source.includes(oldSchema),"database RBAC schema assertion changed; update the schema-020 adapter explicitly");
-assert(source.includes(oldCreatedPermission),"database RBAC permission expectation changed; update the schema-020 adapter explicitly");
-assert(source.includes(oldCreatedLogin),"database RBAC login expectation changed; update the schema-020 adapter explicitly");
+assert(source.includes(oldSchema),"database RBAC schema assertion changed; update the schema-021 adapter explicitly");
+assert(source.includes(oldCreatedPermission),"database RBAC permission expectation changed; update the schema-021 adapter explicitly");
+assert(source.includes(oldCreatedLogin),"database RBAC login expectation changed; update the schema-021 adapter explicitly");
 
 const migrated = source
-  .replace(oldSchema,'assert.equal(health.data.schema,"020");')
+  .replace(oldSchema,'assert.equal(health.data.schema,"021");')
   .replace(
     oldCreatedPermission,
-    'assert.equal(created.data.user.permission_overrides.settings?.view,true,"schema-020 explicit override must be stored separately from role defaults");\nassert.equal(created.data.user.permissions.settings?.view,true,"schema-020 explicit user override must beat the database role default");\nassert.equal(created.data.user.permissions.settings?.edit,true);'
+    'assert.equal(created.data.user.permission_overrides.settings?.view,true,"schema-021 explicit override must be stored separately from role defaults");\nassert.equal(created.data.user.permissions.settings?.view,true,"schema-021 explicit user override must beat the database role default");\nassert.equal(created.data.user.permissions.settings?.edit,true);'
   )
   .replace(oldCreatedLogin,'assert.equal(createdLogin.data.user.permissions.settings?.view,true);\nassert.equal(createdLogin.data.user.permissions.settings?.edit,true);');
 
