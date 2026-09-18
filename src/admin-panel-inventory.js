@@ -6,6 +6,7 @@ let mountedHost = null;
 let sourceInventory = null;
 let destinationInventory = null;
 let sites = [];
+let catalogAudit = null;
 
 function esc(value) {
   return String(value ?? "")
@@ -96,12 +97,68 @@ function panelHtml() {
     <label><span>Số lượng · 數量</span><input name="quantity" type="number" min="0.001" step="0.001" required value="1"></label>
     <label class="wide"><span>Ghi chú · 備註</span><input name="note" maxlength="300" placeholder="Super Admin transfer"></label>
     <div class="wide"><p class="sa-alert" data-routing-message style="margin:0 0 10px"></p><p class="sa-form-error" data-transfer-error></p><button class="sa-btn primary" type="submit">Điều chuyển nguyên liệu · 調撥庫存</button></div>
-  </form>`;
+  </form>
+  <section class="sa-card sa-inventory-audit" data-inventory-catalog-audit>
+    <div class="sa-card-head"><div><h3>Inventory Catalog Audit · 跨店品項稽核</h3><p>Đọc trực tiếp PostgreSQL; không tự thay đổi tồn kho hay catalog.</p></div><button class="sa-btn" type="button" data-catalog-audit-refresh>↻ Audit</button></div>
+    <div data-catalog-audit-body><div class="sa-empty">Đang tải audit…</div></div>
+  </section>`;
 }
 
 async function loadInventory(site) {
   if (!site) return null;
   return apiRequest(`/api/inventory/${encodeURIComponent(site)}`);
+}
+async function loadCatalogAudit() {
+  return apiRequest("/api/admin/super/inventory-catalog-audit");
+}
+
+function auditIssueList(rows = [], kind = "") {
+  if (!rows.length) return `<div class="sa-empty">Không có vấn đề trong nhóm này. · 此類別無異常。</div>`;
+  const rendered = rows.slice(0,8).map((row) => {
+    const title = row.nameVi || row.nameZhTw || row.catalogKey || row.itemKey || "—";
+    let detail = "";
+    if (kind === "receive") {
+      detail = `${siteLabel(row.site)} · ${row.catalogKey} · ${(row.storageLocations || []).map((location)=>location.name_zh_tw || location.code).join(" / ")}`;
+    } else if (kind === "metadata") {
+      const v = row.variants || {};
+      detail = `${row.catalogKey} · unit: ${(v.unit || []).join(" / ") || "—"} · work: ${(v.work_area || []).join(" / ") || "—"}`;
+    } else if (kind === "duplicate") {
+      detail = `${siteLabel(row.site)} · ${row.catalogKey} · ${(row.items || []).map((item)=>item.itemKey).join(" / ")}`;
+    } else if (kind === "storage") {
+      detail = `${siteLabel(row.site)} · ${row.catalogKey} · ${row.workArea || "—"}`;
+    } else {
+      detail = `${row.catalogKey} · missing: ${(row.missingSites || []).map(siteLabel).join(", ") || "—"}`;
+    }
+    return `<div class="sa-list-row"><div><strong>${esc(title)}</strong><small>${esc(detail)}</small></div></div>`;
+  }).join("");
+  const remainder = rows.length > 8 ? `<div class="sa-empty">＋ ${rows.length - 8} mục khác · 另有 ${rows.length - 8} 筆</div>` : "";
+  return `<div class="sa-list">${rendered}${remainder}</div>`;
+}
+
+function renderCatalogAudit(host) {
+  const body = host.querySelector("[data-catalog-audit-body]");
+  if (!body) return;
+  if (!catalogAudit) {
+    body.innerHTML = `<div class="sa-empty">Chưa có dữ liệu audit.</div>`;
+    return;
+  }
+  const s = catalogAudit.summary || {};
+  body.innerHTML = `
+    <section class="sa-stat-grid compact">
+      <article class="sa-stat"><small>Active items</small><strong>${esc(s.activeItems ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Catalog keys</small><strong>${esc(s.catalogKeys ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Metadata lệch · 差異</small><strong>${esc(s.metadataVariants ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Multi-location thiếu fixed receive</small><strong>${esc(s.multiLocationMissingReceiveDefault ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Duplicate/site</small><strong>${esc(s.duplicatesWithinSite ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Không có storage</small><strong>${esc(s.unconfiguredStorage ?? 0)}</strong></article>
+    </section>
+    <section class="sa-two-col">
+      <article class="sa-card"><div class="sa-card-head"><div><h3>固定收貨儲位 còn thiếu</h3><p>Chỉ item branch có từ 2 storage trở lên.</p></div></div>${auditIssueList(catalogAudit.multiLocationMissingReceiveDefault,"receive")}</article>
+      <article class="sa-card"><div class="sa-card-head"><div><h3>Metadata variants</h3><p>Cùng catalog_key nhưng tên / đơn vị / khu làm việc khác nhau.</p></div></div>${auditIssueList(catalogAudit.metadataVariants,"metadata")}</article>
+      <article class="sa-card"><div class="sa-card-head"><div><h3>Duplicate trong cùng site</h3><p>Cùng site có nhiều active item chung catalog_key.</p></div></div>${auditIssueList(catalogAudit.duplicatesWithinSite,"duplicate")}</article>
+      <article class="sa-card"><div class="sa-card-head"><div><h3>Item chưa có storage</h3><p>Catalog tồn tại nhưng chưa cấu hình storage hợp lệ.</p></div></div>${auditIssueList(catalogAudit.unconfiguredStorage,"storage")}</article>
+    </section>
+    <article class="sa-card"><div class="sa-card-head"><div><h3>Coverage giữa các site</h3><p>Thông tin tham khảo; thiếu site không tự động được coi là lỗi.</p></div><span class="sa-pill">${esc(s.partialCoverage ?? 0)}</span></div>${auditIssueList(catalogAudit.coverage,"coverage")}</article>`;
 }
 
 function renderSourceOptions(host) {
@@ -168,6 +225,12 @@ function bindPanel(host) {
   form.destinationSite.addEventListener("change",()=>void refreshInventories(host));
   form.sourceStock.addEventListener("change",()=>renderRouting(host));
   host.querySelector("[data-super-inventory-refresh]").addEventListener("click",()=>void refreshInventories(host));
+  host.querySelector("[data-catalog-audit-refresh]")?.addEventListener("click",async()=>{
+    const body=host.querySelector("[data-catalog-audit-body]");
+    if(body) body.innerHTML=`<div class="sa-empty">Đang tải audit…</div>`;
+    try { catalogAudit=await loadCatalogAudit(); renderCatalogAudit(host); }
+    catch(cause){ if(body) body.innerHTML=`<div class="sa-alert error">${esc(cause?.payload?.error || cause?.code || cause?.message || "INVENTORY_CATALOG_AUDIT_FAILED")}</div>`; }
+  });
   form.addEventListener("submit",async(event)=>{
     event.preventDefault();
     const error = host.querySelector("[data-transfer-error]");
@@ -218,6 +281,11 @@ async function mount() {
     host.innerHTML = panelHtml();
     mountedHost = host;
     bindPanel(host);
+    try { catalogAudit=await loadCatalogAudit(); renderCatalogAudit(host); }
+    catch (auditError) {
+      const body=host.querySelector("[data-catalog-audit-body]");
+      if(body) body.innerHTML=`<div class="sa-alert error">${esc(auditError?.payload?.error || auditError?.code || auditError?.message || "INVENTORY_CATALOG_AUDIT_FAILED")}</div>`;
+    }
   } catch (error) {
     host.innerHTML = `<div class="sa-card-head"><div><h2>Kho tổng & điều chuyển</h2><p>${esc(error?.payload?.error || error?.code || error?.message || "LOAD_FAILED")}</p></div></div>`;
     mountedHost = host;
