@@ -69,7 +69,7 @@ latest_backup_name="$(awk '{print $3}' <<<"${latest_backup:-}" 2>/dev/null || tr
 
 postgres_data_bytes="0"
 if docker inspect kitchen-os-db >/dev/null 2>&1; then
-  postgres_data_bytes="$(docker exec kitchen-os-db sh -lc 'du -sb /var/lib/postgresql/data 2>/dev/null | awk "{print \\$1}"' 2>/dev/null || true)"
+  postgres_data_bytes="$(docker exec kitchen-os-db sh -lc 'du -sb /var/lib/postgresql/data 2>/dev/null | cut -f1' 2>/dev/null || true)"
 fi
 
 primary_iface="$(ip route show default 2>/dev/null | awk 'NR==1{print $5}' || true)"
