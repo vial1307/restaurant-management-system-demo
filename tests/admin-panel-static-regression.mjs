@@ -48,6 +48,8 @@ assert.match(inventoryJs, /\/api\/admin\/super\/inventory-catalog-audit/, "Super
 assert.match(inventoryJs, /multiLocationMissingReceiveDefault/, "catalog audit UI must surface missing receiving-default policy");
 assert.match(inventoryJs, /identityVariants/, "catalog audit UI must separate identity drift");
 assert.match(inventoryJs, /operationalVariants/, "catalog audit UI must separate operational variance");
+assert.match(inventoryJs, /\/api\/admin\/super\/inventory-catalog-identity/, "Super Admin UI must use audited catalog identity resolver API");
+assert.match(inventoryJs, /data-identity-resolve/, "catalog identity drift rows must expose an explicit resolve action");
 assert.doesNotMatch(inventoryJs, /set-quantity|update public\.inventory_stock/, "Super Admin UI must not bypass inventory transaction invariants");
 
 assert.match(css, /@media\(max-width:960px\)/, "Admin Panel must include tablet/mobile navigation layout");
@@ -58,6 +60,8 @@ assert.match(superRoutes, /\/api\/admin\/super\/inventory-catalog-audit/, "cross
 assert.match(superRoutes, /metadataVariants/, "catalog audit must report cross-site metadata variance");
 assert.match(superRoutes, /identityVariants/, "catalog audit must report cross-site identity drift");
 assert.match(superRoutes, /operationalVariants/, "catalog audit must report cross-site operational variance");
+assert.match(superRoutes, /\/api\/admin\/super\/inventory-catalog-identity/, "manual catalog identity resolution must be server-backed");
+assert.match(superRoutes, /super_admin_inventory_identity_resolve/, "manual catalog identity resolution must write audit logs");
 assert.match(superRoutes, /multiLocationMissingReceiveDefault/, "catalog audit must report receiving-default gaps");
 assert.match(superRoutes, /const DATASETS = \{/, "generic CRUD must use an explicit server-side whitelist");
 assert.match(superRoutes, /announcements:/);
