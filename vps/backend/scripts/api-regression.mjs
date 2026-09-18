@@ -188,6 +188,41 @@ const managerCatalog = await request("/api/inventory/catalog/sync",{
 });
 assert.equal(managerCatalog.response.status,200);
 
+const relocateDefault = await request("/api/inventory/receive-default",{
+  method:"POST",cookie:manager.cookie,
+  body:{site:"fuxing",catalogKey:"test-manager",locationCode:"fuxing-freezer"}
+});
+assert.equal(relocateDefault.response.status,200);
+
+const relocated = await request("/api/inventory/relocate-storage",{
+  method:"POST",cookie:manager.cookie,
+  body:{
+    itemId:managerCatalog.data.item.id,
+    sourceLocationId:fxFreezer.id,
+    destinationLocationId:fxFour.id,
+    note:"regression relocate storage"
+  }
+});
+assert.equal(relocated.response.status,200);
+assert.equal(Number(relocated.data.source_before),1);
+assert.equal(Number(relocated.data.source_after),0);
+assert.equal(Number(relocated.data.destination_after),1);
+assert.equal(Number(relocated.data.destination_minimum_after),1);
+assert.equal(relocated.data.receive_default_moved,true);
+
+const relocatedSnapshot = (await inventory(admin.cookie,"fuxing")).data;
+const relocatedItem = relocatedSnapshot.items.find((item)=>item.item_key==="fuxing:test-manager");
+assert(relocatedItem,"relocated catalog item disappeared");
+assert.equal(relocatedSnapshot.stock.some((row)=>row.item_id===relocatedItem.id && row.location_id===fxFreezer.id),false);
+const relocatedStock = relocatedSnapshot.stock.find((row)=>row.item_id===relocatedItem.id && row.location_id===fxFour.id);
+assert(relocatedStock,"relocation did not create destination stock");
+assert.equal(Number(relocatedStock.quantity),1);
+assert.equal(Number(relocatedStock.minimum_quantity),1);
+
+const relocatedDefault = await request("/api/inventory/receive-defaults?sites=fuxing&catalogKeys=test-manager",{cookie:admin.cookie});
+assert.equal(relocatedDefault.response.status,200);
+assert.equal(relocatedDefault.data.defaults?.[0]?.location_code,"fuxing-four");
+
 for (const [site, locationCode] of [["yongji","yongji-freezer"],["central","central-freezer"]]) {
   const itemKey = `${site}:save-button-regression`;
   const saved = await request("/api/inventory/catalog/sync",{
