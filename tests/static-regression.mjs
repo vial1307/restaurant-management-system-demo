@@ -149,6 +149,8 @@ assert(app.includes("attachBusinessStateSync(store)"), "business modules must sy
 const inventoryCloud = read("src/inventory-cloud.js");
 assert.match(inventoryCloud, /cloudSyncBranchCatalogItem[\s\S]{0,300}canManageBranchCatalog\(site\)/, "inventory editors must be allowed to save branch catalog items");
 assert.match(inventoryCloud, /cloudRelocateStorage[\s\S]{0,900}vpsRelocateStorage/, "storage relocation must use the dedicated PostgreSQL mutation API");
+assert.match(inventoryCloud, /switchActiveInventorySite[\s\S]{0,1800}runInventorySync\(targetSite, \{ reloadBranch:false, force:true \}\)/, "site switching must bypass inventory cache and hydrate from VPS");
+assert.match(inventoryCloud, /async function fetchSite\(site, \{ force = false \} = \{\}\)[\s\S]{0,350}vpsInventory\(site, \{ force \}\)[\s\S]{0,200}vpsMasterData\(site, \{ force \}\)/, "forced site hydration must bypass both inventory and master-data caches");
 assert.match(app, /key === "zone"[\s\S]{0,1200}cloudRelocateStorage/, "changing a storage zone must relocate database stock instead of only changing local catalog state");
 assert.doesNotMatch(app, /key === "zone"[\s\S]{0,500}store\.updateItem\(id, key, element\.value\)/, "zone changes must not optimistically mutate local storage before database confirmation");
 const businessRoutes = read("vps/backend/src/business-state-routes.mjs");
