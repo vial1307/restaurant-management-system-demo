@@ -7,8 +7,8 @@ function github(path = "") {
 export const DEVELOPMENT_STATUS = Object.freeze({
   updated_at:"2026-09-19",
   phase:"deployment_hotfix",
-  status:"blocked",
-  headline:"Main đã merge DB/Admin hardening + schema 021, nhưng production deploy dừng ở host-metrics service trước migration/restart.",
+  status:"verifying",
+  headline:"PR #108 đã sửa host-metrics collector và thêm GitHub/Handoff vào Super Admin; đang chờ full release gates trước khi merge/deploy.",
   repository:{
     name:"vial1307/restaurant-management-system-demo",
     url:REPOSITORY_URL,
@@ -22,7 +22,7 @@ export const DEVELOPMENT_STATUS = Object.freeze({
     baseline_main_sha:"d2acef474866460c75ce66b6f5675306481bb65b",
     baseline_main_url:github("/commit/d2acef474866460c75ce66b6f5675306481bb65b"),
     candidate_schema:"021",
-    stopping_point:"Deploy exact tested commit -> Installing filtered host metrics snapshot.",
+    stopping_point:"PR #108 verification: API/static/browser đã xanh; chờ full Deploy Kitchen OS regression + collector runtime smoke trước merge.",
     last_failure:{
       workflow:"Deploy Kitchen OS to VPS",
       run_id:"35372160924",
@@ -51,7 +51,7 @@ export const DEVELOPMENT_STATUS = Object.freeze({
     { label:"DEVELOPMENT_RULES.md", purpose:"Quy tắc bắt buộc trước khi code", url:github("/blob/main/docs/DEVELOPMENT_RULES.md") },
   ],
   next_steps:[
-    "Làm host-metrics collector chịu lỗi tốt hơn và không để telemetry phụ chặn deployment chính.",
+    "Xác nhận host-metrics collector runtime smoke và full Deploy Kitchen OS regression của PR #108 đều xanh.",
     "Chạy regression đầy đủ trên hotfix, merge chỉ khi tất cả gate xanh.",
     "Deploy exact tested SHA; xác nhận release, schema 021 và production UI smoke.",
     "Sau production xanh, cập nhật CURRENT_HANDOFF / WORK_LOG / STATUS với SHA và run thật.",
