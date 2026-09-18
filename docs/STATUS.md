@@ -7,76 +7,74 @@
 - Repository: `vial1307/restaurant-management-system-demo`
 - Production data authority: Browser/UI -> VPS API -> PostgreSQL.
 - PostgreSQL stays private behind the VPS/API boundary.
-- Verified production milestone: `3a3392133483c6575a63d61a04d085a2d50df692`.
-- Verified production workflow: Deploy Kitchen OS to VPS #724, run `35377327661`.
+- Verified production commit: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`.
+- Verified production workflow: Deploy Kitchen OS to VPS #726, run `35378902959`.
 - Verified production schema: `021`.
 - Production UI smoke: PASS.
+- Super Admin GitHub/Handoff now reads live release + schema from the serving runtime.
 - Inventory cross-site refresh and PostgreSQL storage relocation invariants remain green.
 
-## Release #724 completed — 2026-09-19
+## Release #726 completed — 2026-09-19
 
-PR #108 fixed the failed host-metrics deployment and added the Super Admin GitHub/Handoff surface.
+PR #109 made the Super Admin GitHub/Handoff state runtime-backed instead of manually pinning the active production SHA.
 
 Verified release evidence:
 
-- exact deploy target: `3a3392133483c6575a63d61a04d085a2d50df692`;
+- exact deploy target: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`;
 - pre-deploy backup created successfully;
-- migration `021_admin_row_revisions.sql` applied;
 - schema verifier: `021`;
 - Super Admin revision columns: 5;
 - Super Admin revision triggers: 5;
 - API health: PASS;
 - Web/API/Super Admin edge health: PASS;
-- production release check: `3a33921`;
+- production release check: `9aae83a`;
 - production UI smoke: PASS.
 
-Host metrics collector recovery:
+The protected development-status endpoint now returns:
 
-- root cause: GNU `df` inode flags were used with an incompatible output combination;
-- collector command corrected;
-- collector now has actionable error diagnostics;
-- systemd install emits status/journal evidence on failure;
-- deploy preflight now executes the collector instead of syntax-checking only;
-- the real VPS host-metrics install step passed in release #724.
+- live runtime release;
+- live runtime schema;
+- a direct commit link for the serving release;
+- current work/handoff metadata kept separately from runtime truth.
 
-## Active follow-up
+Static handoff metadata no longer needs a manual production SHA change after every release.
 
-Branch: `chore/runtime-handoff-status-20260919`
+## VPS capacity audit #5
 
-Purpose:
-
-- make Super Admin GitHub/Handoff read live release/schema from the serving runtime;
-- keep static handoff metadata focused on current work/next queue rather than hard-coded production SHA;
-- display the resolved host-metrics incident as history instead of an active blocker.
-
-This follow-up must pass the same PR/release gates before merge.
-
-## VPS capacity milestone
-
-Capacity audit run `35377327695` completed successfully before release #724.
+Run `35378899688` completed successfully for the release #726 workstream.
 
 Observed host state:
 
 - OS: Ubuntu 22.04.5 LTS;
 - CPU: 2 vCPU, Intel Xeon E-2236 @ 3.40 GHz;
+- container memory limit/visible host memory: ~3.85 GiB;
 - root filesystem: 49 GB total, 5.1 GB used, 44 GB available (~11% used);
 - inode use: ~2%;
-- Kitchen OS directory: ~38 MB;
-- backup directory: ~15 MB;
-- backup count at audit time: 72;
 - primary interface: `eth0`;
-- host traffic counters at audit time: RX ~16.29 GB, TX ~0.72 GB since boot;
-- external HTTPS total response time in the sample set was roughly 0.67–0.90 seconds.
+- host traffic counters at audit time: RX ~16.29 GB, TX ~0.73 GB since boot;
+- Kitchen OS web/API/PostgreSQL containers: healthy;
+- external HTTPS sample totals: mostly ~0.51–0.70 seconds, with occasional slower samples.
 
-Provider monthly traffic quota remains unknown unless configured from the VPS provider's real plan data.
+Provider monthly traffic quota remains unknown until real provider-plan data is configured. Host counters are usage observations, not billing-quota data.
 
-## Next queue
+## Current continuation point
 
-1. Merge/deploy the runtime-backed handoff follow-up only after all gates are green.
-2. Continue normalized-domain cutover one business domain at a time; never create a second writable authority.
+The secure Admin/Data + VPS metrics + GitHub/Handoff workstream is complete and production verified.
+
+Next engineering work starts from:
+
+- main / production SHA `9aae83a329541e2f65d968c7b1b6adc8bf56097c`;
+- schema `021`;
+- no active production blocker.
+
+Next queue:
+
+1. Continue normalized-domain/database redesign one business domain at a time.
+2. Never create a second writable authority alongside the VPS API/PostgreSQL path.
 3. Keep domain-specific transactional APIs where generic CRUD could bypass inventory/workforce/payroll/SOP invariants.
-4. Add restore-verification evidence and off-site encrypted backup when extending backup operations.
-5. Add provider bandwidth quota only when the real provider limit is known.
+4. Define migration, backfill, rollback and verification before destructive schema changes.
+5. Add restore-verification evidence and off-site encrypted backup when extending backup operations.
+6. Add provider bandwidth quota only when the real provider limit is known.
 
 ## Handoff rule
 

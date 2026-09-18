@@ -1,6 +1,6 @@
 # Kitchen OS — Current Development Handoff
 
-Last updated: 2026-09-18 (Asia/Taipei)
+Last updated: 2026-09-19 (Asia/Taipei)
 
 This document is the current continuation point for any developer or future ChatGPT session working on Kitchen OS. It must be updated whenever a significant production fix, schema migration, deployment, or workstream handoff occurs.
 
@@ -10,10 +10,10 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current main HEAD at handoff creation: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`
+- Current verified main/production SHA: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
-- Production database schema: PostgreSQL migrations through schema 020.
+- Production database schema: PostgreSQL migrations through schema 021.
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
 - Browser localStorage is cache/UI state only; it is not an authoritative shared inventory/business database.
 
@@ -21,18 +21,24 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #691
-- Run ID: `35335888439`
-- Tested/deployed commit: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`
+- Workflow: Deploy Kitchen OS to VPS #726
+- Run ID: `35378902959`
+- Tested/deployed commit: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`
 - Result: SUCCESS
 - Preflight: PASS
+- Host metrics collector runtime smoke: PASS
 - API/inventory regression: PASS
+- PostgreSQL concurrency regression: PASS
 - Desktop/mobile Chromium regression: PASS
 - Full-device cross-browser regression: PASS
-- SSH deploy: PASS
+- SSH deploy with backup/rollback path: PASS
+- Production health/release check: PASS
 - Production UI smoke: PASS
+- Database schema: `021`
+- Super Admin row revision columns: 5
+- Super Admin row revision triggers: 5
 
-This production release includes the forced fresh VPS snapshot on site switching and the database-backed storage relocation flow.
+This production release includes secure Super Admin data editing, schema-021 row revisions, filtered VPS telemetry, GitHub/Handoff, and runtime-backed live release/schema reporting.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
@@ -217,12 +223,12 @@ Never bypass the release gates to push a fix directly to production.
 ## 9. Immediate continuation procedure
 
 When resuming work:
-1. Fetch current `main` HEAD.
-2. Check the newest `Deploy Kitchen OS to VPS` run.
-3. Production is verified at #691 / `d15ae2087d293111b989b5e5efe7d56ac3bebb84`; re-confirm only if a newer production-impacting commit exists.
-4. Re-test the user-facing storage relocation flow and cross-site switching if any inventory code changes after this handoff.
-5. Start P1 database redesign from this verified green baseline.
-6. Update this file and `docs/WORK_LOG.md` at the end of the next substantial work session.
+1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
+2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
+3. Current verified production baseline is #726 / `9aae83a329541e2f65d968c7b1b6adc8bf56097c`, schema `021`.
+4. Re-test storage relocation and cross-site switching if any inventory code changes.
+5. Continue P1 normalized-domain/database redesign from this verified green baseline, one domain at a time.
+6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
 
 
 ## 2026-09-18 continuation — secure admin writes and VPS telemetry
@@ -302,3 +308,51 @@ VPS capacity audit run `35377327695` also passed. At audit time the host reporte
 3. Keep Browser/UI -> VPS API -> PostgreSQL as the only authoritative write path.
 4. Do not use generic Super Admin CRUD for operations whose invariants require dedicated transactions.
 5. Preserve schema 021 row revision concurrency protection and inventory relocation/site-refresh invariants.
+
+
+## 2026-09-19 — Release #726 final verified production
+
+The runtime-backed GitHub/Handoff follow-up was merged as:
+
+- commit: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`;
+- workflow: Deploy Kitchen OS to VPS #726;
+- run ID: `35378902959`;
+- schema: `021`;
+- production UI smoke: PASS.
+
+Production deploy evidence:
+
+- exact tested target `9aae83a329541e2f65d968c7b1b6adc8bf56097c`;
+- pre-deploy backup created successfully;
+- API healthy;
+- `OK: schema version 021`;
+- `OK: Super Admin revision columns = 5`;
+- `OK: Super Admin revision triggers = 5`;
+- Web/API/Super Admin edge healthy;
+- release endpoint returned `9aae83a`;
+- production UI smoke completed successfully.
+
+Super Admin GitHub/Handoff now separates static continuation metadata from live runtime truth. The protected status endpoint derives the currently serving release and schema at request time, so future releases do not require a manually maintained production SHA in the UI.
+
+VPS Capacity Audit #5 / run `35378899688` passed for this workstream. At audit time the host reported:
+
+- Ubuntu 22.04.5 LTS;
+- 2 vCPU on Intel Xeon E-2236;
+- about 3.85 GiB visible memory;
+- 49 GB root filesystem, about 44 GB available;
+- healthy web/API/PostgreSQL containers;
+- primary interface `eth0`;
+- host counters around 16.29 GB RX and 0.73 GB TX since boot;
+- external HTTPS samples mostly around 0.51–0.70 seconds.
+
+Provider monthly traffic quota is not derivable from host counters and remains intentionally unconfigured until real provider-plan data is supplied.
+
+### Exact next work
+
+The Admin/Data hardening, VPS metrics and GitHub/Handoff workstream is complete. The next code work should start with normalized-domain/database redesign:
+
+1. read `docs/DATABASE_CORE_V2.md` and `docs/DATABASE_PERSISTENCE_AUDIT.md`;
+2. choose one business domain;
+3. define relational authority, migration/backfill/rollback and capability checks;
+4. preserve Browser/UI -> VPS API -> PostgreSQL as the only write authority;
+5. keep dedicated transactional APIs for operations whose invariants cannot safely be expressed through generic CRUD.
