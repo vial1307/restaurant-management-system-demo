@@ -1,0 +1,60 @@
+name: Engineering handoff / continuation
+description: Track a Kitchen OS development slice so another developer can continue without reconstructing context.
+title: "[DEV] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: "Read docs/CURRENT_HANDOFF.md and docs/STATUS.md before starting."
+  - type: input
+    id: production_sha
+    attributes:
+      label: Verified production SHA
+      description: Exact SHA confirmed by production release/smoke checks.
+      placeholder: d15ae208...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and invariants
+      description: What is changing, and what must not regress?
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done
+      description: Commits, migrations, fixes and tests already completed.
+  - type: textarea
+    id: in_progress
+    attributes:
+      label: In progress / exact stopping point
+      description: State the exact file, feature or failing check where work stopped.
+    validations:
+      required: true
+  - type: textarea
+    id: next
+    attributes:
+      label: Next steps
+      description: Ordered continuation steps.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification evidence
+      description: Workflow IDs, test commands, screenshots or production checks.
+  - type: checkboxes
+    id: handoff
+    attributes:
+      label: Handoff checklist
+      options:
+        - label: CURRENT_HANDOFF reviewed/updated
+          required: true
+        - label: STATUS reviewed/updated
+          required: true
+        - label: WORK_LOG appended
+          required: true
+        - label: No secrets or credentials were added to the issue
+          required: true
