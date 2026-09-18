@@ -299,11 +299,11 @@ function pdfBuffer(rows) {
 
 async function inventoryCatalogAudit() {
   const siteResult = await pool.query(
-    \`select code,name_vi,name_zh_tw,metadata
+    `select code,name_vi,name_zh_tw,metadata
      from public.sites
      where active=true
        and coalesce(metadata->>'inventory_mode','') in ('central','branch')
-     order by sort_order,code\`
+     order by sort_order,code`
   );
   const sites = siteResult.rows;
   const siteCodes = sites.map((site) => site.code);
@@ -321,7 +321,7 @@ async function inventoryCatalogAudit() {
   }
 
   const itemResult = await pool.query(
-    \`select
+    `select
        i.id,i.item_key,split_part(i.item_key,':',1) as site,i.catalog_key,
        i.name_vi,i.name_zh_tw,i.unit,i.work_area,i.storage_only,i.updated_at,
        count(distinct l.id) filter (where l.active=true and l.kind='storage')::int as storage_location_count,
@@ -346,7 +346,7 @@ async function inventoryCatalogAudit() {
      group by
        i.id,i.item_key,i.catalog_key,i.name_vi,i.name_zh_tw,i.unit,i.work_area,i.storage_only,i.updated_at,
        d.location_id,dl.code,dl.name_vi,dl.name_zh_tw
-     order by i.catalog_key,site,i.item_key\`,
+     order by i.catalog_key,site,i.item_key`,
     [siteCodes]
   );
 
@@ -392,7 +392,7 @@ async function inventoryCatalogAudit() {
 
   const duplicateMap = new Map();
   for (const item of items) {
-    const key = \`\${item.site}|\${item.catalog_key}\`;
+    const key = `\${item.site}|\${item.catalog_key}`;
     const rows = duplicateMap.get(key) || [];
     rows.push(item);
     duplicateMap.set(key, rows);
