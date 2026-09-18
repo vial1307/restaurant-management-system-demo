@@ -208,3 +208,26 @@ This sequence prevents silent divergence and makes rollback possible during the 
 ## 16. Definition of done for future database changes
 
 A database-affecting feature is not complete merely because the UI works. It is complete only when its source of truth is explicit, migration is additive/reversible by backup restore, constraints model critical invariants, concurrency behavior is defined, history semantics are defined, indexes match access paths, PostgreSQL 16 regression is green, and the relevant SDD/spec documentation is updated.
+
+
+## 17. Secure Super Admin mutation model
+
+The Super Admin data editor is an API surface, not a SQL console. PostgreSQL remains private to the VPS network and the browser must never receive database credentials, Docker access, host shell access, or arbitrary table/column/query capability.
+
+Generic administrative CRUD is allowed only when the backend owns an explicit dataset policy containing the table, selectable columns, editable columns, sortable/searchable fields and archive semantics. Unknown fields are rejected. Domain-specific operations that carry stronger invariants (inventory relocation, cross-site shipment, receiving-default changes, workforce approval, payroll locking, SOP approval) stay on dedicated transactional endpoints and must not be reimplemented through generic CRUD.
+
+Persistent identity columns are create-time identity, not casual edit fields. Examples include menu `(site_code,item_code)`, inventory `(item_key,catalog_key)`, and SOP `(site_code,sop_code)`. Changing identity requires an explicit migration/domain operation with referential-integrity review rather than a generic row edit.
+
+Admin updates and archives must reject stale writes. The current implementation uses the row's `updated_at` value as an optimistic concurrency token while holding the target row `FOR UPDATE`; a client editing an older version receives a conflict and must reload before retrying. A future domain that cannot guarantee monotonic `updated_at` must use an explicit version column instead.
+
+Inventory generic CRUD may edit approved catalog metadata but must not bypass stock invariants. In particular, an item with non-zero relational stock cannot be archived through generic CRUD; quantity/location changes continue through dedicated inventory transactions so history remains auditable.
+
+Every successful Super Admin mutation writes `audit_logs` with actor, action, entity, site and before/after data when applicable.
+
+## 18. Host metrics security boundary
+
+VPS host metrics are collected by a root-owned host service into a filtered snapshot. The API container receives only that snapshot directory read-only. The application/browser is not given the Docker socket, `/proc` from the host, SSH access, database host port, or arbitrary filesystem access.
+
+The Super Admin metrics endpoint is capability-gated by `system.super_admin` and may expose only operational capacity data such as CPU/load, memory, disk/inodes, service health, network byte counters/rates, backup footprint, PostgreSQL logical size/connections, schema/release and table/index sizes. Secrets, environment variables, credentials, command output and unrestricted process/container metadata are forbidden.
+
+Host network counters describe traffic observed by the operating system. They do not establish a VPS provider's monthly billing quota; that value must be configured separately if the provider plan has a traffic cap.
