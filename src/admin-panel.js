@@ -45,6 +45,12 @@ const state = {
 function esc(value) {
   return String(value ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 }
+function safeHref(value) {
+  try {
+    const url=new URL(String(value||""),location.origin);
+    return ["http:","https:"].includes(url.protocol)?url.href:"#";
+  } catch { return "#"; }
+}
 function json(value) { try { return JSON.stringify(value ?? {},null,2); } catch { return "{}"; } }
 function display(value) {
   if (value === null || value === undefined || value === "") return "—";
@@ -190,7 +196,7 @@ function renderContent() {
       <div class="sa-list">${(c.announcements||[]).map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.title_vi||row.title_zh_tw)}</strong><small>${esc(siteName(row.site_code))} · ${esc(row.status)} · ${esc(fmtDate(row.updated_at))}</small></div><button class="sa-btn small" data-open-dataset="announcements">Mở bảng</button></div>`).join("")||`<div class="sa-empty">Chưa có thông báo.</div>`}</div>
     </article>
     <article class="sa-card"><div class="sa-card-head"><div><h2>Media / Hình ảnh</h2><p>Metadata hình ảnh và tài liệu.</p></div><button class="sa-btn" type="button" data-open-dataset="media">Quản lý</button></div>
-      <div class="sa-list">${(c.media||[]).map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label)}</strong><small>${esc(row.asset_type)} · ${esc(siteName(row.site_code))}</small></div><a class="sa-link" href="${esc(row.asset_url)}" target="_blank" rel="noreferrer">Mở</a></div>`).join("")||`<div class="sa-empty">Chưa có media.</div>`}</div>
+      <div class="sa-list">${(c.media||[]).map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label)}</strong><small>${esc(row.asset_type)} · ${esc(siteName(row.site_code))}</small></div><a class="sa-link" href="${esc(safeHref(row.asset_url))}" target="_blank" rel="noreferrer">Mở</a></div>`).join("")||`<div class="sa-empty">Chưa có media.</div>`}</div>
     </article>
   </section>
   <article class="sa-card"><div class="sa-card-head"><div><h2>Duyệt SOP · SOP 審核</h2><p>Chỉ version đang ở trạng thái draft mới có thể duyệt/từ chối.</p></div><button class="sa-btn" data-open-dataset="sop-documents">Danh sách SOP</button></div>
