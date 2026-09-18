@@ -237,7 +237,10 @@ export async function switchActiveInventorySite(site) {
   };
   window.addEventListener("shitu:inventory-cloud-status", onStatus);
   try {
-    await syncInventoryNow(targetSite, { reloadBranch:false });
+    // Site switching is user-facing and must not wait behind the background
+    // polling queue for the previous site. Run one authoritative fresh hydrate
+    // immediately; stale background branch hydrations are ignored by applyBranch.
+    await runInventorySync(targetSite, { reloadBranch:false });
   } finally {
     window.removeEventListener("shitu:inventory-cloud-status", onStatus);
   }
@@ -698,6 +701,9 @@ function applyCentral(rows) {
 
 function applyBranch(rows, site) {
   if (!isBranchInventorySite(site)) return false;
+  // A stale sync from a previously selected branch must never overwrite the
+  // shared branch record after the user has switched to another site.
+  if (site !== currentSite()) return false;
   const state=appState();
   if(!state?.records?.[state.selectedDate] || state.selectedDate!==todayKey()) return false;
   const record=state.records[state.selectedDate];
