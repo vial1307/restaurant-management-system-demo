@@ -6,6 +6,7 @@ const stocktakeMigrationUrl = new URL("vps/database/migrations/008_fuxing_large_
 const currentMigrationUrl = new URL("vps/database/migrations/021_admin_row_revisions.sql", root);
 const migrateUrl = new URL("vps/scripts/migrate.sh", root);
 const verifyUrl = new URL("vps/scripts/verify-vps-data.sh", root);
+const backendScriptsUrl = new URL("vps/backend/scripts/", root);
 
 assert.equal(fs.existsSync(stocktakeMigrationUrl), true, "production migration 008 must remain in the canonical repository");
 assert.equal(fs.existsSync(currentMigrationUrl), true, "current production migration 021 must exist in the canonical repository");
@@ -18,7 +19,17 @@ assert.match(migrate, /select 1 from public\.schema_migrations where version=/i,
 assert.match(migrate, /if \[\[ "\$\{applied\}" == "1" \]\]; then[\s\S]*?skip \$\{base\}/, "applied migrations must be skipped instead of re-running one-time migrations");
 
 assert.match(verify, /if \[\[ "\$\{schema\}" < "021" \]\]; then/, "production verifier must reject schemas older than 021");
-assert.match(verify, /older than 021/, "production verifier error text must identify schema 015 as the minimum");
+assert.match(verify, /older than 021/, "production verifier error text must identify schema 021 as the minimum");
 assert.doesNotMatch(verify, /if \[\[ "\$\{schema\}" < "00[78]" \]\]; then/, "stale pre-Core-v2 production baseline must not return");
+
+const backendScripts = fs.readdirSync(backendScriptsUrl)
+  .filter((name) => name.endsWith(".mjs"))
+  .map((name) => fs.readFileSync(new URL(name, backendScriptsUrl), "utf8"))
+  .join("\n");
+assert.doesNotMatch(
+  backendScripts,
+  /(?:health\.data\.schema|schema\.rows\[0\]\?\.version)[^\n]{0,100}["']020["']/,
+  "runtime/backend regression wrappers must not pin the retired schema 020"
+);
 
 console.log("SCHEMA_021_DEPLOY_BASELINE_OK");
