@@ -39,6 +39,7 @@ import {
   canInventoryEdit,
   cloudAdjustQuantity,
   cloudArchiveBranchItem,
+  cloudRelocateStorage,
   cloudSetMinimum,
   cloudSetQuantity,
   cloudSetReceiveDefault,
@@ -1638,10 +1639,37 @@ root.addEventListener("change", (event) => {
       render();
       return;
     }
-    const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(activeInventorySite()) && canDirectInventoryAdjust();
-    if (!canDirectInventoryAdjust() && !manageQuantityEdit) { render(); return; }
+    const site = activeInventorySite();
+    const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(site) && canDirectInventoryAdjust();
+    const catalogMetadataEdit = ["zone","workArea"].includes(key) && canManageBranchCatalog(site);
+    if (!canDirectInventoryAdjust() && !manageQuantityEdit && !catalogMetadataEdit) { render(); return; }
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === id);
     if (!item) return;
+    if (key === "zone") {
+      const previousZone = String(item.zone || "");
+      const nextZone = String(element.value || "");
+      if (!previousZone || !nextZone || previousZone === nextZone) { render(); return; }
+      const sourceLocationCode = branchLocationCode(site,previousZone);
+      const destinationLocationCode = branchLocationCode(site,nextZone);
+      if (!sourceLocationCode || !destinationLocationCode) { render(); return; }
+      element.disabled = true;
+      void cloudRelocateStorage({
+        itemKey:branchItemKey(site,item.stockKey),
+        sourceLocationCode,
+        destinationLocationCode,
+        note:"儲位移動 / Chuyển vị trí lưu",
+      }).then((result) => {
+        if (result.ok) return;
+        window.alert(
+          result.error?.message === "SOURCE_STORAGE_NOT_CONFIGURED"
+            ? "Vị trí nguồn không còn trong database. Dữ liệu sẽ được tải lại. · 來源儲位已不在資料庫，系統將重新載入。"
+            : "Không thể chuyển vị trí trong database. Dữ liệu đã được giữ nguyên. · 無法在資料庫中移動儲位，原資料已保留。"
+        );
+        void syncInventoryNow(site,{reloadBranch:false});
+        render();
+      });
+      return;
+    }
     if (key === "quantity") {
       const previous = Number(item.quantity || 0);
       const next = Math.max(0, Number(element.value) || 0);
