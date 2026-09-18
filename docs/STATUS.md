@@ -17,7 +17,7 @@
 - Branch: `fix/host-metrics-deploy-resilience-20260919`
 - Draft PR: #108 — Add Super Admin GitHub handoff and repair host-metrics deploy
 - Current work URL: `https://github.com/vial1307/restaurant-management-system-demo/pull/108`
-- Status: **BLOCKED at deploy telemetry setup; application/database migration was not started.**
+- Status: **VERIFYING PR #108.** API/static/cross-device Super Admin checks are green; full release workflow remains the merge gate.
 
 ### Exact stopping point
 
@@ -31,11 +31,18 @@ Root cause observed in the deploy log:
 - the first `kitchen-os-host-metrics.service` run exited 1;
 - deploy stopped **before** backup, schema migration, container restart, release verification and production UI smoke.
 
-Immediate code focus:
+Fix implemented on PR #108:
 
+- corrected the GNU `df` inode command that caused the collector to exit under `set -e`;
+- added collector error diagnostics;
+- added systemd status/journal diagnostics on service-start failure;
+- added a CI preflight that executes the host collector instead of syntax-checking only.
+
+Current verification focus:
+
+- `.github/workflows/deploy-vps.yml`
 - `vps/scripts/collect-host-metrics.sh`
 - `vps/scripts/install-host-metrics-timer.sh`
-- `vps/scripts/deploy.sh`
 
 ### Super Admin GitHub / Handoff section
 
@@ -64,10 +71,10 @@ Implemented on PR #108:
 
 ## Next queue
 
-1. Make the host metrics collector/deploy path resilient and diagnosable; telemetry must not corrupt or bypass release safety.
-2. Run PR #108 API/static/browser/full-device gates.
-3. Merge only when all gates are green.
-4. Deploy exact tested SHA and verify release + schema 021 + production UI smoke.
+1. Confirm PR #108 host-metrics runtime smoke + full API/browser/full-device release gates.
+2. Merge only when all gates are green.
+3. Deploy the exact tested merge SHA; metrics service remains a required production component.
+4. Verify release + schema 021 + production UI smoke.
 5. Update `CURRENT_HANDOFF.md`, `WORK_LOG.md`, this file and Super Admin development metadata with the final production SHA/run.
 6. Continue normalized-domain/database redesign one business domain at a time without creating a second writable authority.
 
