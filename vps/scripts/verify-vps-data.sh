@@ -292,6 +292,93 @@ warn_nonzero "active inventory items without configured storage" "
     )
 "
 
+
+echo "=== Inventory catalog synchronization detail ==="
+"${psql_base[@]}" -c "
+with variants as (
+  select
+    catalog_key,
+    array_agg(distinct split_part(item_key,':',1) order by split_part(item_key,':',1)) as sites,
+    array_agg(distinct unit order by unit) as units,
+    array_agg(distinct work_area order by work_area) as work_areas,
+    array_agg(distinct name_zh_tw order by name_zh_tw) as names_zh_tw
+  from public.inventory_items
+  where active=true
+    and split_part(item_key,':',1) in (
+      select code from public.sites
+      where active=true
+        and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+    )
+  group by catalog_key
+)
+select catalog_key,sites,units,work_areas,names_zh_tw
+from variants
+where cardinality(sites) > 1
+  and (
+    cardinality(units) > 1
+    or cardinality(work_areas) > 1
+    or cardinality(names_zh_tw) > 1
+  )
+order by catalog_key
+limit 50;
+"
+
+"${psql_base[@]}" -c "
+with configured as (
+  select
+    i.id,
+    split_part(i.item_key,':',1) as site,
+    i.catalog_key,
+    i.name_zh_tw,
+    count(distinct l.id) filter (where l.active=true and l.kind='storage') as storage_locations,
+    string_agg(distinct l.code,', ' order by l.code) filter (where l.active=true and l.kind='storage') as storage_codes
+  from public.inventory_items i
+  left join public.inventory_stock s on s.item_id=i.id
+  left join public.inventory_locations l on l.id=s.location_id
+  where i.active=true
+  group by i.id,i.item_key,i.catalog_key,i.name_zh_tw
+)
+select c.site,c.catalog_key,c.name_zh_tw,c.storage_codes
+from configured c
+join public.sites site on site.code=c.site
+where site.active=true
+  and site.metadata->>'inventory_mode'='branch'
+  and c.storage_locations > 1
+  and not exists (
+    select 1 from public.inventory_receive_defaults d
+    where d.site=c.site and d.catalog_key=c.catalog_key
+  )
+order by c.site,c.catalog_key
+limit 80;
+"
+
+"${psql_base[@]}" -c "
+select
+  split_part(i.item_key,':',1) as site,
+  i.catalog_key,
+  i.item_key,
+  i.name_zh_tw,
+  i.unit,
+  i.work_area
+from public.inventory_items i
+where i.active=true
+  and split_part(i.item_key,':',1) in (
+    select code from public.sites
+    where active=true
+      and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+  )
+  and not exists (
+    select 1
+    from public.inventory_stock s
+    join public.inventory_locations l on l.id=s.location_id
+    where s.item_id=i.id
+      and l.active=true
+      and l.kind='storage'
+  )
+order by site,i.catalog_key
+limit 80;
+"
+
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
 if [[ "${schema}" < "015" ]]; then
   echo "ERROR: schema version ${schema} is older than 015"
