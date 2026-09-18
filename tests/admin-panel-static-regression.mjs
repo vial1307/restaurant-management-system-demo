@@ -28,6 +28,8 @@ assert.match(caddy, /redir @legacyAdmin \/\.admindev\.html 308/);
 assert.match(js, /vpsMe\(\)/, "Super Admin Panel must authenticate against VPS session");
 assert.match(js, /system\.super_admin/, "Super Admin Panel must require the dedicated system-owner capability");
 assert.match(js, /\/api\/admin\/super\/overview/, "overview must read live VPS/PostgreSQL information");
+assert.match(js, /\/api\/admin\/super\/development-status/, "GitHub/handoff section must read the protected backend status API");
+assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engineering handoff section");
 assert.match(js, /\/api\/admin\/users/, "user administration must use database-backed API");
 assert.match(js, /\/api\/admin\/access-model/, "RBAC editor must read roles/modules from database access model");
 assert.match(js, /\/api\/admin\/super\/content/, "content moderation must use Super Admin API");
@@ -61,6 +63,8 @@ assert.match(css, /@media\(max-width:960px\)/, "Admin Panel must include tablet/
 assert.match(css, /@media\(max-width:640px\)/, "Admin Panel must include compact mobile layout");
 
 assert.match(superRoutes, /system\.super_admin/, "all Super Admin routes must enforce system.super_admin");
+assert.match(superRoutes, /\/api\/admin\/super\/development-status/, "engineering handoff metadata must be exposed only through Super Admin routes");
+assert.match(superRoutes, /DEVELOPMENT_STATUS/, "development status must come from a narrow server-side metadata contract");
 assert.match(superRoutes, /\/api\/admin\/super\/inventory-catalog-audit/, "cross-site catalog audit must be protected by Super Admin route");
 assert.match(superRoutes, /metadataVariants/, "catalog audit must report cross-site metadata variance");
 assert.match(superRoutes, /identityVariants/, "catalog audit must report cross-site identity drift");
