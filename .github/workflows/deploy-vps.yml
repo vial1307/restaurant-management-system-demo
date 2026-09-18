@@ -93,6 +93,260 @@ jobs:
       - name: Validate VPS shell scripts
         run: bash -n vps/scripts/*.sh
 
+      - name: Execute host metrics collector smoke
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          mkdir -p "$tmp_dir/backups"
+          APP_DIR="$tmp_dir" bash vps/scripts/collect-host-metrics.sh
+          test -s "$tmp_dir/runtime/host-metrics.env"
+          grep -q '^FORMAT_VERSION=1
+      - name: Validate Caddy configuration
+        run: |
+          docker run --rm -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Validate required production files
+        run: |
+          set -euo pipefail
+          test -f index.html
+          test -f vps-entry.html
+          test -f manifest.webmanifest
+          test -f sw.js
+          test -f src/business-recovery-notice.js
+          test -f src/business-recovery-notice.css
+          test -f src/business-persistence-status.js
+          test -f src/business-persistence-status.css
+          test -f src/workforce-approval.js
+          test -f src/workforce-schedule-publication.js
+          test -f vps/docker-compose.yml
+          test -f vps/Caddyfile
+          test -f src/vps-auth-bridge.js
+          test -f vps/scripts/deploy-api.sh
+          test -f vps/scripts/stamp-frontend-release.mjs
+          test -f vps/scripts/backup.sh
+          test -f vps/scripts/migrate.sh
+          test -f vps/scripts/verify-vps-data.sh
+          test -f vps/scripts/collect-host-metrics.sh
+          test -f vps/scripts/install-host-metrics-timer.sh
+          test -f vps/backend/scripts/fixtures/host-metrics.env
+          test -f vps/backend/src/workforce-approval-routes.mjs
+          test -f vps/backend/src/workforce-lock-policy.mjs
+          test -f vps/backend/scripts/concurrency-regression.mjs
+          test -f vps/backend/scripts/business-module-conflict-regression.mjs
+          test -f vps/backend/scripts/business-state-regression-client.mjs
+          test -f vps/backend/scripts/workforce-approval-regression-client.mjs
+          test -f vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
+          test -f vps/backend/scripts/api-regression-v6.mjs
+          test -f tests/workforce-approval-browser-regression.mjs
+          test -f tests/workforce-schedule-publication-regression.mjs
+          test -f vps/backend/package-lock.json
+          test -f tests/package-lock.json
+          test -f vps/database/migrations/004_restore_primary_admin.sql
+          test -f vps/database/migrations/005_business_state.sql
+          test -f vps/database/migrations/006_business_module_revisions.sql
+
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kitchen_test
+          POSTGRES_PASSWORD: kitchen_test
+          POSTGRES_DB: kitchen_test
+        options: >-
+          --health-cmd "pg_isready -U kitchen_test -d kitchen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: kitchen_test
+      POSTGRES_PASSWORD: kitchen_test
+      COOKIE_SECURE: "false"
+      SESSION_DAYS: "1"
+      PORT: "8080"
+      HOST_METRICS_PATH: "vps/backend/scripts/fixtures/host-metrics.env"
+      TEST_API_PORT: "8080"
+      TEST_WEB_PORT: "3000"
+      TEST_API_BASE: "http://127.0.0.1:8080"
+      TEST_WEB_BASE: "http://localhost:3000"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install backend and browser test packages
+        run: |
+          npm ci --prefix vps/backend
+          npm ci --prefix tests
+
+      - name: Prepare isolated regression database
+        run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Start API
+        run: |
+          node vps/backend/src/server.mjs >/tmp/kitchen-api.log 2>&1 &
+          echo $! >/tmp/kitchen-api.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-api.log
+          exit 1
+
+      - name: API role and inventory regression
+        run: node vps/backend/scripts/api-regression-v6.mjs
+
+      - name: Workforce schedule publication API regression
+        run: node vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
+
+      - name: Multi-user PostgreSQL concurrency regression
+        run: |
+          node --import ./vps/backend/scripts/business-state-regression-client.mjs vps/backend/scripts/concurrency-regression.mjs
+          node vps/backend/scripts/business-module-conflict-regression.mjs
+
+      - name: Start frontend test server
+        run: |
+          node tests/web-server.mjs >/tmp/kitchen-web.log 2>&1 &
+          echo $! >/tmp/kitchen-web.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/kitchen-web.log
+          exit 1
+
+      - name: Desktop and mobile Chromium regression
+        run: node tests/browser-regression.mjs
+
+      - name: Workforce approval browser regression
+        env:
+          WORKFORCE_APPROVAL_ONLY: "1"
+        run: node tests/workforce-approval-browser-regression.mjs
+
+      - name: Workforce request contract regression
+        run: node tests/workforce-request-contract-regression.mjs
+
+      - name: Workforce request browser regression
+        run: node tests/workforce-request-browser-regression.mjs
+
+      - name: Business recovery notice browser regression
+        run: node tests/business-recovery-notice-browser-regression.mjs
+
+      - name: Business persistence status browser regression
+        run: node tests/business-persistence-status-browser-regression.mjs
+
+      - name: Full-device cross-browser regression
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p tests/artifacts/full-device
+          node tests/full-device-regression.mjs 2>&1 | tee tests/artifacts/full-device/run.log
+
+      - name: Upload full-device screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: full-device-screenshots
+          path: tests/artifacts/full-device
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dump regression logs on failure
+        if: failure()
+        run: |
+          echo "=== API LOG ==="
+          cat /tmp/kitchen-api.log 2>/dev/null || true
+          echo "=== WEB LOG ==="
+          cat /tmp/kitchen-web.log 2>/dev/null || true
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs:
+      - preflight
+      - regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Deploy exact tested commit with server-side backup and rollback
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$GITHUB_SHA" > /tmp/kitchen-os-deploy-target
+          chmod 600 /tmp/kitchen-os-deploy-target
+          scp -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 /tmp/kitchen-os-deploy-target deploy@82.47.180.185:/home/deploy/.kitchen-os-deploy-target
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-os-deploy'
+
+      - name: Production health and release check
+        run: |
+          set -euo pipefail
+          EXPECTED_RELEASE="${GITHUB_SHA:0:7}"
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          echo
+          ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          echo "Release: ${ACTUAL_RELEASE}"
+          test "$ACTUAL_RELEASE" = "$EXPECTED_RELEASE"
+
+  production-ui-smoke:
+    needs:
+      - deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install browser test package
+        run: npm ci --prefix tests
+
+      - name: Verify production permission modal
+        env:
+          PRODUCTION_BASE: https://82.47.180.185.nip.io
+          EXPECTED_RELEASE: ${{ github.sha }}
+        run: node tests/production-ui-smoke.mjs
+ "$tmp_dir/runtime/host-metrics.env"
+          grep -q '^DISK_ROOT_TOTAL_BYTES=' "$tmp_dir/runtime/host-metrics.env"
+          grep -q '^INODE_TOTAL=' "$tmp_dir/runtime/host-metrics.env"
+
       - name: Validate Caddy configuration
         run: |
           docker run --rm -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
