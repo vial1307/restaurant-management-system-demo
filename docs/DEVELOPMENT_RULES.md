@@ -267,3 +267,12 @@ Before calling an update complete:
 13. Record any known limitation explicitly instead of silently deferring it.
 
 A change is not considered complete if it works only on the device, page, module or branch where it was implemented.
+
+
+## Engineering status and handoff discipline
+
+- After reading `docs/CURRENT_HANDOFF.md`, read `docs/STATUS.md` for the concise DONE / IN PROGRESS / NEXT / BLOCKED workboard before changing code.
+- `docs/CURRENT_HANDOFF.md` is the production/architecture continuation contract; `docs/STATUS.md` is the short active workboard; `docs/WORK_LOG.md` is chronological evidence. Do not use a GitHub issue, chat message, or local note as a competing source of truth.
+- Before handing work to another developer, update all three documents when their scope changed and state the exact stopping point.
+- Pull requests must use `.github/PULL_REQUEST_TEMPLATE.md`; continuation work can use the engineering handoff issue template, but the issue must point back to the canonical docs.
+- Never record a candidate commit as production merely because it was merged. Production SHA requires the release endpoint plus production smoke/deploy gates to be green.
