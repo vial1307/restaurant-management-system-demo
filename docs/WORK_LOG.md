@@ -201,3 +201,87 @@ Run `35377327695` succeeded. Observed host values included 2 vCPU, Ubuntu 22.04.
 ### Follow-up started
 
 Created `chore/runtime-handoff-status-20260919` to remove manually maintained production SHA/schema from the Super Admin handoff view. The endpoint will surface live runtime release/schema while static metadata records the current continuation and release milestone.
+
+
+## 2026-09-19 — Release #726 final production verification
+
+### PR #109
+
+Purpose:
+- make Super Admin GitHub/Handoff read live release/schema from the serving runtime;
+- keep static metadata for continuation context rather than manually pinning production state.
+
+PR validation:
+- Super Admin browser regression: PASS;
+- Master Data/Admin regression: PASS;
+- isolated API load smoke: PASS;
+- workforce approval diagnostic: PASS;
+- full Deploy Kitchen OS regression: PASS.
+
+One preflight attempt failed only because the GitHub runner timed out pulling `caddy:2.10-alpine` from Docker Hub. The code/Caddyfile was not changed. The failed jobs were rerun unchanged; Caddy validation then passed. No gate was weakened.
+
+PR #109 merged as:
+- `9aae83a329541e2f65d968c7b1b6adc8bf56097c`.
+
+### Production workflow #726
+
+Run ID: `35378902959`.
+
+Verified:
+- preflight PASS;
+- executable host metrics collector smoke PASS;
+- API/inventory PASS;
+- PostgreSQL concurrency PASS;
+- desktop/mobile Chromium PASS;
+- workforce/persistence browser coverage PASS;
+- full-device cross-browser PASS;
+- exact tested SSH deployment PASS;
+- pre-deploy backup created;
+- API healthy;
+- schema 021 verified;
+- Super Admin revision columns = 5;
+- Super Admin revision triggers = 5;
+- Web/API/Super Admin edge healthy;
+- release check returned `9aae83a`;
+- production UI smoke PASS.
+
+Current verified production is therefore:
+- SHA `9aae83a329541e2f65d968c7b1b6adc8bf56097c`;
+- schema `021`;
+- workflow #726 / run `35378902959`.
+
+### Runtime-backed handoff result
+
+`GET /api/admin/super/development-status` now derives:
+- live release from the serving runtime;
+- live schema from `schema_migrations`;
+- current release commit URL.
+
+This removes the need to manually edit production SHA/schema in the Super Admin handoff view after each release.
+
+### Capacity audit #5
+
+Run `35378899688` passed.
+
+Observed:
+- Ubuntu 22.04.5 LTS;
+- 2 vCPU;
+- ~3.85 GiB visible memory;
+- root disk 49 GB total / 44 GB available;
+- healthy Kitchen OS web/API/PostgreSQL containers;
+- `eth0` primary interface;
+- host network counters ~16.29 GB RX / ~0.73 GB TX since boot;
+- HTTPS sample totals mostly ~0.51–0.70 seconds.
+
+Provider monthly bandwidth quota remains unknown without provider-plan data.
+
+### Next continuation point
+
+The secure Admin/Data + VPS metrics + GitHub/Handoff workstream is complete.
+
+Next work:
+1. start normalized-domain/database redesign from the verified schema-021 baseline;
+2. migrate one business domain at a time;
+3. preserve VPS API/PostgreSQL as the only authoritative write path;
+4. define migration/backfill/rollback + verification before destructive changes;
+5. preserve dedicated transactional APIs for inventory/workforce/payroll/SOP invariants.
