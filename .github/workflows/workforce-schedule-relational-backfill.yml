@@ -11,6 +11,10 @@ on:
       - "vps/backend/scripts/workforce-schedule-central-compat-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/workforce-schedule-relational-backfill.yml"
+      - ".github/workflows/workforce-schedule-production-parity.yml"
+      - "tests/workforce-schedule-production-parity-workflow-regression.mjs"
+      - ".github/workflows/workforce-schedule-production-parity.yml"
+      - "tests/workforce-schedule-production-parity-workflow-regression.mjs"
   push:
     branches: [main]
     paths:
@@ -66,3 +70,5 @@ jobs:
         run: node vps/backend/scripts/workforce-schedule-backfill-regression.mjs
       - name: Verify central schedule department compatibility
         run: node vps/backend/scripts/workforce-schedule-central-compat-regression.mjs
+      - name: Verify production parity workflow contract
+        run: node tests/workforce-schedule-production-parity-workflow-regression.mjs
