@@ -45,7 +45,7 @@ async function removeUser(cookie, id) {
 await DB.connect();
 try {
   const schema = await DB.query("select version from public.schema_migrations order by version desc limit 1");
-  assert.equal(schema.rows[0]?.version, "020");
+  assert.equal(schema.rows[0]?.version, "021");
 
   const ownerDb = await DB.query("select role,location,permission_overrides from public.app_users where username='yangchuadmin'");
   assert.equal(ownerDb.rows[0]?.role, "superadmin");
