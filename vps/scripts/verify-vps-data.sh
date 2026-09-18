@@ -466,11 +466,27 @@ limit 80;
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "015" ]]; then
-  echo "ERROR: schema version ${schema} is older than 015"
+if [[ "${schema}" < "021" ]]; then
+  echo "ERROR: schema version ${schema} is older than 021"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
+fi
+
+revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"
+if [[ "${revision_columns}" != "5" ]]; then
+  echo "ERROR: expected 5 Super Admin revision columns, found ${revision_columns}"
+  errors=$((errors+1))
+else
+  echo "OK: Super Admin revision columns = 5"
+fi
+
+revision_triggers="$(scalar "select count(*) from information_schema.triggers where trigger_schema='public' and action_timing='BEFORE' and event_manipulation='UPDATE' and trigger_name in ('system_announcements_bump_revision','media_assets_bump_revision','menu_items_bump_revision','inventory_items_bump_revision','sop_documents_bump_revision')")"
+if [[ "${revision_triggers}" != "5" ]]; then
+  echo "ERROR: expected 5 Super Admin revision triggers, found ${revision_triggers}"
+  errors=$((errors+1))
+else
+  echo "OK: Super Admin revision triggers = 5"
 fi
 
 echo "Warnings: ${warnings}"
