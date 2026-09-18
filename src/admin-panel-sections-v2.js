@@ -1,6 +1,11 @@
 const root = document.querySelector("#admin-app");
 
 const SECTION_COPY = {
+  development: {
+    eyebrow: "Engineering Handoff",
+    title: "GitHub, release và điểm tiếp tục code",
+    description: "Một nơi duy nhất để biết production đang ở SHA nào, công việc hiện tại nằm ở branch/PR nào, lỗi gần nhất và dev tiếp theo phải tiếp tục từ đâu.",
+  },
   users: {
     eyebrow: "Identity & Access",
     title: "Tài khoản và phân quyền toàn hệ thống",
@@ -80,6 +85,23 @@ function decorateTable(table) {
       if (headers[index]) cell.dataset.label = headers[index];
     });
   });
+}
+
+function decorateDevelopment() {
+  const content = root.querySelector(".sa-content");
+  if (!content || content.dataset.moduleV2 === "development") return;
+  content.dataset.moduleV2 = "development";
+  const status = safeText(content.querySelector(".sa-dev-summary .sa-pill")) || "UNKNOWN";
+  const links = content.querySelectorAll(".sa-dev-link").length;
+  const files = content.querySelectorAll(".sa-code-list code").length;
+  const steps = content.querySelectorAll(".sa-dev-steps li").length;
+  insertHero("development", [
+    metric("Work status", status, "handoff state"),
+    metric("GitHub links", links, "repo / branch / workflow / docs"),
+    metric("Code focus", files, "files to resume"),
+    metric("Next steps", steps, "ordered continuation"),
+  ], "Handoff");
+  content.querySelectorAll(":scope > .sa-card, :scope > .sa-two-col .sa-card").forEach((card) => card.classList.add("sa-module-card-v2"));
 }
 
 function decorateUsers() {
@@ -201,7 +223,8 @@ function decorateLogs() {
 function decorateSection() {
   const section = activeSection();
   if (section === "overview") return;
-  if (section === "users") decorateUsers();
+  if (section === "development") decorateDevelopment();
+  else if (section === "users") decorateUsers();
   else if (section === "content") decorateContent();
   else if (section === "data") decorateData();
   else if (section === "stores") decorateStores();
