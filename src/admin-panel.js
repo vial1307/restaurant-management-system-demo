@@ -37,7 +37,7 @@ let sectionLoadSeq = 0;
 
 const state = {
   me:null, loading:true, error:"", success:"", section:"overview",
-  overview:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
+  overview:null, systemMetrics:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
   data:{ name:"announcements",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
   audit:{ q:"",site:"",action:"",actor:"",page:1,pageSize:25,result:null,loading:false },
 };
@@ -56,6 +56,8 @@ function fmtBytes(value) {
   let n = Number(value || 0); const units=["B","KB","MB","GB","TB"]; let i=0;
   while(n>=1024 && i<units.length-1){n/=1024;i+=1;} return `${n.toFixed(i?1:0)} ${units[i]}`;
 }
+function fmtRate(value) { return `${fmtBytes(value)}/s`; }
+function fmtPercent(value) { const n=Number(value); return Number.isFinite(n) ? `${n.toFixed(1)}%` : "—"; }
 function fmtUptime(seconds) {
   let s=Math.max(0,Number(seconds)||0); const d=Math.floor(s/86400); s%=86400; const h=Math.floor(s/3600); const m=Math.floor((s%3600)/60);
   return `${d?`${d}d `:""}${h}h ${m}m`;
@@ -94,10 +96,11 @@ async function loadAudit() {
   catch(error){state.error=errorText(error);} state.audit.loading=false; render();
 }
 async function loadCore() {
-  const [overview,users,accessModel,sites,settings,content]=await Promise.all([
-    api("/api/admin/super/overview"),vpsListUsers(),api("/api/admin/access-model"),api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),
+  const [overview,systemMetrics,users,accessModel,sites,settings,content]=await Promise.all([
+    api("/api/admin/super/overview"),api("/api/admin/super/system-metrics"),vpsListUsers(),api("/api/admin/access-model"),
+    api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),
   ]);
-  state.overview=overview; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
+  state.overview=overview; state.systemMetrics=systemMetrics||null; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
   state.sites=sites?.sites||[]; state.settings=settings?.settings||[]; state.content=content||null;
 }
 async function refreshCurrent() {
@@ -119,6 +122,10 @@ function stat(label,value,note="") { return `<article class="sa-stat"><small>${e
 
 function renderOverview() {
   const o=state.overview||{}; const c=o.counts||{}; const db=o.database||{}; const apiInfo=o.api||{}; const backup=o.latestBackup;
+  const metrics=state.systemMetrics||{}; const hostMetrics=metrics.host||{}; const host=hostMetrics.host||{}; const cpu=hostMetrics.cpu||{};
+  const memory=hostMetrics.memory||{}; const disk=hostMetrics.disk||{}; const storage=hostMetrics.storage||{}; const network=hostMetrics.network||{};
+  const primaryInterface=(network.interfaces||[]).find((row)=>row.primary)||(network.interfaces||[])[0]||null;
+  const dbMetrics=metrics.database||{}; const serviceRows=hostMetrics.services||[]; const tableSizes=metrics.table_sizes||[];
   return `<section class="sa-stat-grid">
     ${stat("Users",`${c.active_users??0} / ${c.users??0}`,"active / total")}${stat("Chi nhánh · 據點",`${c.active_sites??0} / ${c.sites??0}`)}
     ${stat("Products",c.products??0)}${stat("SOP chờ duyệt",c.pending_sops??0)}${stat("Audit logs",c.audit_logs??0)}${stat("Thông báo đang đăng",c.announcements??0)}
@@ -136,7 +143,34 @@ function renderOverview() {
     </article>
   </section>
   <article class="sa-card"><div class="sa-card-head"><div><h2>Backup</h2><p>Bản sao gần nhất · 最近備份</p></div></div>
-  ${backup?`<div class="sa-kv-grid"><div><small>Backup key</small><strong>${esc(backup.backup_key)}</strong></div><div><small>Status</small><strong>${esc(backup.status)}</strong></div><div><small>Size</small><strong>${esc(fmtBytes(backup.size_bytes))}</strong></div><div><small>Completed</small><strong>${esc(fmtDate(backup.completed_at||backup.started_at))}</strong></div></div>`:`<div class="sa-empty">Chưa có bản ghi backup.</div>`}</article>`;
+  ${backup?`<div class="sa-kv-grid"><div><small>Backup key</small><strong>${esc(backup.backup_key)}</strong></div><div><small>Status</small><strong>${esc(backup.status)}</strong></div><div><small>Size</small><strong>${esc(fmtBytes(backup.size_bytes))}</strong></div><div><small>Completed</small><strong>${esc(fmtDate(backup.completed_at||backup.started_at))}</strong></div></div>`:`<div class="sa-empty">Chưa có bản ghi backup.</div>`}</article>
+  <section class="sa-two-col" data-system-metrics>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Tài nguyên VPS · VPS 資源</h2><p>Snapshot host read-only; không cấp shell/Docker socket cho browser.</p></div><span class="sa-pill ${hostMetrics.available?"ok":"warn"}">${hostMetrics.available?"LIVE":"UNAVAILABLE"}</span></div>
+      ${hostMetrics.available?`<div class="sa-kv-grid">
+        <div><small>Host / OS</small><strong>${esc(host.hostname||"—")}</strong><small>${esc(host.os||"—")} · ${esc(host.arch||"—")}</small></div>
+        <div><small>Host uptime</small><strong>${esc(fmtUptime(cpu.uptime_seconds))}</strong><small>snapshot ${esc(hostMetrics.age_seconds??"—")}s trước</small></div>
+        <div><small>CPU</small><strong>${esc(fmtPercent(cpu.usage_percent))}</strong><small>${esc(cpu.logical||"—")} vCPU · load ${esc(cpu.load_1??"—")} / ${esc(cpu.load_5??"—")} / ${esc(cpu.load_15??"—")}</small></div>
+        <div><small>RAM</small><strong>${esc(fmtBytes(memory.used_bytes))} / ${esc(fmtBytes(memory.total_bytes))}</strong><small>available ${esc(fmtBytes(memory.available_bytes))}</small></div>
+        <div><small>Disk /</small><strong>${esc(fmtBytes(disk.used_bytes))} / ${esc(fmtBytes(disk.total_bytes))}</strong><small>${esc(fmtPercent(disk.used_percent))} · free ${esc(fmtBytes(disk.available_bytes))}</small></div>
+        <div><small>PostgreSQL data</small><strong>${esc(fmtBytes(storage.postgres_data_bytes))}</strong><small>DB logical ${esc(fmtBytes(dbMetrics.size_bytes))}</small></div>
+        <div><small>Kitchen OS</small><strong>${esc(fmtBytes(storage.app_bytes))}</strong><small>backup ${esc(fmtBytes(storage.backup_bytes))} · ${esc(storage.backup_count??0)} files</small></div>
+        <div><small>Swap</small><strong>${esc(fmtBytes(memory.swap_used_bytes))} / ${esc(fmtBytes(memory.swap_total_bytes))}</strong></div>
+      </div>`:`<div class="sa-empty">Host metrics snapshot chưa sẵn sàng. API/database vẫn không mở quyền host trực tiếp.</div>`}
+    </article>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Mạng & dịch vụ · 網路 / Services</h2><p>Băng thông hiện tại là counter/rate của host, không phải quota nhà cung cấp.</p></div></div>
+      ${hostMetrics.available?`<div class="sa-kv-grid">
+        <div><small>Download rate</small><strong>${esc(fmtRate(network.rx_bytes_per_second))}</strong><small>RX từ boot: ${esc(fmtBytes(network.total_rx_bytes))}</small></div>
+        <div><small>Upload rate</small><strong>${esc(fmtRate(network.tx_bytes_per_second))}</strong><small>TX từ boot: ${esc(fmtBytes(network.total_tx_bytes))}</small></div>
+        <div><small>Primary NIC</small><strong>${esc(primaryInterface?.name||"—")}</strong><small>${primaryInterface?.link_speed_mbps?esc(`${primaryInterface.link_speed_mbps} Mbps link`):"link speed N/A"}</small></div>
+        <div><small>Provider quota</small><strong>Chưa cấu hình</strong><small>OS không biết hạn mức traffic theo gói VPS</small></div>
+      </div><div class="sa-list">${serviceRows.map((service)=>`<div class="sa-list-row"><div><strong>${esc(service.name)}</strong><small>${esc(service.status||"—")}</small></div><span class="sa-pill ${service.status==="running"&&["healthy","none"].includes(service.health)?"ok":"warn"}">${esc(service.health||service.status||"—")}</span></div>`).join("")}</div>`:`<div class="sa-empty">Không có host network/service snapshot.</div>`}
+    </article>
+  </section>
+  <article class="sa-card"><div class="sa-card-head"><div><h2>PostgreSQL storage · 表 / Index</h2><p>Top bảng theo tổng dung lượng. Connections: ${esc(dbMetrics.connections??"—")} / max ${esc(dbMetrics.max_connections??"—")}.</p></div></div>
+    <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>Table</th><th>Rows est.</th><th>Table</th><th>Indexes</th><th>Total</th></tr></thead><tbody>
+      ${tableSizes.slice(0,12).map((row)=>`<tr><td><strong>${esc(row.table_name)}</strong></td><td>${esc(row.estimated_rows)}</td><td>${esc(fmtBytes(row.table_bytes))}</td><td>${esc(fmtBytes(row.index_bytes))}</td><td>${esc(fmtBytes(row.total_bytes))}</td></tr>`).join("")||`<tr><td colspan="5">Chưa có số liệu.</td></tr>`}
+    </tbody></table></div>
+  </article>`;
 }
 
 function renderUsers() {
@@ -243,17 +277,19 @@ function openUserEditor(user=null) {
   form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const permissions={};if(form.dataset.permissionMode!=="default")form.querySelectorAll("[data-module]").forEach((row)=>{permissions[row.dataset.module]={view:row.querySelector('[data-perm="view"]').checked,edit:row.querySelector('[data-perm="edit"]').checked};});const submit=form.querySelector('button[type="submit"]');submit.disabled=true;try{await api("/api/admin/users",{method:"POST",body:{action:user?"update":"create",id:user?.id,username:String(fd.get("username")||""),display_name:String(fd.get("display_name")||""),role:String(fd.get("role")||"employee"),location:String(fd.get("location")||""),preferred_language:String(fd.get("preferred_language")||"vi"),password:String(fd.get("password")||""),active:fd.has("active"),permissions}});host.remove();state.success="Đã lưu user và quyền vào PostgreSQL.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);submit.disabled=false;}});
 }
 
-function fieldControl(name,label,type,value) {
-  if(type==="site")return `<label><span>${esc(label)}</span><select name="${esc(name)}"><option value="">Toàn hệ thống / —</option>${state.sites.map((s)=>`<option value="${esc(s.code)}" ${value===s.code?"selected":""}>${esc(siteName(s.code))}</option>`).join("")}</select></label>`;
-  if(type==="announcement-status")return `<label><span>${esc(label)}</span><select name="${esc(name)}">${["draft","published","archived"].map((v)=>`<option value="${v}" ${value===v?"selected":""}>${v}</option>`).join("")}</select></label>`;
-  if(type==="asset-type")return `<label><span>${esc(label)}</span><select name="${esc(name)}">${["image","document","other"].map((v)=>`<option value="${v}" ${value===v?"selected":""}>${v}</option>`).join("")}</select></label>`;
-  if(type==="boolean")return `<label class="sa-check"><input type="checkbox" name="${esc(name)}" ${value!==false?"checked":""}><span>${esc(label)}</span></label>`;
-  if(type==="textarea"||type==="json")return `<label class="wide"><span>${esc(label)}</span><textarea name="${esc(name)}" rows="${type==="json"?5:4}">${esc(type==="json"?json(value||{}):(value||""))}</textarea></label>`;
-  const val=type==="datetime"&&value?new Date(value).toISOString().slice(0,16):(value??"");return `<label><span>${esc(label)}</span><input name="${esc(name)}" type="${type==="datetime"?"datetime-local":type}" value="${esc(val)}"></label>`;
+function fieldControl(name,label,type,value,locked=false) {
+  const lockNote=locked?`<small>Identity field · không đổi sau khi tạo</small>`:"";
+  if(type==="site")return `<label><span>${esc(label)}</span><select name="${esc(name)}" ${locked?"disabled":""}><option value="">Toàn hệ thống / —</option>${state.sites.map((s)=>`<option value="${esc(s.code)}" ${value===s.code?"selected":""}>${esc(siteName(s.code))}</option>`).join("")}</select>${lockNote}</label>`;
+  if(type==="announcement-status")return `<label><span>${esc(label)}</span><select name="${esc(name)}" ${locked?"disabled":""}>${["draft","published","archived"].map((v)=>`<option value="${v}" ${value===v?"selected":""}>${v}</option>`).join("")}</select>${lockNote}</label>`;
+  if(type==="asset-type")return `<label><span>${esc(label)}</span><select name="${esc(name)}" ${locked?"disabled":""}>${["image","document","other"].map((v)=>`<option value="${v}" ${value===v?"selected":""}>${v}</option>`).join("")}</select>${lockNote}</label>`;
+  if(type==="boolean")return `<label class="sa-check"><input type="checkbox" name="${esc(name)}" ${value!==false?"checked":""} ${locked?"disabled":""}><span>${esc(label)}</span>${lockNote}</label>`;
+  if(type==="textarea"||type==="json")return `<label class="wide"><span>${esc(label)}</span><textarea name="${esc(name)}" rows="${type==="json"?5:4}" ${locked?"readonly":""}>${esc(type==="json"?json(value||{}):(value||""))}</textarea>${lockNote}</label>`;
+  const val=type==="datetime"&&value?new Date(value).toISOString().slice(0,16):(value??"");return `<label><span>${esc(label)}</span><input name="${esc(name)}" type="${type==="datetime"?"datetime-local":type}" value="${esc(val)}" ${locked?"readonly":""}>${lockNote}</label>`;
 }
 function openDataEditor(row=null) {
-  const meta=DATASET_META[state.data.name]; const host=modal(`${row?"Sửa":"Thêm"} · ${meta.label}`,`<form data-data-form><div class="sa-form-grid">${meta.fields.map(([name,label,type])=>fieldControl(name,label,type,row?.[name])).join("")}</div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu Database</button></div></form>`); const form=host.querySelector("[data-data-form]");
-  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const values={};try{for(const [name,,type] of meta.fields){if(type==="boolean")values[name]=form.elements[name].checked;else if(type==="number")values[name]=fd.get(name)===""?null:Number(fd.get(name));else if(type==="json")values[name]=JSON.parse(String(fd.get(name)||"{}"));else if(type==="datetime")values[name]=fd.get(name)?new Date(String(fd.get(name))).toISOString():null;else values[name]=String(fd.get(name)||"");}await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"save",id:row?.id,values}});host.remove();state.success="Đã lưu dữ liệu.";await Promise.all([loadDataset(),loadCore()]);}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
+  const meta=DATASET_META[state.data.name]; const createOnly=new Set(state.data.result?.createOnly||[]);
+  const host=modal(`${row?"Sửa":"Thêm"} · ${meta.label}`,`<form data-data-form><div class="sa-form-grid">${meta.fields.map(([name,label,type])=>fieldControl(name,label,type,row?.[name],Boolean(row&&createOnly.has(name)))).join("")}</div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu Database</button></div></form>`); const form=host.querySelector("[data-data-form]");
+  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const values={};try{for(const [name,,type] of meta.fields){if(row&&createOnly.has(name))continue;if(type==="boolean")values[name]=form.elements[name].checked;else if(type==="number")values[name]=fd.get(name)===""?null:Number(fd.get(name));else if(type==="json")values[name]=JSON.parse(String(fd.get(name)||"{}"));else if(type==="datetime")values[name]=fd.get(name)?new Date(String(fd.get(name))).toISOString():null;else values[name]=String(fd.get(name)||"");}await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"save",id:row?.id,expectedUpdatedAt:row?.updated_at||"",values}});host.remove();state.success="Đã lưu dữ liệu.";await Promise.all([loadDataset(),loadCore()]);}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error)==="ADMIN_ROW_STALE"?"Dữ liệu đã được thay đổi ở phiên khác. Hãy đóng form, tải lại rồi sửa trên bản mới nhất.":errorText(error);}});
 }
 function openSiteEditor(site=null) {
   const host=modal(site?"Cấu hình chi nhánh":"Thêm chi nhánh",`<form data-site-form><div class="sa-form-grid"><label><span>Code</span><input required name="code" pattern="[a-z][a-z0-9._-]{1,39}" value="${esc(site?.code||"")}" ${site?"readonly":""}></label><label><span>Sort order</span><input type="number" name="sort_order" value="${esc(site?.sort_order??0)}"></label><label><span>Tên VI</span><input required name="name_vi" value="${esc(site?.name_vi||"")}"></label><label><span>中文名稱</span><input required name="name_zh_tw" value="${esc(site?.name_zh_tw||"")}"></label><label><span>Timezone</span><input name="timezone_name" value="${esc(site?.timezone_name||"Asia/Taipei")}"></label><label><span>Currency</span><input name="currency_code" maxlength="3" value="${esc(site?.currency_code||"TWD")}"></label><label class="sa-check wide"><input type="checkbox" name="active" ${site?.active!==false?"checked":""}><span>Active</span></label><label class="wide"><span>Metadata JSON</span><textarea name="metadata" rows="5">${esc(json(site?.metadata||{}))}</textarea></label></div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu</button></div></form>`);const form=host.querySelector("[data-site-form]");form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);try{await api("/api/admin/super/sites",{method:"POST",body:{code:String(fd.get("code")||""),name_vi:String(fd.get("name_vi")||""),name_zh_tw:String(fd.get("name_zh_tw")||""),timezone_name:String(fd.get("timezone_name")||"Asia/Taipei"),currency_code:String(fd.get("currency_code")||"TWD"),sort_order:Number(fd.get("sort_order")||0),active:fd.has("active"),metadata:JSON.parse(String(fd.get("metadata")||"{}"))}});host.remove();state.success="Đã lưu chi nhánh.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
@@ -294,7 +330,7 @@ function bind() {
   root.querySelectorAll("[data-sort]").forEach((b)=>b.addEventListener("click",async()=>{state.data.direction=state.data.sort===b.dataset.sort&&state.data.direction==="asc"?"desc":"asc";state.data.sort=b.dataset.sort;await loadDataset();}));
   root.querySelectorAll("[data-page]").forEach((b)=>b.addEventListener("click",async()=>{state.data.page=Number(b.dataset.page)||1;await loadDataset();}));
   root.querySelector("[data-data-new]")?.addEventListener("click",()=>openDataEditor()); root.querySelectorAll("[data-data-edit]").forEach((b)=>b.addEventListener("click",()=>openDataEditor(state.data.result?.rows?.find((r)=>String(r.id)===b.dataset.dataEdit))));
-  root.querySelectorAll("[data-data-archive]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Xác nhận archive/ngừng dùng bản ghi này?"))return;try{await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"archive",id:b.dataset.dataArchive}});state.success="Đã cập nhật trạng thái bản ghi.";await Promise.all([loadDataset(),loadCore()]);}catch(error){flash("error",errorText(error));}}));
+  root.querySelectorAll("[data-data-archive]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Xác nhận archive/ngừng dùng bản ghi này?"))return;const row=state.data.result?.rows?.find((item)=>String(item.id)===b.dataset.dataArchive);try{await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"archive",id:b.dataset.dataArchive,expectedUpdatedAt:row?.updated_at||""}});state.success="Đã cập nhật trạng thái bản ghi.";await Promise.all([loadDataset(),loadCore()]);}catch(error){flash("error",errorText(error));}}));
   root.querySelector("[data-site-new]")?.addEventListener("click",()=>openSiteEditor()); root.querySelectorAll("[data-site-edit]").forEach((b)=>b.addEventListener("click",()=>openSiteEditor(state.sites.find((s)=>s.code===b.dataset.siteEdit))));
   root.querySelector("[data-menu-sync]")?.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(event.currentTarget);const source=String(fd.get("source")||"");const destination=String(fd.get("destination")||"");if(source===destination){flash("error","Site nguồn và site đích phải khác nhau.");return;}try{const result=await api("/api/admin/super/menu-sync",{method:"POST",body:{source,destination,overwritePrices:fd.has("overwritePrices")}});state.success=`Đã đồng bộ ${result.count||0} menu items.`;await loadCore();render();}catch(error){flash("error",errorText(error));}});
   root.querySelector("[data-setting-new]")?.addEventListener("click",()=>openSettingEditor()); root.querySelectorAll("[data-setting-edit]").forEach((b)=>b.addEventListener("click",()=>openSettingEditor(state.settings.find((s)=>s.setting_key===b.dataset.settingEdit))));
