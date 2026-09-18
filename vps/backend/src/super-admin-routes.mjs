@@ -312,7 +312,7 @@ async function listDataset(name, query) {
   }
   values.push(pageSize, offset);
   const rows = await pool.query(
-    `select ${config.columns.join(",")},count(*) over()::int as __total
+    `select ${config.columns.join(",")},revision::text as __revision,count(*) over()::int as __total
      from ${config.table}
      ${where.length ? `where ${where.join(" and ")}` : ""}
      order by ${sort} ${direction},${config.id} asc
@@ -325,7 +325,7 @@ async function listDataset(name, query) {
     columns:config.columns,
     editable:config.editable,
     createOnly:DATASET_POLICY[name]?.createOnly || [],
-    rows:rows.rows.map(({ __total, ...row }) => row),
+    rows:rows.rows.map(({ __total,__revision, ...row }) => ({...row,row_revision:__revision})),
     pagination:{ page,pageSize,total,pages:Math.max(1,Math.ceil(total / pageSize)) },
     sort:{ key:sort,direction },
   };
@@ -336,17 +336,15 @@ async function saveDatasetRow(user, name, body) {
   if (!config) throw Object.assign(new Error("ADMIN_DATASET_NOT_FOUND"), { statusCode:404 });
   const action = text(body?.action || "save");
   const id = text(body?.id);
-  const expectedUpdatedAt = text(body?.expectedUpdatedAt);
+  const expectedRevision = text(body?.expectedRevision);
   return withTransaction(async (client) => {
     if (action === "archive") {
       if (!id || !config.archive) throw Object.assign(new Error("ADMIN_ARCHIVE_NOT_ALLOWED"), { statusCode:400 });
       const current = (await client.query(`select * from ${config.table} where ${config.id}=$1 for update`, [id])).rows[0];
       if (!current) throw Object.assign(new Error("ADMIN_ROW_NOT_FOUND"), { statusCode:404 });
-      if (config.columns.includes("updated_at")) {
-        if (!expectedUpdatedAt) throw Object.assign(new Error("ADMIN_EXPECTED_REVISION_REQUIRED"), { statusCode:428 });
-        if (Date.parse(expectedUpdatedAt) !== Date.parse(current.updated_at)) {
-          throw Object.assign(new Error("ADMIN_ROW_STALE"), { statusCode:409,current });
-        }
+      if (!expectedRevision) throw Object.assign(new Error("ADMIN_EXPECTED_REVISION_REQUIRED"), { statusCode:428 });
+      if (expectedRevision !== String(current.revision)) {
+        throw Object.assign(new Error("ADMIN_ROW_STALE"), { statusCode:409,current:{...current,row_revision:String(current.revision)} });
       }
       if (name === "inventory-products" && current.active !== false) {
         const stock = await client.query("select coalesce(sum(quantity),0)::numeric as quantity from public.inventory_stock where item_id=$1",[id]);
@@ -359,7 +357,7 @@ async function saveDatasetRow(user, name, body) {
         [id,config.archive.value]
       )).rows[0];
       await audit(client,user,{ action:`super_admin_${name}_archive`,entityType:name,entityId:id,site:saved.site_code || null,before:current,after:saved });
-      return saved;
+      return {...saved,row_revision:String(saved.revision)};
     }
     if (action !== "save") throw Object.assign(new Error("INVALID_ADMIN_DATA_ACTION"), { statusCode:400 });
     const raw = object(body?.values);
@@ -372,16 +370,14 @@ async function saveDatasetRow(user, name, body) {
     if (id) {
       const current = (await client.query(`select * from ${config.table} where ${config.id}=$1 for update`, [id])).rows[0];
       if (!current) throw Object.assign(new Error("ADMIN_ROW_NOT_FOUND"), { statusCode:404 });
-      if (config.columns.includes("updated_at")) {
-        if (!expectedUpdatedAt) throw Object.assign(new Error("ADMIN_EXPECTED_REVISION_REQUIRED"), { statusCode:428 });
-        if (Date.parse(expectedUpdatedAt) !== Date.parse(current.updated_at)) {
-          throw Object.assign(new Error("ADMIN_ROW_STALE"), { statusCode:409,current });
-        }
+      if (!expectedRevision) throw Object.assign(new Error("ADMIN_EXPECTED_REVISION_REQUIRED"), { statusCode:428 });
+      if (expectedRevision !== String(current.revision)) {
+        throw Object.assign(new Error("ADMIN_ROW_STALE"), { statusCode:409,current:{...current,row_revision:String(current.revision)} });
       }
       validateDatasetValues(name,config,raw,{current});
       const createOnly = new Set(DATASET_POLICY[name]?.createOnly || []);
       entries = entries.filter(([column]) => !createOnly.has(column));
-      if (!entries.length) return current;
+      if (!entries.length) return {...current,row_revision:String(current.revision)};
       if (name === "inventory-products" && current.active !== false && raw.active === false) {
         const stock = await client.query("select coalesce(sum(quantity),0)::numeric as quantity from public.inventory_stock where item_id=$1",[id]);
         if (Number(stock.rows[0]?.quantity || 0) !== 0) {
@@ -395,7 +391,7 @@ async function saveDatasetRow(user, name, body) {
         values
       )).rows[0];
       await audit(client,user,{ action:`super_admin_${name}_update`,entityType:name,entityId:id,site:saved.site_code || null,before:current,after:saved });
-      return saved;
+      return {...saved,row_revision:String(saved.revision)};
     }
 
     if (name === "inventory-products") {
@@ -411,7 +407,7 @@ async function saveDatasetRow(user, name, body) {
       values
     )).rows[0];
     await audit(client,user,{ action:`super_admin_${name}_create`,entityType:name,entityId:saved[config.id],site:saved.site_code || null,after:saved });
-    return saved;
+    return {...saved,row_revision:String(saved.revision)};
   });
 }
 
