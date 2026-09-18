@@ -241,7 +241,7 @@ export async function switchActiveInventorySite(site) {
     // Site switching is user-facing and must not wait behind the background
     // polling queue for the previous site. Run one authoritative fresh hydrate
     // immediately; stale background branch hydrations are ignored by applyBranch.
-    await runInventorySync(targetSite, { reloadBranch:false });
+    await runInventorySync(targetSite, { reloadBranch:false, force:true });
   } finally {
     window.removeEventListener("shitu:inventory-cloud-status", onStatus);
   }
@@ -555,13 +555,13 @@ export async function bootstrapCentralInventory() {
   return isVpsApiConfigured();
 }
 
-async function fetchSite(site) {
+async function fetchSite(site, { force = false } = {}) {
   if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
 
-  await ensureSiteRegistry();
+  await ensureSiteRegistry({ force });
   const [result, master] = await Promise.all([
-    vpsInventory(site),
-    vpsMasterData(site),
+    vpsInventory(site, { force }),
+    vpsMasterData(site, { force }),
   ]);
   syncUiMasterData(site, master || {});
 
@@ -768,7 +768,7 @@ function applyBranch(rows, site) {
   return true;
 }
 
-async function runInventorySync(site, { reloadBranch = false } = {}) {
+async function runInventorySync(site, { reloadBranch = false, force = false } = {}) {
   if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
   await ensureSiteRegistry();
   if (!isKnownInventorySite(site)) return false;
@@ -777,7 +777,7 @@ async function runInventorySync(site, { reloadBranch = false } = {}) {
     return false;
   }
   try {
-    const rows = await fetchSite(site);
+    const rows = await fetchSite(site, { force });
     clearAuthSyncRetry();
     const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
     void reloadBranch;
@@ -790,9 +790,9 @@ async function runInventorySync(site, { reloadBranch = false } = {}) {
   }
 }
 
-export function syncInventoryNow(site = currentSite(), { reloadBranch = false } = {}) {
+export function syncInventoryNow(site = currentSite(), { reloadBranch = false, force = false } = {}) {
   const requestedSite = site;
-  const requestedOptions = { reloadBranch: Boolean(reloadBranch) };
+  const requestedOptions = { reloadBranch: Boolean(reloadBranch), force:Boolean(force) };
   const task = inventorySyncTail.then(() => runInventorySync(requestedSite, requestedOptions));
   inventorySyncTail = task.catch(() => false);
   return task;
