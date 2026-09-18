@@ -65,6 +65,15 @@ try {
   assert.equal(overview.data.schema.version, "020");
   assert(Number(overview.data.api.uptime_seconds) >= 0);
 
+  const metrics = await request("/api/admin/super/system-metrics", { cookie:owner.cookie });
+  assert.equal(metrics.response.status, 200, JSON.stringify(metrics.data));
+  assert.equal(metrics.data.host.available, true);
+  assert.equal(Number(metrics.data.host.memory.total_bytes), 4294967296);
+  assert.equal(Number(metrics.data.host.disk.total_bytes), 85899345920);
+  assert.equal(Number(metrics.data.host.network.rx_bytes_per_second), 1048576);
+  assert(Array.isArray(metrics.data.table_sizes));
+  assert(Number(metrics.data.database.max_connections) > 0);
+
   const accessModel = await request("/api/admin/access-model", { cookie:owner.cookie });
   assert.equal(accessModel.response.status, 200);
   const superRole = accessModel.data.roles.find((role) => role.code === "superadmin");
@@ -86,6 +95,9 @@ try {
   const ordinaryDenied = await request("/api/admin/super/overview", { cookie:ordinary.cookie });
   assert.equal(ordinaryDenied.response.status, 403);
   assert.equal(ordinaryDenied.data.error, "SUPER_ADMIN_REQUIRED");
+  const ordinaryMetricsDenied = await request("/api/admin/super/system-metrics", { cookie:ordinary.cookie });
+  assert.equal(ordinaryMetricsDenied.response.status, 403);
+  assert.equal(ordinaryMetricsDenied.data.error, "SUPER_ADMIN_REQUIRED");
   const ordinaryModel = await request("/api/admin/access-model", { cookie:ordinary.cookie });
   assert.equal(ordinaryModel.response.status, 200);
   assert.equal(ordinaryModel.data.roles.some((role) => role.code === "superadmin"), false, "ordinary admin must not see promotable Super Admin role");
@@ -147,8 +159,27 @@ try {
   assert(table.data.rows.some((row) => row.id === announcementId));
   assert.equal(table.data.pagination.page, 1);
   assert(table.data.columns.includes("title_vi"));
+
+  const forbiddenField = await request("/api/admin/super/data/announcements", {
+    method:"POST",cookie:owner.cookie,
+    body:{action:"save",values:{title_vi:"Blocked",title_zh_tw:"阻擋",raw_sql:"select 1"}},
+  });
+  assert.equal(forbiddenField.response.status,400,JSON.stringify(forbiddenField.data));
+  assert.equal(forbiddenField.data.error,"ADMIN_FIELD_NOT_ALLOWED");
+
+  const updatedAnnouncement = await request("/api/admin/super/data/announcements", {
+    method:"POST",cookie:owner.cookie,
+    body:{action:"save",id:announcementId,expectedUpdatedAt:announcement.data.row.updated_at,values:{body_vi:"Nội dung mới"}},
+  });
+  assert.equal(updatedAnnouncement.response.status,200,JSON.stringify(updatedAnnouncement.data));
+  const staleAnnouncement = await request("/api/admin/super/data/announcements", {
+    method:"POST",cookie:owner.cookie,
+    body:{action:"save",id:announcementId,expectedUpdatedAt:announcement.data.row.updated_at,values:{body_vi:"Ghi đè cũ"}},
+  });
+  assert.equal(staleAnnouncement.response.status,409,JSON.stringify(staleAnnouncement.data));
+  assert.equal(staleAnnouncement.data.error,"ADMIN_ROW_STALE");
   const archiveAnnouncement = await request("/api/admin/super/data/announcements", {
-    method:"POST",cookie:owner.cookie,body:{action:"archive",id:announcementId},
+    method:"POST",cookie:owner.cookie,body:{action:"archive",id:announcementId,expectedUpdatedAt:updatedAnnouncement.data.row.updated_at},
   });
   assert.equal(archiveAnnouncement.response.status, 200, JSON.stringify(archiveAnnouncement.data));
   assert.equal(archiveAnnouncement.data.row.status, "archived");
@@ -156,10 +187,16 @@ try {
   const menuSeed = await DB.query(
     `insert into public.menu_items(site_code,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata)
      values('fuxing','super-regression-menu','Món Regression','回歸菜品','test','noodles',120,'TWD',true,'{}'::jsonb)
-     on conflict(site_code,item_code) do update set price=excluded.price,name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,active=true
-     returning id`
+     on conflict(site_code,item_code) do update set price=excluded.price,name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,active=true,updated_at=now()\n     returning id,updated_at`
   );
   assert.equal(menuSeed.rowCount,1);
+  const immutableMenuIdentity = await request("/api/admin/super/data/menu-items", {
+    method:"POST",cookie:owner.cookie,
+    body:{action:"save",id:menuSeed.rows[0].id,expectedUpdatedAt:menuSeed.rows[0].updated_at,values:{item_code:"must-not-change"}},
+  });
+  assert.equal(immutableMenuIdentity.response.status,409,JSON.stringify(immutableMenuIdentity.data));
+  assert.equal(immutableMenuIdentity.data.error,"ADMIN_IMMUTABLE_FIELD");
+  assert.equal(immutableMenuIdentity.data.field,"item_code");
   const menuSync = await request("/api/admin/super/menu-sync", {
     method:"POST",cookie:owner.cookie,body:{source:"fuxing",destination:"yongji",overwritePrices:true},
   });
