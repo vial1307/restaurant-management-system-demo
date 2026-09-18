@@ -148,6 +148,9 @@ assert.match(authLayer, /inventoryCloudState\(\) !== "ready"[\s\S]{0,250}品項�
 assert(app.includes("attachBusinessStateSync(store)"), "business modules must synchronize with PostgreSQL");
 const inventoryCloud = read("src/inventory-cloud.js");
 assert.match(inventoryCloud, /cloudSyncBranchCatalogItem[\s\S]{0,300}canManageBranchCatalog\(site\)/, "inventory editors must be allowed to save branch catalog items");
+assert.match(inventoryCloud, /cloudRelocateStorage[\s\S]{0,900}vpsRelocateStorage/, "storage relocation must use the dedicated PostgreSQL mutation API");
+assert.match(app, /key === "zone"[\s\S]{0,1200}cloudRelocateStorage/, "changing a storage zone must relocate database stock instead of only changing local catalog state");
+assert.doesNotMatch(app, /key === "zone"[\s\S]{0,500}store\.updateItem\(id, key, element\.value\)/, "zone changes must not optimistically mutate local storage before database confirmation");
 const businessRoutes = read("vps/backend/src/business-state-routes.mjs");
 const businessSync = read("src/business-state-sync.js");
 for (const moduleName of ["settings","reservations","procurement","preparation","menu","sop","skills","attendance","schedule","remote","shared","audit"]) {
