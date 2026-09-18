@@ -33,7 +33,8 @@ This file is the canonical continuation log for implementation, CI, merge and de
 
 ### CI / deployment state at handoff
 - #690 / `483833a95f95822fa32e275579b3890f34c27598`: SUCCESS, deployed to production, production UI smoke PASS.
-- #691 / `d15ae2087d293111b989b5e5efe7d56ac3bebb84`: running when the handoff documentation was created; this commit adds an additional static guard for forced VPS hydration and does not change the already deployed runtime behavior from #690.
+- #691 / `d15ae2087d293111b989b5e5efe7d56ac3bebb84`: SUCCESS, preflight + API/inventory + browser/full-device + SSH deploy + production UI smoke all PASS.
+- Current verified production SHA: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`.
 - Do not claim a newer production SHA until deploy + production smoke are green.
 
 ### Next continuation point
