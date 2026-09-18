@@ -60,11 +60,11 @@ export async function registerInventoryExtraRoutes(app) {
       .filter((value) => allowedSites.has(value) && value !== source))];
     if (!(await activeSite(source))) return reply.code(400).send({ error:"INVALID_SITE" });
     if (!requireInventory(user, source, "edit", reply)) return;
-    if (!sites.length) return { locations:[], catalog:[] };
+    if (!sites.length) return { locations:[], catalog:[], receiveDefaults:[] };
 
     // Shipping users only receive routing metadata for other sites. Quantities
     // remain protected by the normal site-scoped inventory endpoint.
-    const [locationResult, catalogResult] = await Promise.all([
+    const [locationResult, catalogResult, receiveDefaultResult] = await Promise.all([
       pool.query(
         `select id,code,name_zh_tw,name_vi,site,kind,sort_order,metadata
          from public.inventory_locations
@@ -82,6 +82,18 @@ export async function registerInventoryExtraRoutes(app) {
          where i.active=true and l.active=true and l.kind='storage'
            and l.site=any($1::text[])
          order by l.site,i.name_zh_tw,l.sort_order,l.code`,
+        [sites]
+      ),
+      pool.query(
+        `select d.site,d.catalog_key,d.location_id,d.updated_at,
+                l.code as location_code,l.name_zh_tw,l.name_vi,l.kind,l.active,l.metadata
+         from public.inventory_receive_defaults d
+         join public.inventory_locations l on l.id=d.location_id
+         where d.site=any($1::text[])
+           and l.site=d.site
+           and l.kind='storage'
+           and l.active=true
+         order by d.site,d.catalog_key`,
         [sites]
       ),
     ]);
@@ -114,7 +126,7 @@ export async function registerInventoryExtraRoutes(app) {
       });
     }
 
-    return { locations:locationResult.rows, catalog };
+    return { locations:locationResult.rows, catalog, receiveDefaults:receiveDefaultResult.rows };
   });
 
   app.get("/api/inventory/receive-defaults", async (request, reply) => {
