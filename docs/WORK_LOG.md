@@ -90,7 +90,7 @@ This file is the canonical continuation log for implementation, CI, merge and de
 - Kept the existing relational Core v2 and static backend dataset allowlist; did not introduce a second database or browser-side SQL path.
 - Added dataset-specific validation and strict rejection of unknown fields.
 - Made persistent identity columns immutable after creation for menu, inventory catalog and SOP datasets.
-- Added optimistic stale-write protection using `updated_at` while holding the row `FOR UPDATE`; update/archive now returns conflict rather than overwriting a newer edit.
+- Added optimistic stale-write protection using a database-owned integer row revision while holding the row `FOR UPDATE`; update/archive now returns conflict rather than overwriting a newer edit.
 - Generic inventory archive now refuses to deactivate an item while relational stock is non-zero.
 - Audit logging remains mandatory for successful generic mutations.
 
@@ -122,3 +122,5 @@ This file is the canonical continuation log for implementation, CI, merge and de
 
 - Candidate branch: `fix/secure-admin-data-vps-metrics-20260918`.
 - CI/PR, merge, production deploy and production capacity capture are the next actions in this same workstream.
+
+- CI exposed that using serialized `updated_at` as an optimistic-lock token can lose PostgreSQL sub-millisecond precision in JavaScript. The timestamp approach was replaced by migration `021_admin_row_revisions.sql`, which gives each generic admin row a DB-owned integer revision incremented by trigger.
