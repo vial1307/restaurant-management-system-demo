@@ -9,8 +9,11 @@ const workflow = fs.readFileSync(
 );
 
 assert.match(workflow, /workflow_run:[\s\S]*Deploy Kitchen OS to VPS/, "parity audit must follow production deployment");
+assert.match(workflow, /push:[\s\S]*branches:[\s\S]*main[\s\S]*workforce-schedule-production-parity\.yml/, "workflow-only main fixes must be able to re-run parity without redeploying the app");
+assert.match(workflow, /group: kitchen-os-production-schedule-parity/, "parity must not share the maintenance concurrency group with backfill workflows");
 assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/, "parity audit must require successful deploy");
 assert.match(workflow, /github\.event\.workflow_run\.head_branch == 'main'/, "parity audit must only follow main deploys");
+assert.match(workflow, /github\.event_name == 'push'/, "parity job must permit the workflow-only push trigger");
 assert.match(workflow, /workforce-schedule-backfill\.mjs --parity/, "production parity must run read-only parity mode");
 assert.doesNotMatch(workflow, /--apply/, "production parity workflow must never apply backfill writes");
 assert.doesNotMatch(workflow, /backup\.sh/, "read-only parity workflow must not create a write/backfill backup path");
