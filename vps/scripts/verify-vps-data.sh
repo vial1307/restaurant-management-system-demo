@@ -224,7 +224,7 @@ warn_nonzero "duplicate active catalog keys inside the same site" "
   ) q
 "
 
-warn_nonzero "cross-site inventory catalog metadata variants" "
+warn_nonzero "cross-site inventory catalog identity name variants" "
   select count(*)
   from (
     select catalog_key
@@ -240,12 +240,30 @@ warn_nonzero "cross-site inventory catalog metadata variants" "
        and (
          count(distinct name_vi) > 1
          or count(distinct name_zh_tw) > 1
-         or count(distinct unit) > 1
+       )
+  ) q
+"
+operational_variants="$(scalar "
+  select count(*)
+  from (
+    select catalog_key
+    from public.inventory_items
+    where active=true
+      and split_part(item_key,':',1) in (
+        select code from public.sites
+        where active=true
+          and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+      )
+    group by catalog_key
+    having count(distinct split_part(item_key,':',1)) > 1
+       and (
+         count(distinct unit) > 1
          or count(distinct work_area) > 1
          or count(distinct storage_only) > 1
        )
   ) q
-"
+")"
+echo "INFO: cross-site inventory operational variants: ${operational_variants}"
 warn_nonzero "branch multi-location items missing fixed receive default" "
   with configured as (
     select
@@ -294,13 +312,13 @@ warn_nonzero "active inventory items without configured storage" "
 
 
 echo "=== Inventory catalog synchronization detail ==="
+echo "--- Identity name drift ---"
 "${psql_base[@]}" -c "
 with variants as (
   select
     catalog_key,
     array_agg(distinct split_part(item_key,':',1) order by split_part(item_key,':',1)) as sites,
-    array_agg(distinct unit order by unit) as units,
-    array_agg(distinct work_area order by work_area) as work_areas,
+    array_agg(distinct name_vi order by name_vi) as names_vi,
     array_agg(distinct name_zh_tw order by name_zh_tw) as names_zh_tw
   from public.inventory_items
   where active=true
@@ -311,18 +329,85 @@ with variants as (
     )
   group by catalog_key
 )
-select catalog_key,sites,units,work_areas,names_zh_tw
+select catalog_key,sites,names_vi,names_zh_tw
+from variants
+where cardinality(sites) > 1
+  and (
+    cardinality(names_vi) > 1
+    or cardinality(names_zh_tw) > 1
+  )
+order by catalog_key
+limit 100;
+"
+
+echo "--- Operational variants (informational) ---"
+"${psql_base[@]}" -c "
+with variants as (
+  select
+    catalog_key,
+    array_agg(distinct split_part(item_key,':',1) order by split_part(item_key,':',1)) as sites,
+    array_agg(distinct unit order by unit) as units,
+    array_agg(distinct work_area order by work_area) as work_areas,
+    array_agg(distinct storage_only order by storage_only) as storage_only_values
+  from public.inventory_items
+  where active=true
+    and split_part(item_key,':',1) in (
+      select code from public.sites
+      where active=true
+        and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+    )
+  group by catalog_key
+)
+select catalog_key,sites,units,work_areas,storage_only_values
 from variants
 where cardinality(sites) > 1
   and (
     cardinality(units) > 1
     or cardinality(work_areas) > 1
-    or cardinality(names_zh_tw) > 1
+    or cardinality(storage_only_values) > 1
   )
 order by catalog_key
-limit 50;
+limit 100;
 "
 
+echo "--- Per-site rows for all cross-site variants ---"
+"${psql_base[@]}" -c "
+with variant_keys as (
+  select catalog_key
+  from public.inventory_items
+  where active=true
+    and split_part(item_key,':',1) in (
+      select code from public.sites
+      where active=true
+        and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+    )
+  group by catalog_key
+  having count(distinct split_part(item_key,':',1)) > 1
+     and (
+       count(distinct name_vi) > 1
+       or count(distinct name_zh_tw) > 1
+       or count(distinct unit) > 1
+       or count(distinct work_area) > 1
+       or count(distinct storage_only) > 1
+     )
+)
+select
+  i.catalog_key,
+  split_part(i.item_key,':',1) as site,
+  i.item_key,
+  i.name_vi,
+  i.name_zh_tw,
+  i.unit,
+  i.work_area,
+  i.storage_only
+from public.inventory_items i
+join variant_keys v on v.catalog_key=i.catalog_key
+where i.active=true
+order by i.catalog_key,site,i.item_key
+limit 300;
+"
+
+echo "--- Missing fixed receive defaults ---"
 "${psql_base[@]}" -c "
 with configured as (
   select
@@ -352,6 +437,7 @@ order by c.site,c.catalog_key
 limit 80;
 "
 
+echo "--- Items without configured storage ---"
 "${psql_base[@]}" -c "
 select
   split_part(i.item_key,':',1) as site,
