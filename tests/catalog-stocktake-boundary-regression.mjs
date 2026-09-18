@@ -16,7 +16,7 @@ assert.match(
 );
 assert.match(
   app,
-  /element\.dataset\.manageAdjust === "true" && canManageBranchCatalog\(activeInventorySite\(\)\) && canDirectInventoryAdjust\(\)/,
+  /element\.dataset\.manageAdjust === "true" && canManageBranchCatalog\((?:activeInventorySite\(\)|site)\) && canDirectInventoryAdjust\(\)/,
   "quantity change handler must retain the stocktake role guard"
 );
 assert.match(
