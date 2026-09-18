@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 APP_DIR="${APP_DIR:-/opt/kitchen-os}"
 RUNTIME_DIR="${APP_DIR}/runtime"
@@ -7,6 +7,12 @@ OUT="${RUNTIME_DIR}/host-metrics.env"
 STATE="${RUNTIME_DIR}/host-metrics.state"
 TMP="${OUT}.tmp"
 STATE_TMP="${STATE}.tmp"
+
+cleanup_metrics_tmp() {
+  rm -f "${TMP}" "${STATE_TMP}" "${TMP}.network" "${TMP}.services"
+}
+trap 'code=$?; echo "HOST_METRICS_COLLECTOR_FAILED line=${LINENO} command=${BASH_COMMAND}" >&2; exit "${code}"' ERR
+trap cleanup_metrics_tmp EXIT
 
 mkdir -p "${RUNTIME_DIR}"
 chmod 0755 "${RUNTIME_DIR}"
@@ -55,7 +61,7 @@ swap_used_bytes=$((swap_total_bytes - swap_free_bytes))
 
 read -r disk_total disk_used disk_available disk_percent < <(df -B1 --output=size,used,avail,pcent / | tail -n 1)
 disk_percent="${disk_percent%%%}"
-read -r inode_total inode_used inode_available inode_percent < <(df -Pi --output=itotal,iused,iavail,ipcent / | tail -n 1)
+read -r inode_total inode_used inode_available inode_percent < <(df --output=itotal,iused,iavail,ipcent / | tail -n 1)
 inode_percent="${inode_percent%%%}"
 
 app_dir_bytes="$(du -sb "${APP_DIR}" 2>/dev/null | awk '{print $1}' || true)"
@@ -177,6 +183,4 @@ chmod 0644 "${TMP}"
 chmod 0600 "${STATE_TMP}"
 mv "${TMP}" "${OUT}"
 mv "${STATE_TMP}" "${STATE}"
-rm -f "${TMP}.network" "${TMP}.services"
-
 echo "Host metrics updated: ${OUT}"
