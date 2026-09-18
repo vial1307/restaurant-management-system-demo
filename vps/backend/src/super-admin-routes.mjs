@@ -697,12 +697,26 @@ export async function registerSuperAdminRoutes(app) {
   app.get("/api/admin/super/development-status", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
     const migration = await pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1");
+    const schema = migration.rows[0] || null;
+    const release = process.env.APP_RELEASE || "dev";
+    const repositoryUrl = DEVELOPMENT_STATUS.repository?.url || "https://github.com/vial1307/restaurant-management-system-demo";
+    const releaseUrl = release && release !== "dev" ? `${repositoryUrl}/commit/${encodeURIComponent(release)}` : repositoryUrl;
     return {
       ...DEVELOPMENT_STATUS,
-      runtime:{
-        release:process.env.APP_RELEASE || "dev",
-        schema:migration.rows[0] || null,
+      current_work:{
+        ...DEVELOPMENT_STATUS.current_work,
+        baseline_main_sha:release,
+        baseline_main_url:releaseUrl,
+        candidate_schema:schema?.version || null,
       },
+      live_production:{
+        release,
+        schema:schema?.version || null,
+        commit_url:releaseUrl,
+        actions_url:DEVELOPMENT_STATUS.repository?.actions_url || `${repositoryUrl}/actions`,
+        note:"Live release/schema are read from the runtime currently serving this request.",
+      },
+      runtime:{ release,schema },
     };
   });
 
