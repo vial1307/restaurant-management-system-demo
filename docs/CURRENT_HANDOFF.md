@@ -236,7 +236,7 @@ Key new invariants on the candidate branch:
 - generic admin datasets remain static backend allowlists, never arbitrary SQL/table access;
 - unknown fields fail closed;
 - durable identity columns are immutable after creation;
-- update/archive must carry the currently loaded `updated_at` token and stale writes return conflict;
+- update/archive must carry the currently loaded database `row_revision` token and stale writes return conflict;
 - inventory with non-zero relational stock cannot be archived through generic CRUD;
 - host metrics are collected outside the app container into a filtered file mounted read-only;
 - `/api/admin/super/system-metrics` requires `system.super_admin`;
