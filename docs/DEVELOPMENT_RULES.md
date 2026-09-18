@@ -4,6 +4,8 @@ These rules are mandatory for every future feature, fix, refactor, and UI update
 
 Detailed frontend/data invariants: `docs/FRONTEND_DATA_RULES.md`.
 
+Current continuation point: `docs/CURRENT_HANDOFF.md`. Every developer or future automation session must read it before changing production-impacting code and update it after a substantial fix, migration or deployment. Historical implementation/deployment notes belong in `docs/WORK_LOG.md`.
+
 ## 1. One account system / SSO-ready architecture
 
 - VPS API + PostgreSQL is the only identity and permission source.
