@@ -187,7 +187,7 @@ function devLink(url,label,note="") {
 function renderDevelopment() {
   const d=state.developmentStatus;
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
-  const work=d.current_work||{}; const failure=work.last_failure||{}; const prod=d.verified_production||{}; const runtime=d.runtime||{}; const repo=d.repository||{};
+  const work=d.current_work||{}; const incident=work.resolved_incident||{}; const live=d.live_production||{}; const evidence=d.release_evidence||{}; const runtime=d.runtime||{}; const repo=d.repository||{};
   const pr=work.pull_request;
   const status=String(d.status||"unknown").toLowerCase();
   return `<section class="sa-two-col sa-dev-summary">
@@ -196,33 +196,34 @@ function renderDevelopment() {
         <div><small>Phase</small><strong>${esc(d.phase||"—")}</strong></div>
         <div><small>Updated</small><strong>${esc(d.updated_at||"—")}</strong></div>
         <div><small>Branch</small><strong class="mono">${esc(work.branch||"—")}</strong></div>
-        <div><small>Candidate schema</small><strong>${esc(work.candidate_schema||"—")}</strong></div>
+        <div><small>${status==="stable"?"Current schema":"Candidate schema"}</small><strong>${esc(work.candidate_schema||runtime.schema?.version||"—")}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
-        ${devLink(work.url,"Mở branch đang làm","Code hiện tại / current work")}
+        ${devLink(work.url,status==="stable"?"Mở main hiện tại":"Mở branch đang làm",status==="stable"?"Production source / main":"Code hiện tại / current work")}
         ${pr?.url?devLink(pr.url,`PR #${pr.number||""}`,"Pull request hiện tại"):""}
-        ${devLink(work.baseline_main_url,"Main baseline",String(work.baseline_main_sha||"").slice(0,12))}
-        ${devLink(failure.url,"Workflow lỗi gần nhất",failure.run_id?`run ${failure.run_id}`:"")}
+        ${work.baseline_main_url?devLink(work.baseline_main_url,status==="stable"?"Live commit":"Main baseline",String(work.baseline_main_sha||live.release||"").slice(0,12)):""}
+        ${incident.failed_url?devLink(incident.failed_url,"Incident đã xử lý",incident.failed_run_id?`run ${incident.failed_run_id}`:""):""}
       </div>
     </article>
-    <article class="sa-card"><div class="sa-card-head"><div><h2>Production vs candidate</h2><p>Không đồng nhất “main đã merge” với “production đã deploy”.</p></div></div>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Live production · Production hiện tại</h2><p>Release và schema lấy trực tiếp từ runtime đang phục vụ request.</p></div></div>
       <div class="sa-kv-grid">
-        <div><small>Runtime release</small><strong class="mono">${esc(runtime.release||"—")}</strong></div>
-        <div><small>Runtime schema</small><strong>${esc(runtime.schema?.version||"—")}</strong></div>
-        <div><small>Verified production</small><strong class="mono">${esc(String(prod.sha||"").slice(0,12)||"—")}</strong></div>
-        <div><small>Verified schema</small><strong>${esc(prod.schema||"—")}</strong></div>
+        <div><small>Live release</small><strong class="mono">${esc(live.release||runtime.release||"—")}</strong></div>
+        <div><small>Live schema</small><strong>${esc(live.schema||runtime.schema?.version||"—")}</strong></div>
+        <div><small>Release milestone</small><strong class="mono">${esc(String(evidence.milestone_sha||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Milestone schema</small><strong>${esc(evidence.schema||"—")}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
-        ${devLink(prod.url,"Verified production workflow",prod.workflow_run_id?`run ${prod.workflow_run_id}`:"")}
+        ${live.commit_url?devLink(live.commit_url,"Live release commit",live.release||""):""}
+        ${evidence.url?devLink(evidence.url,"Release evidence",evidence.workflow_run_id?`run ${evidence.workflow_run_id}`:""):""}
         ${devLink(repo.actions_url,"GitHub Actions","CI / deploy / audit")}
         ${devLink(repo.url,"Repository","Source of truth")}
       </div>
-      <p class="sa-dev-note">${esc(prod.note||"")}</p>
+      <p class="sa-dev-note">${esc(live.note||evidence.note||"")}</p>
     </article>
   </section>
   <section class="sa-two-col">
     <article class="sa-card"><div class="sa-card-head"><div><h2>Code dừng ở đâu · Exact stopping point</h2><p>Dùng phần này để dev tiếp theo biết chính xác phải mở file nào và tiếp tục từ bước nào.</p></div></div>
-      <div class="sa-dev-stop"><strong>${esc(work.stopping_point||"—")}</strong><p>${esc(failure.reason||"")}</p></div>
+      <div class="sa-dev-stop"><strong>${esc(work.stopping_point||"—")}</strong><p>${esc(incident.resolution||"")}</p></div>
       <div class="sa-code-list">${(work.code_focus||[]).map((path)=>`<code>${esc(path)}</code>`).join("")||"<span>—</span>"}</div>
     </article>
     <article class="sa-card"><div class="sa-card-head"><div><h2>Việc tiếp theo · Next steps</h2><p>Thứ tự ưu tiên để không bỏ qua release gate.</p></div></div>

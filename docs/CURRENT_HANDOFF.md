@@ -266,3 +266,39 @@ Current continuation:
 PR #108 also adds a Super Admin **GitHub & Handoff** section backed by a Super Admin-only API. It shows the current PR/branch, verified production vs candidate state, failed workflow, exact stopping point, code-focus files, handoff docs and ordered next steps. The endpoint must remain metadata-only and must never expose credentials, environment dumps, SSH keys, private keys or direct host/database access.
 
 Next developer must read this file, `docs/STATUS.md`, `docs/WORK_LOG.md` and `docs/DEVELOPMENT_RULES.md` before changing production code.
+
+
+## 2026-09-19 — Release #724 verified production
+
+Verified production now is:
+
+- commit: `3a3392133483c6575a63d61a04d085a2d50df692`;
+- workflow: Deploy Kitchen OS to VPS #724;
+- run ID: `35377327661`;
+- schema: `021`;
+- production UI smoke: PASS.
+
+The previous host-metrics deployment blocker is resolved. The production deploy log proves:
+
+- exact tested target `3a3392133483c6575a63d61a04d085a2d50df692`;
+- pre-deploy PostgreSQL backup created;
+- migration `021_admin_row_revisions.sql` applied;
+- `OK: schema version 021`;
+- `OK: Super Admin revision columns = 5`;
+- `OK: Super Admin revision triggers = 5`;
+- API healthy;
+- Web/API/Super Admin edge healthy;
+- release endpoint returned `3a33921`;
+- production UI smoke completed successfully.
+
+The Super Admin GitHub/Handoff feature is therefore production-capable. A follow-up branch `chore/runtime-handoff-status-20260919` changes the status API/UI so the live release/schema come from the currently serving runtime rather than a manually maintained SHA. Static metadata remains only for handoff context, resolved incidents and the ordered next queue.
+
+VPS capacity audit run `35377327695` also passed. At audit time the host reported Ubuntu 22.04.5 LTS, 2 vCPU, a 49 GB root filesystem with about 44 GB available, and primary interface `eth0`. Provider monthly traffic quota is still intentionally unknown until real provider-plan data is configured.
+
+### Next continuation after runtime-handoff follow-up
+
+1. Read `CURRENT_HANDOFF.md`, `STATUS.md`, `DATABASE_CORE_V2.md` and `DATABASE_PERSISTENCE_AUDIT.md`.
+2. Continue normalized-domain/database redesign one domain at a time.
+3. Keep Browser/UI -> VPS API -> PostgreSQL as the only authoritative write path.
+4. Do not use generic Super Admin CRUD for operations whose invariants require dedicated transactions.
+5. Preserve schema 021 row revision concurrency protection and inventory relocation/site-refresh invariants.

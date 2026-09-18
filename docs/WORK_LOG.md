@@ -157,3 +157,47 @@ The UI now shows:
 - direct links to CURRENT_HANDOFF / WORK_LOG / STATUS / DEVELOPMENT_RULES.
 
 Regression coverage was extended for static contracts, authorization and cross-device browser rendering.
+
+
+## 2026-09-19 — Release #724 production verification
+
+### PR #108 result
+
+- PR #108 passed Master Data/Admin, Super Admin cross-device browser, isolated load, workforce diagnostics and the full release workflow.
+- The deploy workflow YAML was briefly corrupted while adding the collector runtime smoke; this was detected because GitHub showed the workflow by filename with zero jobs. The workflow was rebuilt from the clean `main` copy and the smoke step was reinserted safely.
+- Final PR head `b8a6d4d05a335107605b448d4443830fbcab8f56` passed:
+  - preflight;
+  - executable host-metrics collector smoke;
+  - API/inventory regression;
+  - PostgreSQL concurrency regression;
+  - desktop/mobile Chromium;
+  - workforce/persistence browser coverage;
+  - full-device cross-browser regression.
+- PR #108 merged as `3a3392133483c6575a63d61a04d085a2d50df692`.
+
+### Production workflow #724
+
+Run ID: `35377327661`.
+
+Verified:
+
+- exact tested commit deployment;
+- host-metrics install passed on the real VPS;
+- pre-deploy backup created;
+- migration 021 applied;
+- schema 021 integrity audit passed;
+- 5 Super Admin revision columns present;
+- 5 revision triggers present;
+- API/Web/Super Admin health passed;
+- release check returned `3a33921`;
+- production UI smoke passed.
+
+This makes `3a3392133483c6575a63d61a04d085a2d50df692` the verified production milestone, replacing the old schema-020 production baseline.
+
+### Capacity audit
+
+Run `35377327695` succeeded. Observed host values included 2 vCPU, Ubuntu 22.04.5 LTS, 49 GB root disk with ~44 GB available, ~38 MB Kitchen OS footprint, ~15 MB backup directory and 72 backup files at audit time.
+
+### Follow-up started
+
+Created `chore/runtime-handoff-status-20260919` to remove manually maintained production SHA/schema from the Super Admin handoff view. The endpoint will surface live runtime release/schema while static metadata records the current continuation and release milestone.
