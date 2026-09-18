@@ -1,6 +1,5 @@
 import { vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
 import {
-  getInventoryReceiveDefaults,
   getSiteInventoryRows,
   syncInventoryNow,
 } from "./inventory-cloud.js";
@@ -75,18 +74,13 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
   }
 
   const items = [...byItem.values()].sort((a, b) => String(a.zh).localeCompare(String(b.zh), "zh-Hant"));
-  const catalogKeys = [...new Set(items.map((item) => item.catalogKey).filter(Boolean))];
-  let receiveDefaults = [];
-  if (includeDestinations) {
-    receiveDefaults = await getInventoryReceiveDefaults({ sites: destinationSites, catalogKeys }).catch(() => []);
-  }
 
   return {
     site,
     items,
     locations,
     workLocations,
-    receiveDefaults,
+    receiveDefaults: includeDestinations ? destinationMetadata?.receiveDefaults || [] : [],
     destinationCatalog: destinationMetadata?.catalog || [],
     allLocations: includeDestinations
       ? destinationMetadata?.locations || []
