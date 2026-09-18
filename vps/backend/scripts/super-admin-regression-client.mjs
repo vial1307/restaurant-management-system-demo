@@ -62,7 +62,7 @@ try {
   const overview = await request("/api/admin/super/overview", { cookie:owner.cookie });
   assert.equal(overview.response.status, 200, JSON.stringify(overview.data));
   assert.equal(overview.data.database.database_name, process.env.POSTGRES_DB || "kitchen_test");
-  assert.equal(overview.data.schema.version, "020");
+  assert.equal(overview.data.schema.version, "021");
   assert(Number(overview.data.api.uptime_seconds) >= 0);
 
   const metrics = await request("/api/admin/super/system-metrics", { cookie:owner.cookie });
@@ -169,17 +169,17 @@ try {
 
   const updatedAnnouncement = await request("/api/admin/super/data/announcements", {
     method:"POST",cookie:owner.cookie,
-    body:{action:"save",id:announcementId,expectedUpdatedAt:announcement.data.row.updated_at,values:{body_vi:"Nội dung mới"}},
+    body:{action:"save",id:announcementId,expectedRevision:announcement.data.row.row_revision,values:{body_vi:"Nội dung mới"}},
   });
   assert.equal(updatedAnnouncement.response.status,200,JSON.stringify(updatedAnnouncement.data));
   const staleAnnouncement = await request("/api/admin/super/data/announcements", {
     method:"POST",cookie:owner.cookie,
-    body:{action:"save",id:announcementId,expectedUpdatedAt:announcement.data.row.updated_at,values:{body_vi:"Ghi đè cũ"}},
+    body:{action:"save",id:announcementId,expectedRevision:announcement.data.row.row_revision,values:{body_vi:"Ghi đè cũ"}},
   });
   assert.equal(staleAnnouncement.response.status,409,JSON.stringify(staleAnnouncement.data));
   assert.equal(staleAnnouncement.data.error,"ADMIN_ROW_STALE");
   const archiveAnnouncement = await request("/api/admin/super/data/announcements", {
-    method:"POST",cookie:owner.cookie,body:{action:"archive",id:announcementId,expectedUpdatedAt:updatedAnnouncement.data.row.updated_at},
+    method:"POST",cookie:owner.cookie,body:{action:"archive",id:announcementId,expectedRevision:updatedAnnouncement.data.row.row_revision},
   });
   assert.equal(archiveAnnouncement.response.status, 200, JSON.stringify(archiveAnnouncement.data));
   assert.equal(archiveAnnouncement.data.row.status, "archived");
@@ -187,12 +187,12 @@ try {
   const menuSeed = await DB.query(
     `insert into public.menu_items(site_code,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata)
      values('fuxing','super-regression-menu','Món Regression','回歸菜品','test','noodles',120,'TWD',true,'{}'::jsonb)
-     on conflict(site_code,item_code) do update set price=excluded.price,name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,active=true,updated_at=now()\n     returning id,updated_at`
+     on conflict(site_code,item_code) do update set price=excluded.price,name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,active=true,updated_at=now()\n     returning id,revision`
   );
   assert.equal(menuSeed.rowCount,1);
   const immutableMenuIdentity = await request("/api/admin/super/data/menu-items", {
     method:"POST",cookie:owner.cookie,
-    body:{action:"save",id:menuSeed.rows[0].id,expectedUpdatedAt:menuSeed.rows[0].updated_at,values:{item_code:"must-not-change"}},
+    body:{action:"save",id:menuSeed.rows[0].id,expectedRevision:String(menuSeed.rows[0].revision),values:{item_code:"must-not-change"}},
   });
   assert.equal(immutableMenuIdentity.response.status,409,JSON.stringify(immutableMenuIdentity.data));
   assert.equal(immutableMenuIdentity.data.error,"ADMIN_IMMUTABLE_FIELD");
