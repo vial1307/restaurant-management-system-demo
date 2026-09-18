@@ -65,6 +65,7 @@ assert.match(css, /@media\(max-width:640px\)/, "Admin Panel must include compact
 assert.match(superRoutes, /system\.super_admin/, "all Super Admin routes must enforce system.super_admin");
 assert.match(superRoutes, /\/api\/admin\/super\/development-status/, "engineering handoff metadata must be exposed only through Super Admin routes");
 assert.match(superRoutes, /DEVELOPMENT_STATUS/, "development status must come from a narrow server-side metadata contract");
+assert.match(superRoutes, /live_production/, "development status must expose live runtime release/schema separately from static handoff metadata");
 assert.match(superRoutes, /\/api\/admin\/super\/inventory-catalog-audit/, "cross-site catalog audit must be protected by Super Admin route");
 assert.match(superRoutes, /metadataVariants/, "catalog audit must report cross-site metadata variance");
 assert.match(superRoutes, /identityVariants/, "catalog audit must report cross-site identity drift");
