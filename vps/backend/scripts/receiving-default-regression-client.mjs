@@ -127,6 +127,19 @@ assert(
   "destination routing catalog leaked destination stock quantity",
 );
 
+const catalogAudit = await request("/api/admin/super/inventory-catalog-audit", { cookie: admin });
+assert.equal(catalogAudit.response.status, 200, `catalog audit failed: ${JSON.stringify(catalogAudit.data)}`);
+assert.equal(typeof catalogAudit.data?.summary?.activeItems, "number");
+assert.equal(typeof catalogAudit.data?.summary?.catalogKeys, "number");
+assert(Array.isArray(catalogAudit.data?.metadataVariants), "catalog audit metadata variants missing");
+assert(Array.isArray(catalogAudit.data?.multiLocationMissingReceiveDefault), "catalog audit receiving-default gaps missing");
+assert(Array.isArray(catalogAudit.data?.duplicatesWithinSite), "catalog audit duplicate rows missing");
+assert(Array.isArray(catalogAudit.data?.unconfiguredStorage), "catalog audit unconfigured-storage rows missing");
+
+const managerAuditDenied = await request("/api/admin/super/inventory-catalog-audit", { cookie: manager });
+assert.equal(managerAuditDenied.response.status, 403, "manager unexpectedly accessed system-level inventory catalog audit");
+assert.equal(managerAuditDenied.data?.error, "SUPER_ADMIN_REQUIRED");
+
 // Defense in depth: simulate stale/corrupt data that predates the API guard.
 // direct-transfer must reject it before creating an inventory_stock row.
 const db = new Client({
