@@ -132,6 +132,14 @@ assert.equal(catalogAudit.response.status, 200, `catalog audit failed: ${JSON.st
 assert.equal(typeof catalogAudit.data?.summary?.activeItems, "number");
 assert.equal(typeof catalogAudit.data?.summary?.catalogKeys, "number");
 assert(Array.isArray(catalogAudit.data?.metadataVariants), "catalog audit metadata variants missing");
+assert.equal(typeof catalogAudit.data?.summary?.identityVariants, "number");
+assert.equal(typeof catalogAudit.data?.summary?.operationalVariants, "number");
+assert(Array.isArray(catalogAudit.data?.identityVariants), "catalog audit identity variants missing");
+assert(Array.isArray(catalogAudit.data?.operationalVariants), "catalog audit operational variants missing");
+assert(
+  catalogAudit.data.duplicatesWithinSite.every((row) => !String(row.site || "").includes("${")),
+  "catalog duplicate grouping used an uninterpreted template key",
+);
 assert(Array.isArray(catalogAudit.data?.multiLocationMissingReceiveDefault), "catalog audit receiving-default gaps missing");
 assert(Array.isArray(catalogAudit.data?.duplicatesWithinSite), "catalog audit duplicate rows missing");
 assert(Array.isArray(catalogAudit.data?.unconfiguredStorage), "catalog audit unconfigured-storage rows missing");
