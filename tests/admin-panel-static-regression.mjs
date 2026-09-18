@@ -36,6 +36,9 @@ assert.match(js, /\/api\/admin\/super\/sites/, "multi-store management must be s
 assert.match(js, /\/api\/admin\/super\/menu-sync/, "menu synchronization must be server-backed");
 assert.match(js, /\/api\/admin\/super\/settings/, "system settings must be server-backed");
 assert.match(js, /\/api\/admin\/super\/audit/, "audit logs must be server-backed");
+assert.match(js, /await loadCore\(\);[\s\S]*if\(section==="data"\)await loadDataset\(\);[\s\S]*else if\(section==="logs"\)await loadAudit\(\);/, "every tab switch must refresh PostgreSQL-backed state and section-specific data");
+assert.doesNotMatch(js, /section==="data"&&!state\.data\.result|section==="logs"&&!state\.audit\.result/, "tab switching must not reuse stale cached section snapshots");
+assert.match(js, /sectionLoadSeq/, "tab refresh must guard against stale async responses overwriting a newer tab");
 assert.match(js, /data-export="excel"|data-export=\"excel\"/);
 assert.match(js, /data-export="pdf"|data-export=\"pdf\"/);
 assert.doesNotMatch(js, /localStorage\.setItem/, "standalone Admin Panel must not use browser storage as system data authority");
