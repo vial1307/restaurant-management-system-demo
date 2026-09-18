@@ -18,7 +18,7 @@ export const DEVELOPMENT_STATUS = Object.freeze({
   current_work:{
     branch:"fix/host-metrics-deploy-resilience-20260919",
     url:github("/tree/fix/host-metrics-deploy-resilience-20260919"),
-    pull_request:null,
+    pull_request:{ number:108,url:github("/pull/108") },
     baseline_main_sha:"d2acef474866460c75ce66b6f5675306481bb65b",
     baseline_main_url:github("/commit/d2acef474866460c75ce66b6f5675306481bb65b"),
     candidate_schema:"021",
