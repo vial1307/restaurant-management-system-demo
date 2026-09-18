@@ -109,6 +109,24 @@ assert.equal(routingRead.response.status, 200, "shipping role lost cross-site re
 assert(routingRead.data?.defaults?.some((row) => row.site === "fuxing" && row.catalog_key === "beef"));
 assert(routingRead.data?.defaults?.some((row) => row.site === "yongji" && row.catalog_key === "beef"));
 
+const unifiedRouting = await request("/api/inventory/destinations?source=central&sites=fuxing,yongji", { cookie: central });
+assert.equal(unifiedRouting.response.status, 200, `unified destination routing snapshot failed: ${JSON.stringify(unifiedRouting.data)}`);
+assert(Array.isArray(unifiedRouting.data?.locations), "destination routing locations missing");
+assert(Array.isArray(unifiedRouting.data?.catalog), "destination routing catalog missing");
+assert(Array.isArray(unifiedRouting.data?.receiveDefaults), "destination routing receive defaults missing");
+assert(
+  unifiedRouting.data.receiveDefaults.some((row) => row.site === "fuxing" && row.catalog_key === "beef" && row.location_code === "fuxing-four"),
+  "Fuxing receiving default missing from unified destination snapshot",
+);
+assert(
+  unifiedRouting.data.receiveDefaults.some((row) => row.site === "yongji" && row.catalog_key === "beef"),
+  "Yongji receiving default missing from unified destination snapshot",
+);
+assert(
+  unifiedRouting.data.catalog.every((item) => !Object.hasOwn(item, "quantity")),
+  "destination routing catalog leaked destination stock quantity",
+);
+
 // Defense in depth: simulate stale/corrupt data that predates the API guard.
 // direct-transfer must reject it before creating an inventory_stock row.
 const db = new Client({
