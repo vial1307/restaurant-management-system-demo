@@ -322,7 +322,7 @@ async function runAdminMobile(browser) {
       });
     });
 
-    for (const site of ["fuxing", "yongji", "central"]) {
+    for (const site of ["yongji", "central", "fuxing"]) {
       const switcher = page.locator(`[data-warehouse="${site}"]`).first();
       await switcher.waitFor({ state:"visible", timeout:10000 });
       const inventoryResponse = page.waitForResponse((response) => {
