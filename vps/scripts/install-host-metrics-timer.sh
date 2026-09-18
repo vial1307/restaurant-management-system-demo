@@ -45,5 +45,11 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now kitchen-os-host-metrics.timer
-systemctl start kitchen-os-host-metrics.service
+if ! systemctl start kitchen-os-host-metrics.service; then
+  echo "HOST_METRICS_SERVICE_START_FAILED"
+  systemctl status kitchen-os-host-metrics.service --no-pager -l || true
+  journalctl -u kitchen-os-host-metrics.service -n 80 --no-pager || true
+  exit 1
+fi
 systemctl is-active kitchen-os-host-metrics.timer >/dev/null
+test -s "${APP_DIR}/runtime/host-metrics.env"

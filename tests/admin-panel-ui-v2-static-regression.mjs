@@ -23,7 +23,7 @@ assert.match(shellJs, /data-ui-section/);
 assert.match(shellCss, /\.sa-dashboard-hero/);
 assert.match(shellCss, /@media\(max-width:640px\)/);
 
-for (const section of ["users", "content", "data", "stores", "settings", "logs"]) {
+for (const section of ["development", "users", "content", "data", "stores", "settings", "logs"]) {
   assert.match(sectionsJs, new RegExp(`${section}:\\s*\\{`), `${section} must have v2 section metadata`);
 }
 assert.match(sectionsJs, /MutationObserver/);
@@ -31,6 +31,8 @@ assert.match(sectionsJs, /\.sa-nav-item\.active/);
 assert.match(sectionsJs, /data-export/);
 assert.match(sectionsCss, /\.sa-section-hero-v2/);
 assert.match(sectionsCss, /\.sa-table-v2/);
+assert.match(sectionsCss, /\.sa-dev-link/);
+assert.match(shellJs, /\["development", "⌘"\]/);
 assert.match(sectionsCss, /@media\(max-width:720px\)/);
 
 for (const presentationJs of [shellJs, sectionsJs]) {

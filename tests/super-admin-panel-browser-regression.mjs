@@ -125,7 +125,7 @@ async function runSuperAdminProfile(profile) {
     await login(context, "yangchuadmin");
     await page.goto(`${BASE}/.admindev.html#overview`, { waitUntil:"domcontentloaded", timeout:30000 });
     await page.locator("#admin-app.sa-app").waitFor({ state:"visible", timeout:20000 });
-    assert.equal(await page.locator(".sa-nav-item").count(), 7, `${profile.name}: expected seven Super Admin sections`);
+    assert.equal(await page.locator(".sa-nav-item").count(), 8, `${profile.name}: expected eight Super Admin sections`);
     await page.locator("[data-system-metrics]").waitFor({ state:"visible", timeout:15000 });
     assert.match(await page.locator("[data-system-metrics]").textContent(), /Tài nguyên VPS|VPS 資源/);
     assert.match(await page.locator("[data-system-metrics]").textContent(), /Download rate/);
@@ -139,6 +139,13 @@ async function runSuperAdminProfile(profile) {
       await menu.click();
       await page.waitForFunction(() => !document.querySelector("#admin-app")?.classList.contains("nav-open"));
     }
+
+    await gotoSection(page, "development");
+    await page.locator(".sa-dev-summary").waitFor({ state:"visible", timeout:15000 });
+    assert.match(await page.locator(".sa-content").textContent(), /GitHub|Handoff|Current work|Công việc hiện tại/);
+    assert((await page.locator('.sa-dev-link[href*="github.com/vial1307/restaurant-management-system-demo"]').count()) >= 3, `${profile.name}: handoff GitHub links missing`);
+    assert.match(await page.locator(".sa-dev-stop").textContent(), /host metrics|host-metrics|Installing filtered host metrics/i);
+    await assertFit(page, `${profile.name} development handoff`);
 
     await gotoSection(page, "users");
     await page.locator("[data-user-new]").click();

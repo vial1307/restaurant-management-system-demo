@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
+import { DEVELOPMENT_STATUS } from "./development-status.mjs";
 
 const CODE_RE = /^[a-z][a-z0-9._-]{1,39}$/;
 const DATASETS = {
@@ -690,6 +691,18 @@ export async function registerSuperAdminRoutes(app) {
       schema:migration.rows[0] || null,
       latestBackup:backup.rows[0] || null,
       counts:counts.rows[0] || {},
+    };
+  });
+
+  app.get("/api/admin/super/development-status", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    const migration = await pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1");
+    return {
+      ...DEVELOPMENT_STATUS,
+      runtime:{
+        release:process.env.APP_RELEASE || "dev",
+        schema:migration.rows[0] || null,
+      },
     };
   });
 

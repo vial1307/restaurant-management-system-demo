@@ -65,6 +65,16 @@ try {
   assert.equal(overview.data.schema.version, "021");
   assert(Number(overview.data.api.uptime_seconds) >= 0);
 
+  const development = await request("/api/admin/super/development-status", { cookie:owner.cookie });
+  assert.equal(development.response.status, 200, JSON.stringify(development.data));
+  assert.equal(development.data.repository.name, "vial1307/restaurant-management-system-demo");
+  assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
+  assert.equal(development.data.current_work.candidate_schema, "021");
+  assert.equal(development.data.runtime.schema.version, "021");
+  assert.equal(development.data.verified_production.schema, "020");
+  assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
+  assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
+
   const metrics = await request("/api/admin/super/system-metrics", { cookie:owner.cookie });
   assert.equal(metrics.response.status, 200, JSON.stringify(metrics.data));
   assert.equal(metrics.data.host.available, true);
@@ -98,6 +108,9 @@ try {
   const ordinaryMetricsDenied = await request("/api/admin/super/system-metrics", { cookie:ordinary.cookie });
   assert.equal(ordinaryMetricsDenied.response.status, 403);
   assert.equal(ordinaryMetricsDenied.data.error, "SUPER_ADMIN_REQUIRED");
+  const ordinaryDevelopmentDenied = await request("/api/admin/super/development-status", { cookie:ordinary.cookie });
+  assert.equal(ordinaryDevelopmentDenied.response.status, 403);
+  assert.equal(ordinaryDevelopmentDenied.data.error, "SUPER_ADMIN_REQUIRED");
   const ordinaryModel = await request("/api/admin/access-model", { cookie:ordinary.cookie });
   assert.equal(ordinaryModel.response.status, 200);
   assert.equal(ordinaryModel.data.roles.some((role) => role.code === "superadmin"), false, "ordinary admin must not see promotable Super Admin role");

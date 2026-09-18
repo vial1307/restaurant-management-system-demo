@@ -124,3 +124,36 @@ This file is the canonical continuation log for implementation, CI, merge and de
 - CI/PR, merge, production deploy and production capacity capture are the next actions in this same workstream.
 
 - CI exposed that using serialized `updated_at` as an optimistic-lock token can lose PostgreSQL sub-millisecond precision in JavaScript. The timestamp approach was replaced by migration `021_admin_row_revisions.sql`, which gives each generic admin row a DB-owned integer revision incremented by trigger.
+
+
+## 2026-09-19 — Super Admin GitHub handoff + deploy recovery
+
+### Production state discovered
+
+- PR #107 merged to main as `d2acef474866460c75ce66b6f5675306481bb65b`.
+- Main schema candidate is 021.
+- Production deploy workflow `35372160924` passed all regression gates.
+- Deploy then failed while installing the filtered host-metrics snapshot.
+- `kitchen-os-host-metrics.service` exited 1 before backup/migration/restart.
+- Last verified production therefore remains `d15ae2087d293111b989b5e5efe7d56ac3bebb84`, schema 020.
+
+### Current continuation
+
+- Created branch `fix/host-metrics-deploy-resilience-20260919`.
+- Opened draft PR #108: `https://github.com/vial1307/restaurant-management-system-demo/pull/108`.
+- Exact recovery focus is the host metrics collector/timer/deploy path.
+
+### Super Admin engineering handoff UI
+
+Added a dedicated `GitHub & Handoff · 開發交接` section that exposes only safe development metadata through `GET /api/admin/super/development-status`.
+
+The UI now shows:
+
+- current branch and PR;
+- main baseline and failed workflow;
+- runtime release/schema vs verified production release/schema;
+- exact stopping point and files to resume;
+- ordered next steps;
+- direct links to CURRENT_HANDOFF / WORK_LOG / STATUS / DEVELOPMENT_RULES.
+
+Regression coverage was extended for static contracts, authorization and cross-device browser rendering.

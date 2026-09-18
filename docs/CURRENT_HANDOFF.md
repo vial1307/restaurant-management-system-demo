@@ -243,3 +243,26 @@ Key new invariants on the candidate branch:
 - monthly provider bandwidth quota is not guessed from host counters.
 
 See `docs/STATUS.md` for the active short workboard. Do not mark this candidate as production until CI, deployment release verification and production smoke are green.
+
+
+## 2026-09-19 — PR #108 current continuation
+
+Main now contains merge commit `d2acef474866460c75ce66b6f5675306481bb65b` from PR #107, including schema 021 and secure Admin/Data/VPS metrics work. This commit is **not yet verified production**.
+
+Production deploy workflow run `35372160924` passed preflight and full regression, then stopped during the new host-metrics install step:
+
+- stopping point: `Installing filtered host metrics snapshot`;
+- `kitchen-os-host-metrics.service` exited 1;
+- failure happened before backup, migration, container restart and release verification;
+- therefore the last verified production remains `d15ae2087d293111b989b5e5efe7d56ac3bebb84`, schema 020.
+
+Current continuation:
+
+- branch: `fix/host-metrics-deploy-resilience-20260919`;
+- draft PR: #108;
+- current work link: `https://github.com/vial1307/restaurant-management-system-demo/pull/108`;
+- immediate code focus: `vps/scripts/collect-host-metrics.sh`, `vps/scripts/install-host-metrics-timer.sh`, `vps/scripts/deploy.sh`.
+
+PR #108 also adds a Super Admin **GitHub & Handoff** section backed by a Super Admin-only API. It shows the current PR/branch, verified production vs candidate state, failed workflow, exact stopping point, code-focus files, handoff docs and ordered next steps. The endpoint must remain metadata-only and must never expose credentials, environment dumps, SSH keys, private keys or direct host/database access.
+
+Next developer must read this file, `docs/STATUS.md`, `docs/WORK_LOG.md` and `docs/DEVELOPMENT_RULES.md` before changing production code.

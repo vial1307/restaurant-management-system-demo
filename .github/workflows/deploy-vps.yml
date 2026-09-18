@@ -93,6 +93,17 @@ jobs:
       - name: Validate VPS shell scripts
         run: bash -n vps/scripts/*.sh
 
+      - name: Execute host metrics collector smoke
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          mkdir -p "$tmp_dir/backups"
+          APP_DIR="$tmp_dir" bash vps/scripts/collect-host-metrics.sh
+          test -s "$tmp_dir/runtime/host-metrics.env"
+          grep -q "FORMAT_VERSION=1" "$tmp_dir/runtime/host-metrics.env"
+          grep -q "DISK_ROOT_TOTAL_BYTES=" "$tmp_dir/runtime/host-metrics.env"
+          grep -q "INODE_TOTAL=" "$tmp_dir/runtime/host-metrics.env"
+
       - name: Validate Caddy configuration
         run: |
           docker run --rm -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
