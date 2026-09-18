@@ -161,6 +161,7 @@ await db.connect();
 let badLocationId = "";
 let validReceiveLocationId = "";
 let managerUserId = "";
+const identityCatalogKey = "identity-resolution-regression";
 try {
   const source = await db.query(
     `select i.id as item_id,l.id as location_id
@@ -178,6 +179,57 @@ try {
   assert.equal(validLocation.rowCount, 1, "missing valid Fuxing receiving location fixture");
   managerUserId = managerRow.rows[0].id;
   validReceiveLocationId = validLocation.rows[0].id;
+
+  await db.query("delete from public.inventory_items where catalog_key=$1", [identityCatalogKey]);
+  await db.query(
+    `insert into public.inventory_items(
+       item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
+     ) values
+       ('fuxing:identity-resolution-regression',$1,'測試甲','Tên A','包','meat',true,true),
+       ('yongji:identity-resolution-regression',$1,'測試乙','Tên B','盒','soup',false,true)`,
+    [identityCatalogKey]
+  );
+
+  const managerIdentityDenied = await request("/api/admin/super/inventory-catalog-identity", {
+    method:"POST",
+    cookie:manager,
+    body:{ catalogKey:identityCatalogKey,nameVi:"Tên chuẩn",nameZhTw:"標準名稱" },
+  });
+  assert.equal(managerIdentityDenied.response.status,403,"manager unexpectedly resolved system-level catalog identity");
+  assert.equal(managerIdentityDenied.data?.error,"SUPER_ADMIN_REQUIRED");
+
+  const resolvedIdentity = await request("/api/admin/super/inventory-catalog-identity", {
+    method:"POST",
+    cookie:admin,
+    body:{ catalogKey:identityCatalogKey,nameVi:"Tên chuẩn",nameZhTw:"標準名稱" },
+  });
+  assert.equal(resolvedIdentity.response.status,200,`identity resolution failed: ${JSON.stringify(resolvedIdentity.data)}`);
+  assert.equal(resolvedIdentity.data?.matched,2);
+  assert.equal(resolvedIdentity.data?.changed?.length,2);
+
+  const resolvedRows = await db.query(
+    `select split_part(item_key,':',1) as site,name_vi,name_zh_tw,unit,work_area,storage_only
+     from public.inventory_items
+     where catalog_key=$1
+     order by site`,
+    [identityCatalogKey]
+  );
+  assert.deepEqual(
+    resolvedRows.rows,
+    [
+      { site:"fuxing",name_vi:"Tên chuẩn",name_zh_tw:"標準名稱",unit:"包",work_area:"meat",storage_only:true },
+      { site:"yongji",name_vi:"Tên chuẩn",name_zh_tw:"標準名稱",unit:"盒",work_area:"soup",storage_only:false },
+    ],
+    "identity resolution changed operational catalog metadata",
+  );
+  const identityAudit = await db.query(
+    `select count(*)::int as count
+     from public.audit_logs
+     where action='super_admin_inventory_identity_resolve'
+       and metadata->>'catalogKey'=$1`,
+    [identityCatalogKey]
+  );
+  assert.equal(identityAudit.rows[0]?.count,2,"identity resolution must audit every changed item");
 
   const badLocation = await db.query(
     `insert into public.inventory_locations(code,name_zh_tw,name_vi,site,kind,sort_order,active)
@@ -224,6 +276,10 @@ try {
   );
   assert.equal(leakedStock.rowCount, 0, "direct-transfer created stock at an unconfigured receiving location");
 } finally {
+  try {
+    await db.query("delete from public.audit_logs where action='super_admin_inventory_identity_resolve' and metadata->>'catalogKey'=$1", [identityCatalogKey]);
+    await db.query("delete from public.inventory_items where catalog_key=$1", [identityCatalogKey]);
+  } catch {}
   if (badLocationId) {
     await db.query("delete from public.inventory_stock where location_id=$1", [badLocationId]);
   }
