@@ -16,7 +16,7 @@ import {
   getCloudInventoryHistory,
   inventoryCloudState,
   isCurrentBranchInventoryDate,
-  setActiveInventorySite,
+  switchActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
 import { searchMatches } from "./search-utils.js";
@@ -542,6 +542,38 @@ function addLogout(user) {
 function branchSwitcher(user, active = activeInventorySite() || "fuxing") {
   if (user.location !== "all" && user.role !== "admin") return "";
   return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="yongji" class="${active === "yongji" ? "active" : ""}">永吉店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
+}
+
+let warehouseSwitchToken = 0;
+async function switchWarehouse(button, { centralContent = null } = {}) {
+  const site = String(button?.dataset?.warehouse || "");
+  if (!site) return false;
+  const token = ++warehouseSwitchToken;
+  const buttons = [...document.querySelectorAll("[data-warehouse]")];
+  buttons.forEach((entry) => {
+    entry.disabled = true;
+    entry.setAttribute("aria-busy","true");
+  });
+  button.dataset.switching = "true";
+  try {
+    const ok = await switchActiveInventorySite(site);
+    if (token !== warehouseSwitchToken) return false;
+    if (!ok) {
+      window.alert("Không thể tải dữ liệu cơ sở mới từ PostgreSQL. Hệ thống đã giữ lại cơ sở hiện tại. · 無法從 PostgreSQL 載入新據點資料，系統已保留原據點。");
+      return false;
+    }
+    if (centralContent) centralContent.dataset.centralView = "off";
+    if (location.hash !== "#inventory") location.hash = "#inventory";
+    return true;
+  } finally {
+    if (token === warehouseSwitchToken) {
+      document.querySelectorAll("[data-warehouse]").forEach((entry) => {
+        entry.disabled = false;
+        entry.removeAttribute("aria-busy");
+        delete entry.dataset.switching;
+      });
+    }
+  }
 }
 
 function centralPage(user) {
@@ -1118,10 +1150,7 @@ function bindCentral(user) {
     alert("盤點調整失敗，請重新整理後再試。");
   });
   content.querySelectorAll("[data-warehouse]").forEach(b => b.onclick = () => {
-    const site=b.dataset.warehouse;
-    if (!setActiveInventorySite(site)) return;
-    content.dataset.centralView = "off";
-    location.hash = "#inventory";
+    void switchWarehouse(b, { centralContent:content });
   });
 }
 
@@ -1180,9 +1209,7 @@ function applyAccess() {
       if (heading && !heading.querySelector(".warehouse-switch")) {
         heading.insertAdjacentHTML("beforeend", branchSwitcher(user,selectedSite));
         heading.querySelectorAll("[data-warehouse]").forEach((button)=>button.addEventListener("click",()=>{
-          const site=button.dataset.warehouse;
-          if(!setActiveInventorySite(site)) return;
-          location.hash="#inventory";
+          void switchWarehouse(button);
         }));
       }
     }
