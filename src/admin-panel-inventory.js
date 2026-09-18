@@ -121,7 +121,16 @@ function auditIssueList(rows = [], kind = "") {
       detail = `${siteLabel(row.site)} · ${row.catalogKey} · ${(row.storageLocations || []).map((location)=>location.name_zh_tw || location.code).join(" / ")}`;
     } else if (kind === "identity") {
       const v = row.variants || {};
-      detail = `${row.catalogKey} · VI: ${(v.name_vi || []).join(" / ") || "—"} · 中文: ${(v.name_zh_tw || []).join(" / ") || "—"}`;
+      const viOptions = (v.name_vi || []).length > 1
+        ? `<label><span>VI canonical</span><select data-identity-vi>${v.name_vi.map((value)=>`<option value="${esc(value)}">${esc(value)}</option>`).join("")}</select></label>`
+        : "";
+      const zhOptions = (v.name_zh_tw || []).length > 1
+        ? `<label><span>中文 canonical</span><select data-identity-zh>${v.name_zh_tw.map((value)=>`<option value="${esc(value)}">${esc(value)}</option>`).join("")}</select></label>`
+        : "";
+      return `<div class="sa-list-row sa-identity-row" data-identity-row="${esc(row.catalogKey)}">
+        <div><strong>${esc(row.catalogKey)}</strong><small>VI: ${esc((v.name_vi || []).join(" / ") || "—")} · 中文: ${esc((v.name_zh_tw || []).join(" / ") || "—")}</small></div>
+        <div class="sa-row-actions sa-identity-actions">${viOptions}${zhOptions}<button class="sa-btn small primary" type="button" data-identity-resolve>Resolve · 統一</button></div>
+      </div>`;
     } else if (kind === "operational") {
       const v = row.variants || {};
       detail = `${row.catalogKey} · unit: ${(v.unit || []).join(" / ") || "—"} · work: ${(v.work_area || []).join(" / ") || "—"} · storage_only: ${(v.storage_only || []).join(" / ") || "—"}`;
@@ -235,6 +244,36 @@ function bindPanel(host) {
     if(body) body.innerHTML=`<div class="sa-empty">Đang tải audit…</div>`;
     try { catalogAudit=await loadCatalogAudit(); renderCatalogAudit(host); }
     catch(cause){ if(body) body.innerHTML=`<div class="sa-alert error">${esc(cause?.payload?.error || cause?.code || cause?.message || "INVENTORY_CATALOG_AUDIT_FAILED")}</div>`; }
+  });
+  host.querySelector("[data-inventory-catalog-audit]")?.addEventListener("click",async(event)=>{
+    const button=event.target.closest("[data-identity-resolve]");
+    if(!button) return;
+    const row=button.closest("[data-identity-row]");
+    const catalogKey=row?.dataset?.identityRow || "";
+    if(!catalogKey) return;
+    const vi=row.querySelector("[data-identity-vi]");
+    const zh=row.querySelector("[data-identity-zh]");
+    const body={ catalogKey };
+    if(vi) body.nameVi=vi.value;
+    if(zh) body.nameZhTw=zh.value;
+    button.disabled=true;
+    const original=button.textContent;
+    button.textContent="Đang đồng bộ…";
+    try {
+      await apiRequest("/api/admin/super/inventory-catalog-identity",{ method:"POST",body });
+      catalogAudit=await loadCatalogAudit();
+      renderCatalogAudit(host);
+    } catch(cause) {
+      button.disabled=false;
+      button.textContent=original;
+      const auditBody=host.querySelector("[data-catalog-audit-body]");
+      if(auditBody) {
+        const notice=document.createElement("div");
+        notice.className="sa-alert error";
+        notice.textContent=cause?.payload?.error || cause?.code || cause?.message || "INVENTORY_IDENTITY_RESOLVE_FAILED";
+        auditBody.prepend(notice);
+      }
+    }
   });
   form.addEventListener("submit",async(event)=>{
     event.preventDefault();
