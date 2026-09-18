@@ -312,13 +312,35 @@ async function runAdminMobile(browser) {
 
     await gotoInventory(page);
     await assertPermissionNavigation(page, session, label);
+    await page.evaluate(() => {
+      window.__siteHydrationEvents = [];
+      window.addEventListener("shitu:active-site-changed", (event) => {
+        window.__siteHydrationEvents.push({
+          site:String(event.detail?.site || ""),
+          hydrated:Boolean(event.detail?.hydrated),
+        });
+      });
+    });
 
     for (const site of ["fuxing", "yongji", "central"]) {
       const switcher = page.locator(`[data-warehouse="${site}"]`).first();
       await switcher.waitFor({ state:"visible", timeout:10000 });
+      const inventoryResponse = page.waitForResponse((response) => {
+        try {
+          const url = new URL(response.url());
+          return url.pathname === `/api/inventory/${site}` && response.status() === 200;
+        } catch {
+          return false;
+        }
+      }, { timeout:15000 });
       await switcher.click();
+      await inventoryResponse;
       await page.waitForFunction((target) => localStorage.getItem("shitu-admin-active-site-v1") === target, site, { timeout:10000 });
-      await page.waitForTimeout(150);
+      await page.waitForFunction((target) => (
+        Array.isArray(window.__siteHydrationEvents)
+        && window.__siteHydrationEvents.some((entry) => entry.site === target && entry.hydrated === true)
+      ), site, { timeout:10000 });
+      await page.locator(`[data-warehouse="${site}"].active`).first().waitFor({ state:"visible", timeout:10000 });
       assert.equal(await page.locator(".access-empty-state").count(), 0, `${label}: admin blocked from ${site}`);
       if (site === "central") {
         await page.locator('input[data-central-search]').first().waitFor({ state:"visible", timeout:10000 });
