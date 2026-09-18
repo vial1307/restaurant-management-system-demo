@@ -53,6 +53,8 @@ assert.match(inventoryJs, /identityVariants/, "catalog audit UI must separate id
 assert.match(inventoryJs, /operationalVariants/, "catalog audit UI must separate operational variance");
 assert.match(inventoryJs, /\/api\/admin\/super\/inventory-catalog-identity/, "Super Admin UI must use audited catalog identity resolver API");
 assert.match(inventoryJs, /data-identity-resolve/, "catalog identity drift rows must expose an explicit resolve action");
+assert.match(inventoryJs, /host\.isConnected/, "inventory extension must detect host replacement during live tab refresh");
+assert.match(inventoryJs, /queueMicrotask\(\(\) => \{ void mount\(\); \}\)/, "inventory extension must remount after a live tab refresh replaces its host");
 assert.doesNotMatch(inventoryJs, /set-quantity|update public\.inventory_stock/, "Super Admin UI must not bypass inventory transaction invariants");
 
 assert.match(css, /@media\(max-width:960px\)/, "Admin Panel must include tablet/mobile navigation layout");
