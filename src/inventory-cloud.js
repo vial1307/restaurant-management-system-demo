@@ -208,9 +208,53 @@ export function setActiveInventorySite(site) {
   if (s?.location !== "all" || !isKnownInventorySite(site)) return false;
   localStorage.setItem(ACTIVE_SITE_KEY, site);
   window.dispatchEvent(new CustomEvent("shitu:active-site-changed", { detail:{ site } }));
-  // A warehouse switch can keep the same #inventory route, so hashchange will
-  // not necessarily fire. Start the new site's sync explicitly.
+  // Legacy low-level setter: preserve the historical immediate-notify contract
+  // for non-UI callers. Interactive warehouse switching uses
+  // switchActiveInventorySite() below so data is hydrated before render.
   setTimeout(() => { void syncInventoryNow(site, { reloadBranch: false }); }, 0);
+  return true;
+}
+
+export async function switchActiveInventorySite(site) {
+  const s = session();
+  if (s?.location !== "all" || !isKnownInventorySite(site)) return false;
+
+  const previousSite = activeInventorySite();
+  const targetSite = String(site || "");
+  if (!targetSite) return false;
+
+  localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
+  window.dispatchEvent(new CustomEvent("shitu:active-site-changing", {
+    detail:{ site:targetSite, previousSite },
+  }));
+
+  let syncStatus = "";
+  let syncError = "";
+  const onStatus = (event) => {
+    if (String(event.detail?.site || "") !== targetSite) return;
+    syncStatus = String(event.detail?.status || "");
+    syncError = String(event.detail?.error || "");
+  };
+  window.addEventListener("shitu:inventory-cloud-status", onStatus);
+  try {
+    await syncInventoryNow(targetSite, { reloadBranch:false });
+  } finally {
+    window.removeEventListener("shitu:inventory-cloud-status", onStatus);
+  }
+
+  const hydrated = syncStatus === "synced";
+  if (!hydrated) {
+    if (previousSite && isKnownInventorySite(previousSite)) localStorage.setItem(ACTIVE_SITE_KEY, previousSite);
+    else localStorage.removeItem(ACTIVE_SITE_KEY);
+    window.dispatchEvent(new CustomEvent("shitu:active-site-change-failed", {
+      detail:{ site:targetSite, previousSite, status:syncStatus || "unknown", error:syncError },
+    }));
+    return false;
+  }
+
+  window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
+    detail:{ site:targetSite, previousSite, hydrated:true },
+  }));
   return true;
 }
 
