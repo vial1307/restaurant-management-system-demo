@@ -139,6 +139,7 @@ function pageArgs(query) {
 function normalizeValue(column, value) {
   if (value === "" && ["site_code","menu_item_id","work_area","category","entity_type","entity_id","starts_at","ends_at","price"].includes(column)) return null;
   if (column === "metadata") return object(value);
+  if (column === "currency_code") return text(value).toUpperCase();
   if (["active","storage_only"].includes(column)) return value !== false && value !== "false";
   return value;
 }
@@ -181,6 +182,15 @@ function validateDatasetValues(name, config, raw, { isCreate = false, current = 
       if (Object.prototype.hasOwnProperty.call(raw,column) && !sameValue(normalizeValue(column,raw[column]),current[column])) {
         throw Object.assign(new Error("ADMIN_IMMUTABLE_FIELD"), { statusCode:409, field:column });
       }
+    }
+  }
+  if (name === "media" && Object.prototype.hasOwnProperty.call(raw,"asset_url")) {
+    const assetUrl = text(raw.asset_url);
+    try {
+      const parsed = new URL(assetUrl,"https://kitchen.invalid/");
+      if (!["http:","https:"].includes(parsed.protocol)) throw new Error("protocol");
+    } catch {
+      throw Object.assign(new Error("ADMIN_INVALID_MEDIA_URL"), { statusCode:400, field:"asset_url" });
     }
   }
   if (name === "menu-items" && Object.prototype.hasOwnProperty.call(raw,"currency_code") && !/^[A-Z]{3}$/.test(String(raw.currency_code || "").toUpperCase())) {
