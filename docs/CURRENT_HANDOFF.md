@@ -223,3 +223,23 @@ When resuming work:
 4. Re-test the user-facing storage relocation flow and cross-site switching if any inventory code changes after this handoff.
 5. Start P1 database redesign from this verified green baseline.
 6. Update this file and `docs/WORK_LOG.md` at the end of the next substantial work session.
+
+
+## 2026-09-18 continuation — secure admin writes and VPS telemetry
+
+The inventory synchronization/relocation baseline above remains authoritative and must not be rewritten.
+
+A continuation branch `fix/secure-admin-data-vps-metrics-20260918` was created from main `d84484a15bd835e7890921267ba59984ca37967a`. This branch hardens the existing Super Admin database surface instead of creating a parallel database authority, and adds filtered VPS metrics without exposing host/Docker/PostgreSQL internals directly to the browser.
+
+Key new invariants on the candidate branch:
+
+- generic admin datasets remain static backend allowlists, never arbitrary SQL/table access;
+- unknown fields fail closed;
+- durable identity columns are immutable after creation;
+- update/archive must carry the currently loaded `updated_at` token and stale writes return conflict;
+- inventory with non-zero relational stock cannot be archived through generic CRUD;
+- host metrics are collected outside the app container into a filtered file mounted read-only;
+- `/api/admin/super/system-metrics` requires `system.super_admin`;
+- monthly provider bandwidth quota is not guessed from host counters.
+
+See `docs/STATUS.md` for the active short workboard. Do not mark this candidate as production until CI, deployment release verification and production smoke are green.
