@@ -19,11 +19,11 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 ## 2. Last verified production release
 
-The last fully verified production deployment before this handoff document was created:
+The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #690
-- Run ID: `35335869313`
-- Tested/deployed commit: `483833a95f95822fa32e275579b3890f34c27598`
+- Workflow: Deploy Kitchen OS to VPS #691
+- Run ID: `35335888439`
+- Tested/deployed commit: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -32,7 +32,7 @@ The last fully verified production deployment before this handoff document was c
 - SSH deploy: PASS
 - Production UI smoke: PASS
 
-Workflow #691 for commit `d15ae2087d293111b989b5e5efe7d56ac3bebb84` was still running when this file was created. Commit `d15ae208...` only adds an additional static regression guard for forced VPS hydration; the runtime fix itself was already included and deployed in #690.
+This production release includes the forced fresh VPS snapshot on site switching and the database-backed storage relocation flow.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
@@ -219,7 +219,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD.
 2. Check the newest `Deploy Kitchen OS to VPS` run.
-3. Confirm whether #691 completed and what SHA is actually live.
-4. Re-test the user-facing storage relocation flow and cross-site switching if any inventory code changed after this handoff.
-5. Start P1 database redesign only after the current inventory workflow is green.
+3. Production is verified at #691 / `d15ae2087d293111b989b5e5efe7d56ac3bebb84`; re-confirm only if a newer production-impacting commit exists.
+4. Re-test the user-facing storage relocation flow and cross-site switching if any inventory code changes after this handoff.
+5. Start P1 database redesign from this verified green baseline.
 6. Update this file and `docs/WORK_LOG.md` at the end of the next substantial work session.
