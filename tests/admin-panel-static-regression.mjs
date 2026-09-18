@@ -46,6 +46,8 @@ assert.match(inventoryJs, /\/api\/inventory\/direct-transfer/, "cross-store stoc
 assert.match(inventoryJs, /receiveDefaults/, "destination branch receiving-location policy must be respected in Admin Panel");
 assert.match(inventoryJs, /\/api\/admin\/super\/inventory-catalog-audit/, "Super Admin inventory panel must expose PostgreSQL-backed cross-site catalog audit");
 assert.match(inventoryJs, /multiLocationMissingReceiveDefault/, "catalog audit UI must surface missing receiving-default policy");
+assert.match(inventoryJs, /identityVariants/, "catalog audit UI must separate identity drift");
+assert.match(inventoryJs, /operationalVariants/, "catalog audit UI must separate operational variance");
 assert.doesNotMatch(inventoryJs, /set-quantity|update public\.inventory_stock/, "Super Admin UI must not bypass inventory transaction invariants");
 
 assert.match(css, /@media\(max-width:960px\)/, "Admin Panel must include tablet/mobile navigation layout");
@@ -54,6 +56,8 @@ assert.match(css, /@media\(max-width:640px\)/, "Admin Panel must include compact
 assert.match(superRoutes, /system\.super_admin/, "all Super Admin routes must enforce system.super_admin");
 assert.match(superRoutes, /\/api\/admin\/super\/inventory-catalog-audit/, "cross-site catalog audit must be protected by Super Admin route");
 assert.match(superRoutes, /metadataVariants/, "catalog audit must report cross-site metadata variance");
+assert.match(superRoutes, /identityVariants/, "catalog audit must report cross-site identity drift");
+assert.match(superRoutes, /operationalVariants/, "catalog audit must report cross-site operational variance");
 assert.match(superRoutes, /multiLocationMissingReceiveDefault/, "catalog audit must report receiving-default gaps");
 assert.match(superRoutes, /const DATASETS = \{/, "generic CRUD must use an explicit server-side whitelist");
 assert.match(superRoutes, /announcements:/);
