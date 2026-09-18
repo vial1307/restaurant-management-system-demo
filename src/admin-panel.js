@@ -1,7 +1,7 @@
 import { apiRequest, vpsListUsers, vpsMe } from "./vps-api.js";
 
 const root = document.querySelector("#admin-app");
-const SECTIONS = ["overview","users","content","data","stores","settings","logs"];
+const SECTIONS = ["overview","development","users","content","data","stores","settings","logs"];
 const DATASET_META = {
   announcements:{ label:"Thông báo · 公告", archive:"Lưu trữ · 封存", fields:[
     ["site_code","Chi nhánh · 據點","site"],["title_vi","Tiêu đề VI","text"],["title_zh_tw","中文標題","text"],
@@ -29,7 +29,7 @@ const DATASET_META = {
   ]},
 };
 const LABELS = {
-  overview:"Tổng quan VPS · VPS 總覽",users:"Quản lý người dùng · 使用者管理",content:"Nội dung & duyệt · 內容審核",
+  overview:"Tổng quan VPS · VPS 總覽",development:"GitHub & Handoff · 開發交接",users:"Quản lý người dùng · 使用者管理",content:"Nội dung & duyệt · 內容審核",
   data:"Data Tables & CRUD · 資料管理",stores:"Chuỗi & chi nhánh · 多店管理",settings:"Settings · 系統設定",logs:"Logs & Reports · 日誌報表",
 };
 
@@ -37,7 +37,7 @@ let sectionLoadSeq = 0;
 
 const state = {
   me:null, loading:true, error:"", success:"", section:"overview",
-  overview:null, systemMetrics:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
+  overview:null, systemMetrics:null, developmentStatus:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
   data:{ name:"announcements",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
   audit:{ q:"",site:"",action:"",actor:"",page:1,pageSize:25,result:null,loading:false },
 };
@@ -102,11 +102,11 @@ async function loadAudit() {
   catch(error){state.error=errorText(error);} state.audit.loading=false; render();
 }
 async function loadCore() {
-  const [overview,systemMetrics,users,accessModel,sites,settings,content]=await Promise.all([
-    api("/api/admin/super/overview"),api("/api/admin/super/system-metrics"),vpsListUsers(),api("/api/admin/access-model"),
+  const [overview,systemMetrics,developmentStatus,users,accessModel,sites,settings,content]=await Promise.all([
+    api("/api/admin/super/overview"),api("/api/admin/super/system-metrics"),api("/api/admin/super/development-status").catch(()=>null),vpsListUsers(),api("/api/admin/access-model"),
     api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),
   ]);
-  state.overview=overview; state.systemMetrics=systemMetrics||null; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
+  state.overview=overview; state.systemMetrics=systemMetrics||null; state.developmentStatus=developmentStatus||null; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
   state.sites=sites?.sites||[]; state.settings=settings?.settings||[]; state.content=content||null;
 }
 async function refreshCurrent() {
@@ -179,6 +179,62 @@ function renderOverview() {
   </article>`;
 }
 
+function devLink(url,label,note="") {
+  const href=safeHref(url);
+  return `<a class="sa-dev-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer"><strong>${esc(label)}</strong>${note?`<small>${esc(note)}</small>`:""}<span>↗</span></a>`;
+}
+
+function renderDevelopment() {
+  const d=state.developmentStatus;
+  if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
+  const work=d.current_work||{}; const failure=work.last_failure||{}; const prod=d.verified_production||{}; const runtime=d.runtime||{}; const repo=d.repository||{};
+  const pr=work.pull_request;
+  const status=String(d.status||"unknown").toLowerCase();
+  return `<section class="sa-two-col sa-dev-summary">
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Công việc hiện tại · Current work</h2><p>${esc(d.headline||"")}</p></div><span class="sa-pill ${status==="blocked"?"off":"ok"}">${esc(String(d.status||"UNKNOWN").toUpperCase())}</span></div>
+      <div class="sa-kv-grid">
+        <div><small>Phase</small><strong>${esc(d.phase||"—")}</strong></div>
+        <div><small>Updated</small><strong>${esc(d.updated_at||"—")}</strong></div>
+        <div><small>Branch</small><strong class="mono">${esc(work.branch||"—")}</strong></div>
+        <div><small>Candidate schema</small><strong>${esc(work.candidate_schema||"—")}</strong></div>
+      </div>
+      <div class="sa-dev-link-grid">
+        ${devLink(work.url,"Mở branch đang làm","Code hiện tại / current work")}
+        ${pr?.url?devLink(pr.url,`PR #${pr.number||""}`,"Pull request hiện tại"):""}
+        ${devLink(work.baseline_main_url,"Main baseline",String(work.baseline_main_sha||"").slice(0,12))}
+        ${devLink(failure.url,"Workflow lỗi gần nhất",failure.run_id?`run ${failure.run_id}`:"")}
+      </div>
+    </article>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Production vs candidate</h2><p>Không đồng nhất “main đã merge” với “production đã deploy”.</p></div></div>
+      <div class="sa-kv-grid">
+        <div><small>Runtime release</small><strong class="mono">${esc(runtime.release||"—")}</strong></div>
+        <div><small>Runtime schema</small><strong>${esc(runtime.schema?.version||"—")}</strong></div>
+        <div><small>Verified production</small><strong class="mono">${esc(String(prod.sha||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Verified schema</small><strong>${esc(prod.schema||"—")}</strong></div>
+      </div>
+      <div class="sa-dev-link-grid">
+        ${devLink(prod.url,"Verified production workflow",prod.workflow_run_id?`run ${prod.workflow_run_id}`:"")}
+        ${devLink(repo.actions_url,"GitHub Actions","CI / deploy / audit")}
+        ${devLink(repo.url,"Repository","Source of truth")}
+      </div>
+      <p class="sa-dev-note">${esc(prod.note||"")}</p>
+    </article>
+  </section>
+  <section class="sa-two-col">
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Code dừng ở đâu · Exact stopping point</h2><p>Dùng phần này để dev tiếp theo biết chính xác phải mở file nào và tiếp tục từ bước nào.</p></div></div>
+      <div class="sa-dev-stop"><strong>${esc(work.stopping_point||"—")}</strong><p>${esc(failure.reason||"")}</p></div>
+      <div class="sa-code-list">${(work.code_focus||[]).map((path)=>`<code>${esc(path)}</code>`).join("")||"<span>—</span>"}</div>
+    </article>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Việc tiếp theo · Next steps</h2><p>Thứ tự ưu tiên để không bỏ qua release gate.</p></div></div>
+      <ol class="sa-dev-steps">${(d.next_steps||[]).map((step)=>`<li>${esc(step)}</li>`).join("")}</ol>
+    </article>
+  </section>
+  <article class="sa-card"><div class="sa-card-head"><div><h2>Tài liệu bàn giao · Handoff docs</h2><p>Dev mới phải đọc handoff/rules trước khi sửa code production.</p></div></div>
+    <div class="sa-dev-docs">${(d.documents||[]).map((doc)=>devLink(doc.url,doc.label,doc.purpose)).join("")}</div>
+    <p class="sa-dev-note">${esc(d.security_note||"")}</p>
+  </article>`;
+}
+
 function renderUsers() {
   return `<article class="sa-card"><div class="sa-card-head"><div><h2>Users & RBAC</h2><p>Role + quyền override theo từng user, đọc/ghi trực tiếp PostgreSQL.</p></div><button class="sa-btn primary" type="button" data-user-new>＋ Thêm user</button></div>
   <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>User</th><th>Vai trò</th><th>Chi nhánh</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
@@ -245,7 +301,7 @@ function renderLogs() {
 }
 
 function sectionHtml() {
-  if(state.section==="overview")return renderOverview(); if(state.section==="users")return renderUsers(); if(state.section==="content")return renderContent();
+  if(state.section==="overview")return renderOverview(); if(state.section==="development")return renderDevelopment(); if(state.section==="users")return renderUsers(); if(state.section==="content")return renderContent();
   if(state.section==="data")return renderData(); if(state.section==="stores")return renderStores(); if(state.section==="settings")return renderSettings(); return renderLogs();
 }
 function render() {
