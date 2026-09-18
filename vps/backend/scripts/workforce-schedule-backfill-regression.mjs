@@ -90,6 +90,8 @@ try {
 
   const first = runBackfill("--apply", "--site=fuxing");
   assert.match(first, /WORKFORCE_SCHEDULE_BACKFILL_OK/);
+  const firstParity = runBackfill("--parity", "--site=fuxing");
+  assert.match(firstParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
   const schedules = await client.query(
     `select id,staff_id,schedule_kind,service_date,recurrence_month,weekday,shift_type,start_time,end_time,ends_next_day,department_code,work_area,legacy_schedule_id,note
      from public.workforce_schedule_entries where site_code='fuxing' order by legacy_schedule_id`
@@ -159,6 +161,8 @@ try {
     ["fuxing", JSON.stringify({ schedule:changed }), JSON.stringify({ schedule:9 })]
   );
   runBackfill("--apply", "--site=fuxing");
+  const changedParity = runBackfill("--parity", "--site=fuxing");
+  assert.match(changedParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
   const changedDraft = await client.query(
     `select id,note from public.workforce_schedule_entries where site_code='fuxing' and legacy_schedule_id='schedule-day'`
   );
@@ -174,6 +178,17 @@ try {
     client.query(`update public.workforce_schedule_publication_entries set note='mutated' where publication_id=$1`, [publication.rows[0].id]),
     (error) => error?.code === "55000"
   );
+
+  await client.query(
+    `update public.workforce_schedule_entries set note='intentional parity drift' where site_code='fuxing' and legacy_schedule_id='schedule-day'`
+  );
+  const drift = spawnSync(process.execPath, ["vps/backend/scripts/workforce-schedule-backfill.mjs", "--parity", "--site=fuxing"], {
+    cwd:process.cwd(), env, encoding:"utf8",
+  });
+  assert.equal(drift.status, 3, `parity drift must fail with status 3\nSTDOUT:\n${drift.stdout}\nSTDERR:\n${drift.stderr}`);
+  assert.match(drift.stdout, /WORKFORCE_SCHEDULE_PARITY_MISMATCH/);
+  assert.match(drift.stdout, /"schedules":\s*\[/);
+
   console.log("WORKFORCE_SCHEDULE_BACKFILL_REGRESSION_OK");
 } finally {
   await client.end();
