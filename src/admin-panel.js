@@ -33,6 +33,8 @@ const LABELS = {
   data:"Data Tables & CRUD · 資料管理",stores:"Chuỗi & chi nhánh · 多店管理",settings:"Settings · 系統設定",logs:"Logs & Reports · 日誌報表",
 };
 
+let sectionLoadSeq = 0;
+
 const state = {
   me:null, loading:true, error:"", success:"", section:"overview",
   overview:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
@@ -261,7 +263,24 @@ function openSettingEditor(row=null) {
 }
 
 async function switchSection(section) {
-  if(!SECTIONS.includes(section))return;state.section=section;location.hash=section;state.error="";state.success="";render();if(section==="data"&&!state.data.result)await loadDataset();if(section==="logs"&&!state.audit.result)await loadAudit();
+  if(!SECTIONS.includes(section))return;
+  state.section=section;
+  if(location.hash.replace(/^#/,"")!==section)location.hash=section;
+  state.error="";
+  state.success="";
+  const loadSeq=++sectionLoadSeq;
+  render();
+  try {
+    await loadCore();
+    if(loadSeq!==sectionLoadSeq)return;
+    if(section==="data")await loadDataset();
+    else if(section==="logs")await loadAudit();
+    if(loadSeq===sectionLoadSeq)render();
+  } catch(error) {
+    if(loadSeq!==sectionLoadSeq)return;
+    state.error=errorText(error);
+    render();
+  }
 }
 function bind() {
   root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
