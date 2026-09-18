@@ -4,6 +4,11 @@ import pg from "pg";
 const { Client } = pg;
 pg.types.setTypeParser(1082, (value) => value);
 const APPLY = process.argv.includes("--apply");
+const PARITY = process.argv.includes("--parity");
+if (APPLY && PARITY) {
+  console.error("WORKFORCE_SCHEDULE_BACKFILL_MODE_CONFLICT");
+  process.exit(64);
+}
 const SITE_FILTER = (() => {
   const flag = process.argv.find((arg) => arg.startsWith("--site="));
   return flag ? flag.slice("--site=".length).trim() : "";
@@ -29,6 +34,19 @@ function databaseTime(value) {
   const match = raw.match(/(?:[01]\d|2[0-3]):[0-5]\d/);
   return match ? match[0] : raw.slice(0, 5);
 }
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+  }
+  return value;
+}
+function stableJson(value) { return JSON.stringify(stableValue(value)); }
+function databaseIso(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : text(value);
+}
 function signatureDifferences(actualRows, expectedRows) {
   const actualById = new Map(actualRows.map((row) => [row.legacyId, row]));
   const expectedById = new Map(expectedRows.map((row) => [row.legacyId, row]));
@@ -38,11 +56,11 @@ function signatureDifferences(actualRows, expectedRows) {
     const actual = actualById.get(legacyId);
     const expected = expectedById.get(legacyId);
     if (!actual || !expected) {
-      result.push({ legacyId, fields:[actual ? "missing_expected_row" : "missing_database_row"] });
+      result.push({ legacyId, fields:[actual ? "unexpected_database_row" : "missing_database_row"] });
       continue;
     }
     const fields = [...new Set([...Object.keys(actual), ...Object.keys(expected)])]
-      .filter((key) => JSON.stringify(actual[key]) !== JSON.stringify(expected[key]));
+      .filter((key) => stableJson(actual[key]) !== stableJson(expected[key]));
     if (fields.length) result.push({ legacyId, fields });
   }
   return result.slice(0, 20);
@@ -422,6 +440,299 @@ async function upsertException(client, plan, item, requestIds, scheduleIds) {
   );
 }
 
+async function verifyRelationalParity(client, plan) {
+  const scheduleRows = await client.query(
+    `select id,legacy_schedule_id,staff_id,schedule_kind,service_date,recurrence_month,weekday,slot_no,shift_type,
+            start_time,end_time,ends_next_day,department_code,work_area,note
+     from public.workforce_schedule_entries
+     where site_code=$1 and active=true
+     order by legacy_schedule_id nulls last,id`,
+    [plan.site]
+  );
+  const actualSchedules = scheduleRows.rows.map((row) => ({
+    legacyId:text(row.legacy_schedule_id) || `__unmapped__:${row.id}`,
+    staffId:text(row.staff_id),
+    scheduleKind:text(row.schedule_kind),
+    serviceDate:databaseDate(row.service_date),
+    recurrenceMonth:databaseDate(row.recurrence_month),
+    weekday:row.weekday === null ? null : Number(row.weekday),
+    slotNo:Number(row.slot_no),
+    shiftType:text(row.shift_type),
+    startTime:databaseTime(row.start_time),
+    endTime:databaseTime(row.end_time),
+    endsNextDay:Boolean(row.ends_next_day),
+    departmentCode:text(row.department_code) || null,
+    workArea:text(row.work_area) || null,
+    note:text(row.note),
+  }));
+  const expectedSchedules = plan.schedules.map((item) => ({
+    legacyId:item.legacyId,
+    staffId:text(item.staffId),
+    scheduleKind:item.scheduleKind,
+    serviceDate:item.serviceDate,
+    recurrenceMonth:item.recurrenceMonth,
+    weekday:item.weekday,
+    slotNo:item.slotNo,
+    shiftType:item.shiftType,
+    startTime:item.startTime,
+    endTime:item.endTime,
+    endsNextDay:item.endsNextDay,
+    departmentCode:item.departmentCode,
+    workArea:item.workArea,
+    note:item.note,
+  }));
+  const scheduleDifferences = signatureDifferences(actualSchedules, expectedSchedules);
+
+  const requestRows = await client.query(
+    `select r.id,r.legacy_request_id,r.staff_id,r.request_type,r.service_date,s.legacy_schedule_id as source_schedule_legacy_id,
+            r.source_snapshot,r.requested_start_time,r.requested_end_time,r.requested_ends_next_day,r.reason,r.status,
+            r.created_by_user_id,r.created_by_name,r.created_at,r.decided_by_user_id,r.decided_by_name,r.decided_at,r.decision_note,
+            r.cancelled_by_user_id,r.cancelled_by_name,r.cancelled_at
+     from public.workforce_schedule_requests r
+     left join public.workforce_schedule_entries s on s.id=r.source_schedule_entry_id
+     where r.site_code=$1
+     order by r.legacy_request_id nulls last,r.id`,
+    [plan.site]
+  );
+  const actualRequests = requestRows.rows.map((row) => ({
+    legacyId:text(row.legacy_request_id) || `__unmapped__:${row.id}`,
+    staffId:text(row.staff_id),
+    requestType:text(row.request_type),
+    serviceDate:databaseDate(row.service_date),
+    sourceScheduleLegacyId:text(row.source_schedule_legacy_id) || null,
+    sourceSnapshot:row.source_snapshot || null,
+    requestedStartTime:databaseTime(row.requested_start_time) || null,
+    requestedEndTime:databaseTime(row.requested_end_time) || null,
+    requestedEndsNextDay:Boolean(row.requested_ends_next_day),
+    reason:text(row.reason),
+    status:text(row.status),
+    createdByUserId:text(row.created_by_user_id) || null,
+    createdByName:text(row.created_by_name),
+    createdAt:databaseIso(row.created_at),
+    decidedByUserId:text(row.decided_by_user_id) || null,
+    decidedByName:text(row.decided_by_name) || null,
+    decidedAt:databaseIso(row.decided_at),
+    decisionNote:text(row.decision_note) || null,
+    cancelledByUserId:text(row.cancelled_by_user_id) || null,
+    cancelledByName:text(row.cancelled_by_name) || null,
+    cancelledAt:databaseIso(row.cancelled_at),
+  }));
+  const expectedRequests = plan.requests.map((item) => ({
+    legacyId:item.legacyId,
+    staffId:text(item.staffId),
+    requestType:item.requestType,
+    serviceDate:item.serviceDate,
+    sourceScheduleLegacyId:item.sourceScheduleLegacyId || null,
+    sourceSnapshot:item.sourceSnapshot || null,
+    requestedStartTime:item.requestedStartTime || null,
+    requestedEndTime:item.requestedEndTime || null,
+    requestedEndsNextDay:Boolean(item.requestedEndsNextDay),
+    reason:item.reason,
+    status:item.status,
+    createdByUserId:item.createdByUserId || null,
+    createdByName:item.createdByName,
+    createdAt:databaseIso(item.createdAt),
+    decidedByUserId:item.decidedByUserId || null,
+    decidedByName:item.decidedByName || null,
+    decidedAt:databaseIso(item.decidedAt),
+    decisionNote:item.decisionNote || null,
+    cancelledByUserId:item.cancelledByUserId || null,
+    cancelledByName:item.cancelledByName || null,
+    cancelledAt:databaseIso(item.cancelledAt),
+  }));
+  const requestDifferences = signatureDifferences(actualRequests, expectedRequests);
+
+  const exceptionRows = await client.query(
+    `select e.id,e.legacy_exception_id,e.staff_id,e.service_date,e.exception_kind,
+            r.legacy_request_id,s.legacy_schedule_id as source_schedule_legacy_id,
+            e.start_time,e.end_time,e.ends_next_day,e.department_code,e.work_area,e.status,
+            e.approved_by_user_id,e.approved_by_name,e.approved_at
+     from public.workforce_schedule_exceptions e
+     join public.workforce_schedule_requests r on r.id=e.request_id
+     left join public.workforce_schedule_entries s on s.id=e.source_schedule_entry_id
+     where e.site_code=$1
+     order by e.legacy_exception_id nulls last,e.id`,
+    [plan.site]
+  );
+  const actualExceptions = exceptionRows.rows.map((row) => ({
+    legacyId:text(row.legacy_exception_id) || `__unmapped__:${row.id}`,
+    requestLegacyId:text(row.legacy_request_id) || null,
+    staffId:text(row.staff_id),
+    serviceDate:databaseDate(row.service_date),
+    exceptionKind:text(row.exception_kind),
+    sourceScheduleLegacyId:text(row.source_schedule_legacy_id) || null,
+    startTime:databaseTime(row.start_time) || null,
+    endTime:databaseTime(row.end_time) || null,
+    endsNextDay:Boolean(row.ends_next_day),
+    departmentCode:text(row.department_code) || null,
+    workArea:text(row.work_area) || null,
+    status:text(row.status),
+    approvedByUserId:text(row.approved_by_user_id) || null,
+    approvedByName:text(row.approved_by_name),
+    approvedAt:databaseIso(row.approved_at),
+  }));
+  const expectedExceptions = plan.exceptions.map((item) => ({
+    legacyId:item.legacyId,
+    requestLegacyId:item.requestLegacyId || null,
+    staffId:text(item.staffId),
+    serviceDate:item.serviceDate,
+    exceptionKind:item.exceptionKind,
+    sourceScheduleLegacyId:item.sourceScheduleLegacyId || null,
+    startTime:item.startTime || null,
+    endTime:item.endTime || null,
+    endsNextDay:Boolean(item.endsNextDay),
+    departmentCode:item.departmentCode || null,
+    workArea:item.workArea || null,
+    status:"active",
+    approvedByUserId:item.approvedByUserId || null,
+    approvedByName:item.approvedByName,
+    approvedAt:databaseIso(item.approvedAt),
+  }));
+  const exceptionDifferences = signatureDifferences(actualExceptions, expectedExceptions);
+
+  const publication = object(plan.module.publication);
+  let publicationParity = { expected:false, ok:true, differences:[] };
+  if (Object.keys(publication).length && plan.published.length) {
+    const version = Number(publication.version);
+    const header = await client.query(
+      `select id,source_module_revision,schedule_count,published_by_user_id,published_by_name,published_at
+       from public.workforce_schedule_publications where site_code=$1 and version=$2`,
+      [plan.site,version]
+    );
+    if (header.rowCount !== 1) {
+      publicationParity = { expected:true, ok:false, differences:[{ version, fields:["missing_publication_header"] }] };
+    } else {
+      const row = header.rows[0];
+      const expectedHeader = {
+        sourceModuleRevision:Number(publication.sourceModuleRevision ?? plan.sourceRevision),
+        scheduleCount:plan.published.length,
+        publishedByUserId:uuidOrNull(publication.publishedByUserId, plan.knownUsers),
+        publishedByName:text(publication.publishedByName) || "migration",
+        publishedAt:databaseIso(publication.publishedAt),
+      };
+      const actualHeader = {
+        sourceModuleRevision:Number(row.source_module_revision ?? 0),
+        scheduleCount:Number(row.schedule_count),
+        publishedByUserId:text(row.published_by_user_id) || null,
+        publishedByName:text(row.published_by_name),
+        publishedAt:databaseIso(row.published_at),
+      };
+      const headerFields = Object.keys(expectedHeader).filter((key) => stableJson(actualHeader[key]) !== stableJson(expectedHeader[key]));
+      const entries = await client.query(
+        `select pe.id,pe.legacy_schedule_id,pe.staff_id,pe.schedule_kind,pe.service_date,pe.recurrence_month,pe.weekday,pe.slot_no,
+                pe.shift_type,pe.start_time,pe.end_time,pe.ends_next_day,pe.department_code,pe.work_area,pe.note
+         from public.workforce_schedule_publication_entries pe
+         where pe.publication_id=$1
+         order by pe.legacy_schedule_id nulls last,pe.id`,
+        [row.id]
+      );
+      const actualEntries = entries.rows.map((entry) => ({
+        legacyId:text(entry.legacy_schedule_id) || `__unmapped__:${entry.id}`,
+        staffId:text(entry.staff_id),
+        scheduleKind:text(entry.schedule_kind),
+        serviceDate:databaseDate(entry.service_date),
+        recurrenceMonth:databaseDate(entry.recurrence_month),
+        weekday:entry.weekday === null ? null : Number(entry.weekday),
+        slotNo:Number(entry.slot_no),
+        shiftType:text(entry.shift_type),
+        startTime:databaseTime(entry.start_time),
+        endTime:databaseTime(entry.end_time),
+        endsNextDay:Boolean(entry.ends_next_day),
+        departmentCode:text(entry.department_code) || null,
+        workArea:text(entry.work_area) || null,
+        note:text(entry.note),
+      }));
+      const expectedEntries = plan.published.map((item) => ({
+        legacyId:item.legacyId,
+        staffId:text(item.staffId),
+        scheduleKind:item.scheduleKind,
+        serviceDate:item.serviceDate,
+        recurrenceMonth:item.recurrenceMonth,
+        weekday:item.weekday,
+        slotNo:item.slotNo,
+        shiftType:item.shiftType,
+        startTime:item.startTime,
+        endTime:item.endTime,
+        endsNextDay:item.endsNextDay,
+        departmentCode:item.departmentCode,
+        workArea:item.workArea,
+        note:item.note,
+      }));
+      const entryDifferences = signatureDifferences(actualEntries, expectedEntries);
+      publicationParity = {
+        expected:true,
+        ok:headerFields.length === 0 && entryDifferences.length === 0,
+        differences:[
+          ...(headerFields.length ? [{ version, fields:headerFields }] : []),
+          ...entryDifferences,
+        ].slice(0,20),
+      };
+    }
+  } else {
+    const count = await client.query(
+      `select count(*)::int as count from public.workforce_schedule_publications where site_code=$1`,
+      [plan.site]
+    );
+    const historicalCount = Number(count.rows[0]?.count || 0);
+    publicationParity = {
+      expected:false,
+      ok:historicalCount === 0,
+      historicalCount,
+      differences:historicalCount ? [{ fields:["unexpected_publication_history"] }] : [],
+    };
+  }
+
+  const checkpointResult = await client.query(
+    `select source_revision,status,rows_read,rows_written,checksum,details
+     from public.data_migration_checkpoints
+     where migration_key=$1 and site_code=$2`,
+    [MIGRATION_KEY,plan.site]
+  );
+  const checkpoint = checkpointResult.rows[0] || null;
+  const expectedRowsRead = plan.schedules.length + plan.published.length + plan.requests.length + plan.exceptions.length;
+  const checkpointFields = [];
+  if (!checkpoint) checkpointFields.push("missing_checkpoint");
+  else {
+    if (Number(checkpoint.source_revision) !== Number(plan.sourceRevision)) checkpointFields.push("source_revision");
+    if (text(checkpoint.status) !== "verified") checkpointFields.push("status");
+    if (Number(checkpoint.rows_read) !== expectedRowsRead) checkpointFields.push("rows_read");
+    if (text(checkpoint.checksum) !== plan.checksum) checkpointFields.push("checksum");
+    if (Number(checkpoint?.details?.diagnostics?.blocking || 0) !== 0) checkpointFields.push("blocking_diagnostics");
+  }
+
+  const ok = plan.diagnostics.blocking === 0
+    && scheduleDifferences.length === 0
+    && requestDifferences.length === 0
+    && exceptionDifferences.length === 0
+    && publicationParity.ok
+    && checkpointFields.length === 0;
+
+  return {
+    ok,
+    checkpoint:{
+      present:Boolean(checkpoint),
+      sourceRevision:checkpoint ? Number(checkpoint.source_revision) : null,
+      status:checkpoint ? text(checkpoint.status) : null,
+      rowsRead:checkpoint ? Number(checkpoint.rows_read) : null,
+      rowsWritten:checkpoint ? Number(checkpoint.rows_written) : null,
+      checksum:checkpoint ? text(checkpoint.checksum) : null,
+      differences:checkpointFields,
+    },
+    relationalCounts:{
+      schedules:actualSchedules.length,
+      requests:actualRequests.length,
+      exceptions:actualExceptions.length,
+      publicationExpected:Boolean(publicationParity.expected),
+    },
+    differences:{
+      schedules:scheduleDifferences,
+      publication:publicationParity.differences || [],
+      requests:requestDifferences,
+      exceptions:exceptionDifferences,
+    },
+  };
+}
+
 async function applySite(client, plan) {
   if (plan.diagnostics.blocking) throw new Error(`WORKFORCE_SCHEDULE_BACKFILL_BLOCKED:${plan.site}:${plan.diagnostics.blocking}`);
   const scheduleIds = new Map();
@@ -473,7 +784,12 @@ try {
       diagnostics:plan.diagnostics,
     };
     if (!APPLY) {
-      report.push({ mode:"verify-only", ...summary });
+      if (PARITY) {
+        const parity = await verifyRelationalParity(client, plan);
+        report.push({ mode:"parity", ...summary, parity });
+      } else {
+        report.push({ mode:"verify-only", ...summary });
+      }
       continue;
     }
     await client.query("begin");
@@ -489,11 +805,15 @@ try {
   }
   console.log(JSON.stringify({ migrationKey:MIGRATION_KEY, apply:APPLY, sites:report }, null, 2));
   const blocking = report.reduce((sum, item) => sum + Number(item?.diagnostics?.blocking || 0), 0);
-  if (!APPLY && blocking) {
+  const parityFailed = PARITY && report.some((item) => !item?.parity?.ok);
+  if (!APPLY && PARITY && (blocking || parityFailed)) {
+    console.log("WORKFORCE_SCHEDULE_PARITY_MISMATCH");
+    process.exitCode = 3;
+  } else if (!APPLY && blocking) {
     console.log("WORKFORCE_SCHEDULE_BACKFILL_VERIFY_BLOCKED");
     process.exitCode = 2;
   } else {
-    console.log(APPLY ? "WORKFORCE_SCHEDULE_BACKFILL_OK" : "WORKFORCE_SCHEDULE_BACKFILL_VERIFY_OK");
+    console.log(APPLY ? "WORKFORCE_SCHEDULE_BACKFILL_OK" : PARITY ? "WORKFORCE_SCHEDULE_PARITY_OK" : "WORKFORCE_SCHEDULE_BACKFILL_VERIFY_OK");
   }
 } finally {
   await client.end();

@@ -1,0 +1,82 @@
+name: Workforce Schedule Production Parity
+
+on:
+  workflow_run:
+    workflows:
+      - "Deploy Kitchen OS to VPS"
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitchen-os-production-maintenance
+  cancel-in-progress: false
+
+jobs:
+  parity:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      DEPLOYED_HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
+    steps:
+      - name: Checkout deployed source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Verify deployed release and parity source
+        run: |
+          set -euo pipefail
+          ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          REMOTE_RELEASE="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 "git -C /opt/kitchen-os/repo rev-parse --short HEAD")"
+          LOCAL_SCRIPT_SHA="$(sha256sum vps/backend/scripts/workforce-schedule-backfill.mjs | cut -d' ' -f1)"
+          REMOTE_SCRIPT_SHA="$(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 "test -f /opt/kitchen-os/repo/vps/backend/scripts/workforce-schedule-backfill.mjs && sha256sum /opt/kitchen-os/repo/vps/backend/scripts/workforce-schedule-backfill.mjs | cut -d' ' -f1")"
+
+          echo "Production release: ${ACTUAL_RELEASE}"
+          echo "Production repo: ${REMOTE_RELEASE}"
+          test "$ACTUAL_RELEASE" = "$REMOTE_RELEASE"
+          test "$LOCAL_SCRIPT_SHA" = "$REMOTE_SCRIPT_SHA"
+
+          if [[ -n "$DEPLOYED_HEAD_SHA" ]]; then
+            EXPECTED_RELEASE="${DEPLOYED_HEAD_SHA:0:7}"
+            echo "Expected deployed release: ${EXPECTED_RELEASE}"
+            test "$ACTUAL_RELEASE" = "$EXPECTED_RELEASE"
+          fi
+
+      - name: Run read-only workforce schedule parity
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
+          APP_DIR=/opt/kitchen-os
+          "${SSH[@]}" "cd '$APP_DIR' && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs --parity </dev/null"
+
+      - name: Verify production remains healthy
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          echo
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE

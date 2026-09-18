@@ -53,3 +53,31 @@ This phase does **not** change frontend reads, schedule request routes, schedule
 - Requests and approved exceptions preserve lifecycle, staff/date scope and source references when available.
 - Re-running apply is idempotent and refreshes only mutable draft state.
 - A verified migration checkpoint records zero blocking diagnostics before later cutover work can proceed.
+
+
+## Read-only parity gate
+
+Before any authority cutover, the backfill tool must support `--parity`.
+
+Parity mode is strictly read-only and compares the current compatibility source against relational PostgreSQL state for:
+
+- manager draft schedules;
+- the current immutable publication header and publication entries;
+- schedule requests;
+- active schedule exceptions;
+- the `workforce.schedule.v1` migration checkpoint.
+
+A site is parity-ready only when:
+
+- source diagnostics have zero blockers;
+- relational rows match the canonical compatibility projection;
+- no unexpected active draft/request/exception rows exist;
+- the current publication snapshot matches when one exists;
+- the migration checkpoint exists with `status=verified`;
+- checkpoint source revision and checksum match the current compatibility source.
+
+Parity mismatch exits non-zero and reports field-level differences. It must not repair or mutate data.
+
+Production parity is checked by a separate read-only workflow after a successful main deployment. That workflow verifies the deployed release and script hash before running parity on the VPS.
+
+Passing parity does **not** itself change authority. `business_state.modules.schedule` remains canonical until a later explicit cutover changes API reads/writes and frontend consumption to relational authority with compatibility projection/rollback defined.
