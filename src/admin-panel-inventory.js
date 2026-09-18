@@ -119,9 +119,12 @@ function auditIssueList(rows = [], kind = "") {
     let detail = "";
     if (kind === "receive") {
       detail = `${siteLabel(row.site)} · ${row.catalogKey} · ${(row.storageLocations || []).map((location)=>location.name_zh_tw || location.code).join(" / ")}`;
-    } else if (kind === "metadata") {
+    } else if (kind === "identity") {
       const v = row.variants || {};
-      detail = `${row.catalogKey} · unit: ${(v.unit || []).join(" / ") || "—"} · work: ${(v.work_area || []).join(" / ") || "—"}`;
+      detail = `${row.catalogKey} · VI: ${(v.name_vi || []).join(" / ") || "—"} · 中文: ${(v.name_zh_tw || []).join(" / ") || "—"}`;
+    } else if (kind === "operational") {
+      const v = row.variants || {};
+      detail = `${row.catalogKey} · unit: ${(v.unit || []).join(" / ") || "—"} · work: ${(v.work_area || []).join(" / ") || "—"} · storage_only: ${(v.storage_only || []).join(" / ") || "—"}`;
     } else if (kind === "duplicate") {
       detail = `${siteLabel(row.site)} · ${row.catalogKey} · ${(row.items || []).map((item)=>item.itemKey).join(" / ")}`;
     } else if (kind === "storage") {
@@ -147,14 +150,16 @@ function renderCatalogAudit(host) {
     <section class="sa-stat-grid compact">
       <article class="sa-stat"><small>Active items</small><strong>${esc(s.activeItems ?? 0)}</strong></article>
       <article class="sa-stat"><small>Catalog keys</small><strong>${esc(s.catalogKeys ?? 0)}</strong></article>
-      <article class="sa-stat"><small>Metadata lệch · 差異</small><strong>${esc(s.metadataVariants ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Identity drift · 名稱差異</small><strong>${esc(s.identityVariants ?? 0)}</strong></article>
+      <article class="sa-stat"><small>Operational variants</small><strong>${esc(s.operationalVariants ?? 0)}</strong></article>
       <article class="sa-stat"><small>Multi-location thiếu fixed receive</small><strong>${esc(s.multiLocationMissingReceiveDefault ?? 0)}</strong></article>
       <article class="sa-stat"><small>Duplicate/site</small><strong>${esc(s.duplicatesWithinSite ?? 0)}</strong></article>
       <article class="sa-stat"><small>Không có storage</small><strong>${esc(s.unconfiguredStorage ?? 0)}</strong></article>
     </section>
     <section class="sa-two-col">
       <article class="sa-card"><div class="sa-card-head"><div><h3>固定收貨儲位 còn thiếu</h3><p>Chỉ item branch có từ 2 storage trở lên.</p></div></div>${auditIssueList(catalogAudit.multiLocationMissingReceiveDefault,"receive")}</article>
-      <article class="sa-card"><div class="sa-card-head"><div><h3>Metadata variants</h3><p>Cùng catalog_key nhưng tên / đơn vị / khu làm việc khác nhau.</p></div></div>${auditIssueList(catalogAudit.metadataVariants,"metadata")}</article>
+      <article class="sa-card"><div class="sa-card-head"><div><h3>Identity drift · 名稱差異</h3><p>Cùng catalog_key nhưng tên VI/中文 khác nhau; đây là nhóm ưu tiên đồng bộ identity.</p></div></div>${auditIssueList(catalogAudit.identityVariants,"identity")}</article>
+      <article class="sa-card"><div class="sa-card-head"><div><h3>Operational variants</h3><p>Unit / work area / storage_only khác nhau; có thể hợp lệ theo từng site nên không tự sửa.</p></div></div>${auditIssueList(catalogAudit.operationalVariants,"operational")}</article>
       <article class="sa-card"><div class="sa-card-head"><div><h3>Duplicate trong cùng site</h3><p>Cùng site có nhiều active item chung catalog_key.</p></div></div>${auditIssueList(catalogAudit.duplicatesWithinSite,"duplicate")}</article>
       <article class="sa-card"><div class="sa-card-head"><div><h3>Item chưa có storage</h3><p>Catalog tồn tại nhưng chưa cấu hình storage hợp lệ.</p></div></div>${auditIssueList(catalogAudit.unconfiguredStorage,"storage")}</article>
     </section>
