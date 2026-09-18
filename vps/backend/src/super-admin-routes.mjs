@@ -311,9 +311,11 @@ async function inventoryCatalogAudit() {
     return {
       generatedAt:new Date().toISOString(),
       sites:[],
-      summary:{ activeItems:0,catalogKeys:0,partialCoverage:0,metadataVariants:0,duplicatesWithinSite:0,multiLocationMissingReceiveDefault:0,unconfiguredStorage:0 },
+      summary:{ activeItems:0,catalogKeys:0,partialCoverage:0,metadataVariants:0,identityVariants:0,operationalVariants:0,duplicatesWithinSite:0,multiLocationMissingReceiveDefault:0,unconfiguredStorage:0 },
       coverage:[],
       metadataVariants:[],
+      identityVariants:[],
+      operationalVariants:[],
       duplicatesWithinSite:[],
       multiLocationMissingReceiveDefault:[],
       unconfiguredStorage:[],
@@ -362,6 +364,8 @@ async function inventoryCatalogAudit() {
 
   const coverage = [];
   const metadataVariants = [];
+  const identityVariants = [];
+  const operationalVariants = [];
   for (const [catalogKey, rows] of byCatalog) {
     const presentSites = [...new Set(rows.map((row) => row.site))].sort();
     const missingSites = siteCodes.filter((site) => !presentSites.includes(site));
@@ -372,11 +376,16 @@ async function inventoryCatalogAudit() {
       work_area:[...new Set(rows.map((row) => text(row.work_area)).filter(Boolean))],
       storage_only:[...new Set(rows.map((row) => Boolean(row.storage_only)))],
     };
-    const hasVariance = Object.values(variants).some((values) => values.length > 1);
+    const identityFields = ["name_vi","name_zh_tw"].filter((field) => variants[field].length > 1);
+    const operationalFields = ["unit","work_area","storage_only"].filter((field) => variants[field].length > 1);
+    const hasIdentityVariance = identityFields.length > 0;
+    const hasOperationalVariance = operationalFields.length > 0;
     const detail = {
       catalogKey,
       presentSites,
       missingSites,
+      identityFields,
+      operationalFields,
       variants,
       items:rows.map((row) => ({
         id:row.id,itemKey:row.item_key,site:row.site,nameVi:row.name_vi,nameZhTw:row.name_zh_tw,
@@ -387,12 +396,14 @@ async function inventoryCatalogAudit() {
       })),
     };
     if (missingSites.length) coverage.push(detail);
-    if (hasVariance) metadataVariants.push(detail);
+    if (hasIdentityVariance || hasOperationalVariance) metadataVariants.push(detail);
+    if (hasIdentityVariance) identityVariants.push(detail);
+    if (hasOperationalVariance) operationalVariants.push(detail);
   }
 
   const duplicateMap = new Map();
   for (const item of items) {
-    const key = `\${item.site}|\${item.catalog_key}`;
+    const key = `${item.site}|${item.catalog_key}`;
     const rows = duplicateMap.get(key) || [];
     rows.push(item);
     duplicateMap.set(key, rows);
@@ -433,12 +444,16 @@ async function inventoryCatalogAudit() {
       catalogKeys:byCatalog.size,
       partialCoverage:coverage.length,
       metadataVariants:metadataVariants.length,
+      identityVariants:identityVariants.length,
+      operationalVariants:operationalVariants.length,
       duplicatesWithinSite:duplicatesWithinSite.length,
       multiLocationMissingReceiveDefault:multiLocationMissingReceiveDefault.length,
       unconfiguredStorage:unconfiguredStorage.length,
     },
     coverage:coverage.slice(0,250),
     metadataVariants:metadataVariants.slice(0,250),
+    identityVariants:identityVariants.slice(0,250),
+    operationalVariants:operationalVariants.slice(0,250),
     duplicatesWithinSite:duplicatesWithinSite.slice(0,250),
     multiLocationMissingReceiveDefault:multiLocationMissingReceiveDefault.slice(0,250),
     unconfiguredStorage:unconfiguredStorage.slice(0,250),
