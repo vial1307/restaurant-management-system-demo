@@ -314,8 +314,10 @@ async function mount() {
   mounting = true;
   try {
     const me = await vpsMe();
+    if (!host.isConnected) return;
     if (!me?.user?.capabilities?.["system.super_admin"]) return;
     const siteResult = await apiRequest("/api/admin/super/sites");
+    if (!host.isConnected) return;
     sites = (siteResult?.sites || []).filter((site) => site.active !== false);
     if (sites.length < 2) {
       host.innerHTML = `<div class="sa-card-head"><div><h2>Kho tổng & điều chuyển</h2><p>Cần ít nhất 2 site đang hoạt động để điều chuyển liên chi nhánh.</p></div></div>`;
@@ -335,6 +337,7 @@ async function mount() {
     mountedHost = host;
   } finally {
     mounting = false;
+    if (!host.isConnected) queueMicrotask(() => { void mount(); });
   }
 }
 
