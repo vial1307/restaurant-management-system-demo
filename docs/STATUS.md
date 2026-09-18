@@ -22,7 +22,7 @@ Branch: `fix/secure-admin-data-vps-metrics-20260918`
   - unknown fields are rejected rather than silently ignored;
   - dataset-specific validation and text limits;
   - identity columns such as menu `site_code/item_code`, inventory `item_key/catalog_key`, and SOP `site_code/sop_code` become immutable after creation;
-  - update/archive requires the row's current `updated_at` token to prevent stale overwrite;
+  - update/archive requires the row's current database `row_revision` token to prevent stale overwrite;
   - inventory items with non-zero stock cannot be archived through generic CRUD;
   - every successful mutation still writes `audit_logs`.
 - Added Super Admin-only system metrics endpoint:
