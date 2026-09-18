@@ -126,6 +126,9 @@ async function runSuperAdminProfile(profile) {
     await page.goto(`${BASE}/.admindev.html#overview`, { waitUntil:"domcontentloaded", timeout:30000 });
     await page.locator("#admin-app.sa-app").waitFor({ state:"visible", timeout:20000 });
     assert.equal(await page.locator(".sa-nav-item").count(), 7, `${profile.name}: expected seven Super Admin sections`);
+    await page.locator("[data-system-metrics]").waitFor({ state:"visible", timeout:15000 });
+    assert.match(await page.locator("[data-system-metrics]").textContent(), /Tài nguyên VPS|VPS 資源/);
+    assert.match(await page.locator("[data-system-metrics]").textContent(), /Download rate/);
     await assertFit(page, `${profile.name} overview`);
 
     if (profile.mobile) {

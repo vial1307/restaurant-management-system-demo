@@ -90,6 +90,9 @@ jobs:
             node --check "$file"
           done
 
+      - name: Validate VPS shell scripts
+        run: bash -n vps/scripts/*.sh
+
       - name: Validate Caddy configuration
         run: |
           docker run --rm -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
@@ -115,6 +118,9 @@ jobs:
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh
           test -f vps/scripts/verify-vps-data.sh
+          test -f vps/scripts/collect-host-metrics.sh
+          test -f vps/scripts/install-host-metrics-timer.sh
+          test -f vps/backend/scripts/fixtures/host-metrics.env
           test -f vps/backend/src/workforce-approval-routes.mjs
           test -f vps/backend/src/workforce-lock-policy.mjs
           test -f vps/backend/scripts/concurrency-regression.mjs
@@ -158,6 +164,7 @@ jobs:
       COOKIE_SECURE: "false"
       SESSION_DAYS: "1"
       PORT: "8080"
+      HOST_METRICS_PATH: "vps/backend/scripts/fixtures/host-metrics.env"
       TEST_API_PORT: "8080"
       TEST_WEB_PORT: "3000"
       TEST_API_BASE: "http://127.0.0.1:8080"

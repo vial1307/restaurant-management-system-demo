@@ -73,3 +73,54 @@ This file is the canonical continuation log for implementation, CI, merge and de
 1. Build attendance correction/request workflow as the next workforce slice; employee/part-time submit their own correction request, manager/admin approve or reject, and approved correction invalidates attendance approval so it must be reviewed again.
 2. Then continue payroll history/export and configurable scheduling/shift rules without inventing wage rules.
 3. Keep manager/admin authority distinct from employee/part-time self-service and certify desktop/mobile parity through the existing release gates.
+
+
+## 2026-09-18 — Secure DB admin surface + VPS metrics continuation
+
+### Starting baseline
+
+- Read `docs/CURRENT_HANDOFF.md`, `docs/WORK_LOG.md`, and `docs/DEVELOPMENT_RULES.md` before coding.
+- Main HEAD before branch: `d84484a15bd835e7890921267ba59984ca37967a` (documentation-only commits after the runtime release).
+- Last verified production runtime: `d15ae2087d293111b989b5e5efe7d56ac3bebb84`, workflow #691.
+- Production DB schema: `020`.
+- Inventory baseline kept intact: VPS API + PostgreSQL authority, cross-site refresh guards, transactional relocation, receiving defaults and audit history.
+
+### Database/Admin hardening implemented on branch
+
+- Kept the existing relational Core v2 and static backend dataset allowlist; did not introduce a second database or browser-side SQL path.
+- Added dataset-specific validation and strict rejection of unknown fields.
+- Made persistent identity columns immutable after creation for menu, inventory catalog and SOP datasets.
+- Added optimistic stale-write protection using a database-owned integer row revision while holding the row `FOR UPDATE`; update/archive now returns conflict rather than overwriting a newer edit.
+- Generic inventory archive now refuses to deactivate an item while relational stock is non-zero.
+- Audit logging remains mandatory for successful generic mutations.
+
+### VPS metrics implemented on branch
+
+- Added root-owned host collector + systemd timer producing a filtered snapshot under `/opt/kitchen-os/runtime`.
+- API container mounts only that runtime directory read-only; no Docker socket, host shell, host filesystem, DB port or credentials are exposed to the browser.
+- Added Super Admin-only `/api/admin/super/system-metrics` with CPU/load/uptime, RAM/swap, disk/inodes, app/backup/PostgreSQL footprint, service status, network counters/rate/link speed, PostgreSQL connections and table/index sizes.
+- Super Admin Overview renders the new capacity/network/database metrics.
+- Provider traffic quota is intentionally reported as unconfigured because the operating system cannot infer the VPS vendor billing cap.
+
+### GitHub handoff organization
+
+- Added `docs/STATUS.md` as a concise active workboard.
+- Added `.github/PULL_REQUEST_TEMPLATE.md` with persistence/security/verification/handoff gates.
+- Added `.github/ISSUE_TEMPLATE/engineering-handoff.yml` for structured continuation issues.
+- Updated development/database docs with the new handoff and security contracts.
+
+### Regression coverage added
+
+- Super Admin authorization for system metrics.
+- Host metrics fixture and browser rendering across existing device profiles.
+- Unknown admin field rejection.
+- Stale-write conflict.
+- Immutable menu identity.
+- VPS shell-script syntax and required production file checks.
+
+### Current stopping point
+
+- Candidate branch: `fix/secure-admin-data-vps-metrics-20260918`.
+- CI/PR, merge, production deploy and production capacity capture are the next actions in this same workstream.
+
+- CI exposed that using serialized `updated_at` as an optimistic-lock token can lose PostgreSQL sub-millisecond precision in JavaScript. The timestamp approach was replaced by migration `021_admin_row_revisions.sql`, which gives each generic admin row a DB-owned integer revision incremented by trigger.

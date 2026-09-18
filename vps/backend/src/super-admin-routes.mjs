@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
 
@@ -60,6 +61,36 @@ const DATASETS = {
   },
 };
 
+const DATASET_POLICY = {
+  announcements: {
+    required:["title_vi","title_zh_tw"],
+    enums:{ status:["draft","published","archived"] },
+    textLimits:{ title_vi:240,title_zh_tw:240,body_vi:20000,body_zh_tw:20000 },
+  },
+  media: {
+    required:["asset_type","label","asset_url"],
+    enums:{ asset_type:["image","document","other"] },
+    textLimits:{ label:240,asset_url:2048,alt_vi:1000,alt_zh_tw:1000,entity_type:120,entity_id:240 },
+  },
+  "menu-items": {
+    required:["site_code","item_code","name_vi","name_zh_tw"],
+    createOnly:["site_code","item_code"],
+    textLimits:{ site_code:40,item_code:64,name_vi:240,name_zh_tw:240,category:120,work_area:120,currency_code:3 },
+  },
+  "inventory-products": {
+    required:["item_key","catalog_key","name_vi","name_zh_tw","unit","work_area"],
+    createOnly:["item_key","catalog_key"],
+    textLimits:{ item_key:240,catalog_key:180,name_vi:240,name_zh_tw:240,unit:40,work_area:120 },
+  },
+  "sop-documents": {
+    required:["site_code","sop_code","name_vi","name_zh_tw"],
+    createOnly:["site_code","sop_code"],
+    textLimits:{ site_code:40,sop_code:64,work_area:120,name_vi:240,name_zh_tw:240 },
+  },
+};
+
+const HOST_METRICS_PATH = process.env.HOST_METRICS_PATH || "/run/kitchen-host-metrics/host-metrics.env";
+
 function object(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -108,8 +139,146 @@ function pageArgs(query) {
 function normalizeValue(column, value) {
   if (value === "" && ["site_code","menu_item_id","work_area","category","entity_type","entity_id","starts_at","ends_at","price"].includes(column)) return null;
   if (column === "metadata") return object(value);
+  if (column === "currency_code") return text(value).toUpperCase();
   if (["active","storage_only"].includes(column)) return value !== false && value !== "false";
   return value;
+}
+
+function sameValue(left, right) {
+  if (left === null || left === undefined || right === null || right === undefined) return left == null && right == null;
+  if (typeof left === "object" || typeof right === "object") return JSON.stringify(left) === JSON.stringify(right);
+  return String(left) === String(right);
+}
+
+function validateDatasetValues(name, config, raw, { isCreate = false, current = null } = {}) {
+  const policy = DATASET_POLICY[name] || {};
+  const unknown = Object.keys(raw).filter((column) => !config.editable.includes(column));
+  if (unknown.length) {
+    throw Object.assign(new Error("ADMIN_FIELD_NOT_ALLOWED"), { statusCode:400, fields:unknown });
+  }
+  if (Object.prototype.hasOwnProperty.call(raw,"metadata") && (raw.metadata === null || typeof raw.metadata !== "object" || Array.isArray(raw.metadata))) {
+    throw Object.assign(new Error("ADMIN_METADATA_OBJECT_REQUIRED"), { statusCode:400, field:"metadata" });
+  }
+  for (const column of policy.required || []) {
+    if (!isCreate && !Object.prototype.hasOwnProperty.call(raw,column)) continue;
+    const value = raw[column];
+    if (value === null || value === undefined || (typeof value === "string" && !value.trim())) {
+      throw Object.assign(new Error("ADMIN_REQUIRED_FIELD"), { statusCode:400, field:column });
+    }
+  }
+  for (const [column, allowed] of Object.entries(policy.enums || {})) {
+    if (Object.prototype.hasOwnProperty.call(raw,column) && !allowed.includes(String(raw[column]))) {
+      throw Object.assign(new Error("ADMIN_INVALID_ENUM"), { statusCode:400, field:column });
+    }
+  }
+  for (const [column, max] of Object.entries(policy.textLimits || {})) {
+    if (Object.prototype.hasOwnProperty.call(raw,column) && raw[column] != null && String(raw[column]).length > max) {
+      throw Object.assign(new Error("ADMIN_VALUE_TOO_LONG"), { statusCode:400, field:column, max });
+    }
+  }
+  if (current) {
+    for (const column of policy.createOnly || []) {
+      if (Object.prototype.hasOwnProperty.call(raw,column) && !sameValue(normalizeValue(column,raw[column]),current[column])) {
+        throw Object.assign(new Error("ADMIN_IMMUTABLE_FIELD"), { statusCode:409, field:column });
+      }
+    }
+  }
+  if (name === "media" && Object.prototype.hasOwnProperty.call(raw,"asset_url")) {
+    const assetUrl = text(raw.asset_url);
+    try {
+      const parsed = new URL(assetUrl,"https://kitchen.invalid/");
+      if (!["http:","https:"].includes(parsed.protocol)) throw new Error("protocol");
+    } catch {
+      throw Object.assign(new Error("ADMIN_INVALID_MEDIA_URL"), { statusCode:400, field:"asset_url" });
+    }
+  }
+  if (name === "menu-items" && Object.prototype.hasOwnProperty.call(raw,"currency_code") && !/^[A-Z]{3}$/.test(String(raw.currency_code || "").toUpperCase())) {
+    throw Object.assign(new Error("ADMIN_INVALID_CURRENCY"), { statusCode:400, field:"currency_code" });
+  }
+  if (name === "menu-items" && Object.prototype.hasOwnProperty.call(raw,"price") && raw.price !== null && raw.price !== "") {
+    const price = Number(raw.price);
+    if (!Number.isFinite(price) || price < 0) throw Object.assign(new Error("ADMIN_INVALID_PRICE"), { statusCode:400, field:"price" });
+  }
+  if (name === "announcements") {
+    const startsAt = raw.starts_at ? Date.parse(raw.starts_at) : null;
+    const endsAt = raw.ends_at ? Date.parse(raw.ends_at) : null;
+    if (raw.starts_at && !Number.isFinite(startsAt)) throw Object.assign(new Error("ADMIN_INVALID_DATETIME"), { statusCode:400, field:"starts_at" });
+    if (raw.ends_at && !Number.isFinite(endsAt)) throw Object.assign(new Error("ADMIN_INVALID_DATETIME"), { statusCode:400, field:"ends_at" });
+    if (startsAt !== null && endsAt !== null && endsAt < startsAt) throw Object.assign(new Error("ADMIN_INVALID_DATE_RANGE"), { statusCode:400, field:"ends_at" });
+  }
+  if (name === "inventory-products" && isCreate) {
+    const itemKey = text(raw.item_key);
+    const divider = itemKey.indexOf(":");
+    const siteCode = divider > 0 ? itemKey.slice(0,divider) : "";
+    if (!CODE_RE.test(siteCode) || divider === itemKey.length - 1) {
+      throw Object.assign(new Error("ADMIN_INVALID_INVENTORY_ITEM_KEY"), { statusCode:400, field:"item_key" });
+    }
+  }
+}
+
+function parseMetricEnv(content) {
+  const values = {};
+  for (const rawLine of String(content || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const split = line.indexOf("=");
+    if (split <= 0) continue;
+    const key = line.slice(0,split);
+    if (!/^[A-Z0-9_]+$/.test(key)) continue;
+    values[key] = line.slice(split + 1);
+  }
+  return values;
+}
+
+function metricNumber(values, key) {
+  const value = Number(values[key]);
+  return Number.isFinite(value) ? value : 0;
+}
+
+async function hostMetricsSnapshot() {
+  try {
+    const values = parseMetricEnv(await readFile(HOST_METRICS_PATH,"utf8"));
+    const generatedEpoch = metricNumber(values,"GENERATED_EPOCH");
+    const network = [];
+    const networkCount = Math.min(32,Math.max(0,Math.trunc(metricNumber(values,"NET_COUNT"))));
+    for (let index=0;index<networkCount;index+=1) {
+      const prefix = `NET_${index}_`;
+      const name = text(values[`${prefix}NAME`]);
+      if (!name) continue;
+      network.push({
+        name,
+        primary:values[`${prefix}PRIMARY`] === "true",
+        rx_bytes:metricNumber(values,`${prefix}RX_BYTES`),
+        tx_bytes:metricNumber(values,`${prefix}TX_BYTES`),
+        rx_bytes_per_second:metricNumber(values,`${prefix}RX_BPS`),
+        tx_bytes_per_second:metricNumber(values,`${prefix}TX_BPS`),
+        link_speed_mbps:metricNumber(values,`${prefix}SPEED_MBPS`),
+      });
+    }
+    const services = [];
+    const serviceCount = Math.min(16,Math.max(0,Math.trunc(metricNumber(values,"SERVICE_COUNT"))));
+    for (let index=0;index<serviceCount;index+=1) {
+      const prefix = `SERVICE_${index}_`;
+      const name = text(values[`${prefix}NAME`]);
+      if (!name) continue;
+      services.push({ name,status:text(values[`${prefix}STATUS`]),health:text(values[`${prefix}HEALTH`]) });
+    }
+    return {
+      available:true,
+      generated_at:text(values.GENERATED_AT) || null,
+      age_seconds:generatedEpoch > 0 ? Math.max(0,Math.floor(Date.now()/1000 - generatedEpoch)) : null,
+      host:{ hostname:text(values.HOSTNAME),os:text(values.OS_PRETTY),os_version:text(values.OS_VERSION),kernel:text(values.KERNEL),arch:text(values.ARCH) },
+      cpu:{ logical:metricNumber(values,"CPU_LOGICAL"),usage_percent:metricNumber(values,"CPU_USAGE_PERCENT"),load_1:metricNumber(values,"LOAD_1"),load_5:metricNumber(values,"LOAD_5"),load_15:metricNumber(values,"LOAD_15"),uptime_seconds:metricNumber(values,"UPTIME_SECONDS") },
+      memory:{ total_bytes:metricNumber(values,"MEM_TOTAL_BYTES"),used_bytes:metricNumber(values,"MEM_USED_BYTES"),available_bytes:metricNumber(values,"MEM_AVAILABLE_BYTES"),swap_total_bytes:metricNumber(values,"SWAP_TOTAL_BYTES"),swap_used_bytes:metricNumber(values,"SWAP_USED_BYTES") },
+      disk:{ total_bytes:metricNumber(values,"DISK_ROOT_TOTAL_BYTES"),used_bytes:metricNumber(values,"DISK_ROOT_USED_BYTES"),available_bytes:metricNumber(values,"DISK_ROOT_AVAILABLE_BYTES"),used_percent:metricNumber(values,"DISK_ROOT_USED_PERCENT"),inode_total:metricNumber(values,"INODE_TOTAL"),inode_used:metricNumber(values,"INODE_USED"),inode_available:metricNumber(values,"INODE_AVAILABLE"),inode_used_percent:metricNumber(values,"INODE_USED_PERCENT") },
+      storage:{ app_bytes:metricNumber(values,"APP_DIR_BYTES"),backup_bytes:metricNumber(values,"BACKUP_DIR_BYTES"),backup_count:metricNumber(values,"BACKUP_COUNT"),latest_backup_name:text(values.BACKUP_LATEST_NAME),latest_backup_epoch:metricNumber(values,"BACKUP_LATEST_EPOCH"),latest_backup_bytes:metricNumber(values,"BACKUP_LATEST_BYTES"),postgres_data_bytes:metricNumber(values,"POSTGRES_DATA_BYTES") },
+      network:{ interfaces:network,total_rx_bytes:metricNumber(values,"NET_TOTAL_RX_BYTES"),total_tx_bytes:metricNumber(values,"NET_TOTAL_TX_BYTES"),rx_bytes_per_second:metricNumber(values,"NET_TOTAL_RX_BPS"),tx_bytes_per_second:metricNumber(values,"NET_TOTAL_TX_BPS"),provider_quota_bytes:null },
+      services,
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "EACCES") return { available:false,reason:"HOST_METRICS_UNAVAILABLE" };
+    throw error;
+  }
 }
 
 async function listDataset(name, query) {
@@ -143,7 +312,7 @@ async function listDataset(name, query) {
   }
   values.push(pageSize, offset);
   const rows = await pool.query(
-    `select ${config.columns.join(",")},count(*) over()::int as __total
+    `select ${config.columns.join(",")},revision::text as __revision,count(*) over()::int as __total
      from ${config.table}
      ${where.length ? `where ${where.join(" and ")}` : ""}
      order by ${sort} ${direction},${config.id} asc
@@ -155,7 +324,8 @@ async function listDataset(name, query) {
     dataset:name,
     columns:config.columns,
     editable:config.editable,
-    rows:rows.rows.map(({ __total, ...row }) => row),
+    createOnly:DATASET_POLICY[name]?.createOnly || [],
+    rows:rows.rows.map(({ __total,__revision, ...row }) => ({...row,row_revision:__revision})),
     pagination:{ page,pageSize,total,pages:Math.max(1,Math.ceil(total / pageSize)) },
     sort:{ key:sort,direction },
   };
@@ -166,21 +336,33 @@ async function saveDatasetRow(user, name, body) {
   if (!config) throw Object.assign(new Error("ADMIN_DATASET_NOT_FOUND"), { statusCode:404 });
   const action = text(body?.action || "save");
   const id = text(body?.id);
+  const expectedRevision = text(body?.expectedRevision);
   return withTransaction(async (client) => {
     if (action === "archive") {
       if (!id || !config.archive) throw Object.assign(new Error("ADMIN_ARCHIVE_NOT_ALLOWED"), { statusCode:400 });
       const current = (await client.query(`select * from ${config.table} where ${config.id}=$1 for update`, [id])).rows[0];
       if (!current) throw Object.assign(new Error("ADMIN_ROW_NOT_FOUND"), { statusCode:404 });
+      if (!expectedRevision) throw Object.assign(new Error("ADMIN_EXPECTED_REVISION_REQUIRED"), { statusCode:428 });
+      if (expectedRevision !== String(current.revision)) {
+        throw Object.assign(new Error("ADMIN_ROW_STALE"), { statusCode:409,current:{...current,row_revision:String(current.revision)} });
+      }
+      if (name === "inventory-products" && current.active !== false) {
+        const stock = await client.query("select coalesce(sum(quantity),0)::numeric as quantity from public.inventory_stock where item_id=$1",[id]);
+        if (Number(stock.rows[0]?.quantity || 0) !== 0) {
+          throw Object.assign(new Error("INVENTORY_ARCHIVE_STOCK_REMAINS"), { statusCode:409 });
+        }
+      }
       const saved = (await client.query(
         `update ${config.table} set ${config.archive.column}=$2${config.columns.includes("updated_at") ? ",updated_at=now()" : ""} where ${config.id}=$1 returning *`,
         [id,config.archive.value]
       )).rows[0];
       await audit(client,user,{ action:`super_admin_${name}_archive`,entityType:name,entityId:id,site:saved.site_code || null,before:current,after:saved });
-      return saved;
+      return {...saved,row_revision:String(saved.revision)};
     }
     if (action !== "save") throw Object.assign(new Error("INVALID_ADMIN_DATA_ACTION"), { statusCode:400 });
     const raw = object(body?.values);
-    const entries = config.editable
+    validateDatasetValues(name,config,raw,{isCreate:!id});
+    let entries = config.editable
       .filter((column) => Object.prototype.hasOwnProperty.call(raw,column))
       .map((column) => [column,normalizeValue(column,raw[column])]);
     if (!entries.length) throw Object.assign(new Error("ADMIN_VALUES_REQUIRED"), { statusCode:400 });
@@ -188,6 +370,20 @@ async function saveDatasetRow(user, name, body) {
     if (id) {
       const current = (await client.query(`select * from ${config.table} where ${config.id}=$1 for update`, [id])).rows[0];
       if (!current) throw Object.assign(new Error("ADMIN_ROW_NOT_FOUND"), { statusCode:404 });
+      if (!expectedRevision) throw Object.assign(new Error("ADMIN_EXPECTED_REVISION_REQUIRED"), { statusCode:428 });
+      if (expectedRevision !== String(current.revision)) {
+        throw Object.assign(new Error("ADMIN_ROW_STALE"), { statusCode:409,current:{...current,row_revision:String(current.revision)} });
+      }
+      validateDatasetValues(name,config,raw,{current});
+      const createOnly = new Set(DATASET_POLICY[name]?.createOnly || []);
+      entries = entries.filter(([column]) => !createOnly.has(column));
+      if (!entries.length) return {...current,row_revision:String(current.revision)};
+      if (name === "inventory-products" && current.active !== false && raw.active === false) {
+        const stock = await client.query("select coalesce(sum(quantity),0)::numeric as quantity from public.inventory_stock where item_id=$1",[id]);
+        if (Number(stock.rows[0]?.quantity || 0) !== 0) {
+          throw Object.assign(new Error("INVENTORY_ARCHIVE_STOCK_REMAINS"), { statusCode:409 });
+        }
+      }
       const values = [id,...entries.map(([,value]) => value)];
       const setSql = entries.map(([column],index) => `${column}=$${index + 2}`).join(",");
       const saved = (await client.query(
@@ -195,9 +391,14 @@ async function saveDatasetRow(user, name, body) {
         values
       )).rows[0];
       await audit(client,user,{ action:`super_admin_${name}_update`,entityType:name,entityId:id,site:saved.site_code || null,before:current,after:saved });
-      return saved;
+      return {...saved,row_revision:String(saved.revision)};
     }
 
+    if (name === "inventory-products") {
+      const siteCode = text(raw.item_key).split(":")[0];
+      const validSite = await client.query("select 1 from public.sites where code=$1 limit 1",[siteCode]);
+      if (!validSite.rowCount) throw Object.assign(new Error("ADMIN_INVENTORY_SITE_NOT_FOUND"), { statusCode:409,field:"item_key" });
+    }
     const columns = entries.map(([column]) => column);
     const values = entries.map(([,value]) => value);
     const placeholders = values.map((_,index) => `$${index + 1}`).join(",");
@@ -206,7 +407,7 @@ async function saveDatasetRow(user, name, body) {
       values
     )).rows[0];
     await audit(client,user,{ action:`super_admin_${name}_create`,entityType:name,entityId:saved[config.id],site:saved.site_code || null,after:saved });
-    return saved;
+    return {...saved,row_revision:String(saved.revision)};
   });
 }
 
@@ -492,6 +693,50 @@ export async function registerSuperAdminRoutes(app) {
     };
   });
 
+  app.get("/api/admin/super/system-metrics", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    try {
+      const [host,database,tables,migration] = await Promise.all([
+        hostMetricsSnapshot(),
+        pool.query(`select
+          current_database() as database_name,
+          current_setting('server_version') as server_version,
+          current_setting('max_connections')::int as max_connections,
+          pg_database_size(current_database())::bigint as size_bytes,
+          count(*) filter (where datname=current_database())::int as connections,
+          count(*) filter (where datname=current_database() and state='active')::int as active_connections,
+          count(*) filter (where datname=current_database() and state='idle')::int as idle_connections
+        from pg_stat_activity`),
+        pool.query(`select
+          c.relname as table_name,
+          pg_relation_size(c.oid)::bigint as table_bytes,
+          pg_indexes_size(c.oid)::bigint as index_bytes,
+          pg_total_relation_size(c.oid)::bigint as total_bytes,
+          coalesce(s.n_live_tup,0)::bigint as estimated_rows
+        from pg_class c
+        join pg_namespace n on n.oid=c.relnamespace
+        left join pg_stat_user_tables s on s.relid=c.oid
+        where n.nspname='public' and c.relkind='r'
+        order by pg_total_relation_size(c.oid) desc,c.relname
+        limit 25`),
+        pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1"),
+      ]);
+      return {
+        generated_at:new Date().toISOString(),
+        release:process.env.APP_RELEASE || "dev",
+        schema:migration.rows[0] || null,
+        api:{ uptime_seconds:Math.floor(process.uptime()),node_version:process.version,memory:process.memoryUsage() },
+        host,
+        database:database.rows[0] || null,
+        table_sizes:tables.rows,
+        bandwidth_note:"Host counters report bytes since boot and recent transfer rate. Provider monthly traffic quota is not exposed unless separately configured.",
+      };
+    } catch (error) {
+      request.log.error(error);
+      return reply.code(500).send({ error:"SYSTEM_METRICS_FAILED" });
+    }
+  });
+
   app.get("/api/admin/super/inventory-catalog-audit", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
     try { return await inventoryCatalogAudit(); }
@@ -693,7 +938,13 @@ export async function registerSuperAdminRoutes(app) {
     try { return { ok:true,row:await saveDatasetRow(user,text(request.params?.dataset),request.body) }; }
     catch (error) {
       const status = ["23503","23505","23514"].includes(error?.code) ? 409 : (error.statusCode || 500);
-      return reply.code(status).send({ error:error.message || "ADMIN_DATA_SAVE_FAILED" });
+      return reply.code(status).send({
+        error:error.message || "ADMIN_DATA_SAVE_FAILED",
+        ...(error.field ? { field:error.field } : {}),
+        ...(error.fields ? { fields:error.fields } : {}),
+        ...(error.max ? { max:error.max } : {}),
+        ...(error.current ? { current:error.current } : {}),
+      });
     }
   });
 

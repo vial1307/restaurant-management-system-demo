@@ -18,7 +18,7 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-echo "[1/11] Loading exact tested source..."
+echo "[1/12] Loading exact tested source..."
 SOURCE_BEFORE="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
 DEPLOY_TARGET="${KITCHEN_DEPLOY_TARGET:-}"
 if [[ -z "${DEPLOY_TARGET}" && -f "${TARGET_FILE}" ]]; then
@@ -64,11 +64,14 @@ fi
 
 echo "Deploy target verified: ${DEPLOY_TARGET}"
 
-echo "[2/11] Updating compose definition..."
+echo "[2/12] Updating compose definition..."
 cp "${REPO_DIR}/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 chown deploy:deploy "${APP_DIR}/docker-compose.yml"
 
-echo "[3/11] Frontend JavaScript syntax preflight..."
+echo "[3/12] Installing filtered host metrics snapshot..."
+bash "${REPO_DIR}/vps/scripts/install-host-metrics-timer.sh"
+
+echo "[4/12] Frontend JavaScript syntax preflight..."
 docker run --rm -v "${REPO_DIR}:/repo:ro" node:22-alpine sh -lc '
   set -e
   for file in /repo/src/*.js /repo/tests/*.mjs; do
@@ -76,13 +79,13 @@ docker run --rm -v "${REPO_DIR}:/repo:ro" node:22-alpine sh -lc '
   done
 '
 
-echo "[4/11] Building API image..."
+echo "[5/12] Building API image..."
 cd "${APP_DIR}"
 APP_RELEASE="$(runuser -u deploy -- git -C "${REPO_DIR}" rev-parse --short HEAD)"
 export APP_RELEASE
 docker compose --env-file .env build app
 
-echo "[5/11] Preparing validated frontend release..."
+echo "[6/12] Preparing validated frontend release..."
 rm -rf "${WEB_NEXT}"
 mkdir -p "${WEB_NEXT}"
 cp -a "${REPO_DIR}/index.html" "${WEB_NEXT}/"
@@ -103,16 +106,16 @@ docker run --rm \
 printf '%s\n' "${APP_RELEASE}" > "${WEB_NEXT}/RELEASE"
 chown -R deploy:deploy "${WEB_NEXT}"
 
-echo "[6/11] Creating pre-deploy database backup..."
+echo "[7/12] Creating pre-deploy database backup..."
 bash "${REPO_DIR}/vps/scripts/backup.sh"
 
-echo "[7/11] Applying database migrations..."
+echo "[8/12] Applying database migrations..."
 bash "${REPO_DIR}/vps/scripts/migrate.sh"
 
-echo "[8/11] Starting database and API..."
+echo "[9/12] Starting database and API..."
 docker compose --env-file .env up -d db app
 
-echo "[9/11] Waiting for API health..."
+echo "[10/12] Waiting for API health..."
 for attempt in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
     echo "API healthy."
@@ -126,14 +129,14 @@ for attempt in $(seq 1 30); do
   sleep 2
 done
 
-echo "[10/11] Verifying production database integrity..."
+echo "[11/12] Verifying production database integrity..."
 if ! bash "${REPO_DIR}/vps/scripts/verify-vps-data.sh"; then
   echo "Database verification failed. Existing frontend remains active."
   docker compose --env-file .env logs --tail=120 app
   exit 1
 fi
 
-echo "[11/11] Activating frontend release..."
+echo "[12/12] Activating frontend release..."
 rm -rf "${WEB_PREV}"
 if [[ -d "${WEB_LIVE}" ]]; then
   mv "${WEB_LIVE}" "${WEB_PREV}"

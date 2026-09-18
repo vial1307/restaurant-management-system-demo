@@ -52,6 +52,7 @@ jobs:
       COOKIE_SECURE: "false"
       SESSION_DAYS: "1"
       PORT: "8080"
+      HOST_METRICS_PATH: "vps/backend/scripts/fixtures/host-metrics.env"
       TEST_API_BASE: "http://127.0.0.1:8080"
       TEST_WEB_BASE: "http://127.0.0.1:3000"
       PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"

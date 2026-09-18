@@ -7,6 +7,10 @@ on:
       - main
     paths:
       - ".github/workflows/vps-capacity-audit.yml"
+      - "vps/scripts/collect-host-metrics.sh"
+      - "vps/scripts/install-host-metrics-timer.sh"
+      - "vps/docker-compose.yml"
+      - "vps/backend/src/super-admin-routes.mjs"
 
 permissions:
   contents: read
@@ -34,6 +38,7 @@ jobs:
       - name: Read-only VPS capacity and runtime audit
         run: |
           set -euo pipefail
+          exec > >(tee -a vps-capacity-audit.txt) 2>&1
           ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
           set -u
 
@@ -63,6 +68,18 @@ jobs:
           echo '=== LOAD_UPTIME ==='
           uptime
           cat /proc/loadavg
+
+          echo '=== NETWORK_HOST ==='
+          default_iface="$(ip route show default 2>/dev/null | awk 'NR==1{print $5}' || true)"
+          echo "default_interface=${default_iface:-unknown}"
+          for nic_path in /sys/class/net/*; do
+            nic="$(basename "${nic_path}")"
+            [ "${nic}" = "lo" ] && continue
+            rx="$(cat "${nic_path}/statistics/rx_bytes" 2>/dev/null || echo 0)"
+            tx="$(cat "${nic_path}/statistics/tx_bytes" 2>/dev/null || echo 0)"
+            speed="$(cat "${nic_path}/speed" 2>/dev/null || echo 0)"
+            echo "interface=${nic} rx_bytes=${rx} tx_bytes=${tx} link_mbps=${speed}"
+          done
 
           echo '=== FILESYSTEM ==='
           df -hT /
@@ -136,6 +153,7 @@ jobs:
       - name: External production HTTPS timing from CI runner
         run: |
           set -euo pipefail
+          exec > >(tee -a vps-capacity-audit.txt) 2>&1
           echo '=== EXTERNAL_HTTPS_TIMING ==='
           for path in / /api/health /RELEASE; do
             echo "-- ${path} --"
@@ -145,3 +163,12 @@ jobs:
                 "https://82.47.180.185.nip.io${path}"
             done
           done
+
+      - name: Upload VPS capacity audit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vps-capacity-audit
+          path: vps-capacity-audit.txt
+          if-no-files-found: warn
+          retention-days: 7
