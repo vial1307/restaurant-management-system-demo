@@ -78,7 +78,7 @@ const DATASET_POLICY = {
     textLimits:{ site_code:40,item_code:64,name_vi:240,name_zh_tw:240,category:120,work_area:120,currency_code:3 },
   },
   "inventory-products": {
-    required:["item_key","catalog_key","name_vi","name_zh_tw","unit"],
+    required:["item_key","catalog_key","name_vi","name_zh_tw","unit","work_area"],
     createOnly:["item_key","catalog_key"],
     textLimits:{ item_key:240,catalog_key:180,name_vi:240,name_zh_tw:240,unit:40,work_area:120 },
   },
@@ -159,12 +159,11 @@ function validateDatasetValues(name, config, raw, { isCreate = false, current = 
   if (Object.prototype.hasOwnProperty.call(raw,"metadata") && (raw.metadata === null || typeof raw.metadata !== "object" || Array.isArray(raw.metadata))) {
     throw Object.assign(new Error("ADMIN_METADATA_OBJECT_REQUIRED"), { statusCode:400, field:"metadata" });
   }
-  if (isCreate) {
-    for (const column of policy.required || []) {
-      const value = raw[column];
-      if (value === null || value === undefined || (typeof value === "string" && !value.trim())) {
-        throw Object.assign(new Error("ADMIN_REQUIRED_FIELD"), { statusCode:400, field:column });
-      }
+  for (const column of policy.required || []) {
+    if (!isCreate && !Object.prototype.hasOwnProperty.call(raw,column)) continue;
+    const value = raw[column];
+    if (value === null || value === undefined || (typeof value === "string" && !value.trim())) {
+      throw Object.assign(new Error("ADMIN_REQUIRED_FIELD"), { statusCode:400, field:column });
     }
   }
   for (const [column, allowed] of Object.entries(policy.enums || {})) {
