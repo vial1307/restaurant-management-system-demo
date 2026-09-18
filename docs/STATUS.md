@@ -57,6 +57,22 @@ Observed host state:
 
 Provider monthly traffic quota remains unknown until real provider-plan data is configured. Host counters are usage observations, not billing-quota data.
 
+## Active work — workforce schedule parity
+
+Branch: `feat/workforce-schedule-parity-gate-20260919`
+
+Goal:
+- prove relational workforce schedule data matches the current `business_state.schedule` compatibility source before any authority cutover.
+
+Implemented on this branch:
+- `--parity` read-only mode in `workforce-schedule-backfill.mjs`;
+- field-level comparison for draft schedules, current publication snapshot, requests and exceptions;
+- checkpoint revision/checksum/status verification;
+- regression proving parity success and intentional-drift failure;
+- read-only production parity workflow after successful main deploy.
+
+Authority remains unchanged while this work is in progress: `business_state.modules.schedule` is still canonical.
+
 ## Current continuation point
 
 The secure Admin/Data + VPS metrics + GitHub/Handoff workstream is complete and production verified.
