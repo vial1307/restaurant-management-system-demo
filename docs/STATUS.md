@@ -1,76 +1,63 @@
 # Kitchen OS Engineering Status
 
-> Read this after `docs/CURRENT_HANDOFF.md`. This is the short operational workboard; `docs/WORK_LOG.md` remains the chronological log.
+> Read this after `docs/CURRENT_HANDOFF.md`. `docs/WORK_LOG.md` is the chronological evidence log.
 
 ## Current authority
 
 - Repository: `vial1307/restaurant-management-system-demo`
-- Production data authority: Browser/UI -> VPS API -> PostgreSQL.
-- PostgreSQL remains private behind the VPS/API boundary.
-- Verified production commit: `fc563c7f147327656aff304a0c621754d38b4591`.
-- Verified production workflow: Deploy Kitchen OS to VPS #765, run `35443223746`.
-- Verified production schema: `022`.
+- Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
+- Verified production release: Deploy Kitchen OS to VPS #767 / run `35456380284`.
+- Verified production SHA: `04718106c7558a2f20f8e1551d17767e3bff1230`.
+- Production schema: `022`.
 - Production UI smoke: PASS.
-- Inventory Site Production Audit after release: PASS.
-- Workforce Schedule Production Parity after release: PASS.
-- Workforce Schedule Production Backfill after release: PASS.
+- Inventory Site Production Audit #24: completed read-only diagnostics.
+- Cross-site inventory contamination: 0.
 
-## DONE
+## CONFIRMED PRODUCTION DEFECT
 
-- Schema-022 inventory site isolation and storage relocation remain production-verified.
-- Warehouse-switch pending/loading feedback is merged and production-verified.
-- PR #119 runtime schedule shadow write is merged and production-verified.
-- Draft schedules, requests/exceptions and publication history write to relational workforce tables in the same transaction as compatibility state.
-- The existing schedule compatibility JSON remains readable and writable for rollback.
-- Production parity after release #765 is green.
+Deep inventory audit found 4 hidden stock rows under inactive items.
 
-## IN PROGRESS — workforce schedule relational read cutover gate
+Affected item keys:
 
-Branch: `feat/workforce-schedule-read-cutover-gate-20260920`
+- `fuxing:duck-tongue`
+- `fuxing:freezer-kombu-broth-small`
 
-Goal:
+Total hidden physical quantity visible in the audit rows:
 
-- prepare a reversible read-authority cutover without changing production behavior yet.
+- duck tongue: 22 across three locations;
+- small frozen kombu broth: 40 in Fuxing large freezer.
 
-Current candidate behavior:
+The values remain in PostgreSQL; they are hidden because the item rows are inactive.
 
-- server flag: `WORKFORCE_SCHEDULE_RELATIONAL_READ`;
-- VPS default: `false`;
-- OFF: business-state schedule read remains compatibility JSON;
-- ON: business-state schedule read comes from relational schedule projection;
-- schedule write path remains the existing transactional write-through path;
-- compatibility module revision tokens remain the concurrency contract;
-- no migration/schema change.
+Root cause is the dedicated catalog archive endpoint missing the server/database `ITEM_HAS_STOCK` guard that the frontend already expected.
 
-Required verification before merge:
+## IN PROGRESS — archive integrity fix
 
-1. syntax/static contracts;
-2. PostgreSQL schedule backfill/parity regression;
-3. schedule read-authority OFF/ON regression;
-4. API/business-state regression;
-5. desktop/mobile/full-device browser regression;
-6. deploy preflight.
+Branch:
+
+- `fix/inventory-hidden-stock-archive-integrity-20260920`
+
+Changes in progress:
+
+- schema 023 hidden-stock recovery;
+- DB archive guard;
+- DB inactive-item stock guard;
+- transactional catalog archive;
+- archive audit history;
+- API regression for block -> clear -> archive;
+- DB migration/trigger regression;
+- production verifier upgraded to schema 023 and hidden-stock checks.
 
 ## NEXT
 
-1. Merge only if all PR checks are green.
-2. Deploy the merged commit with relational read still OFF.
-3. Verify production release + UI smoke.
-4. Verify production schedule parity/backfill again.
-5. Enable relational read in a separate explicit step only after the OFF deployment is verified.
-6. Keep compatibility writes until a later retirement stage is explicitly reviewed.
+1. Complete CI on the fix branch.
+2. Merge only when API/database/browser/full-device gates are green.
+3. Deploy exact tested commit with PostgreSQL backup.
+4. Confirm migration 023 reactivates the two affected Fuxing items without changing quantities.
+5. Confirm production hidden-stock counts become zero.
+6. Confirm Inventory Site Production Audit remains zero for cross-site contamination.
+7. After this fix is stable, resume schedule relational-read certification separately.
 
 ## BLOCKED
 
-- No current product/data blocker.
-- Do not treat relational read as production authority until the feature flag is deliberately enabled after the verified OFF deployment.
-
-## Handoff rule
-
-Before stopping work:
-
-1. update this file with DONE / IN PROGRESS / NEXT / BLOCKED;
-2. append the session to `docs/WORK_LOG.md`;
-3. update `docs/CURRENT_HANDOFF.md` with exact verified production evidence;
-4. keep Super Admin GitHub/Handoff metadata aligned with the current continuation point;
-5. never label a release as verified until deploy release check and production UI smoke are green.
+- Do not manually delete/zero the hidden production rows before migration 023; their quantities are treated as real physical stock until an operator corrects them through normal stocktake/transfer flows.
