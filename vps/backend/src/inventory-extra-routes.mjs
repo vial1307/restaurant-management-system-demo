@@ -353,7 +353,6 @@ export async function registerInventoryExtraRoutes(app) {
       return reply.code(400).send({ error: "INVALID_CATALOG_ITEM" });
     }
     if (!requireCatalogManager(user,site,reply)) return;
-    const stocktakeWrite = canStocktakeRole(user,site);
 
     try {
       const saved = await withTransaction(async (client) => {
@@ -395,33 +394,43 @@ export async function registerInventoryExtraRoutes(app) {
           const locationId = location.rows[0].id;
           wantedLocationIds.push(locationId);
 
-          if (stocktakeWrite) {
-            await client.query(
-              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
-               values($1,$2,$3,$4,now())
-               on conflict(item_id,location_id) do update set
-                 quantity=excluded.quantity,
-                 minimum_quantity=excluded.minimum_quantity,
-                 updated_at=now()`,
-              [
-                savedItem.id,locationId,
-                Math.max(0,Number(loc.quantity) || 0),
-                Math.max(0,Number(loc.minimum) || 0),
-              ]
-            );
-          } else {
-            // Catalog editors may configure item/location metadata but must not
-            // use catalog sync as an alternate stocktake write path.
-            await client.query(
-              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
-               values($1,$2,0,0,now())
-               on conflict(item_id,location_id) do nothing`,
-              [savedItem.id,locationId]
-            );
-          }
+          // Catalog sync owns only catalog/location association metadata.
+          // Physical quantity and minimum configuration must use the dedicated
+          // stocktake endpoints so quantity changes remain auditable and cannot
+          // be replayed from a stale browser/catalog snapshot.
+          await client.query(
+            `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+             values($1,$2,0,0,now())
+             on conflict(item_id,location_id) do nothing`,
+            [savedItem.id,locationId]
+          );
         }
 
         if (wantedLocationIds.length) {
+          const protectedOmitted = await client.query(
+            `select s.location_id,l.code as location_code,s.quantity,s.minimum_quantity
+             from public.inventory_stock s
+             join public.inventory_locations l on l.id=s.location_id
+             where s.item_id=$1
+               and l.site=$2
+               and not(s.location_id=any($3::uuid[]))
+               and (s.quantity>0 or s.minimum_quantity>0)
+             order by l.code
+             for update of s`,
+            [savedItem.id,site,wantedLocationIds]
+          );
+          if (protectedOmitted.rowCount) {
+            throw Object.assign(new Error("LOCATION_HAS_STOCK"), {
+              statusCode:409,
+              details:protectedOmitted.rows.map((row) => ({
+                locationId:row.location_id,
+                locationCode:row.location_code,
+                quantity:Number(row.quantity || 0),
+                minimum:Number(row.minimum_quantity || 0),
+              })),
+            });
+          }
+
           await client.query(
             `delete from public.inventory_stock
              where item_id=$1
@@ -429,7 +438,8 @@ export async function registerInventoryExtraRoutes(app) {
                  select l.id from public.inventory_locations l where l.site=$2
                )
                and not(location_id=any($3::uuid[]))
-               and quantity=0`,
+               and quantity=0
+               and minimum_quantity=0`,
             [savedItem.id,site,wantedLocationIds]
           );
         }
@@ -439,7 +449,13 @@ export async function registerInventoryExtraRoutes(app) {
       return { item:saved };
     } catch (error) {
       if (error?.code === "23505") return reply.code(409).send({ error:"CATALOG_CONFLICT" });
-      return reply.code(500).send({ error:error.message || "CATALOG_SYNC_FAILED" });
+      if (error?.message === "LOCATION_HAS_STOCK") {
+        return reply.code(409).send({
+          error:"LOCATION_HAS_STOCK",
+          details:Array.isArray(error.details) ? error.details : [],
+        });
+      }
+      return reply.code(error.statusCode || 500).send({ error:error.message || "CATALOG_SYNC_FAILED" });
     }
   });
 
