@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import pg from "pg";
 import { loadWorkforceScheduleRelationalState } from "../src/workforce-schedule-relational-state.mjs";
+import {
+  applyWorkforceScheduleWorkflowShadowMutation,
+  insertWorkforceSchedulePublicationShadow,
+  syncWorkforceScheduleDraftShadow,
+} from "../src/workforce-schedule-relational-shadow.mjs";
 
 const { Client } = pg;
 pg.types.setTypeParser(1082, (value) => value);
@@ -218,6 +223,149 @@ try {
     client.query(`update public.workforce_schedule_publication_entries set note='mutated' where publication_id=$1`, [publication.rows[0].id]),
     (error) => error?.code === "55000"
   );
+
+  const runtimeModule = structuredClone(changed);
+  runtimeModule.schedules = [structuredClone(runtimeModule.schedules[0])];
+  runtimeModule.schedules[0].note = "runtime shadow draft note";
+  const runtimeUser = { id:manager.id, username:manager.username };
+  const draftShadow = await syncWorkforceScheduleDraftShadow(client, {
+    site:"fuxing",
+    schedules:runtimeModule.schedules,
+    user:runtimeUser,
+  });
+  assert.equal(draftShadow.ok, true);
+  assert.equal(draftShadow.rows, 1);
+  await client.query(
+    `update public.business_state set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_at=now() where site=$1`,
+    ["fuxing", JSON.stringify({ schedule:runtimeModule }), JSON.stringify({ schedule:10 })]
+  );
+  const runtimeDraftParity = runBackfill("--parity", "--site=fuxing");
+  assert.match(runtimeDraftParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
+  assert.equal(
+    (await client.query(`select count(*)::int as count from public.workforce_schedule_entries where site_code='fuxing' and active=true`)).rows[0].count,
+    1
+  );
+  assert.equal(
+    (await client.query(`select active from public.workforce_schedule_entries where site_code='fuxing' and legacy_schedule_id='schedule-recurring'`)).rows[0].active,
+    false
+  );
+
+  const runtimePublication = {
+    version:3,
+    publishedAt:"2026-09-16T07:00:00.000Z",
+    publishedByUserId:manager.id,
+    publishedByName:manager.username,
+    scheduleCount:runtimeModule.schedules.length,
+    sourceModuleRevision:10,
+  };
+  const publicationShadow = await insertWorkforceSchedulePublicationShadow(client, {
+    site:"fuxing",
+    publication:runtimePublication,
+    draftSchedules:runtimeModule.schedules,
+    user:runtimeUser,
+  });
+  assert.equal(publicationShadow.ok, true);
+  runtimeModule.publishedSchedules = structuredClone(runtimeModule.schedules);
+  runtimeModule.publication = runtimePublication;
+  await client.query(
+    `update public.business_state set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_at=now() where site=$1`,
+    ["fuxing", JSON.stringify({ schedule:runtimeModule }), JSON.stringify({ schedule:11 })]
+  );
+  const runtimePublicationParity = runBackfill("--parity", "--site=fuxing");
+  assert.match(runtimePublicationParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
+  const runtimePublicationRow = await client.query(
+    `select id,schedule_count from public.workforce_schedule_publications where site_code='fuxing' and version=3`
+  );
+  assert.equal(runtimePublicationRow.rowCount, 1);
+  assert.equal(Number(runtimePublicationRow.rows[0].schedule_count), 1);
+  assert.equal(
+    (await client.query(`select count(*)::int as count from public.workforce_schedule_publication_entries where publication_id=$1`, [runtimePublicationRow.rows[0].id])).rows[0].count,
+    1
+  );
+
+  const runtimeRequest = {
+    id:"schedule-request-runtime",
+    type:"leave",
+    staffId:"schedule-employee",
+    staffName:"Schedule Employee",
+    date:"2026-10-07",
+    sourceScheduleId:"",
+    sourceSnapshot:null,
+    requestedStart:"",
+    requestedEnd:"",
+    reason:"Runtime shadow regression",
+    status:"pending",
+    createdAt:"2026-09-16T08:00:00.000Z",
+    createdByUserId:employee.id,
+    createdByName:employee.username,
+  };
+  const requestCreateShadow = await applyWorkforceScheduleWorkflowShadowMutation(client, {
+    site:"fuxing",
+    action:"workforce-schedule-request-create",
+    after:runtimeRequest,
+    metadata:{},
+    user:{ id:employee.id, username:employee.username },
+  });
+  assert.equal(requestCreateShadow.ok, true);
+  runtimeModule.requests.unshift(structuredClone(runtimeRequest));
+  await client.query(
+    `update public.business_state set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_at=now() where site=$1`,
+    ["fuxing", JSON.stringify({ schedule:runtimeModule }), JSON.stringify({ schedule:12 })]
+  );
+  assert.match(runBackfill("--parity", "--site=fuxing"), /WORKFORCE_SCHEDULE_PARITY_OK/);
+
+  const runtimeApprovedRequest = {
+    ...runtimeRequest,
+    status:"approved",
+    decidedAt:"2026-09-16T09:00:00.000Z",
+    decidedByUserId:manager.id,
+    decidedByName:manager.username,
+    decisionNote:"approved",
+    exceptionId:"schedule-exception-runtime",
+  };
+  const runtimeException = {
+    id:"schedule-exception-runtime",
+    requestId:runtimeRequest.id,
+    staffId:runtimeRequest.staffId,
+    staffName:runtimeRequest.staffName,
+    date:runtimeRequest.date,
+    kind:"leave",
+    sourceScheduleId:"",
+    start:"",
+    end:"",
+    department:"",
+    area:"",
+    shift:"",
+    approvedAt:runtimeApprovedRequest.decidedAt,
+    approvedByUserId:manager.id,
+    approvedByName:manager.username,
+  };
+  const requestApproveShadow = await applyWorkforceScheduleWorkflowShadowMutation(client, {
+    site:"fuxing",
+    action:"workforce-schedule-request-approve",
+    after:runtimeApprovedRequest,
+    metadata:{ exception:runtimeException },
+    user:runtimeUser,
+  });
+  assert.equal(requestApproveShadow.ok, true);
+  runtimeModule.requests = runtimeModule.requests.map((entry) => (
+    entry.id === runtimeRequest.id ? structuredClone(runtimeApprovedRequest) : entry
+  ));
+  runtimeModule.exceptions.unshift(structuredClone(runtimeException));
+  await client.query(
+    `update public.business_state set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_at=now() where site=$1`,
+    ["fuxing", JSON.stringify({ schedule:runtimeModule }), JSON.stringify({ schedule:13 })]
+  );
+  assert.match(runBackfill("--parity", "--site=fuxing"), /WORKFORCE_SCHEDULE_PARITY_OK/);
+  const runtimeRequestRow = await client.query(
+    `select status from public.workforce_schedule_requests where site_code='fuxing' and legacy_request_id='schedule-request-runtime'`
+  );
+  assert.equal(runtimeRequestRow.rows[0].status, "approved");
+  const runtimeExceptionRow = await client.query(
+    `select exception_kind,status from public.workforce_schedule_exceptions where site_code='fuxing' and legacy_exception_id='schedule-exception-runtime'`
+  );
+  assert.equal(runtimeExceptionRow.rows[0].exception_kind, "leave");
+  assert.equal(runtimeExceptionRow.rows[0].status, "active");
 
   await client.query(
     `update public.workforce_schedule_entries set note='intentional parity drift' where site_code='fuxing' and legacy_schedule_id='schedule-day'`
