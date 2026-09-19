@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified main/production SHA: `fc563c7f147327656aff304a0c621754d38b4591`
+- Current verified production SHA: `04718106c7558a2f20f8e1551d17767e3bff1230`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
 - Production database schema: PostgreSQL migrations through schema 022.
@@ -21,9 +21,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #765
-- Run ID: `35443223746`
-- Tested/deployed commit: `fc563c7f147327656aff304a0c621754d38b4591`
+- Workflow: Deploy Kitchen OS to VPS #767
+- Run ID: `35456380284`
+- Tested/deployed commit: `04718106c7558a2f20f8e1551d17767e3bff1230`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -230,7 +230,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #765 / `fc563c7f147327656aff304a0c621754d38b4591`, schema `022`.
+3. Current verified production baseline is #767 / `04718106c7558a2f20f8e1551d17767e3bff1230`, schema `022`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
 5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
@@ -447,3 +447,51 @@ Do not enable the flag in production merely because this candidate merges. Requi
 3. Re-run production schedule parity/backfill and confirm no divergence.
 4. Enable relational read only in a separate reviewed change/operation with a rollback path.
 5. Continue compatibility writes until relational read has been stable in production; retirement of compatibility authority is a later explicit stage.
+
+
+## 2026-09-20 — Inventory hidden-stock production defect confirmed
+
+A deeper read-only production audit was merged as PR #122 and executed as Inventory Site Production Audit #24 / run `35457497470`.
+
+Cross-site integrity remained clean:
+
+- `stock_site_mismatch = 0`
+- `receive_default_site_mismatch = 0`
+- `unknown_item_site = 0`
+- duplicate active catalog/site groups = 0
+- invalid/blank catalog identity = 0
+- active item without stock/storage configuration = 0
+- invalid receive-default configuration = 0
+
+The audit found one real inventory integrity defect:
+
+- `inactive_item_positive_stock = 4` stock rows;
+- `inactive_item_positive_minimum = 4` stock rows;
+- affected hidden stock belongs to two Fuxing items:
+  - `fuxing:duck-tongue`
+    - `fuxing-kitchen`: quantity 4 / minimum 10
+    - `fuxing-large-fridge`: quantity 14 / minimum 20
+    - `fuxing-work-noodles`: quantity 4 / minimum 10
+  - `fuxing:freezer-kombu-broth-small`
+    - `fuxing-large-freezer`: quantity 40 / minimum 15
+
+Root cause:
+
+- frontend already expected the backend to return `ITEM_HAS_STOCK` when deleting a stock-bearing item;
+- backend `POST /api/inventory/catalog/archive` previously performed a direct `active=false` update with no stock guard;
+- inventory GET intentionally hides inactive items, so stock stayed in PostgreSQL but disappeared from normal UI/API snapshots.
+
+Active fix branch:
+
+- `fix/inventory-hidden-stock-archive-integrity-20260920`
+
+Candidate fix:
+
+1. migration 023 reactivates only inactive items that still have positive physical quantity; quantity/minimum values are preserved exactly and recovery is audit logged;
+2. DB trigger blocks item archive while quantity or minimum configuration remains;
+3. DB trigger blocks positive stock/minimum writes against an inactive item;
+4. archive API becomes transactional, returns `409 ITEM_HAS_STOCK`, removes only zero-stock configuration/default routing, and writes an audit record;
+5. API regression requires archive to fail before stock is cleared and succeed only after quantity/minimum become zero;
+6. production data verifier requires schema 023 and zero hidden stock after deploy.
+
+Do not manually delete or zero the affected production quantities. The migration intentionally restores visibility without guessing physical stock.
