@@ -20,6 +20,15 @@ try {
   );
   assert.deepEqual(sites.rows.map((row) => row.code), ["fuxing","yongji"]);
 
+  await assert.rejects(
+    client.query(
+      `insert into public.inventory_items(
+       item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
+       ) values('ghost:site-isolation-regression','ghost-site-isolation','錯誤站點','Site sai','包','noodles',false,true)`
+    ),
+    (error) => error?.code === "23514" && /INVENTORY_ITEM_SITE_INVALID/.test(String(error?.message || ""))
+  );
+
   const item = await client.query(
     `insert into public.inventory_items(
        item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
@@ -78,9 +87,9 @@ try {
     `select count(*)::int as count
      from information_schema.triggers
      where trigger_schema='public'
-       and trigger_name in ('inventory_stock_site_guard','inventory_receive_defaults_site_guard')`
+       and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')`
   );
-  assert.equal(triggerCount.rows[0].count,2);
+  assert.equal(triggerCount.rows[0].count,3);
 
   console.log("INVENTORY_SITE_ISOLATION_DATABASE_OK");
 } finally {
