@@ -11,7 +11,7 @@ const legacyAssertion = 'assert.equal(health.data.schema, "013", "Database Core 
 assert(source.includes(legacyAssertion), "business module conflict schema assertion changed; update wrapper explicitly");
 const migrated = source.replace(
   legacyAssertion,
-  'assert.equal(health.data.schema, "021", "Database Core v2 migrations are not active");'
+  'assert.equal(health.data.schema, "022", "Database Core v2 migrations are not active");'
 );
 
 fs.writeFileSync(tempPath, migrated, "utf8");
