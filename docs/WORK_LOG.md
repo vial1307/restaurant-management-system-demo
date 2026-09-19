@@ -285,3 +285,78 @@ Next work:
 3. preserve VPS API/PostgreSQL as the only authoritative write path;
 4. define migration/backfill/rollback + verification before destructive changes;
 5. preserve dedicated transactional APIs for inventory/workforce/payroll/SOP invariants.
+
+
+## 2026-09-19 — Inventory site isolation production release #754
+
+### User-reported issue
+
+- Editing/viewing Fuxing could appear to affect Yongji.
+- Internal storage relocation could be unreliable from the user's perspective.
+- The product owner required confirmation whether Central/Fuxing/Yongji are separate databases or separate site data inside one database.
+
+### Architecture confirmed
+
+- Central, Fuxing and Yongji use one PostgreSQL database.
+- Inventory is isolated by site-prefixed item identity and site-owned locations.
+- Normal edits are site-local.
+- Only explicit cross-site shipment/direct-transfer updates two sites.
+
+### Root cause and hardening
+
+The production database read path was already site-filtered, but browser branch state had a shared-record/cache risk and several mutation routes needed stronger item/location site checks.
+
+PR #115 hardened all three layers:
+
+- PostgreSQL schema 022 site guards;
+- API item/location site validation;
+- Fuxing/Yongji site-scoped browser mirrors;
+- fetch-before-commit site switching;
+- failed switch rollback;
+- no cross-branch staging draft seeding;
+- storage relocation regression;
+- pre/post production inventory site audits.
+
+### Production data audit
+
+Before schema 022:
+
+- `stock_site_mismatch = 0`;
+- `receive_default_site_mismatch = 0`;
+- `unknown_item_site = 0`.
+
+Therefore production PostgreSQL did not contain cross-site contamination from the reported incident.
+
+### CI stabilization
+
+Main deploy was temporarily blocked by pre-existing browser-test timing races:
+
+- WebKit mobile schedule permission visibility race;
+- repeated role-login browser hydration race.
+
+PR #116 made WebKit permission certification atomic.
+PR #117 kept primary login-form coverage while using a proven UI-first/backend-fallback pattern for repeated role certification.
+
+No inventory authority or production auth behavior was weakened to pass these gates.
+
+### Release #754
+
+Verified production:
+
+- commit `6f391421881e6e4aa687ed8cca85d751f96efadb`;
+- workflow run `35430241680`;
+- schema `022`;
+- backup created;
+- pre-migration inventory audit PASS;
+- migration 022 applied;
+- inventory site-isolation triggers = 3;
+- API/inventory/concurrency/browser/full-device gates PASS;
+- production health/release check PASS;
+- production UI smoke PASS;
+- post-deploy Inventory Site Production Audit #8 PASS.
+
+### Next
+
+- add visible pending feedback while a target warehouse snapshot is loading;
+- keep all warehouse buttons disabled until hydration completes;
+- preserve site-scoped cache and schema-022 invariants in subsequent work.
