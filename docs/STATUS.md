@@ -1,76 +1,56 @@
 # Kitchen OS Engineering Status
 
-> Read this after `docs/CURRENT_HANDOFF.md`. This is the short operational workboard; `docs/WORK_LOG.md` remains the chronological log.
+> Read this after `docs/CURRENT_HANDOFF.md`. `docs/WORK_LOG.md` remains chronological evidence.
 
 ## Current authority
 
 - Repository: `vial1307/restaurant-management-system-demo`
-- Production data authority: Browser/UI -> VPS API -> PostgreSQL.
-- PostgreSQL remains private behind the VPS/API boundary.
-- Verified production commit: `fc563c7f147327656aff304a0c621754d38b4591`.
-- Verified production workflow: Deploy Kitchen OS to VPS #765, run `35443223746`.
-- Verified production schema: `022`.
+- Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
+- Verified production commit: `04718106c7558a2f20f8e1551d17767e3bff1230`.
+- Verified production workflow: Deploy Kitchen OS to VPS #767, run `35456380284`.
+- Schema: `022`.
 - Production UI smoke: PASS.
-- Inventory Site Production Audit after release: PASS.
-- Workforce Schedule Production Parity after release: PASS.
-- Workforce Schedule Production Backfill after release: PASS.
+- Inventory Site Production Audit #22: PASS.
+- Workforce Schedule Production Parity #43: PASS.
+- Workforce Schedule Production Backfill #254: PASS.
+- Production schedule read authority: compatibility JSON; relational read gate is deployed but default OFF.
 
 ## DONE
 
-- Schema-022 inventory site isolation and storage relocation remain production-verified.
-- Warehouse-switch pending/loading feedback is merged and production-verified.
-- PR #119 runtime schedule shadow write is merged and production-verified.
-- Draft schedules, requests/exceptions and publication history write to relational workforce tables in the same transaction as compatibility state.
-- The existing schedule compatibility JSON remains readable and writable for rollback.
-- Production parity after release #765 is green.
+- Schedule runtime write-through to relational PostgreSQL is production-verified.
+- Reversible server-side read gate is production-deployed with default OFF.
+- Release #767 passed full regression, deploy, UI smoke, inventory audit and schedule parity/backfill.
 
-## IN PROGRESS — workforce schedule relational read cutover gate
+## IN PROGRESS — relational-read canary certification
 
-Branch: `feat/workforce-schedule-read-cutover-gate-20260920`
+Branch: `test/workforce-schedule-relational-read-canary-20260920`
 
-Goal:
+This branch does not enable production relational read.
 
-- prepare a reversible read-authority cutover without changing production behavior yet.
+It changes CI so the full release regression runs with:
 
-Current candidate behavior:
+- `WORKFORCE_SCHEDULE_RELATIONAL_READ=true`
 
-- server flag: `WORKFORCE_SCHEDULE_RELATIONAL_READ`;
-- VPS default: `false`;
-- OFF: business-state schedule read remains compatibility JSON;
-- ON: business-state schedule read comes from relational schedule projection;
-- schedule write path remains the existing transactional write-through path;
-- compatibility module revision tokens remain the concurrency contract;
-- no migration/schema change.
+It also adds an API canary after full-device regression to prove relational read + transactional write-through + module revision reuse.
 
-Required verification before merge:
+Production `vps/docker-compose.yml` remains default:
 
-1. syntax/static contracts;
-2. PostgreSQL schedule backfill/parity regression;
-3. schedule read-authority OFF/ON regression;
-4. API/business-state regression;
-5. desktop/mobile/full-device browser regression;
-6. deploy preflight.
+- `WORKFORCE_SCHEDULE_RELATIONAL_READ=false`
 
 ## NEXT
 
-1. Merge only if all PR checks are green.
-2. Deploy the merged commit with relational read still OFF.
-3. Verify production release + UI smoke.
-4. Verify production schedule parity/backfill again.
-5. Enable relational read in a separate explicit step only after the OFF deployment is verified.
-6. Keep compatibility writes until a later retirement stage is explicitly reviewed.
+1. Run all PR workflows.
+2. Fix any API/browser/canary mismatch.
+3. Merge only when all gates are green.
+4. Deploy certification changes with production still OFF.
+5. Reverify production parity/backfill.
+6. Only then create a separate explicit production-enable PR.
 
 ## BLOCKED
 
-- No current product/data blocker.
-- Do not treat relational read as production authority until the feature flag is deliberately enabled after the verified OFF deployment.
+- No current data-integrity blocker.
+- Production read cutover remains intentionally blocked until full ON-mode CI certification passes.
 
 ## Handoff rule
 
-Before stopping work:
-
-1. update this file with DONE / IN PROGRESS / NEXT / BLOCKED;
-2. append the session to `docs/WORK_LOG.md`;
-3. update `docs/CURRENT_HANDOFF.md` with exact verified production evidence;
-4. keep Super Admin GitHub/Handoff metadata aligned with the current continuation point;
-5. never label a release as verified until deploy release check and production UI smoke are green.
+Update `CURRENT_HANDOFF.md`, `STATUS.md`, and `WORK_LOG.md` whenever the verified baseline or exact continuation point changes.
