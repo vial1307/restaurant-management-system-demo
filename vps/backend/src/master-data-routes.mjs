@@ -151,11 +151,12 @@ async function assertLocationCanChangeKind(client, locationId) {
 }
 
 async function assertLocationCanArchive(client, locationId) {
-  const [positiveStock, defaults] = await Promise.all([
+  const [protectedStock, defaults] = await Promise.all([
     client.query(
       `select count(*)::int as count
        from public.inventory_stock
-       where location_id=$1 and quantity>0`,
+       where location_id=$1
+         and (quantity>0 or minimum_quantity>0)`,
       [locationId]
     ),
     client.query(
@@ -165,8 +166,8 @@ async function assertLocationCanArchive(client, locationId) {
       [locationId]
     ),
   ]);
-  if (Number(positiveStock.rows[0]?.count || 0) > 0) {
-    throw Object.assign(new Error("LOCATION_HAS_POSITIVE_STOCK"), { statusCode: 409 });
+  if (Number(protectedStock.rows[0]?.count || 0) > 0) {
+    throw Object.assign(new Error("LOCATION_HAS_PROTECTED_STOCK"), { statusCode: 409 });
   }
   if (Number(defaults.rows[0]?.count || 0) > 0) {
     throw Object.assign(new Error("LOCATION_IS_RECEIVE_DEFAULT"), { statusCode: 409 });
