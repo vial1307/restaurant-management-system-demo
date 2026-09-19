@@ -1,6 +1,7 @@
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const STAFF_CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 function text(value) {
   return String(value ?? "").trim();
@@ -31,16 +32,14 @@ function canonicalDepartment(site, value, departments, { defaultInside = false }
 }
 
 async function relationalLookups(client, site) {
-  const [staff, departments] = await Promise.all([
-    client.query(
-      `select id,legacy_staff_id from public.staff_members where site_code=$1 and legacy_staff_id is not null`,
-      [site]
-    ),
-    client.query(
-      `select code from public.organization_departments where site_code=$1 and active=true`,
-      [site]
-    ),
-  ]);
+  const staff = await client.query(
+    `select id,legacy_staff_id from public.staff_members where site_code=$1 and legacy_staff_id is not null`,
+    [site]
+  );
+  const departments = await client.query(
+    `select code from public.organization_departments where site_code=$1 and active=true`,
+    [site]
+  );
   return {
     staffByLegacy:new Map(staff.rows.map((row) => [text(row.legacy_staff_id), row.id])),
     departments:new Set(departments.rows.map((row) => text(row.code))),
