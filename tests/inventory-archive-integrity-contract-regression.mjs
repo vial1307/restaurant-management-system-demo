@@ -52,7 +52,7 @@ assert.match(
 assert.match(verifier,/inactive inventory items with positive quantity/);
 assert.match(verifier,/inactive inventory items with positive minimum/);
 assert.match(verifier,/inventory archive-integrity triggers = 2/);
-assert.match(verifier,/schema version \$\{schema\} is older than 023/);
+assert.match(verifier,/schema version \$\{schema\} is older than 024/);
 
 assert.match(
   auditWorkflow,

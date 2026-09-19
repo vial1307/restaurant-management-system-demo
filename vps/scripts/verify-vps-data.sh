@@ -508,8 +508,8 @@ limit 80;
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "023" ]]; then
-  echo "ERROR: schema version ${schema} is older than 023"
+if [[ "${schema}" < "024" ]]; then
+  echo "ERROR: schema version ${schema} is older than 024"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
@@ -517,6 +517,7 @@ fi
 
 inventory_site_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
 inventory_archive_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_archive_guard','inventory_stock_active_item_guard')")"
+inventory_location_integrity_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_locations_archive_guard','inventory_stock_active_location_guard','inventory_receive_defaults_active_location_guard')")"
 if [[ "${inventory_site_triggers}" != "3" ]]; then
   echo "ERROR: expected 3 inventory site-isolation triggers, found ${inventory_site_triggers}"
   errors=$((errors+1))
@@ -529,6 +530,13 @@ if [[ "${inventory_archive_triggers}" != "2" ]]; then
   errors=$((errors+1))
 else
   echo "OK: inventory archive-integrity triggers = 2"
+fi
+
+if [[ "${inventory_location_integrity_triggers}" != "3" ]]; then
+  echo "ERROR: expected 3 inventory location-integrity triggers, found ${inventory_location_integrity_triggers}"
+  errors=$((errors+1))
+else
+  echo "OK: inventory location-integrity triggers = 3"
 fi
 
 revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"
