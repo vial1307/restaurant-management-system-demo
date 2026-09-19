@@ -39,7 +39,7 @@ async function login(username) {
 await DB.connect();
 try {
   const schema = await DB.query(`select version from public.schema_migrations order by version desc limit 1`);
-  assert.equal(schema.rows[0]?.version, "023");
+  assert.equal(schema.rows[0]?.version, "024");
 
   for (const site of ["central","fuxing","yongji"]) {
     const workAreas = await DB.query(
