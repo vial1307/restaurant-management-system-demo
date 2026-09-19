@@ -46,6 +46,7 @@ import {
   cloudSyncBranchCatalogItem,
   cloudTransferInventory,
   getCloudInventoryHistory,
+  inventoryBranchSnapshot,
   inventoryCatalogKey,
   inventoryCloudState,
   refreshInventoryCloudState,
@@ -1024,7 +1025,16 @@ function inventory(context) {
   const site = activeInventorySite() || "fuxing";
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  const effectiveRecord = !cloudReady && ["fuxing","yongji"].includes(site) ? loadBranchDraftRecord(site,record) : record;
+  const branchSite = ["fuxing","yongji"].includes(site);
+  const branchSnapshot = cloudReady && branchSite ? inventoryBranchSnapshot(site) : null;
+  const isolatedCloudRecord = branchSite && cloudReady
+    ? branchSnapshot
+      ? { ...record, inventory:branchSnapshot.inventory, workInventory:branchSnapshot.workInventory, inventorySite:site }
+      : record?.inventorySite === site
+        ? record
+        : { ...record, inventory:[], workInventory:[], inventorySite:site }
+    : record;
+  const effectiveRecord = !cloudReady && branchSite ? loadBranchDraftRecord(site,record) : isolatedCloudRecord;
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
