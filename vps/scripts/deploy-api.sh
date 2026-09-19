@@ -109,6 +109,9 @@ chown -R deploy:deploy "${WEB_NEXT}"
 echo "[7/12] Creating pre-deploy database backup..."
 bash "${REPO_DIR}/vps/scripts/backup.sh"
 
+echo "[7b/12] Auditing inventory site isolation before migrations..."
+bash "${REPO_DIR}/vps/scripts/audit-inventory-site-isolation.sh"
+
 echo "[8/12] Applying database migrations..."
 bash "${REPO_DIR}/vps/scripts/migrate.sh"
 

@@ -183,14 +183,25 @@ async function assertBranchInventoryRole(page, testCase, label) {
   if (testCase.manage) {
     await manage.waitFor({ state:"visible", timeout:10000 });
     await manage.click();
-    const edit = page.locator('[data-action="open-edit-item"]').first();
-    await edit.waitFor({ state:"visible", timeout:10000 });
-    const directControls = await page.locator('[data-manage-adjust="true"]').count();
-    if (testCase.stocktake) assert(directControls > 0, `${label}: stocktake controls missing`);
-    else assert.equal(directControls, 0, `${label}: unauthorized stocktake controls visible`);
 
-    await edit.click();
-    const modal = page.locator('form[data-form="edit-item"]');
+    const add = page.locator('[data-action="open-add-item"]').first();
+    await add.waitFor({ state:"visible", timeout:10000 });
+    const edit = page.locator('[data-action="open-edit-item"]').first();
+    const existingItem = await edit.count() > 0;
+
+    if (existingItem) {
+      const directControls = await page.locator('[data-manage-adjust="true"]').count();
+      if (testCase.stocktake) assert(directControls > 0, `${label}: stocktake controls missing for existing catalog rows`);
+      else assert.equal(directControls, 0, `${label}: unauthorized stocktake controls visible`);
+      await edit.click();
+    } else {
+      // An empty site is valid after strict Fuxing/Yongji isolation. Catalog
+      // management capability is certified through the add form instead of
+      // requiring a borrowed/stale item from another branch.
+      await add.click();
+    }
+
+    const modal = page.locator(`form[data-form="${existingItem ? "edit-item" : "add-item"}"]`);
     await modal.waitFor({ state:"visible", timeout:10000 });
 
     const quantity = modal.locator('input[name^="quantity:"]').first();

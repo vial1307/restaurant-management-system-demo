@@ -82,6 +82,7 @@ jobs:
           node tests/vps-auth-stale-response-regression.mjs
           node tests/vps-business-state-contract-regression.mjs
           node tests/vps-business-module-revision-runtime-regression.mjs
+          node tests/inventory-site-switch-isolation-regression.mjs
 
       - name: Validate backend JavaScript
         run: |

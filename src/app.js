@@ -46,6 +46,7 @@ import {
   cloudSyncBranchCatalogItem,
   cloudTransferInventory,
   getCloudInventoryHistory,
+  inventoryBranchSnapshot,
   inventoryCatalogKey,
   inventoryCloudState,
   refreshInventoryCloudState,
@@ -679,21 +680,20 @@ function cloneJson(value){ return JSON.parse(JSON.stringify(value)); }
 function loadBranchDraftRecord(site,baseRecord){
   try{
     const saved=JSON.parse(localStorage.getItem(branchDraftKey(site))||"null");
-    if(saved?.inventory&&saved?.workInventory)return saved;
+    if(saved?.site===site&&saved?.inventory&&saved?.workInventory)return saved;
   }catch{}
-  const inventory=cloneJson(baseRecord?.inventory||[]);
-  const workInventory=cloneJson(baseRecord?.workInventory||[]);
-  if(site==="yongji"){
-    inventory.forEach((item)=>{ item.quantity=0; });
-    workInventory.forEach((item)=>{ item.quantity=0; });
-  }
-  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};
+
+  const mirror=inventoryBranchSnapshot(site);
+  const trustedBase=mirror || (baseRecord?.inventorySite===site ? baseRecord : null);
+  const inventory=cloneJson(trustedBase?.inventory||[]);
+  const workInventory=cloneJson(trustedBase?.workInventory||[]);
+  const seeded={site,inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};
   localStorage.setItem(branchDraftKey(site),JSON.stringify(seeded));
   return seeded;
 }
 
 function saveBranchDraftRecord(site,record){
-  localStorage.setItem(branchDraftKey(site),JSON.stringify({...record,updatedAt:new Date().toISOString(),status:"staging"}));
+  localStorage.setItem(branchDraftKey(site),JSON.stringify({...record,site,updatedAt:new Date().toISOString(),status:"staging"}));
 }
 
 function branchZoneByLocationCode(site,code){
@@ -704,7 +704,7 @@ function loadBranchDraftBySite(site){
   const key=branchDraftKey(site);
   try{
     const saved=JSON.parse(localStorage.getItem(key)||"null");
-    if(saved?.inventory&&saved?.workInventory)return saved;
+    if(saved?.site===site&&saved?.inventory&&saved?.workInventory)return saved;
   }catch{}
   let baseRecord={inventory:[],workInventory:[]};
   try{
@@ -1024,7 +1024,16 @@ function inventory(context) {
   const site = activeInventorySite() || "fuxing";
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  const effectiveRecord = !cloudReady && ["fuxing","yongji"].includes(site) ? loadBranchDraftRecord(site,record) : record;
+  const branchSite = ["fuxing","yongji"].includes(site);
+  const branchSnapshot = cloudReady && branchSite ? inventoryBranchSnapshot(site) : null;
+  const isolatedCloudRecord = branchSite && cloudReady
+    ? branchSnapshot
+      ? { ...record, inventory:branchSnapshot.inventory, workInventory:branchSnapshot.workInventory, inventorySite:site }
+      : record?.inventorySite === site
+        ? record
+        : { ...record, inventory:[], workInventory:[], inventorySite:site }
+    : record;
+  const effectiveRecord = !cloudReady && branchSite ? loadBranchDraftRecord(site,record) : isolatedCloudRecord;
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
