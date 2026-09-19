@@ -13,6 +13,7 @@ import { registerWorkforceApprovalRoutes } from "./workforce-approval-routes.mjs
 import { registerWorkforceCorrectionRoutes } from "./workforce-correction-routes.mjs";
 import { registerWorkforceRequestRoutes } from "./workforce-request-routes.mjs";
 import { registerWorkforceScheduleRuleRoutes } from "./workforce-schedule-rule-routes.mjs";
+import { registerWorkforceScheduleRelationalRoutes } from "./workforce-schedule-relational-routes.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -149,6 +150,7 @@ export async function registerBusinessStateRoutes(app) {
   await registerWorkforceCorrectionRoutes(app);
   await registerWorkforceRequestRoutes(app);
   await registerWorkforceScheduleRuleRoutes(app);
+  await registerWorkforceScheduleRelationalRoutes(app);
 
   app.get("/api/business-state/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
