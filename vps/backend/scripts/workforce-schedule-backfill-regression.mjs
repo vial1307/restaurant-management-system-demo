@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import pg from "pg";
 import { loadWorkforceScheduleRelationalState } from "../src/workforce-schedule-relational-state.mjs";
+import { resolveWorkforceScheduleReadAuthority } from "../src/workforce-schedule-read-authority.mjs";
 import {
   applyWorkforceScheduleWorkflowShadowMutation,
   insertWorkforceSchedulePublicationShadow,
@@ -99,6 +100,38 @@ try {
 
   const relationalState = await loadWorkforceScheduleRelationalState(client, "fuxing");
   assert.equal(relationalState.authority, "relational-shadow");
+
+  const compatibilityFixture = {
+    schedule:{
+      ...structuredClone(module),
+      schedules:[{ ...structuredClone(day), note:"compatibility-only-read-marker" }],
+    },
+    shared:{ staff:[] },
+  };
+  const compatibilityRead = await resolveWorkforceScheduleReadAuthority(client, {
+    site:"fuxing",
+    modules:compatibilityFixture,
+    enabled:false,
+  });
+  assert.equal(compatibilityRead.authority, "compatibility-json");
+  assert.equal(compatibilityRead.cutover, false);
+  assert.equal(compatibilityRead.modules.schedule.schedules[0].note, "compatibility-only-read-marker");
+
+  const relationalRead = await resolveWorkforceScheduleReadAuthority(client, {
+    site:"fuxing",
+    modules:compatibilityFixture,
+    enabled:true,
+  });
+  assert.equal(relationalRead.authority, "relational-primary");
+  assert.equal(relationalRead.cutover, true);
+  assert.equal(relationalRead.modules.schedule.schedules.length, 2);
+  assert.equal(
+    relationalRead.modules.schedule.schedules.find((entry) => entry.id === "schedule-day")?.note,
+    "close kitchen",
+    "enabled cutover gate must source the schedule draft from relational rows instead of the compatibility input"
+  );
+  assert.equal(relationalRead.modules.shared.staff.length, 0, "non-schedule modules must remain from the compatibility input");
+
   assert.equal(relationalState.module.schedules.length, 2);
   assert.equal(relationalState.module.publishedSchedules.length, 2);
   assert.equal(relationalState.module.requests.length, 2);
