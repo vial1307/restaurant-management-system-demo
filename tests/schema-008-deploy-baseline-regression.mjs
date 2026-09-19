@@ -19,7 +19,7 @@ assert.match(migrate, /select 1 from public\.schema_migrations where version=/i,
 assert.match(migrate, /if \[\[ "\$\{applied\}" == "1" \]\]; then[\s\S]*?skip \$\{base\}/, "applied migrations must be skipped instead of re-running one-time migrations");
 
 assert.match(verify, /if \[\[ "\$\{schema\}" < "024" \]\]; then/, "production verifier must reject schemas older than 024");
-assert.match(verify, /older than 024/, "production verifier error text must identify schema 023 as the minimum");
+assert.match(verify, /older than 024/, "production verifier error text must identify schema 024 as the minimum");
 assert.doesNotMatch(verify, /if \[\[ "\$\{schema\}" < "00[78]" \]\]; then/, "stale pre-Core-v2 production baseline must not return");
 
 const backendScripts = fs.readdirSync(backendScriptsUrl)
