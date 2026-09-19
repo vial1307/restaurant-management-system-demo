@@ -74,8 +74,8 @@ try {
   assert.equal(development.data.current_work.candidate_schema, "024");
   assert.equal(development.data.runtime.schema.version, "024");
   assert.equal(development.data.live_production.schema, "024");
-  assert.equal(development.data.release_evidence.schema, "022");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35430241680");
+  assert.equal(development.data.release_evidence.schema, "023");
+  assert.equal(development.data.release_evidence.workflow_run_id, "35458513691");
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
   assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
 
