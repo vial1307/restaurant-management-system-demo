@@ -256,6 +256,9 @@ export async function registerInventoryExtraRoutes(app) {
         if (!requireStocktakeRole(user, row.site, reply)) {
           throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
         }
+        if (!String(row.item_key || "").startsWith(row.site + ":")) {
+          throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
+        }
 
         await client.query(
           `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
@@ -315,7 +318,7 @@ export async function registerInventoryExtraRoutes(app) {
     }
 
     const ctx = await pool.query(
-      `select l.site
+      `select i.item_key,l.site
        from public.inventory_items i
        join public.inventory_locations l on l.id=$2 and l.active=true
        where i.id=$1 and i.active=true
@@ -325,6 +328,9 @@ export async function registerInventoryExtraRoutes(app) {
     const row = ctx.rows[0];
     if (!row) return reply.code(404).send({ error: "ITEM_LOCATION_NOT_FOUND" });
     if (!requireStocktakeRole(user,row.site,reply)) return;
+    if (!String(row.item_key || "").startsWith(row.site + ":")) {
+      return reply.code(400).send({ error:"ITEM_SITE_MISMATCH" });
+    }
 
     await pool.query(
       `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
@@ -657,6 +663,9 @@ export async function registerInventoryExtraRoutes(app) {
         if (sourceItem.from_site === sourceItem.to_site) {
           throw Object.assign(new Error("USE_INTERNAL_TRANSFER"), { statusCode:400 });
         }
+        if (!String(sourceItem.item_key || "").startsWith(sourceItem.from_site + ":")) {
+          throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
+        }
         if (!(siteAllowed(user,sourceItem.from_site) && hasPermission(user,"inventory","edit"))) {
           throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403 });
         }
@@ -671,6 +680,10 @@ export async function registerInventoryExtraRoutes(app) {
         );
 
         let destinationItem = destinationItemResult.rows[0];
+
+        if (destinationItem && !String(destinationItem.item_key || "").startsWith(sourceItem.to_site + ":")) {
+          throw Object.assign(new Error("DESTINATION_ITEM_SITE_MISMATCH"), { statusCode:409 });
+        }
 
         if (destinationItem) {
           const configured = await client.query(
