@@ -153,9 +153,10 @@ async function assertPermissionNavigation(page, session, label) {
     const expected = Boolean(session?.permissions?.[route]?.view) || session?.role === "admin" || session?.accountRole === "admin";
     const nav = page.locator(`.mobile-nav .nav-item[href="#${route}"]`);
     assert.equal(await nav.count(), 1, `${label}: mobile nav entry missing for ${route}`);
+    // waitForPermissionState performs the visibility + schedule-mode check in
+    // one browser task. Re-reading display in a second task races transient
+    // rerenders on WebKit and can observe an intermediate hidden frame.
     await waitForPermissionState(page, ".mobile-nav", route, expected);
-    const displayed = await nav.evaluate((node) => getComputedStyle(node).display !== "none");
-    assert.equal(displayed, expected, `${label}: mobile nav permission mismatch for ${route}`);
   }
 
   const menuButton = page.locator('[data-action="toggle-mobile-menu"]').first();
@@ -168,8 +169,6 @@ async function assertPermissionNavigation(page, session, label) {
       const link = menu.locator(`.nav-item[href="#${route}"]`);
       assert.equal(await link.count(), 1, `${label}: full mobile menu entry missing for ${route}`);
       await waitForPermissionState(page, ".mobile-menu-grid", route, expected);
-      const displayed = await link.evaluate((node) => getComputedStyle(node).display !== "none");
-      assert.equal(displayed, expected, `${label}: full mobile menu permission mismatch for ${route}`);
     }
     await page.keyboard.press("Escape");
     await page.locator(".mobile-menu-backdrop").waitFor({ state:"detached", timeout:10000 });
