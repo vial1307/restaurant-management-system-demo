@@ -105,7 +105,63 @@ function invalidResult(error, details = null, status = 409) {
   return { ok:false, status, error, details };
 }
 
-export async function syncWorkforceScheduleDraftShadow(client, { site, schedules, user }) {
+async function ensureReferencedStaffShadow(client, { site, schedules, staffRoster, user }) {
+  const referenced = [...new Set(array(schedules).map((entry) => text(entry?.staffId)).filter(Boolean))];
+  if (!referenced.length) return { ok:true, rows:0 };
+
+  const existing = await client.query(
+    `select legacy_staff_id from public.staff_members
+     where site_code=$1 and legacy_staff_id = any($2::text[])`,
+    [site, referenced]
+  );
+  const existingIds = new Set(existing.rows.map((row) => text(row.legacy_staff_id)));
+  const missing = referenced.filter((id) => !existingIds.has(id));
+  if (!missing.length) return { ok:true, rows:0 };
+
+  const roster = new Map(array(staffRoster).map((member) => [text(member?.id), member]));
+  let rows = 0;
+  for (const legacyId of missing) {
+    const member = roster.get(legacyId);
+    const displayName = text(member?.name);
+    const staffCode = legacyId;
+    const hourlyRate = Number(member?.hourlyRate ?? 0);
+    if (!member || !displayName || !STAFF_CODE_RE.test(staffCode) || !Number.isFinite(hourlyRate) || hourlyRate < 0) {
+      return invalidResult("WORKFORCE_SCHEDULE_RELATIONAL_STAFF_REQUIRED", { legacyStaffId:legacyId });
+    }
+    const employmentType = text(member?.role) === "parttime" ? "parttime" : "other";
+    await client.query(
+      `insert into public.staff_members(
+         site_code,staff_code,legacy_staff_id,display_name,employment_type,default_work_area,hourly_rate,active,metadata
+       ) values($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
+       on conflict (site_code,legacy_staff_id) where legacy_staff_id is not null
+       do update set display_name=excluded.display_name,default_work_area=excluded.default_work_area,
+         hourly_rate=excluded.hourly_rate,active=excluded.active,
+         metadata=public.staff_members.metadata || excluded.metadata,updated_at=now()`,
+      [
+        site,
+        staffCode,
+        legacyId,
+        displayName,
+        employmentType,
+        text(member?.area) || null,
+        hourlyRate,
+        member?.active !== false,
+        JSON.stringify({
+          runtimeShadow:true,
+          compatibilityRole:text(member?.role) || null,
+          accountUsername:text(member?.accountUsername) || null,
+          updatedByUserId:text(user?.id) || null,
+        }),
+      ]
+    );
+    rows += 1;
+  }
+  return { ok:true, rows };
+}
+
+export async function syncWorkforceScheduleDraftShadow(client, { site, schedules, staffRoster = [], user }) {
+  const staffShadow = await ensureReferencedStaffShadow(client, { site, schedules, staffRoster, user });
+  if (!staffShadow.ok) return staffShadow;
   const lookups = await relationalLookups(client, site);
   const planned = array(schedules).map((entry) => planSchedule(entry, site, lookups));
   const invalid = planned.filter((entry) => entry.errors.length);
@@ -143,7 +199,7 @@ export async function syncWorkforceScheduleDraftShadow(client, { site, schedules
     );
   }
 
-  return { ok:true, rows:planned.length };
+  return { ok:true, rows:planned.length, staffRows:staffShadow.rows };
 }
 
 async function relationalStaffId(client, site, legacyStaffId) {
