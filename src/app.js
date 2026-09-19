@@ -1955,22 +1955,31 @@ root.addEventListener("submit", async (event) => {
     view.editingStockKey = null;
     if (form.dataset.form === "edit-item") {
       store.updateIngredient(stockKey, item);
-      const result = await cloudSyncBranchCatalogItem(stockKey, site);
+      const result = await cloudSyncBranchCatalogItem(stockKey, site, { sync:false });
       if (result.ok) {
-        const receiveResult = canManageReceiveDefault(site)
+        const stockResult=await persistCatalogStocktakeFields({
+          site,
+          stockKey,
+          locations,
+          workArea:item.workArea,
+          workMinimum:item.workMinimum,
+        });
+        const receiveResult = stockResult.ok && canManageReceiveDefault(site)
           ? await cloudSetReceiveDefault({
               site,
               catalogKey,
               locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
             })
-          : {ok:true,skipped:true};
+          : {ok:stockResult.ok,skipped:true};
         await syncInventoryNow(site, { reloadBranch: false });
-        if (!receiveResult.ok) {
+        if (!stockResult.ok) {
+          window.alert("Thông tin sản phẩm đã lưu, nhưng tồn kho/định mức chưa lưu hoàn tất. Dữ liệu thật từ database đã được tải lại; hãy kiểm tra và thử lại phần tồn kho. · 品項資料已儲存，但庫存／標準量尚未完整寫入；系統已重新載入資料庫實際資料，請確認後再試。");
+        } else if (!receiveResult.ok) {
           window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
         }
       } else {
         const message = result.error?.message === "LOCATION_HAS_STOCK"
-          ? "Không thể bỏ vị trí đang còn tồn kho. Hãy chuyển/điều chỉnh tồn về 0 trước. · 儲位仍有庫存，請先轉撥或盤點為 0。"
+          ? "Không thể bỏ vị trí còn tồn kho hoặc định mức. Hãy chuyển/điều chỉnh tồn và định mức về 0 trước. · 儲位仍有庫存或標準量，請先轉撥／盤點並將標準量設為 0。"
           : "Không thể lưu chỉnh sửa vào database. · 品項修改無法儲存至資料庫。";
         window.alert(message);
         await syncInventoryNow(site, { reloadBranch: true });
@@ -1978,18 +1987,27 @@ root.addEventListener("submit", async (event) => {
     } else {
       const createdStockKey=store.addItem(item);
       const result=createdStockKey
-        ? await cloudSyncBranchCatalogItem(createdStockKey,site)
+        ? await cloudSyncBranchCatalogItem(createdStockKey,site,{sync:false})
         : {ok:false,fallback:false};
       if(result.ok){
-        const receiveResult = canManageReceiveDefault(site)
+        const stockResult=await persistCatalogStocktakeFields({
+          site,
+          stockKey:createdStockKey,
+          locations,
+          workArea:item.workArea,
+          workMinimum:item.workMinimum,
+        });
+        const receiveResult = stockResult.ok && canManageReceiveDefault(site)
           ? await cloudSetReceiveDefault({
               site,
               catalogKey,
               locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
             })
-          : {ok:true,skipped:true};
+          : {ok:stockResult.ok,skipped:true};
         await syncInventoryNow(site, { reloadBranch: false });
-        if (!receiveResult.ok) {
+        if (!stockResult.ok) {
+          window.alert("Sản phẩm đã được tạo, nhưng tồn kho/định mức chưa lưu hoàn tất. Dữ liệu thật từ database đã được tải lại; hãy mở sản phẩm và thử lại phần tồn kho. · 品項已建立，但庫存／標準量尚未完整寫入；系統已重新載入資料庫實際資料，請重新開啟品項再試。");
+        } else if (!receiveResult.ok) {
           window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
         }
       }else{
