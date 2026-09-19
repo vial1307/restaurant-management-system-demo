@@ -230,9 +230,9 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #726 / `9aae83a329541e2f65d968c7b1b6adc8bf56097c`, schema `021`.
+3. Current verified production baseline is #754 / `6f391421881e6e4aa687ed8cca85d751f96efadb`, schema `022`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
-5. Continue P1 normalized-domain/database redesign from this verified green baseline, one domain at a time.
+5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
 
 
