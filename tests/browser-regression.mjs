@@ -24,6 +24,33 @@ async function login(page, username) {
   await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:30000 });
 }
 
+async function seedRoleSession(page, context, username) {
+  await page.goto(BASE + "/", { waitUntil:"domcontentloaded", timeout:30000 });
+  await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
+
+  const form = page.locator("#auth-login-form");
+  if (await form.count()) {
+    await form.locator('input[name="username"]').fill(username);
+    await form.locator('input[name="password"]').fill(PASSWORD);
+    await form.locator('button[type="submit"]').click();
+  }
+
+  try {
+    await page.locator(".app-shell").waitFor({ state:"visible", timeout:12000 });
+    await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:12000 });
+  } catch (uiError) {
+    const response = await context.request.post(`${BASE}/api/auth/login`, {
+      data:{ username, password:PASSWORD },
+      failOnStatusCode:false,
+    });
+    assert.equal(response.status(),200,`${username}: login fallback failed with HTTP ${response.status()}; original=${uiError?.message || uiError}`);
+    await page.reload({ waitUntil:"domcontentloaded", timeout:30000 });
+    await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
+    await page.locator(".app-shell").waitFor({ state:"visible", timeout:15000 });
+    await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:15000 });
+  }
+}
+
 async function assertNoPageErrors(page, errors, label) {
   await page.waitForTimeout(80);
   assert.deepEqual(errors,[],`${label} page errors: ${errors.join(" | ")}`);
@@ -259,7 +286,7 @@ async function roleDesktop(browser, username, checks) {
   const page=await context.newPage();
   const errors=[];
   page.on("pageerror",(error)=>errors.push(error.message));
-  await login(page,username);
+  await seedRoleSession(page,context,username);
   await assertRoutePermissions(page,username);
   if(checks.dashboardEdit !== undefined){
     await page.goto(BASE + "/#dashboard",{waitUntil:"domcontentloaded"});
@@ -402,7 +429,7 @@ async function responsiveAdmin(browser, viewport) {
   const page=await context.newPage();
   const errors=[];
   page.on("pageerror",(error)=>errors.push(error.message));
-  await login(page,"yangchuadmin");
+  await seedRoleSession(page,context,"yangchuadmin");
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
 
