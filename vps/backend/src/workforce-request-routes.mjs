@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { withTransaction } from "./db.mjs";
 import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
 import { isWorkforceSelfServiceUser, resolveWorkforceStaffId } from "./workforce-policy.mjs";
+import { applyWorkforceScheduleWorkflowShadowMutation } from "./workforce-schedule-relational-shadow.mjs";
 
 const VALID_SITES = new Set(["central", "fuxing", "yongji"]);
 const VALID_REQUEST_TYPES = new Set(["leave", "change"]);
@@ -166,6 +167,15 @@ async function mutateScheduleState({ site, user, action, entityId, mutate }) {
       };
     }
 
+    const relationalShadow = await applyWorkforceScheduleWorkflowShadowMutation(client, {
+      site,
+      action,
+      after:result.after,
+      metadata:result.metadata || {},
+      user,
+    });
+    if (!relationalShadow.ok) return relationalShadow;
+
     const nextModules = { ...modules, schedule:result.module };
     const nextModuleRevision = currentModuleRevision(revisions) + 1;
     const nextRevisions = { ...revisions, schedule:nextModuleRevision };
@@ -189,7 +199,10 @@ async function mutateScheduleState({ site, user, action, entityId, mutate }) {
         site,
         auditPayload(result.before),
         auditPayload(result.after),
-        JSON.stringify(result.metadata || {}),
+        JSON.stringify({
+          ...(result.metadata || {}),
+          relationalShadowRows:relationalShadow.rows,
+        }),
       ]
     );
 
