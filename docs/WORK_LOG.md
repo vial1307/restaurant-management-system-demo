@@ -417,3 +417,38 @@ No schema migration was introduced.
 - deploy with gate OFF;
 - verify production parity/backfill;
 - only then consider an explicit relational-read enablement step.
+
+
+## 2026-09-20 — Release #767 OFF verification and relational-read canary
+
+### Release #767 verified
+
+- commit `04718106c7558a2f20f8e1551d17767e3bff1230`;
+- run `35456380284`;
+- full regression PASS;
+- deploy/backup/rollback path PASS;
+- production UI smoke PASS;
+- Inventory Site Production Audit #22 PASS;
+- Workforce Schedule Production Parity #43 PASS;
+- Workforce Schedule Production Backfill #254 PASS;
+- schema remains 022.
+
+The relational schedule read gate is present in production code but remains OFF by Docker default.
+
+### Canary certification branch
+
+Created:
+
+- `test/workforce-schedule-relational-read-canary-20260920`
+
+Changes:
+
+- full deploy regression API runs with `WORKFORCE_SCHEDULE_RELATIONAL_READ=true`;
+- added `vps/backend/scripts/workforce-schedule-read-cutover-canary.mjs`;
+- canary verifies business-state relational read authority, transactional schedule/staff write-through, direct relational endpoint parity, and a second revision-guarded update;
+- production Docker default remains false;
+- static contract requires both CI ON and production-default OFF.
+
+### Next
+
+Run full PR CI in relational-read mode. Production enablement remains a separate later change.

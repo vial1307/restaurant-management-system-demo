@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified main/production SHA: `fc563c7f147327656aff304a0c621754d38b4591`
+- Current verified main/production SHA: `04718106c7558a2f20f8e1551d17767e3bff1230`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
 - Production database schema: PostgreSQL migrations through schema 022.
@@ -21,9 +21,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #765
-- Run ID: `35443223746`
-- Tested/deployed commit: `fc563c7f147327656aff304a0c621754d38b4591`
+- Workflow: Deploy Kitchen OS to VPS #767
+- Run ID: `35456380284`
+- Tested/deployed commit: `04718106c7558a2f20f8e1551d17767e3bff1230`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -230,7 +230,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #765 / `fc563c7f147327656aff304a0c621754d38b4591`, schema `022`.
+3. Current verified production baseline is #767 / `04718106c7558a2f20f8e1551d17767e3bff1230`, schema `022`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
 5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
@@ -447,3 +447,40 @@ Do not enable the flag in production merely because this candidate merges. Requi
 3. Re-run production schedule parity/backfill and confirm no divergence.
 4. Enable relational read only in a separate reviewed change/operation with a rollback path.
 5. Continue compatibility writes until relational read has been stable in production; retirement of compatibility authority is a later explicit stage.
+
+
+## 2026-09-20 — Release #767 verified OFF; relational-read canary certification next
+
+Release #767 is verified production:
+
+- commit: `04718106c7558a2f20f8e1551d17767e3bff1230`;
+- Deploy Kitchen OS to VPS #767 / run `35456380284`;
+- schema `022`;
+- production UI smoke PASS;
+- Inventory Site Production Audit #22 PASS;
+- Workforce Schedule Production Parity #43 PASS;
+- Workforce Schedule Production Backfill #254 PASS;
+- VPS Capacity Audit #6 PASS.
+
+The schedule relational read gate is deployed but remains OFF by default in production. Compatibility JSON is still the production schedule read authority.
+
+Current certification branch:
+
+- `test/workforce-schedule-relational-read-canary-20260920`
+
+Purpose:
+
+- force the full release regression API to run with `WORKFORCE_SCHEDULE_RELATIONAL_READ=true`;
+- run all API/browser/full-device tests against relational schedule reads;
+- execute a dedicated read/write canary after full-device tests;
+- keep production Docker Compose default at `false`.
+
+The canary must prove:
+
+1. business-state reports `relational-primary`;
+2. a schedule + staff write succeeds transactionally;
+3. business-state relational projection returns the new schedule;
+4. the dedicated relational endpoint returns the same projection;
+5. a second write using the compatibility module revision token is reflected by relational read.
+
+Do not enable production relational read until this certification PR is fully green and merged/deployed with production still OFF.
