@@ -468,3 +468,71 @@ Branch `fix/inventory-hidden-stock-archive-integrity-20260920`:
 - production verifier requires schema 023 and zero hidden-stock conditions after deploy.
 
 No production quantities are guessed, deleted or zeroed by this repair.
+
+
+## 2026-09-20 — Release #774 production verification and location-integrity continuation
+
+### Schema 023 release
+
+PR #123 merged as `267235bf9d406f84f982d05df10a46a30f937201`.
+
+Deploy Kitchen OS to VPS #774 / run `35458513691` passed:
+
+- preflight;
+- inventory archive integrity DB regression;
+- API/inventory regression;
+- PostgreSQL concurrency regression;
+- desktop/mobile Chromium;
+- workforce browser coverage;
+- full-device cross-browser regression;
+- exact tested commit deploy;
+- server-side PostgreSQL backup;
+- production health/release check;
+- production UI smoke.
+
+Production deployment evidence:
+
+- backup: `/opt/kitchen-os/backups/kitchen_os_20260919T173838Z.dump`;
+- migration 023 applied;
+- `OK: schema version 023`;
+- `OK: inventory archive-integrity triggers = 2`;
+- `DATA_INTEGRITY_OK`;
+- release endpoint: `267235b`.
+
+Post-deploy Inventory Site Production Audit #31 / run `35458782811`:
+
+- stock-site mismatch = 0;
+- receive-default site mismatch = 0;
+- unknown item site = 0;
+- inactive item positive quantity = 0;
+- inactive item positive minimum = 0;
+- inactive location positive quantity = 0;
+- inactive location positive minimum = 0;
+- invalid receive-default checks = 0;
+- duplicate active catalog/site groups = 0;
+- active items missing stock/storage = 0;
+- `inventory_site_integrity_violations = 0`;
+- `inventory_hidden_integrity_violations = 0`;
+- deployed release exact-match PASS.
+
+The previously hidden Fuxing stock remained in PostgreSQL and became visible again; no quantity was guessed or zeroed.
+
+### Next inventory defect found
+
+The dedicated location archive API checked only positive physical quantity.
+A location with quantity 0 but minimum > 0 could be archived and hide configuration.
+
+Created branch:
+
+- `fix/inventory-location-archive-integrity-20260920`
+
+Schema 024 candidate:
+
+- `inventory_locations_archive_guard`;
+- `inventory_stock_active_location_guard`;
+- `inventory_receive_defaults_active_location_guard`;
+- API archive checks quantity OR minimum;
+- DB regression for minimum-only location + receive-default routing;
+- production verifier requires three new location-integrity triggers.
+
+After this slice, inspect catalog sync stocktake writes so every physical quantity mutation has auditable transaction history.
