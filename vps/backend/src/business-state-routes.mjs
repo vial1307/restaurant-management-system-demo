@@ -272,6 +272,9 @@ export async function registerBusinessStateRoutes(app) {
         scheduleShadow = await syncWorkforceScheduleDraftShadow(client, {
           site,
           schedules:effectiveEditable.schedule.schedules,
+          staffRoster:Object.hasOwn(effectiveEditable, "shared")
+            ? effectiveEditable.shared.staff
+            : before.shared?.staff,
           user,
         });
         if (!scheduleShadow.ok) {
@@ -301,7 +304,10 @@ export async function registerBusinessStateRoutes(app) {
       );
       const auditMetadata = { modules: editableNames, moduleRevisions: savedModuleRevisions };
       if (scheduleShadow?.ok) {
-        auditMetadata.workforceScheduleRelationalShadow = { draftRows:scheduleShadow.rows };
+        auditMetadata.workforceScheduleRelationalShadow = {
+          draftRows:scheduleShadow.rows,
+          staffRows:scheduleShadow.staffRows || 0,
+        };
       }
       if (workforceAudit?.changedAttendanceIds?.length) {
         auditMetadata.workforceAttendanceChanges = workforceAudit.changedAttendanceIds;
