@@ -83,6 +83,7 @@ jobs:
           node tests/vps-business-state-contract-regression.mjs
           node tests/vps-business-module-revision-runtime-regression.mjs
           node tests/inventory-site-switch-isolation-regression.mjs
+          node tests/inventory-archive-integrity-contract-regression.mjs
           node tests/workforce-schedule-runtime-shadow-contract-regression.mjs
           node tests/workforce-schedule-read-authority-contract-regression.mjs
 
@@ -146,6 +147,7 @@ jobs:
           test -f vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
           test -f vps/backend/scripts/api-regression-v6.mjs
           test -f vps/backend/scripts/inventory-archive-integrity-regression.mjs
+          test -f tests/inventory-archive-integrity-contract-regression.mjs
           test -f tests/workforce-approval-browser-regression.mjs
           test -f tests/workforce-schedule-publication-regression.mjs
           test -f vps/backend/package-lock.json
