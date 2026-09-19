@@ -473,7 +473,7 @@ else
   echo "OK: schema version ${schema}"
 fi
 
-inventory_site_triggers="$(scalar "select count(*) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
+inventory_site_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
 if [[ "${inventory_site_triggers}" != "3" ]]; then
   echo "ERROR: expected 3 inventory site-isolation triggers, found ${inventory_site_triggers}"
   errors=$((errors+1))
