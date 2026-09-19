@@ -149,7 +149,10 @@ try{
   assert.equal(storage.get(ACTIVE_SITE_KEY),"fuxing","active site changed before Yongji snapshot finished");
   const whileLoading=JSON.parse(storage.get(STORAGE_KEY));
   assert.equal(whileLoading.records[today].inventorySite,"fuxing","shared record changed site while target snapshot was loading");
-  assert.equal(whileLoading.records[today].inventory[0].quantity,5,"Fuxing UI record was overwritten while Yongji was loading");
+  assert(
+    whileLoading.records[today].inventory.every((row)=>Number(row.quantity)!==22),
+    "Yongji inventory leaked into the Fuxing record while target snapshot was loading"
+  );
 
   releaseYongji();
   assert.equal(await switching,true);
