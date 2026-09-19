@@ -145,6 +145,7 @@ jobs:
           test -f vps/backend/scripts/workforce-approval-regression-client.mjs
           test -f vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
           test -f vps/backend/scripts/api-regression-v6.mjs
+          test -f vps/backend/scripts/inventory-archive-integrity-regression.mjs
           test -f tests/workforce-approval-browser-regression.mjs
           test -f tests/workforce-schedule-publication-regression.mjs
           test -f vps/backend/package-lock.json
@@ -152,6 +153,7 @@ jobs:
           test -f vps/database/migrations/004_restore_primary_admin.sql
           test -f vps/database/migrations/005_business_state.sql
           test -f vps/database/migrations/006_business_module_revisions.sql
+          test -f vps/database/migrations/023_inventory_archive_integrity.sql
 
   regression:
     runs-on: ubuntu-latest
@@ -202,6 +204,9 @@ jobs:
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Inventory archive integrity database regression
+        run: node vps/backend/scripts/inventory-archive-integrity-regression.mjs
 
       - name: Start API
         run: |
