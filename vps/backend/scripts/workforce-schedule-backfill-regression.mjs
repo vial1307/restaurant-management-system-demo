@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import pg from "pg";
+import { loadWorkforceScheduleRelationalState } from "../src/workforce-schedule-relational-state.mjs";
 
 const { Client } = pg;
 pg.types.setTypeParser(1082, (value) => value);
@@ -90,6 +91,29 @@ try {
 
   const first = runBackfill("--apply", "--site=fuxing");
   assert.match(first, /WORKFORCE_SCHEDULE_BACKFILL_OK/);
+
+  const relationalState = await loadWorkforceScheduleRelationalState(client, "fuxing");
+  assert.equal(relationalState.authority, "relational-shadow");
+  assert.equal(relationalState.module.schedules.length, 2);
+  assert.equal(relationalState.module.publishedSchedules.length, 2);
+  assert.equal(relationalState.module.requests.length, 2);
+  assert.equal(relationalState.module.exceptions.length, 1);
+  const projectedDay = relationalState.module.schedules.find((entry) => entry.id === "schedule-day");
+  const projectedRecurring = relationalState.module.schedules.find((entry) => entry.id === "schedule-recurring");
+  assert.equal(projectedDay.staffId, "schedule-employee");
+  assert.equal(projectedDay.applyMode, "day");
+  assert.equal(projectedDay.shift, "evening");
+  assert.equal(projectedRecurring.staffId, "schedule-parttime");
+  assert.equal(projectedRecurring.applyMode, "month");
+  assert.equal(projectedRecurring.date, "2026-10-06");
+  assert.equal(projectedRecurring.month, "2026-10");
+  assert.equal(projectedRecurring.weekday, 2);
+  assert.equal(projectedRecurring.shift, "full");
+  assert.equal(relationalState.module.publication.version, 2);
+  assert.equal(relationalState.module.publication.scheduleCount, 2);
+  assert.equal(relationalState.module.requests.find((entry) => entry.id === "schedule-request-approved").status, "approved");
+  assert.equal(relationalState.module.exceptions[0].id, "schedule-exception-approved");
+  assert.equal(relationalState.module.exceptions[0].shift, "full");
   const firstParity = runBackfill("--parity", "--site=fuxing");
   assert.match(firstParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
 
