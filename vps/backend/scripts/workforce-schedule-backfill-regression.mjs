@@ -92,6 +92,22 @@ try {
   assert.match(first, /WORKFORCE_SCHEDULE_BACKFILL_OK/);
   const firstParity = runBackfill("--parity", "--site=fuxing");
   assert.match(firstParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
+
+  const rulesOnly = structuredClone(module);
+  rulesOnly.rules = {
+    version:1,
+    shifts:{ morning:{ start:"10:00", end:"16:00" }, evening:{ start:"16:00", end:"22:00" }, full:{ start:"10:00", end:"22:00" } },
+    staffingBands:[],
+  };
+  await client.query(
+    `update public.business_state set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_at=now() where site=$1`,
+    ["fuxing", JSON.stringify({ schedule:rulesOnly }), JSON.stringify({ schedule:9 })]
+  );
+  const staleCheckpointParity = runBackfill("--parity", "--site=fuxing");
+  assert.match(staleCheckpointParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
+  assert.match(staleCheckpointParity, /"fresh": false/);
+  assert.match(staleCheckpointParity, /source_revision_stale/);
+  assert.match(staleCheckpointParity, /checksum_stale/);
   const schedules = await client.query(
     `select id,staff_id,schedule_kind,service_date,recurrence_month,weekday,shift_type,start_time,end_time,ends_next_day,department_code,work_area,legacy_schedule_id,note
      from public.workforce_schedule_entries where site_code='fuxing' order by legacy_schedule_id`
@@ -188,6 +204,22 @@ try {
   assert.equal(drift.status, 3, `parity drift must fail with status 3\nSTDOUT:\n${drift.stdout}\nSTDERR:\n${drift.stderr}`);
   assert.match(drift.stdout, /WORKFORCE_SCHEDULE_PARITY_MISMATCH/);
   assert.match(drift.stdout, /"schedules":\s*\[/);
+
+  await client.query(`delete from public.workforce_schedule_exceptions where site_code='yongji'`);
+  await client.query(`delete from public.workforce_schedule_requests where site_code='yongji'`);
+  await client.query(`delete from public.workforce_schedule_publication_entries where site_code='yongji'`);
+  await client.query(`delete from public.workforce_schedule_publications where site_code='yongji'`);
+  await client.query(`delete from public.workforce_schedule_entries where site_code='yongji'`);
+  await client.query(`delete from public.data_migration_checkpoints where migration_key='workforce.schedule.v1' and site_code='yongji'`);
+  await client.query(
+    `insert into public.business_state(site,modules,module_revisions,revision)
+     values('yongji',$1::jsonb,$2::jsonb,0)
+     on conflict(site) do update set modules=excluded.modules,module_revisions=excluded.module_revisions,revision=excluded.revision,updated_at=now()`,
+    [JSON.stringify({ schedule:{ schedules:[], publishedSchedules:[], requests:[], exceptions:[] } }), JSON.stringify({ schedule:0 })]
+  );
+  const emptyParity = runBackfill("--parity", "--site=yongji");
+  assert.match(emptyParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
+  assert.match(emptyParity, /checkpoint_not_required_for_empty_domain/);
 
   console.log("WORKFORCE_SCHEDULE_BACKFILL_REGRESSION_OK");
 } finally {
