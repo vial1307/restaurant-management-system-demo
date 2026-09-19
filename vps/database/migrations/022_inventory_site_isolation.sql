@@ -42,7 +42,7 @@ end $$;
 create or replace function public.assert_inventory_item_site_exists()
 returns trigger
 language plpgsql
-as $
+as $inventory_item_site$
 declare
   item_site text;
 begin
@@ -55,7 +55,7 @@ begin
   end if;
   return new;
 end;
-$;
+$inventory_item_site$;
 
 drop trigger if exists inventory_items_site_guard on public.inventory_items;
 create trigger inventory_items_site_guard
