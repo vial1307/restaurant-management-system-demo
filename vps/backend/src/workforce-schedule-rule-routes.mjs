@@ -1,5 +1,6 @@
 import { withTransaction } from "./db.mjs";
 import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
+import { insertWorkforceSchedulePublicationShadow } from "./workforce-schedule-relational-shadow.mjs";
 
 const VALID_SITES = new Set(["central", "fuxing", "yongji"]);
 const SHIFT_IDS = ["morning", "evening", "full"];
@@ -316,6 +317,19 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
         scheduleCount:draftSchedules.length,
         sourceModuleRevision:moduleRevision,
       };
+      const relationalShadow = await insertWorkforceSchedulePublicationShadow(client, {
+        site,
+        publication,
+        draftSchedules,
+        user,
+      });
+      if (!relationalShadow.ok) {
+        return {
+          shadowDenied:true,
+          error:relationalShadow.error,
+          status:relationalShadow.status || 409,
+        };
+      }
       module.publishedSchedules = draftSchedules;
       module.publication = publication;
       const nextModules = { ...modules, schedule:module };
@@ -343,6 +357,7 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
             scheduleCount:publication.scheduleCount,
             sourceModuleRevision:moduleRevision,
             moduleRevision:nextModuleRevision,
+            relationalShadowRows:relationalShadow.rows,
           }),
         ]
       );
@@ -355,6 +370,11 @@ export async function registerWorkforceScheduleRuleRoutes(app) {
       };
     });
 
+    if (result.shadowDenied) {
+      return reply.code(result.status || 409).send({
+        error:result.error || "WORKFORCE_SCHEDULE_RELATIONAL_SHADOW_FAILED",
+      });
+    }
     if (result.conflict) {
       return reply.code(409).send({
         error:"WORKFORCE_SCHEDULE_PUBLISH_CONFLICT",
