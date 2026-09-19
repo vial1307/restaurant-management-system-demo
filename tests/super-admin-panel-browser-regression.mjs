@@ -145,7 +145,7 @@ async function runSuperAdminProfile(profile) {
     assert.match(await page.locator(".sa-content").textContent(), /GitHub|Handoff|Current work|Công việc hiện tại/);
     assert.match(await page.locator(".sa-content").textContent(), /Live production|Production hiện tại/);
     assert((await page.locator('.sa-dev-link[href*="github.com/vial1307/restaurant-management-system-demo"]').count()) >= 3, `${profile.name}: handoff GitHub links missing`);
-    assert.match(await page.locator(".sa-dev-stop").textContent(), /Release recovery|normalized-domain|database redesign/i);
+    assert.match(await page.locator(".sa-dev-stop").textContent(), /PR #115|Inventory|site isolation|relocation|branch switching/i);
     await assertFit(page, `${profile.name} development handoff`);
 
     await gotoSection(page, "users");
