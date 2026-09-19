@@ -159,18 +159,18 @@ try{
   assert.equal(storage.get(ACTIVE_SITE_KEY),"yongji");
   const afterSwitch=JSON.parse(storage.get(STORAGE_KEY));
   assert.equal(afterSwitch.records[today].inventorySite,"yongji");
-  assert.equal(afterSwitch.records[today].inventory.find((row)=>row.stockKey==="beef")?.quantity,22);
+  assert.equal(afterSwitch.records[today].inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,22);
 
   const yjMirror=cloud.inventoryBranchSnapshot("yongji");
   assert.equal(yjMirror.site,"yongji");
-  assert.equal(yjMirror.inventory.find((row)=>row.stockKey==="beef")?.quantity,22);
+  assert.equal(yjMirror.inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,22);
 
   const back=await cloud.switchActiveInventorySite("fuxing");
   assert.equal(back,true);
   assert.equal(storage.get(ACTIVE_SITE_KEY),"fuxing");
   const fxMirror=cloud.inventoryBranchSnapshot("fuxing");
-  assert.equal(fxMirror.inventory.find((row)=>row.stockKey==="beef")?.quantity,11);
-  assert.equal(cloud.inventoryBranchSnapshot("yongji").inventory.find((row)=>row.stockKey==="beef")?.quantity,22,"Fuxing hydrate mutated Yongji mirror");
+  assert.equal(fxMirror.inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,11);
+  assert.equal(cloud.inventoryBranchSnapshot("yongji").inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,22,"Fuxing hydrate mutated Yongji mirror");
 
   // A failed target hydrate must leave the current site and its mirror untouched.
   failYongji=true;
@@ -181,8 +181,8 @@ try{
   releaseYongji();
   assert.equal(await failed,false);
   assert.equal(storage.get(ACTIVE_SITE_KEY),"fuxing","failed Yongji switch replaced the active Fuxing site");
-  assert.equal(cloud.inventoryBranchSnapshot("fuxing").inventory.find((row)=>row.stockKey==="beef")?.quantity,11);
-  assert.equal(cloud.inventoryBranchSnapshot("yongji").inventory.find((row)=>row.stockKey==="beef")?.quantity,22);
+  assert.equal(cloud.inventoryBranchSnapshot("fuxing").inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,11);
+  assert.equal(cloud.inventoryBranchSnapshot("yongji").inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,22);
 
   assert(events.some((event)=>event.type==="shitu:active-site-changing"));
   assert(events.some((event)=>event.type==="shitu:active-site-change-failed"));
