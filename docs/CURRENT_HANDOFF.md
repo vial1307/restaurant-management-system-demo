@@ -1,6 +1,6 @@
 # Kitchen OS — Current Development Handoff
 
-Last updated: 2026-09-19 (Asia/Taipei)
+Last updated: 2026-09-20 (Asia/Taipei)
 
 This document is the current continuation point for any developer or future ChatGPT session working on Kitchen OS. It must be updated whenever a significant production fix, schema migration, deployment, or workstream handoff occurs.
 
@@ -10,10 +10,10 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `04718106c7558a2f20f8e1551d17767e3bff1230`
+- Current verified production SHA: `267235bf9d406f84f982d05df10a46a30f937201`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
-- Production database schema: PostgreSQL migrations through schema 022.
+- Production database schema: PostgreSQL migrations through schema 023.
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
 - Browser localStorage is cache/UI state only; it is not an authoritative shared inventory/business database.
 
@@ -21,9 +21,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #767
-- Run ID: `35456380284`
-- Tested/deployed commit: `04718106c7558a2f20f8e1551d17767e3bff1230`
+- Workflow: Deploy Kitchen OS to VPS #774
+- Run ID: `35458513691`
+- Tested/deployed commit: `267235bf9d406f84f982d05df10a46a30f937201`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -33,7 +33,7 @@ The current verified production deployment is:
 - SSH deploy with backup/rollback path: PASS
 - Production health/release check: PASS
 - Production UI smoke: PASS
-- Database schema: `022`
+- Database schema: `023`
 - Inventory site-isolation triggers: 3
 - Post-deploy Inventory Site Production Audit: PASS
 
@@ -230,7 +230,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #767 / `04718106c7558a2f20f8e1551d17767e3bff1230`, schema `022`.
+3. Current verified production baseline is #774 / `267235bf9d406f84f982d05df10a46a30f937201`, schema `023`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
 5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
@@ -495,3 +495,58 @@ Candidate fix:
 6. production data verifier requires schema 023 and zero hidden stock after deploy.
 
 Do not manually delete or zero the affected production quantities. The migration intentionally restores visibility without guessing physical stock.
+
+
+## 2026-09-20 — Release #774 hidden-stock repair verified; schema 024 candidate
+
+Release #774 is now the verified production baseline.
+
+Evidence:
+
+- commit: `267235bf9d406f84f982d05df10a46a30f937201`;
+- workflow: Deploy Kitchen OS to VPS #774;
+- run ID: `35458513691`;
+- server-side backup: `kitchen_os_20260919T173838Z.dump`;
+- migration `023_inventory_archive_integrity.sql`: applied;
+- schema: `023`;
+- API health/release: PASS;
+- production UI smoke: PASS;
+- post-deploy Inventory Site Production Audit #31 / run `35458782811`: PASS.
+
+Production after migration 023:
+
+- stock-site mismatch: 0;
+- receive-default site mismatch: 0;
+- unknown item site: 0;
+- inactive item positive quantity: 0;
+- inactive item positive minimum: 0;
+- inactive location positive quantity: 0;
+- inactive location positive minimum: 0;
+- invalid receive-default location/config: 0;
+- duplicate active catalog/site groups: 0;
+- active item without stock rows: 0;
+- active item without active storage rows: 0;
+- `inventory_hidden_integrity_violations = 0`;
+- `inventory_site_integrity_violations = 0`.
+
+The Fuxing hidden-stock repair preserved the database totals and stock rows; it did not zero or delete the affected inventory.
+
+Current candidate branch:
+
+- `fix/inventory-location-archive-integrity-20260920`
+- target schema: `024`
+
+Reason:
+
+The location archive API previously blocked only `quantity > 0`. A location with `quantity = 0` but `minimum_quantity > 0` could therefore be archived and hide operational stock configuration.
+
+Schema 024 candidate adds:
+
+1. DB guard blocking location archive while quantity/minimum remains;
+2. DB guard blocking positive stock/minimum writes to inactive locations;
+3. DB guard requiring receive-default routing to target an active storage location;
+4. API archive check for `quantity > 0 OR minimum_quantity > 0`;
+5. isolated DB + static regression coverage;
+6. production verifier requirement for all three location-integrity triggers.
+
+After schema 024, continue the inventory audit by reviewing `catalog/sync`: any path that changes physical quantity must create the same auditable `inventory_transactions` history as the dedicated set-quantity/transfer APIs.
