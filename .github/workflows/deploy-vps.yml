@@ -83,6 +83,7 @@ jobs:
           node tests/vps-business-state-contract-regression.mjs
           node tests/vps-business-module-revision-runtime-regression.mjs
           node tests/inventory-site-switch-isolation-regression.mjs
+          node tests/workforce-schedule-runtime-shadow-contract-regression.mjs
 
       - name: Validate backend JavaScript
         run: |
@@ -135,6 +136,7 @@ jobs:
           test -f vps/backend/scripts/fixtures/host-metrics.env
           test -f vps/backend/src/workforce-approval-routes.mjs
           test -f vps/backend/src/workforce-lock-policy.mjs
+          test -f vps/backend/src/workforce-schedule-relational-shadow.mjs
           test -f vps/backend/scripts/concurrency-regression.mjs
           test -f vps/backend/scripts/business-module-conflict-regression.mjs
           test -f vps/backend/scripts/business-state-regression-client.mjs
