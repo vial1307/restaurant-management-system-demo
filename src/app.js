@@ -1357,6 +1357,47 @@ function syncReceiveZoneOptions(form) {
   if(receive.value && !selected.has(receive.value)) receive.value="";
 }
 
+async function persistCatalogStocktakeFields({ site, stockKey, locations, workArea, workMinimum }) {
+  if (!canDirectInventoryAdjust()) return { ok:true, skipped:true };
+  const itemKey=branchItemKey(site,stockKey);
+  if (!itemKey) return { ok:false, fallback:false, error:new Error("CATALOG_ITEM_NOT_FOUND") };
+
+  for (const location of locations) {
+    const locationCode=branchLocationCode(site,location.zone);
+    if (!locationCode) return { ok:false, fallback:false, error:new Error("INVALID_LOCATION") };
+
+    const quantityResult=await cloudSetQuantity({
+      itemKey,
+      locationCode,
+      quantity:location.quantity,
+      note:"品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
+      sync:false,
+    });
+    if (!quantityResult.ok) return quantityResult;
+
+    const minimumResult=await cloudSetMinimum({
+      itemKey,
+      locationCode,
+      minimum:location.minimum,
+      sync:false,
+    });
+    if (!minimumResult.ok) return minimumResult;
+  }
+
+  const workLocationCode=branchWorkLocationCode(site,workArea);
+  if (workLocationCode) {
+    const workMinimumResult=await cloudSetMinimum({
+      itemKey,
+      locationCode:workLocationCode,
+      minimum:workMinimum,
+      sync:false,
+    });
+    if (!workMinimumResult.ok) return workMinimumResult;
+  }
+
+  return { ok:true };
+}
+
 function render() {
   const context = currentContext();
   const active = route();
