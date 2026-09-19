@@ -448,14 +448,123 @@ export async function registerInventoryExtraRoutes(app) {
     if (!user) return;
     if (user.role !== "admin") return reply.code(403).send({ error:"ADMIN_REQUIRED" });
 
-    const itemKey = String(request.body?.itemKey || "");
+    const itemKey = String(request.body?.itemKey || "").trim();
     if (!itemKey) return reply.code(400).send({ error:"ITEM_KEY_REQUIRED" });
 
-    const result = await pool.query(
-      "update public.inventory_items set active=false where item_key=$1 returning id",
-      [itemKey]
-    );
-    return { archived:Boolean(result.rowCount) };
+    try {
+      const result = await withTransaction(async (client) => {
+        const itemResult = await client.query(
+          `select id,item_key,catalog_key,active
+           from public.inventory_items
+           where item_key=$1
+           for update`,
+          [itemKey]
+        );
+        const item = itemResult.rows[0];
+        if (!item) return { archived:false };
+        if (!item.active) return { archived:false, alreadyArchived:true };
+
+        const site = String(item.item_key || "").split(":")[0];
+        if (!(await activeSite(site))) {
+          throw Object.assign(new Error("INVALID_SITE"), { statusCode:400 });
+        }
+
+        const stock = await client.query(
+          `select s.location_id,l.code as location_code,s.quantity,s.minimum_quantity
+           from public.inventory_stock s
+           join public.inventory_locations l on l.id=s.location_id
+           where s.item_id=$1
+           order by l.code
+           for update of s`,
+          [item.id]
+        );
+        const protectedRows = stock.rows.filter((row) => (
+          Number(row.quantity || 0) > 0 || Number(row.minimum_quantity || 0) > 0
+        ));
+        if (protectedRows.length) {
+          throw Object.assign(new Error("ITEM_HAS_STOCK"), {
+            statusCode:409,
+            details:protectedRows.map((row) => ({
+              locationId:row.location_id,
+              locationCode:row.location_code,
+              quantity:Number(row.quantity || 0),
+              minimum:Number(row.minimum_quantity || 0),
+            })),
+          });
+        }
+
+        const receiveDefault = await client.query(
+          `delete from public.inventory_receive_defaults d
+           where d.site=$1
+             and d.catalog_key=$2
+             and not exists (
+               select 1
+               from public.inventory_items other
+               where other.active=true
+                 and other.id<>$3
+                 and split_part(other.item_key,':',1)=d.site
+                 and other.catalog_key=d.catalog_key
+             )
+           returning d.site,d.catalog_key,d.location_id`,
+          [site,item.catalog_key,item.id]
+        );
+
+        const removedStock = await client.query(
+          `delete from public.inventory_stock
+           where item_id=$1
+           returning location_id,quantity,minimum_quantity`,
+          [item.id]
+        );
+
+        const archived = await client.query(
+          `update public.inventory_items
+           set active=false,updated_at=now()
+           where id=$1 and active=true
+           returning id`,
+          [item.id]
+        );
+
+        if (archived.rowCount) {
+          await client.query(
+            `insert into public.audit_logs(
+               actor_user_id,actor_username,action,entity_type,entity_id,site,
+               before_data,after_data,metadata
+             ) values(
+               $1,$2,'inventory_catalog_archive','inventory_item',$3,$4,
+               jsonb_build_object('active',true),
+               jsonb_build_object('active',false),
+               jsonb_build_object(
+                 'item_key',$5::text,
+                 'catalog_key',$6::text,
+                 'stock_rows_removed',$7::int,
+                 'receive_default_removed',$8::boolean
+               )
+             )`,
+            [
+              user.id,user.username,item.id,site,item.item_key,item.catalog_key,
+              removedStock.rowCount,Boolean(receiveDefault.rowCount)
+            ]
+          );
+        }
+
+        return {
+          archived:Boolean(archived.rowCount),
+          stockRowsRemoved:removedStock.rowCount,
+          receiveDefaultRemoved:Boolean(receiveDefault.rowCount),
+        };
+      });
+      return result;
+    } catch (error) {
+      if (error?.message === "ITEM_HAS_STOCK") {
+        return reply.code(409).send({
+          error:"ITEM_HAS_STOCK",
+          details:Array.isArray(error.details) ? error.details : [],
+        });
+      }
+      return reply.code(error.statusCode || 500).send({
+        error:error.message || "CATALOG_ARCHIVE_FAILED",
+      });
+    }
   });
 
   app.post("/api/inventory/relocate-storage", async (request, reply) => {

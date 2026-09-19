@@ -139,11 +139,53 @@ check_zero "invalid work-area master data labels" "
 
 check_zero "negative inventory quantities" "select count(*) from public.inventory_stock where quantity<0"
 check_zero "negative minimum quantities" "select count(*) from public.inventory_stock where minimum_quantity<0"
+check_zero "inactive inventory items with positive quantity" "
+  select count(*)
+  from public.inventory_stock s
+  join public.inventory_items i on i.id=s.item_id
+  where i.active=false and s.quantity>0
+"
+check_zero "inactive inventory items with positive minimum" "
+  select count(*)
+  from public.inventory_stock s
+  join public.inventory_items i on i.id=s.item_id
+  where i.active=false and s.minimum_quantity>0
+"
+check_zero "inactive inventory locations with protected stock/config" "
+  select count(*)
+  from public.inventory_stock s
+  join public.inventory_locations l on l.id=s.location_id
+  where l.active=false and (s.quantity>0 or s.minimum_quantity>0)
+"
 check_zero "receive defaults pointing to wrong site/non-storage" "
   select count(*)
   from public.inventory_receive_defaults d
   join public.inventory_locations l on l.id=d.location_id
   where l.site<>d.site or l.kind<>'storage' or l.active=false
+"
+check_zero "receive defaults without matching active inventory item" "
+  select count(*)
+  from public.inventory_receive_defaults d
+  where not exists (
+    select 1
+    from public.inventory_items i
+    where i.active=true
+      and split_part(i.item_key,':',1)=d.site
+      and i.catalog_key=d.catalog_key
+  )
+"
+check_zero "receive defaults not configured on selected location" "
+  select count(*)
+  from public.inventory_receive_defaults d
+  where not exists (
+    select 1
+    from public.inventory_items i
+    join public.inventory_stock s on s.item_id=i.id
+    where i.active=true
+      and split_part(i.item_key,':',1)=d.site
+      and i.catalog_key=d.catalog_key
+      and s.location_id=d.location_id
+  )
 "
 check_zero "active catalog rows missing required fields" "
   select count(*)
@@ -466,19 +508,27 @@ limit 80;
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "022" ]]; then
-  echo "ERROR: schema version ${schema} is older than 022"
+if [[ "${schema}" < "023" ]]; then
+  echo "ERROR: schema version ${schema} is older than 023"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
 fi
 
 inventory_site_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
+inventory_archive_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_archive_guard','inventory_stock_active_item_guard')")"
 if [[ "${inventory_site_triggers}" != "3" ]]; then
   echo "ERROR: expected 3 inventory site-isolation triggers, found ${inventory_site_triggers}"
   errors=$((errors+1))
 else
   echo "OK: inventory site-isolation triggers = 3"
+fi
+
+if [[ "${inventory_archive_triggers}" != "2" ]]; then
+  echo "ERROR: expected 2 inventory archive-integrity triggers, found ${inventory_archive_triggers}"
+  errors=$((errors+1))
+else
+  echo "OK: inventory archive-integrity triggers = 2"
 fi
 
 revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"

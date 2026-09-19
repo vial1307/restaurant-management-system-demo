@@ -417,3 +417,54 @@ No schema migration was introduced.
 - deploy with gate OFF;
 - verify production parity/backfill;
 - only then consider an explicit relational-read enablement step.
+
+
+## 2026-09-20 — Deep inventory database audit and hidden-stock repair
+
+### Production audit
+
+PR #122 expanded the existing read-only Inventory Site Production Audit.
+Audit #24 / run `35457497470` queried production schema 022.
+
+Clean checks:
+
+- cross-site stock mismatch: 0;
+- receive-default site mismatch: 0;
+- unknown item site: 0;
+- duplicate active catalog per site: 0;
+- blank catalog keys: 0;
+- invalid item-key suffix: 0;
+- invalid receive-default location/config: 0;
+- active items without stock rows: 0;
+- active items without active storage rows: 0;
+- inactive-location protected stock: 0.
+
+Detected defect:
+
+- 4 stock rows belonged to inactive inventory items.
+- `fuxing:duck-tongue`:
+  - kitchen: 4 / minimum 10
+  - large fridge: 14 / minimum 20
+  - work noodles: 4 / minimum 10
+- `fuxing:freezer-kombu-broth-small`:
+  - large freezer: 40 / minimum 15
+
+### Root cause
+
+`POST /api/inventory/catalog/archive` directly set `inventory_items.active=false` without checking stock.
+The frontend already contained an `ITEM_HAS_STOCK` error path, proving the intended contract existed but the backend guard was missing.
+
+### Candidate repair
+
+Branch `fix/inventory-hidden-stock-archive-integrity-20260920`:
+
+- migration 023 reactivates inactive items with positive physical quantity while preserving quantity/minimum exactly;
+- recovery writes `system_inventory_hidden_stock_reactivate` audit entries;
+- `inventory_items_archive_guard` prevents archive while quantity/minimum configuration remains;
+- `inventory_stock_active_item_guard` prevents positive stock/minimum writes to inactive items;
+- catalog archive is transactional, stock-safe and audit logged;
+- API regression now requires `409 ITEM_HAS_STOCK` before clearing stock;
+- dedicated DB regression recreates the pre-023 defect, reruns migration 023, validates recovery and both DB guards;
+- production verifier requires schema 023 and zero hidden-stock conditions after deploy.
+
+No production quantities are guessed, deleted or zeroed by this repair.
