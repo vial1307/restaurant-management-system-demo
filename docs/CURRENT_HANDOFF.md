@@ -10,10 +10,10 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `267235bf9d406f84f982d05df10a46a30f937201`
+- Current verified production SHA: `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
-- Production database schema: PostgreSQL migrations through schema 023.
+- Production database schema: PostgreSQL migrations through schema 024.
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
 - Browser localStorage is cache/UI state only; it is not an authoritative shared inventory/business database.
 
@@ -21,9 +21,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #774
-- Run ID: `35458513691`
-- Tested/deployed commit: `267235bf9d406f84f982d05df10a46a30f937201`
+- Workflow: Deploy Kitchen OS to VPS #776
+- Run ID: `35459291983`
+- Tested/deployed commit: `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -33,7 +33,7 @@ The current verified production deployment is:
 - SSH deploy with backup/rollback path: PASS
 - Production health/release check: PASS
 - Production UI smoke: PASS
-- Database schema: `023`
+- Database schema: `024`
 - Inventory site-isolation triggers: 3
 - Post-deploy Inventory Site Production Audit: PASS
 
@@ -230,7 +230,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #774 / `267235bf9d406f84f982d05df10a46a30f937201`, schema `023`.
+3. Current verified production baseline is #776 / `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`, schema `024`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
 5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
@@ -550,3 +550,50 @@ Schema 024 candidate adds:
 6. production verifier requirement for all three location-integrity triggers.
 
 After schema 024, continue the inventory audit by reviewing `catalog/sync`: any path that changes physical quantity must create the same auditable `inventory_transactions` history as the dedicated set-quantity/transfer APIs.
+
+
+## 2026-09-20 — Release #776 schema 024 verified; catalog stock authority defect confirmed
+
+Verified production:
+
+- commit: `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`;
+- Deploy Kitchen OS to VPS #776 / run `35459291983`;
+- backup: `kitchen_os_20260919T175402Z.dump`;
+- migration `024_inventory_location_archive_integrity.sql`: applied;
+- schema: `024`;
+- item archive-integrity triggers: 2;
+- location-integrity triggers: 3;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #33 / run `35459551373`: PASS;
+- Schedule Production Parity/Backfill: PASS.
+
+Audit #33 confirms all current inventory structural checks are zero, including inactive item/location stock, invalid receive defaults, duplicate active catalog/site groups and missing active stock/storage rows.
+
+### Next defect found during write-path audit
+
+`POST /api/inventory/catalog/sync` currently mixes two authorities:
+
+1. catalog/location metadata;
+2. physical quantity/minimum writes when the caller has stocktake capability.
+
+The branch/product modal sends quantity/minimum in the same catalog payload. Therefore an admin/supervisor metadata edit can replay stale local stock into PostgreSQL, and the quantity mutation does not create `inventory_transactions`.
+
+A second issue exists in the same route: omitted location associations are deleted when `quantity=0` even if `minimum_quantity>0`.
+
+Active branch:
+
+- `fix/inventory-catalog-sync-stock-authority-20260920`
+- schema change: none
+
+Required invariant:
+
+- catalog sync owns metadata + location association only;
+- quantity changes use dedicated stocktake API and transaction history;
+- minimum changes use dedicated minimum API;
+- catalog sync never overwrites existing quantity/minimum;
+- new associations start at 0/0;
+- omitted associations may be deleted only at quantity=0 and minimum=0;
+- protected omitted locations return conflict rather than silently losing configuration.
+
+Historical quantity changes performed through the old catalog path cannot be reconstructed reliably because that path did not emit inventory transactions. Do not guess corrective stock values; current physical quantities must be validated by normal stocktake if operationally questioned.
