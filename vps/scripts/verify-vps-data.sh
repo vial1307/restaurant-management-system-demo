@@ -473,12 +473,12 @@ else
   echo "OK: schema version ${schema}"
 fi
 
-inventory_site_triggers="$(scalar "select count(*) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
-if [[ "${inventory_site_triggers}" != "2" ]]; then
-  echo "ERROR: expected 2 inventory site-isolation triggers, found ${inventory_site_triggers}"
+inventory_site_triggers="$(scalar "select count(*) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
+if [[ "${inventory_site_triggers}" != "3" ]]; then
+  echo "ERROR: expected 3 inventory site-isolation triggers, found ${inventory_site_triggers}"
   errors=$((errors+1))
 else
-  echo "OK: inventory site-isolation triggers = 2"
+  echo "OK: inventory site-isolation triggers = 3"
 fi
 
 revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"
