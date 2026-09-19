@@ -80,6 +80,104 @@ jobs:
           from public.inventory_items i
           left join public.sites st on st.code=split_part(i.item_key,':',1)
           where st.code is null;
+
+          select 'inactive_item_positive_stock|' || count(*)
+          from public.inventory_stock s
+          join public.inventory_items i on i.id=s.item_id
+          where i.active=false and s.quantity>0;
+
+          select 'inactive_item_positive_minimum|' || count(*)
+          from public.inventory_stock s
+          join public.inventory_items i on i.id=s.item_id
+          where i.active=false and s.minimum_quantity>0;
+
+          select 'inactive_location_positive_stock|' || count(*)
+          from public.inventory_stock s
+          join public.inventory_locations l on l.id=s.location_id
+          where l.active=false and s.quantity>0;
+
+          select 'inactive_location_positive_minimum|' || count(*)
+          from public.inventory_stock s
+          join public.inventory_locations l on l.id=s.location_id
+          where l.active=false and s.minimum_quantity>0;
+
+          select 'receive_default_inactive_or_nonstorage|' || count(*)
+          from public.inventory_receive_defaults d
+          join public.inventory_locations l on l.id=d.location_id
+          where l.active=false or l.kind<>'storage';
+
+          select 'receive_default_without_active_item|' || count(*)
+          from public.inventory_receive_defaults d
+          where not exists (
+            select 1
+            from public.inventory_items i
+            where i.active=true
+              and split_part(i.item_key,':',1)=d.site
+              and i.catalog_key=d.catalog_key
+          );
+
+          select 'receive_default_not_configured|' || count(*)
+          from public.inventory_receive_defaults d
+          where not exists (
+            select 1
+            from public.inventory_items i
+            join public.inventory_stock s on s.item_id=i.id
+            where i.active=true
+              and split_part(i.item_key,':',1)=d.site
+              and i.catalog_key=d.catalog_key
+              and s.location_id=d.location_id
+          );
+
+          select 'blank_catalog_key|' || count(*)
+          from public.inventory_items
+          where active=true and btrim(catalog_key)='';
+
+          select 'invalid_item_key_suffix|' || count(*)
+          from public.inventory_items
+          where active=true and btrim(split_part(item_key,':',2))='';
+
+          select 'duplicate_active_catalog_site_groups|' || count(*)
+          from (
+            select split_part(item_key,':',1) as site,catalog_key
+            from public.inventory_items
+            where active=true
+            group by split_part(item_key,':',1),catalog_key
+            having count(*)>1
+          ) duplicates;
+
+          select 'active_item_without_stock_rows|' || count(*)
+          from public.inventory_items i
+          where i.active=true
+            and not exists (
+              select 1 from public.inventory_stock s where s.item_id=i.id
+            );
+
+          select 'active_item_without_storage_rows|' || count(*)
+          from public.inventory_items i
+          where i.active=true
+            and not exists (
+              select 1
+              from public.inventory_stock s
+              join public.inventory_locations l on l.id=s.location_id
+              where s.item_id=i.id and l.active=true and l.kind='storage'
+            );
+
+          select 'detail_duplicate_catalog|' ||
+                 split_part(item_key,':',1) || '|' || catalog_key || '|count|' || count(*)
+          from public.inventory_items
+          where active=true
+          group by split_part(item_key,':',1),catalog_key
+          having count(*)>1
+          order by split_part(item_key,':',1),catalog_key;
+
+          select 'detail_hidden_stock|' || i.item_key || '|location|' || l.code
+                 || '|quantity|' || s.quantity || '|minimum|' || s.minimum_quantity
+          from public.inventory_stock s
+          join public.inventory_items i on i.id=s.item_id
+          join public.inventory_locations l on l.id=s.location_id
+          where (i.active=false or l.active=false)
+            and (s.quantity>0 or s.minimum_quantity>0)
+          order by i.item_key,l.code;
           SQL
 
       - name: Enforce zero cross-site contamination
