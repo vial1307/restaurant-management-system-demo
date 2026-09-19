@@ -28,8 +28,8 @@ const backendScripts = fs.readdirSync(backendScriptsUrl)
   .join("\n");
 assert.doesNotMatch(
   backendScripts,
-  /(?:health\.data\.schema|schema\.rows\[0\]\?\.version)[^\n]{0,100}["']020["']/,
-  "runtime/backend regression wrappers must not pin the retired schema 020"
+  /(?:health\.data\.schema|schema\.rows\[0\]\?\.version)[^\n]{0,100}["']02[01]["']/,
+  "runtime/backend regression wrappers must not pin retired schemas 020/021"
 );
 
 console.log("SCHEMA_022_DEPLOY_BASELINE_OK");
