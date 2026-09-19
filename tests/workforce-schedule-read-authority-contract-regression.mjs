@@ -12,6 +12,7 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const businessRoutes = read("vps/backend/src/business-state-routes.mjs");
 const relationalRoutes = read("vps/backend/src/workforce-schedule-relational-routes.mjs");
 const compose = read("vps/docker-compose.yml");
+const deployWorkflow = read(".github/workflows/deploy-vps.yml");
 
 assert.equal(workforceScheduleRelationalReadEnabled({}), false);
 assert.equal(workforceScheduleRelationalReadEnabled({ WORKFORCE_SCHEDULE_RELATIONAL_READ:"false" }), false);
@@ -61,6 +62,16 @@ assert.match(
   compose,
   /WORKFORCE_SCHEDULE_RELATIONAL_READ: \$\{WORKFORCE_SCHEDULE_RELATIONAL_READ:-false\}/,
   "VPS compose must default schedule relational reads to OFF"
+);
+assert.match(
+  deployWorkflow,
+  /regression:[\s\S]*?WORKFORCE_SCHEDULE_RELATIONAL_READ: "true"/,
+  "full release regression must certify the relational schedule read path before production enablement"
+);
+assert.match(
+  deployWorkflow,
+  /Workforce schedule relational read canary[\s\S]*?workforce-schedule-read-cutover-canary\.mjs/,
+  "full release regression must execute the read/write cutover canary"
 );
 
 console.log("WORKFORCE_SCHEDULE_READ_AUTHORITY_CONTRACT_OK");
