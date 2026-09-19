@@ -536,3 +536,58 @@ Schema 024 candidate:
 - production verifier requires three new location-integrity triggers.
 
 After this slice, inspect catalog sync stocktake writes so every physical quantity mutation has auditable transaction history.
+
+
+## 2026-09-20 — Release #776 schema 024 and catalog stock-authority audit
+
+### Release #776 verified
+
+PR #124 merged as `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`.
+
+Deploy #776 / run `35459291983`:
+
+- full DB/API/browser/full-device regression PASS;
+- pre-deploy backup `kitchen_os_20260919T175402Z.dump`;
+- migration 024 applied;
+- schema 024 verified;
+- inventory archive-integrity triggers = 2;
+- inventory location-integrity triggers = 3;
+- DATA_INTEGRITY_OK;
+- exact release check PASS;
+- production UI smoke PASS.
+
+Post-deploy Inventory Site Production Audit #33 / run `35459551373`:
+
+- cross-site mismatch = 0;
+- inactive item quantity/minimum = 0;
+- inactive location quantity/minimum = 0;
+- invalid receive-default checks = 0;
+- duplicate active catalog/site groups = 0;
+- active items missing stock/storage = 0;
+- hidden integrity violations = 0;
+- exact release match PASS.
+
+### Catalog stock-authority defect
+
+Write-path audit found that `catalog/sync` directly overwrote quantity/minimum for stocktake-capable users.
+The product modal calls this route after editing metadata and includes local quantity/minimum values, so a stale browser snapshot could overwrite PostgreSQL without an `inventory_transactions` record.
+
+The same route deleted omitted stock rows when quantity was zero without requiring minimum to be zero.
+
+Created branch:
+
+- `fix/inventory-catalog-sync-stock-authority-20260920`
+
+Implemented candidate behavior:
+
+- catalog sync no longer writes physical quantity/minimum;
+- catalog sync creates only zeroed new associations;
+- protected omitted associations return 409;
+- omitted association deletion requires quantity=0 and minimum=0;
+- product modal quantity uses `set-quantity`;
+- product modal minimum/work minimum uses `set-minimum`;
+- metadata sync can defer refresh until dedicated stock writes finish;
+- dynamic regression proves a stocktake-capable supervisor cannot overwrite stock via catalog sync;
+- dynamic regression proves minimum-only location removal is blocked.
+
+No schema migration is required; schema remains 024.
