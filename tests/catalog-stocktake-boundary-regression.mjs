@@ -8,6 +8,10 @@ const source = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const app = source("src/app.js");
 const cloud = source("src/inventory-cloud.js");
 const backend = source("vps/backend/src/inventory-extra-routes.mjs");
+const catalogSync = backend.slice(
+  backend.indexOf('app.post("/api/inventory/catalog/sync"'),
+  backend.indexOf('app.post("/api/inventory/catalog/archive"')
+);
 
 assert.match(
   app,
@@ -45,16 +49,47 @@ assert.doesNotMatch(
   /allowInventoryEditor && canInventoryEdit\(\)/,
   "legacy inventory-editor quantity bypass must remain removed"
 );
-
 assert.match(
-  backend,
-  /const stocktakeWrite = canStocktakeRole\(user,site\);/,
-  "catalog sync must compute the stocktake write boundary server-side"
-);
-assert.match(
-  backend,
-  /if \(stocktakeWrite\) \{[\s\S]*?quantity=excluded\.quantity,[\s\S]*?minimum_quantity=excluded\.minimum_quantity,[\s\S]*?\} else \{[\s\S]*?on conflict\(item_id,location_id\) do nothing/,
-  "catalog-only editors may create zeroed stock rows but must not overwrite quantity/minimum"
+  cloud,
+  /cloudSyncBranchCatalogItem\(stockKey, site = currentSite\(\), \{ sync = true \} = \{\}\)/,
+  "catalog metadata sync must support deferring refresh while dedicated stock APIs run"
 );
 
-console.log("catalog stocktake boundary regression passed");
+assert.match(
+  app,
+  /async function persistCatalogStocktakeFields[\s\S]*?cloudSetQuantity\([\s\S]*?sync:false[\s\S]*?cloudSetMinimum\([\s\S]*?sync:false/,
+  "product modal stock fields must be persisted through dedicated stocktake APIs"
+);
+assert.match(
+  app,
+  /cloudSyncBranchCatalogItem\(stockKey, site, \{ sync:false \}\)[\s\S]*?persistCatalogStocktakeFields/,
+  "edit-item save must sync metadata before dedicated stock fields"
+);
+assert.match(
+  app,
+  /cloudSyncBranchCatalogItem\(createdStockKey,site,\{sync:false\}\)[\s\S]*?persistCatalogStocktakeFields/,
+  "add-item save must sync metadata before dedicated stock fields"
+);
+
+assert.doesNotMatch(
+  catalogSync,
+  /stocktakeWrite|quantity=excluded\.quantity|minimum_quantity=excluded\.minimum_quantity/,
+  "catalog sync must never be an alternate physical stocktake write authority"
+);
+assert.match(
+  catalogSync,
+  /values\(\$1,\$2,0,0,now\(\)\)[\s\S]*?on conflict\(item_id,location_id\) do nothing/,
+  "catalog sync may create only zeroed stock associations"
+);
+assert.match(
+  catalogSync,
+  /\(s\.quantity>0 or s\.minimum_quantity>0\)[\s\S]*?LOCATION_HAS_STOCK/,
+  "removing a catalog location must reject quantity or minimum configuration"
+);
+assert.match(
+  catalogSync,
+  /and quantity=0[\s\S]*?and minimum_quantity=0/,
+  "catalog sync may delete an omitted location association only when quantity and minimum are both zero"
+);
+
+console.log("catalog stock authority boundary regression passed");
