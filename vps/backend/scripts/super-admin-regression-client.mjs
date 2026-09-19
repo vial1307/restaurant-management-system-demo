@@ -45,7 +45,7 @@ async function removeUser(cookie, id) {
 await DB.connect();
 try {
   const schema = await DB.query("select version from public.schema_migrations order by version desc limit 1");
-  assert.equal(schema.rows[0]?.version, "021");
+  assert.equal(schema.rows[0]?.version, "022");
 
   const ownerDb = await DB.query("select role,location,permission_overrides from public.app_users where username='yangchuadmin'");
   assert.equal(ownerDb.rows[0]?.role, "superadmin");
@@ -62,7 +62,7 @@ try {
   const overview = await request("/api/admin/super/overview", { cookie:owner.cookie });
   assert.equal(overview.response.status, 200, JSON.stringify(overview.data));
   assert.equal(overview.data.database.database_name, process.env.POSTGRES_DB || "kitchen_test");
-  assert.equal(overview.data.schema.version, "021");
+  assert.equal(overview.data.schema.version, "022");
   assert(Number(overview.data.api.uptime_seconds) >= 0);
 
   const development = await request("/api/admin/super/development-status", { cookie:owner.cookie });
@@ -71,9 +71,9 @@ try {
   assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
   assert.equal(development.data.status, "stable");
   assert.equal(development.data.current_work.branch, "main");
-  assert.equal(development.data.current_work.candidate_schema, "021");
-  assert.equal(development.data.runtime.schema.version, "021");
-  assert.equal(development.data.live_production.schema, "021");
+  assert.equal(development.data.current_work.candidate_schema, "022");
+  assert.equal(development.data.runtime.schema.version, "022");
+  assert.equal(development.data.live_production.schema, "022");
   assert.equal(development.data.release_evidence.schema, "021");
   assert.equal(development.data.release_evidence.workflow_run_id, "35377327661");
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
