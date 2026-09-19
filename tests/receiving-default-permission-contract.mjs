@@ -19,7 +19,11 @@ assert(app.includes("canManageReceiveDefault,"), "branch editor does not import 
 assert(app.includes("const receiveDefaultEditable = canManageReceiveDefault(activeInventorySite());"), "branch editor does not derive receiving-default editability from the dedicated boundary");
 assert(app.includes('disabled aria-disabled="true"'), "non-manager receiving-default selector is not disabled");
 assert(app.includes('type="hidden" name="receiveZone"'), "read-only receiving-default UI must preserve the existing value on product save");
-assert.equal((app.match(/const receiveResult = canManageReceiveDefault\(site\)/g) || []).length, 2, "both add/edit product save paths must skip unauthorized receiving-default writes");
+assert.equal(
+  (app.match(/const receiveResult = stockResult\.ok && canManageReceiveDefault\(site\)/g) || []).length,
+  2,
+  "both add/edit product save paths must require successful stock persistence and receiving-default authority before writing"
+);
 
 assert(backend.includes("async function canManageReceiveDefault(user, site)"), "backend receiving-default permission boundary missing");
 assert(backend.includes('return user.role === "manager" && await isBranchSite(site);'), "backend receiving-default boundary must be branch-manager scoped through DB-backed site metadata");
