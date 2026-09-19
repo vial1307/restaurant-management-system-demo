@@ -690,33 +690,46 @@ async function verifyRelationalParity(client, plan) {
   );
   const checkpoint = checkpointResult.rows[0] || null;
   const expectedRowsRead = plan.schedules.length + plan.published.length + plan.requests.length + plan.exceptions.length;
-  const checkpointFields = [];
-  if (!checkpoint) checkpointFields.push("missing_checkpoint");
-  else {
-    if (Number(checkpoint.source_revision) !== Number(plan.sourceRevision)) checkpointFields.push("source_revision");
-    if (text(checkpoint.status) !== "verified") checkpointFields.push("status");
-    if (Number(checkpoint.rows_read) !== expectedRowsRead) checkpointFields.push("rows_read");
-    if (text(checkpoint.checksum) !== plan.checksum) checkpointFields.push("checksum");
-    if (Number(checkpoint?.details?.diagnostics?.blocking || 0) !== 0) checkpointFields.push("blocking_diagnostics");
+  const relationalRowCount = actualSchedules.length + actualRequests.length + actualExceptions.length
+    + Number(publicationParity?.expected ? plan.published.length + 1 : 0);
+  const checkpointRequired = expectedRowsRead > 0 || relationalRowCount > 0;
+  const checkpointBlocking = [];
+  const checkpointWarnings = [];
+  if (!checkpoint) {
+    if (checkpointRequired) checkpointBlocking.push("missing_checkpoint");
+    else checkpointWarnings.push("checkpoint_not_required_for_empty_domain");
+  } else {
+    if (text(checkpoint.status) !== "verified") checkpointBlocking.push("status");
+    if (Number(checkpoint?.details?.diagnostics?.blocking || 0) !== 0) checkpointBlocking.push("blocking_diagnostics");
+    if (Number(checkpoint.source_revision) !== Number(plan.sourceRevision)) checkpointWarnings.push("source_revision_stale");
+    if (Number(checkpoint.rows_read) !== expectedRowsRead) checkpointWarnings.push("rows_read_stale");
+    if (text(checkpoint.checksum) !== plan.checksum) checkpointWarnings.push("checksum_stale");
   }
 
-  const ok = plan.diagnostics.blocking === 0
+  const dataParityOk = plan.diagnostics.blocking === 0
     && scheduleDifferences.length === 0
     && requestDifferences.length === 0
     && exceptionDifferences.length === 0
-    && publicationParity.ok
-    && checkpointFields.length === 0;
+    && publicationParity.ok;
+  const ok = dataParityOk && checkpointBlocking.length === 0;
 
   return {
     ok,
+    dataParityOk,
     checkpoint:{
+      required:checkpointRequired,
       present:Boolean(checkpoint),
+      fresh:Boolean(checkpoint)
+        && Number(checkpoint.source_revision) === Number(plan.sourceRevision)
+        && Number(checkpoint.rows_read) === expectedRowsRead
+        && text(checkpoint.checksum) === plan.checksum,
       sourceRevision:checkpoint ? Number(checkpoint.source_revision) : null,
       status:checkpoint ? text(checkpoint.status) : null,
       rowsRead:checkpoint ? Number(checkpoint.rows_read) : null,
       rowsWritten:checkpoint ? Number(checkpoint.rows_written) : null,
       checksum:checkpoint ? text(checkpoint.checksum) : null,
-      differences:checkpointFields,
+      blocking:checkpointBlocking,
+      warnings:checkpointWarnings,
     },
     relationalCounts:{
       schedules:actualSchedules.length,
