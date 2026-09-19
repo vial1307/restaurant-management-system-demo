@@ -62,23 +62,24 @@ returns trigger
 language plpgsql
 as $$
 declare
-  positive_rows bigint;
+  protected_rows bigint;
   total_quantity numeric;
+  total_minimum numeric;
 begin
   if old.active=true and new.active=false then
-    select count(*),coalesce(sum(quantity),0)
-      into positive_rows,total_quantity
+    select count(*),coalesce(sum(quantity),0),coalesce(sum(minimum_quantity),0)
+      into protected_rows,total_quantity,total_minimum
     from public.inventory_stock
     where item_id=old.id
-      and quantity>0;
+      and (quantity>0 or minimum_quantity>0);
 
-    if positive_rows>0 then
+    if protected_rows>0 then
       raise exception using
         errcode='23514',
         message='ITEM_HAS_STOCK',
         detail=format(
-          'item_id=%s item_key=%s positive_stock_rows=%s total_quantity=%s',
-          old.id,old.item_key,positive_rows,total_quantity
+          'item_id=%s item_key=%s protected_stock_rows=%s total_quantity=%s total_minimum=%s',
+          old.id,old.item_key,protected_rows,total_quantity,total_minimum
         );
     end if;
   end if;
