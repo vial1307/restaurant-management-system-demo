@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 const BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
-const PASSWORD = process.env.KITCHEN_REGRESSION_PASSWORD || ["Kitchen","Test","123"].join("");
+const PASSWORD = process.env.KITCHEN_REGRESSION_PASSWORD || ["Kitchen","Test",String.fromCharCode(33),"123"].join("");
 
 async function request(path, { method="GET", cookie="", body } = {}) {
   const response = await fetch(BASE + path, {
