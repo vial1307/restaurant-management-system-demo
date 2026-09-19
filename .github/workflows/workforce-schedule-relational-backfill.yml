@@ -10,6 +10,11 @@ on:
       - "tests/workforce-schedule-relational-route-contract-regression.mjs"
       - "vps/backend/src/workforce-schedule-relational-routes.mjs"
       - "vps/backend/src/workforce-schedule-relational-state.mjs"
+      - "vps/backend/src/workforce-schedule-relational-shadow.mjs"
+      - "vps/backend/src/business-state-routes.mjs"
+      - "vps/backend/src/workforce-request-routes.mjs"
+      - "vps/backend/src/workforce-schedule-rule-routes.mjs"
+      - "tests/workforce-schedule-runtime-shadow-contract-regression.mjs"
       - "vps/backend/scripts/workforce-schedule-backfill-regression.mjs"
       - "vps/backend/scripts/workforce-schedule-central-compat-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
@@ -23,6 +28,11 @@ on:
     paths:
       - "vps/database/**"
       - "vps/backend/scripts/workforce-schedule-backfill.mjs"
+      - "vps/backend/src/workforce-schedule-relational-shadow.mjs"
+      - "vps/backend/src/business-state-routes.mjs"
+      - "vps/backend/src/workforce-request-routes.mjs"
+      - "vps/backend/src/workforce-schedule-rule-routes.mjs"
+      - "tests/workforce-schedule-runtime-shadow-contract-regression.mjs"
       - "vps/backend/scripts/workforce-schedule-backfill-regression.mjs"
       - "vps/backend/scripts/workforce-schedule-central-compat-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
@@ -77,3 +87,5 @@ jobs:
         run: node tests/workforce-schedule-production-parity-workflow-regression.mjs
       - name: Verify relational schedule route contract
         run: node tests/workforce-schedule-relational-route-contract-regression.mjs
+      - name: Verify runtime relational shadow contract
+        run: node tests/workforce-schedule-runtime-shadow-contract-regression.mjs
