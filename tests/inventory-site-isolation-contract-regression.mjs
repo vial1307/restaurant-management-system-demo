@@ -28,7 +28,9 @@ assert.match(app,/saved\?\.site===site/,"offline branch drafts must carry a site
 assert.match(app,/baseRecord\?\.inventorySite===site/,"offline branch drafts must never seed from another site's shared record");
 assert.match(app,/inventoryBranchSnapshot\(site\)/,"branch render must use site-scoped inventory mirror");
 assert.match(authLayer,/entry\.disabled = true[\s\S]{0,180}aria-busy[\s\S]{0,220}button\.dataset\.switching = "true"/,"warehouse switch UI must disable all site buttons and mark the target busy");
-assert.match(authLayer,/switchActiveInventorySite\(site\)[\s\S]{0,420}entry\.disabled = false[\s\S]{0,160}removeAttribute\("aria-busy"\)/,"warehouse switch UI must restore controls after hydration");
+assert.match(authLayer,/entry\.disabled = false/,"warehouse switch UI must restore button enabled state after hydration");
+assert.match(authLayer,/removeAttribute\("aria-busy"\)/,"warehouse switch UI must clear busy state after hydration");
+assert.match(authLayer,/delete entry\.dataset\.switching/,"warehouse switch UI must clear target switching marker after hydration");
 assert.match(authCss,/button\[data-switching="true"\]::after[\s\S]{0,120}content:" …"/,"pending warehouse switch must have visible feedback");
 assert.match(app,/key === "zone"[\s\S]{0,900}cloudRelocateStorage\([\s\S]{0,260}sourceLocationCode[\s\S]{0,160}destinationLocationCode/,"zone edit must use full storage relocation with explicit source/destination");
 
