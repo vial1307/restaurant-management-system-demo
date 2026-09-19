@@ -39,6 +39,29 @@ begin
   end if;
 end $$;
 
+create or replace function public.assert_inventory_item_site_exists()
+returns trigger
+language plpgsql
+as $
+declare
+  item_site text;
+begin
+  item_site := split_part(new.item_key,':',1);
+  if item_site='' or not exists(select 1 from public.sites where code=item_site) then
+    raise exception using
+      errcode='23514',
+      message='INVENTORY_ITEM_SITE_INVALID',
+      detail=format('item_key=%s item_site=%s',new.item_key,coalesce(item_site,'?'));
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists inventory_items_site_guard on public.inventory_items;
+create trigger inventory_items_site_guard
+before insert or update of item_key on public.inventory_items
+for each row execute function public.assert_inventory_item_site_exists();
+
 create or replace function public.assert_inventory_stock_site_match()
 returns trigger
 language plpgsql
