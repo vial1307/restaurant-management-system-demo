@@ -10,10 +10,10 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified main/production SHA: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`
+- Current verified main/production SHA: `6f391421881e6e4aa687ed8cca85d751f96efadb`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
-- Production database schema: PostgreSQL migrations through schema 021.
+- Production database schema: PostgreSQL migrations through schema 022.
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
 - Browser localStorage is cache/UI state only; it is not an authoritative shared inventory/business database.
 
@@ -21,12 +21,11 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #726
-- Run ID: `35378902959`
-- Tested/deployed commit: `9aae83a329541e2f65d968c7b1b6adc8bf56097c`
+- Workflow: Deploy Kitchen OS to VPS #754
+- Run ID: `35430241680`
+- Tested/deployed commit: `6f391421881e6e4aa687ed8cca85d751f96efadb`
 - Result: SUCCESS
 - Preflight: PASS
-- Host metrics collector runtime smoke: PASS
 - API/inventory regression: PASS
 - PostgreSQL concurrency regression: PASS
 - Desktop/mobile Chromium regression: PASS
@@ -34,11 +33,17 @@ The current verified production deployment is:
 - SSH deploy with backup/rollback path: PASS
 - Production health/release check: PASS
 - Production UI smoke: PASS
-- Database schema: `021`
-- Super Admin row revision columns: 5
-- Super Admin row revision triggers: 5
+- Database schema: `022`
+- Inventory site-isolation triggers: 3
+- Post-deploy Inventory Site Production Audit: PASS
 
-This production release includes secure Super Admin data editing, schema-021 row revisions, filtered VPS telemetry, GitHub/Handoff, and runtime-backed live release/schema reporting.
+Production audit after schema 022:
+
+- `stock_site_mismatch = 0`
+- `receive_default_site_mismatch = 0`
+- `unknown_item_site = 0`
+
+This release production-verifies site-scoped inventory authority, transactional storage relocation and strict cross-site database guards.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
@@ -225,9 +230,9 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #726 / `9aae83a329541e2f65d968c7b1b6adc8bf56097c`, schema `021`.
+3. Current verified production baseline is #754 / `6f391421881e6e4aa687ed8cca85d751f96efadb`, schema `022`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
-5. Continue P1 normalized-domain/database redesign from this verified green baseline, one domain at a time.
+5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
 
 
@@ -356,3 +361,47 @@ The Admin/Data hardening, VPS metrics and GitHub/Handoff workstream is complete.
 3. define relational authority, migration/backfill/rollback and capability checks;
 4. preserve Browser/UI -> VPS API -> PostgreSQL as the only write authority;
 5. keep dedicated transactional APIs for operations whose invariants cannot safely be expressed through generic CRUD.
+
+
+## 2026-09-19 — Release #754 inventory isolation verified
+
+Inventory hardening is now production-verified.
+
+Evidence:
+
+- commit: `6f391421881e6e4aa687ed8cca85d751f96efadb`;
+- workflow: Deploy Kitchen OS to VPS #754;
+- run ID: `35430241680`;
+- schema: `022`;
+- production UI smoke: PASS;
+- post-deploy Inventory Site Production Audit #8: PASS.
+
+Pre-migration production audit ran after the database backup and before schema 022:
+
+- stock-site mismatch: 0;
+- receive-default site mismatch: 0;
+- unknown item-site prefix: 0.
+
+Migration `022_inventory_site_isolation.sql` was then applied successfully. Production verification reported:
+
+- `OK: schema version 022`;
+- `OK: inventory site-isolation triggers = 3`;
+- release endpoint: `6f39142`.
+
+This confirms the user-reported Fuxing/Yongji “shared quantity” symptom was not caused by cross-site PostgreSQL contamination. The relevant defect was browser cache/site context; schema 022 now also prevents a future frontend defect from writing an item into another site's location.
+
+Current inventory authority:
+
+- Central, Fuxing and Yongji intentionally share one PostgreSQL database.
+- They are isolated by site-scoped item/location rows.
+- Normal stock edits affect only the active site.
+- Cross-site quantity changes require an explicit shipment/direct-transfer transaction.
+- Same-site storage movement uses transfer/relocation transactions.
+- Browser localStorage remains cache/UI state only.
+
+Immediate continuation:
+
+1. Finish visible warehouse-switch pending feedback.
+2. Preserve fetch-before-commit branch switching.
+3. Keep Inventory Site Production Audit as a release gate.
+4. Preserve schema-022 guards in all future inventory/database work.

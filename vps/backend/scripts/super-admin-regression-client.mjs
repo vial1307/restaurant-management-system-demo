@@ -69,13 +69,13 @@ try {
   assert.equal(development.response.status, 200, JSON.stringify(development.data));
   assert.equal(development.data.repository.name, "vial1307/restaurant-management-system-demo");
   assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
-  assert.equal(development.data.status, "verifying");
-  assert.equal(development.data.current_work.branch, "fix/inventory-site-isolation-relocation-20260919");
+  assert.equal(development.data.status, "stable");
+  assert.equal(development.data.current_work.branch, "main");
   assert.equal(development.data.current_work.candidate_schema, "022");
   assert.equal(development.data.runtime.schema.version, "022");
   assert.equal(development.data.live_production.schema, "022");
-  assert.equal(development.data.release_evidence.schema, "021");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35377327661");
+  assert.equal(development.data.release_evidence.schema, "022");
+  assert.equal(development.data.release_evidence.workflow_run_id, "35430241680");
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
   assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
 

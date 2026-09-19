@@ -13,6 +13,8 @@ const audit=read(".github/workflows/inventory-site-production-audit.yml");
 const deploy=read("vps/scripts/deploy-api.sh");
 const preMigrationAudit=read("vps/scripts/audit-inventory-site-isolation.sh");
 const operations=read("src/inventory-operations.js");
+const authLayer=read("src/auth-layer.js");
+const authCss=read("src/auth-layer.css");
 
 assert.match(cloud,/BRANCH_SNAPSHOT_KEY_PREFIX/,"branch inventory must keep per-site mirrors");
 assert.match(cloud,/inventoryBranchSnapshot\(site\)/,"branch mirror reader missing");
@@ -25,6 +27,11 @@ assert(fetchIndex>=0 && commitIndex>fetchIndex,"site switch must fetch target sn
 assert.match(app,/saved\?\.site===site/,"offline branch drafts must carry a site marker");
 assert.match(app,/baseRecord\?\.inventorySite===site/,"offline branch drafts must never seed from another site's shared record");
 assert.match(app,/inventoryBranchSnapshot\(site\)/,"branch render must use site-scoped inventory mirror");
+assert.match(authLayer,/entry\.disabled = true[\s\S]{0,180}aria-busy[\s\S]{0,220}button\.dataset\.switching = "true"/,"warehouse switch UI must disable all site buttons and mark the target busy");
+assert.match(authLayer,/entry\.disabled = false/,"warehouse switch UI must restore button enabled state after hydration");
+assert.match(authLayer,/removeAttribute\("aria-busy"\)/,"warehouse switch UI must clear busy state after hydration");
+assert.match(authLayer,/delete entry\.dataset\.switching/,"warehouse switch UI must clear target switching marker after hydration");
+assert.match(authCss,/button\[data-switching="true"\]::after[\s\S]{0,120}content:" …"/,"pending warehouse switch must have visible feedback");
 assert.match(app,/key === "zone"[\s\S]{0,900}cloudRelocateStorage\([\s\S]{0,260}sourceLocationCode[\s\S]{0,160}destinationLocationCode/,"zone edit must use full storage relocation with explicit source/destination");
 
 const itemSiteGuards=(routes.match(/ITEM_SITE_MISMATCH/g)||[]).length;
