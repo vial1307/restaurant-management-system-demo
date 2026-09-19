@@ -7,6 +7,9 @@ on:
     paths:
       - "vps/database/**"
       - "vps/backend/scripts/workforce-schedule-backfill.mjs"
+      - "tests/workforce-schedule-relational-route-contract-regression.mjs"
+      - "vps/backend/src/workforce-schedule-relational-routes.mjs"
+      - "vps/backend/src/workforce-schedule-relational-state.mjs"
       - "vps/backend/scripts/workforce-schedule-backfill-regression.mjs"
       - "vps/backend/scripts/workforce-schedule-central-compat-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
@@ -72,3 +75,5 @@ jobs:
         run: node vps/backend/scripts/workforce-schedule-central-compat-regression.mjs
       - name: Verify production parity workflow contract
         run: node tests/workforce-schedule-production-parity-workflow-regression.mjs
+      - name: Verify relational schedule route contract
+        run: node tests/workforce-schedule-relational-route-contract-regression.mjs
