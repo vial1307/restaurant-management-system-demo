@@ -37,6 +37,7 @@ const CENTRAL_WORK_KEY = "shitu-central-kitchen-work-v1";
 const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const RECEIVE_DEFAULT_KEY = "shitu-inventory-receive-defaults-v1";
+const BRANCH_SNAPSHOT_KEY_PREFIX = "shitu-inventory-branch-snapshot-v1:";
 const POLL_MS = 60000;
 const REQUIRED_SCHEMA_VERSION = 12;
 const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
@@ -55,6 +56,7 @@ let bootedUserId = "";
 let inventorySyncTail = Promise.resolve();
 let lastSite = "";
 let siteRegistryInFlight = null;
+let activeSiteSwitchSerial = 0;
 const cache = {
   itemsByKey: new Map(),
   locationsByCode: new Map(),
@@ -67,6 +69,30 @@ function readJson(key, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function branchSnapshotKey(site) {
+  return BRANCH_SNAPSHOT_KEY_PREFIX + String(site || "");
+}
+
+export function inventoryBranchSnapshot(site) {
+  const code = String(site || "");
+  if (!code || !isBranchInventorySite(code)) return null;
+  const snapshot = readJson(branchSnapshotKey(code), null);
+  if (!snapshot || snapshot.site !== code || !Array.isArray(snapshot.inventory) || !Array.isArray(snapshot.workInventory)) {
+    return null;
+  }
+  return snapshot;
+}
+
+function saveInventoryBranchSnapshot(site, inventory, workInventory) {
+  if (!isBranchInventorySite(site)) return;
+  localStorage.setItem(branchSnapshotKey(site), JSON.stringify({
+    site,
+    inventory,
+    workInventory,
+    updatedAt:new Date().toISOString(),
+  }));
 }
 
 function session() {
@@ -223,43 +249,48 @@ export async function switchActiveInventorySite(site) {
   const previousSite = activeInventorySite();
   const targetSite = String(site || "");
   if (!targetSite) return false;
+  if (targetSite === previousSite) {
+    await runInventorySync(targetSite, { reloadBranch:false, force:true });
+    return true;
+  }
 
-  localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
+  const serial = ++activeSiteSwitchSerial;
   window.dispatchEvent(new CustomEvent("shitu:active-site-changing", {
     detail:{ site:targetSite, previousSite },
   }));
 
-  let syncStatus = "";
-  let syncError = "";
-  const onStatus = (event) => {
-    if (String(event.detail?.site || "") !== targetSite) return;
-    syncStatus = String(event.detail?.status || "");
-    syncError = String(event.detail?.error || "");
-  };
-  window.addEventListener("shitu:inventory-cloud-status", onStatus);
   try {
-    // Site switching is user-facing and must not wait behind the background
-    // polling queue for the previous site. Run one authoritative fresh hydrate
-    // immediately; stale background branch hydrations are ignored by applyBranch.
-    await runInventorySync(targetSite, { reloadBranch:false, force:true });
-  } finally {
-    window.removeEventListener("shitu:inventory-cloud-status", onStatus);
-  }
+    if (!(await verifyMigration()) || !hasInventoryPermission("view")) {
+      throw new Error("INVENTORY_BACKEND_NOT_READY");
+    }
+    await ensureSiteRegistry({ force:true });
+    if (!isKnownInventorySite(targetSite)) throw new Error("INVALID_SITE");
 
-  const hydrated = syncStatus === "synced";
-  if (!hydrated) {
+    // Fetch the authoritative target snapshot before changing the active site.
+    // This prevents Fuxing/Yongji from ever rendering the previous branch while
+    // a new branch request is still in flight.
+    const rows = await fetchSite(targetSite, { force:true });
+    if (serial !== activeSiteSwitchSerial) return false;
+
+    localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
+    if (isBranchInventorySite(targetSite)) applyBranch(rows, targetSite);
+    else applyCentral(rows);
+    dispatchStatus("synced", { site:targetSite, count:rows.length, switch:true });
+
+    window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
+      detail:{ site:targetSite, previousSite, hydrated:true },
+    }));
+    return true;
+  } catch (error) {
+    if (serial !== activeSiteSwitchSerial) return false;
     if (previousSite && isKnownInventorySite(previousSite)) localStorage.setItem(ACTIVE_SITE_KEY, previousSite);
     else localStorage.removeItem(ACTIVE_SITE_KEY);
+    dispatchStatus("error", { site:targetSite, error:error?.message || String(error), switch:true });
     window.dispatchEvent(new CustomEvent("shitu:active-site-change-failed", {
-      detail:{ site:targetSite, previousSite, status:syncStatus || "unknown", error:syncError },
+      detail:{ site:targetSite, previousSite, status:"error", error:error?.message || String(error) },
     }));
     return false;
   }
-
-  window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
-    detail:{ site:targetSite, previousSite, hydrated:true },
-  }));
-  return true;
 }
 
 function currentSite() {
@@ -757,11 +788,13 @@ function applyBranch(rows, site) {
 
   inventory.sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant") || String(a.zone).localeCompare(String(b.zone)));
   const workInventory=[...workMap.values()].sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant"));
-  const before=JSON.stringify({inventory:record.inventory||[],workInventory:record.workInventory||[]});
-  const after=JSON.stringify({inventory,workInventory});
+  saveInventoryBranchSnapshot(site, inventory, workInventory);
+  const before=JSON.stringify({inventory:record.inventory||[],workInventory:record.workInventory||[],inventorySite:record.inventorySite||""});
+  const after=JSON.stringify({inventory,workInventory,inventorySite:site});
   if(before===after) return false;
   record.inventory=inventory;
   record.workInventory=workInventory;
+  record.inventorySite=site;
   record.updatedAt=new Date().toISOString();
   localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
   window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated",{detail:{site}}));
