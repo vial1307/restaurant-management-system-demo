@@ -14,6 +14,7 @@ import { registerWorkforceCorrectionRoutes } from "./workforce-correction-routes
 import { registerWorkforceRequestRoutes } from "./workforce-request-routes.mjs";
 import { registerWorkforceScheduleRuleRoutes } from "./workforce-schedule-rule-routes.mjs";
 import { registerWorkforceScheduleRelationalRoutes } from "./workforce-schedule-relational-routes.mjs";
+import { syncWorkforceScheduleDraftShadow } from "./workforce-schedule-relational-shadow.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -265,8 +266,24 @@ export async function registerBusinessStateRoutes(app) {
         workforceAudit = workforceMerge.audit || null;
       }
 
+      let scheduleShadow = null;
       if (Object.hasOwn(effectiveEditable, "schedule")) {
         effectiveEditable.schedule = preserveScheduleWorkflow(before.schedule, effectiveEditable.schedule);
+        scheduleShadow = await syncWorkforceScheduleDraftShadow(client, {
+          site,
+          schedules:effectiveEditable.schedule.schedules,
+          staffRoster:Object.hasOwn(effectiveEditable, "shared")
+            ? effectiveEditable.shared.staff
+            : before.shared?.staff,
+          user,
+        });
+        if (!scheduleShadow.ok) {
+          return {
+            workforceDenied:true,
+            error:scheduleShadow.error,
+            status:scheduleShadow.status || 409,
+          };
+        }
       }
 
       const next = { ...before, ...effectiveEditable };
@@ -286,6 +303,12 @@ export async function registerBusinessStateRoutes(app) {
         editableNames.map((moduleName) => [moduleName, nextRevisions[moduleName]])
       );
       const auditMetadata = { modules: editableNames, moduleRevisions: savedModuleRevisions };
+      if (scheduleShadow?.ok) {
+        auditMetadata.workforceScheduleRelationalShadow = {
+          draftRows:scheduleShadow.rows,
+          staffRows:scheduleShadow.staffRows || 0,
+        };
+      }
       if (workforceAudit?.changedAttendanceIds?.length) {
         auditMetadata.workforceAttendanceChanges = workforceAudit.changedAttendanceIds;
       }
