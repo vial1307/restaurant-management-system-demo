@@ -73,10 +73,18 @@ A site is parity-ready only when:
 - relational rows match the canonical compatibility projection;
 - no unexpected active draft/request/exception rows exist;
 - the current publication snapshot matches when one exists;
-- the migration checkpoint exists with `status=verified`;
-- checkpoint source revision and checksum match the current compatibility source.
+- a verified migration checkpoint exists when the migrated schedule domain contains relational/source rows;
+- exact relational row parity is the primary cutover gate;
+- checkpoint source revision/checksum freshness is reported separately because the wider `schedule` module can advance for non-migrated fields such as rules.
 
 Parity mismatch exits non-zero and reports field-level differences. It must not repair or mutate data.
+
+Checkpoint semantics:
+
+- missing checkpoint is blocking only when the migrated schedule domain contains source or relational rows;
+- an entirely empty site may be parity-ready without manufacturing a checkpoint;
+- checkpoint status/previous blocking diagnostics remain provenance gates when a checkpoint is required;
+- stale checkpoint source revision/rows-read/checksum are freshness warnings when current row-level parity is exact, not evidence of relational drift by themselves.
 
 Production parity is checked by a separate read-only workflow after a successful main deployment. That workflow verifies the deployed release and script hash before running parity on the VPS.
 
