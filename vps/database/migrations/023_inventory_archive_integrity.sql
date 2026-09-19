@@ -22,7 +22,7 @@ with hidden as (
   join public.inventory_stock s on s.item_id=i.id
   join public.inventory_locations l on l.id=s.location_id
   where i.active=false
-    and s.quantity>0
+    and (s.quantity>0 or s.minimum_quantity>0)
   group by i.id,i.item_key,i.catalog_key
 ),
 reactivated as (
@@ -50,7 +50,7 @@ select
     'source','migration_023',
     'item_key',r.item_key,
     'catalog_key',r.catalog_key,
-    'reason','inactive_item_had_positive_stock',
+    'reason','inactive_item_had_protected_stock',
     'stock_rows',r.stock_rows
   )
 from reactivated r;
