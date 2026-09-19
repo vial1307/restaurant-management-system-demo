@@ -227,14 +227,39 @@ try {
   const runtimeModule = structuredClone(changed);
   runtimeModule.schedules = [structuredClone(runtimeModule.schedules[0])];
   runtimeModule.schedules[0].note = "runtime shadow draft note";
+  runtimeModule.schedules.push({
+    id:"schedule-runtime-new-staff",
+    staffId:"schedule-runtime-new-staff",
+    staffName:"Runtime New Staff",
+    department:"inside",
+    area:"meat",
+    applyMode:"day",
+    date:"2026-10-08",
+    month:"2026-10",
+    weekday:4,
+    shift:"evening",
+    start:"17:00",
+    end:"23:30",
+    note:"new staff identity shadow",
+  });
   const runtimeUser = { id:manager.id, username:manager.username };
   const draftShadow = await syncWorkforceScheduleDraftShadow(client, {
     site:"fuxing",
     schedules:runtimeModule.schedules,
+    staffRoster:[{
+      id:"schedule-runtime-new-staff",
+      name:"Runtime New Staff",
+      role:"employee",
+      area:"meat",
+      hourlyRate:240,
+      active:true,
+      accountUsername:"",
+    }],
     user:runtimeUser,
   });
   assert.equal(draftShadow.ok, true);
-  assert.equal(draftShadow.rows, 1);
+  assert.equal(draftShadow.rows, 2);
+  assert.equal(draftShadow.staffRows, 1);
   await client.query(
     `update public.business_state set modules=$2::jsonb,module_revisions=$3::jsonb,revision=revision+1,updated_at=now() where site=$1`,
     ["fuxing", JSON.stringify({ schedule:runtimeModule }), JSON.stringify({ schedule:10 })]
@@ -243,12 +268,21 @@ try {
   assert.match(runtimeDraftParity, /WORKFORCE_SCHEDULE_PARITY_OK/);
   assert.equal(
     (await client.query(`select count(*)::int as count from public.workforce_schedule_entries where site_code='fuxing' and active=true`)).rows[0].count,
-    1
+    2
   );
   assert.equal(
     (await client.query(`select active from public.workforce_schedule_entries where site_code='fuxing' and legacy_schedule_id='schedule-recurring'`)).rows[0].active,
     false
   );
+  const runtimeStaffRow = await client.query(
+    `select display_name,employment_type,default_work_area,hourly_rate
+     from public.staff_members where site_code='fuxing' and legacy_staff_id='schedule-runtime-new-staff'`
+  );
+  assert.equal(runtimeStaffRow.rowCount, 1);
+  assert.equal(runtimeStaffRow.rows[0].display_name, "Runtime New Staff");
+  assert.equal(runtimeStaffRow.rows[0].employment_type, "other");
+  assert.equal(runtimeStaffRow.rows[0].default_work_area, "meat");
+  assert.equal(Number(runtimeStaffRow.rows[0].hourly_rate), 240);
 
   const runtimePublication = {
     version:3,
@@ -277,10 +311,10 @@ try {
     `select id,schedule_count from public.workforce_schedule_publications where site_code='fuxing' and version=3`
   );
   assert.equal(runtimePublicationRow.rowCount, 1);
-  assert.equal(Number(runtimePublicationRow.rows[0].schedule_count), 1);
+  assert.equal(Number(runtimePublicationRow.rows[0].schedule_count), 2);
   assert.equal(
     (await client.query(`select count(*)::int as count from public.workforce_schedule_publication_entries where publication_id=$1`, [runtimePublicationRow.rows[0].id])).rows[0].count,
-    1
+    2
   );
 
   const runtimeRequest = {
