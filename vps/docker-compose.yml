@@ -36,6 +36,7 @@ services:
       SESSION_DAYS: 14
       COOKIE_SECURE: "false"
       APP_RELEASE: ${APP_RELEASE:-vps-dev}
+      WORKFORCE_SCHEDULE_RELATIONAL_READ: ${WORKFORCE_SCHEDULE_RELATIONAL_READ:-false}
       HOST_METRICS_PATH: /run/kitchen-host-metrics/host-metrics.env
     volumes:
       - ./runtime:/run/kitchen-host-metrics:ro
