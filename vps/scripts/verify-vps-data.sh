@@ -206,7 +206,7 @@ check_positive "manager work-area-management grant exists" "
   where role_code='manager' and capability_key='operations.work_areas.manage' and allowed=true
 "
 
-warn_nonzero "stock rows whose item key site differs from location site" "
+check_zero "stock rows whose item key site differs from location site" "
   select count(*)
   from public.inventory_stock s
   join public.inventory_items i on i.id=s.item_id
@@ -466,11 +466,19 @@ limit 80;
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "021" ]]; then
-  echo "ERROR: schema version ${schema} is older than 021"
+if [[ "${schema}" < "022" ]]; then
+  echo "ERROR: schema version ${schema} is older than 022"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
+fi
+
+inventory_site_triggers="$(scalar "select count(*) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
+if [[ "${inventory_site_triggers}" != "2" ]]; then
+  echo "ERROR: expected 2 inventory site-isolation triggers, found ${inventory_site_triggers}"
+  errors=$((errors+1))
+else
+  echo "OK: inventory site-isolation triggers = 2"
 fi
 
 revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"
