@@ -14,6 +14,7 @@ import {
 import { searchMatches } from "../src/search-utils.js";
 import "./system-port-regression.mjs";
 import "./inventory-master-data-regression.mjs";
+import "./inventory-site-isolation-contract-regression.mjs";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
