@@ -10,6 +10,8 @@ const app=read("src/app.js");
 const routes=read("vps/backend/src/inventory-extra-routes.mjs");
 const migration=read("vps/database/migrations/022_inventory_site_isolation.sql");
 const audit=read(".github/workflows/inventory-site-production-audit.yml");
+const deploy=read("vps/scripts/deploy-api.sh");
+const preMigrationAudit=read("vps/scripts/audit-inventory-site-isolation.sh");
 const operations=read("src/inventory-operations.js");
 
 assert.match(cloud,/BRANCH_SNAPSHOT_KEY_PREFIX/,"branch inventory must keep per-site mirrors");
@@ -38,5 +40,10 @@ assert.match(audit,/stock_site_mismatch/,"production audit must report cross-sit
 assert.match(audit,/receive_default_site_mismatch/,"production audit must report receive-default site mismatch");
 assert.match(audit,/test "\$result" = "0"/,"production audit must fail on contamination");
 assert.doesNotMatch(audit,/delete\s+from|update\s+public\.|insert\s+into/i,"production inventory site audit must remain read-only");
+assert.match(deploy,/backup\.sh[\s\S]{0,320}audit-inventory-site-isolation\.sh[\s\S]{0,320}migrate\.sh/,"deploy must audit site isolation after backup and before migrations");
+assert.match(preMigrationAudit,/stock_site_mismatch/,"pre-migration audit must report cross-site stock");
+assert.match(preMigrationAudit,/receive_default_site_mismatch/,"pre-migration audit must report receive-default mismatch");
+assert.match(preMigrationAudit,/unknown_item_site/,"pre-migration audit must report unknown item sites");
+assert.doesNotMatch(preMigrationAudit,/delete\s+from|update\s+public\.|insert\s+into/i,"pre-migration audit must remain read-only");
 
 console.log("INVENTORY_SITE_ISOLATION_CONTRACT_OK");
