@@ -84,7 +84,7 @@ try {
   assert.equal(mismatch.rows[0].count,0);
 
   const triggerCount = await client.query(
-    `select count(*)::int as count
+    `select count(distinct trigger_name)::int as count
      from information_schema.triggers
      where trigger_schema='public'
        and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')`
