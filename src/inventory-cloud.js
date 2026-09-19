@@ -244,11 +244,18 @@ export function setActiveInventorySite(site) {
 
 export async function switchActiveInventorySite(site) {
   const s = session();
-  if (s?.location !== "all" || !isKnownInventorySite(site)) return false;
+  if (s?.location !== "all") return false;
 
-  const previousSite = activeInventorySite();
   const targetSite = String(site || "");
   if (!targetSite) return false;
+  try {
+    await ensureSiteRegistry({ force:true });
+  } catch {
+    return false;
+  }
+  if (!isKnownInventorySite(targetSite)) return false;
+
+  const previousSite = activeInventorySite();
   if (targetSite === previousSite) {
     await runInventorySync(targetSite, { reloadBranch:false, force:true });
     return true;
@@ -263,7 +270,6 @@ export async function switchActiveInventorySite(site) {
     if (!(await verifyMigration()) || !hasInventoryPermission("view")) {
       throw new Error("INVENTORY_BACKEND_NOT_READY");
     }
-    await ensureSiteRegistry({ force:true });
     if (!isKnownInventorySite(targetSite)) throw new Error("INVALID_SITE");
 
     // Fetch the authoritative target snapshot before changing the active site.
