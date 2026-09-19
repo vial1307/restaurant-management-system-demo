@@ -70,7 +70,7 @@ try {
   assert.equal(development.data.repository.name, "vial1307/restaurant-management-system-demo");
   assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
   assert.equal(development.data.status, "verifying");
-  assert.equal(development.data.current_work.branch, "main");
+  assert.equal(development.data.current_work.branch, "fix/inventory-site-isolation-relocation-20260919");
   assert.equal(development.data.current_work.candidate_schema, "022");
   assert.equal(development.data.runtime.schema.version, "022");
   assert.equal(development.data.live_production.schema, "022");
