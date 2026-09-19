@@ -15,6 +15,7 @@ import { registerWorkforceRequestRoutes } from "./workforce-request-routes.mjs";
 import { registerWorkforceScheduleRuleRoutes } from "./workforce-schedule-rule-routes.mjs";
 import { registerWorkforceScheduleRelationalRoutes } from "./workforce-schedule-relational-routes.mjs";
 import { syncWorkforceScheduleDraftShadow } from "./workforce-schedule-relational-shadow.mjs";
+import { resolveWorkforceScheduleReadAuthority } from "./workforce-schedule-read-authority.mjs";
 
 const MODULE_RULES = {
   settings: ["settings"],
@@ -165,13 +166,19 @@ export async function registerBusinessStateRoutes(app) {
       [site]
     );
     const row = rows[0];
-    const modules = row?.modules || {};
+    const storedModules = row?.modules || {};
+    const scheduleRead = can(user, "schedule", "view")
+      ? await resolveWorkforceScheduleReadAuthority(pool, { site, modules:storedModules })
+      : { modules:storedModules, authority:"not-visible", cutover:false };
     return {
       site,
-      modules: filteredModules(user, modules),
-      moduleRevisions: filteredModuleRevisions(user, modules, row?.module_revisions || {}),
+      modules: filteredModules(user, scheduleRead.modules),
+      moduleRevisions: filteredModuleRevisions(user, storedModules, row?.module_revisions || {}),
       revision: Number(row?.revision || 0),
       updatedAt: row?.updated_at || null,
+      readAuthorities: can(user, "schedule", "view")
+        ? { schedule:scheduleRead.authority }
+        : {},
     };
   });
 

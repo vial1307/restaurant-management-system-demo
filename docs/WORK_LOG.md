@@ -360,3 +360,60 @@ Verified production:
 - add visible pending feedback while a target warehouse snapshot is loading;
 - keep all warehouse buttons disabled until hydration completes;
 - preserve site-scoped cache and schema-022 invariants in subsequent work.
+
+
+## 2026-09-20 — Workforce schedule relational read cutover preparation
+
+### Starting point
+
+Verified production before this work:
+
+- commit `fc563c7f147327656aff304a0c621754d38b4591`;
+- Deploy Kitchen OS to VPS #765 / run `35443223746`;
+- schema `022`;
+- production UI smoke PASS;
+- Inventory Site Production Audit PASS;
+- Workforce Schedule Production Parity PASS;
+- Workforce Schedule Production Backfill PASS.
+
+PR #119 had already made schedule runtime writes transactional write-through to relational tables while keeping `business_state.schedule` as compatibility/read authority.
+
+### Work performed
+
+Created branch:
+
+- `feat/workforce-schedule-read-cutover-gate-20260920`
+
+Added:
+
+- `vps/backend/src/workforce-schedule-read-authority.mjs`
+- server-side `WORKFORCE_SCHEDULE_RELATIONAL_READ` flag parsing;
+- rollback-safe authority resolver;
+- Docker Compose default `WORKFORCE_SCHEDULE_RELATIONAL_READ=false`;
+- business-state GET integration for schedule-only relational projection when enabled;
+- read-authority diagnostic metadata;
+- relational diagnostic endpoint metadata aligned to the same gate;
+- static contract regression;
+- PostgreSQL integration coverage proving OFF reads compatibility input while ON reads relational rows;
+- deploy and dedicated relational workflow gates.
+
+No schema migration was introduced.
+
+### Safety model
+
+- Gate defaults OFF.
+- Production behavior is unchanged unless the server flag is explicitly enabled.
+- PostgreSQL remains the only shared data store behind the VPS API.
+- Compatibility module revisions remain the optimistic-concurrency token during the cutover phase.
+- Schedule writes continue to update compatibility + relational state transactionally.
+- Dedicated relational endpoint remains read-only.
+- Production enablement must be a separate reviewed step after an OFF deployment is verified.
+
+### Next
+
+- open PR;
+- run full CI;
+- fix any regression before merge;
+- deploy with gate OFF;
+- verify production parity/backfill;
+- only then consider an explicit relational-read enablement step.

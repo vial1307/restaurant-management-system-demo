@@ -41,7 +41,8 @@ assert.match(shadow, /insert into public\.workforce_schedule_publications/);
 assert.match(shadow, /insert into public\.workforce_schedule_publication_entries/);
 assert.doesNotMatch(shadow, /delete from public\.workforce_schedule_publications/);
 
-assert.match(relationalRead, /cutover:false/);
-assert.match(relationalRead, /authority:state\.authority/);
+assert.match(relationalRead, /workforceScheduleRelationalReadEnabled\(\)/);
+assert.match(relationalRead, /authority:cutover \? "relational-primary" : state\.authority/);
+assert.match(relationalRead, /cutover,/);
 
 console.log("WORKFORCE_SCHEDULE_RUNTIME_SHADOW_CONTRACT_OK");

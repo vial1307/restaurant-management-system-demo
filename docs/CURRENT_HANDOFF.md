@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified main/production SHA: `6f391421881e6e4aa687ed8cca85d751f96efadb`
+- Current verified main/production SHA: `fc563c7f147327656aff304a0c621754d38b4591`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
 - Production database schema: PostgreSQL migrations through schema 022.
@@ -21,9 +21,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #754
-- Run ID: `35430241680`
-- Tested/deployed commit: `6f391421881e6e4aa687ed8cca85d751f96efadb`
+- Workflow: Deploy Kitchen OS to VPS #765
+- Run ID: `35443223746`
+- Tested/deployed commit: `fc563c7f147327656aff304a0c621754d38b4591`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -43,7 +43,7 @@ Production audit after schema 022:
 - `receive_default_site_mismatch = 0`
 - `unknown_item_site = 0`
 
-This release production-verifies site-scoped inventory authority, transactional storage relocation and strict cross-site database guards.
+This release preserves the schema-022 inventory guarantees and production-verifies transactional workforce schedule shadow writes plus post-deploy schedule parity/backfill checks.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
@@ -230,7 +230,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #754 / `6f391421881e6e4aa687ed8cca85d751f96efadb`, schema `022`.
+3. Current verified production baseline is #765 / `fc563c7f147327656aff304a0c621754d38b4591`, schema `022`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
 5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
@@ -405,3 +405,45 @@ Immediate continuation:
 2. Preserve fetch-before-commit branch switching.
 3. Keep Inventory Site Production Audit as a release gate.
 4. Preserve schema-022 guards in all future inventory/database work.
+
+
+## 2026-09-20 — Release #765 verified; schedule read cutover gate in progress
+
+Verified production now is:
+
+- commit: `fc563c7f147327656aff304a0c621754d38b4591`;
+- workflow: Deploy Kitchen OS to VPS #765;
+- run ID: `35443223746`;
+- schema: `022`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit: PASS;
+- Workforce Schedule Production Parity: PASS;
+- Workforce Schedule Production Backfill: PASS.
+
+PR #119 is therefore production-verified. Runtime schedule mutations now write through to relational workforce schedule tables inside the same PostgreSQL transaction as the compatibility `business_state.schedule` update. Compatibility JSON is still the read authority; there is not yet a production read cutover.
+
+Current candidate branch:
+
+- `feat/workforce-schedule-read-cutover-gate-20260920`
+- base: verified production `fc563c7f147327656aff304a0c621754d38b4591`
+- schema change: none
+- production behavior change while the flag is absent: none
+
+Candidate purpose:
+
+- add `WORKFORCE_SCHEDULE_RELATIONAL_READ` as a server-side read-authority gate;
+- default the VPS compose value to `false`;
+- when disabled, `/api/business-state/:site` continues to read schedule from compatibility JSON;
+- when enabled, only the schedule module is projected from relational PostgreSQL tables;
+- keep existing compatibility module revision tokens for optimistic write concurrency and rollback;
+- expose read-authority metadata for diagnosis;
+- keep the dedicated relational schedule endpoint read-only;
+- regression-test both gate states before any production enablement.
+
+Do not enable the flag in production merely because this candidate merges. Required sequence:
+
+1. CI must pass with the gate default OFF.
+2. Deploy the code with the gate still OFF and verify release + production smoke.
+3. Re-run production schedule parity/backfill and confirm no divergence.
+4. Enable relational read only in a separate reviewed change/operation with a rollback path.
+5. Continue compatibility writes until relational read has been stable in production; retirement of compatibility authority is a later explicit stage.

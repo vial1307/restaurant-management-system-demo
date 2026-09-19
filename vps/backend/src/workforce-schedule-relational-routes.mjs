@@ -2,6 +2,7 @@ import { pool } from "./db.mjs";
 import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
 import { scopeWorkforceModules } from "./workforce-policy.mjs";
 import { loadWorkforceScheduleRelationalState } from "./workforce-schedule-relational-state.mjs";
+import { workforceScheduleRelationalReadEnabled } from "./workforce-schedule-read-authority.mjs";
 
 const VALID_SITES = new Set(["central", "fuxing", "yongji"]);
 
@@ -28,10 +29,11 @@ export async function registerWorkforceScheduleRelationalRoutes(app) {
       state.identityModules
     );
 
+    const cutover = workforceScheduleRelationalReadEnabled();
     return {
       site,
-      authority:state.authority,
-      cutover:false,
+      authority:cutover ? "relational-primary" : state.authority,
+      cutover,
       compatibilityModuleRevision:state.compatibilityModuleRevision,
       counts:state.counts,
       schedule:scoped.schedule || { schedules:[], requests:[], exceptions:[] },

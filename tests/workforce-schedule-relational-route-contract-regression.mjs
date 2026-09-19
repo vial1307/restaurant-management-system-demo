@@ -16,8 +16,9 @@ assert.match(route, /requireUser\(/, "relational schedule state must require aut
 assert.match(route, /siteAllowed\(user, site\)/, "relational schedule state must enforce site scope");
 assert.match(route, /hasPermission\(user, "schedule", "view"\)/, "relational schedule state must enforce schedule view permission");
 assert.match(route, /scopeWorkforceModules\(/, "relational schedule state must preserve workforce self-service scoping");
-assert.match(route, /cutover:false/, "shadow API must not claim authority cutover");
-assert.match(route, /authority:state\.authority/, "route must expose explicit shadow authority metadata");
+assert.match(route, /workforceScheduleRelationalReadEnabled\(\)/, "relational schedule state must report the server-side read cutover gate");
+assert.match(route, /authority:cutover \? "relational-primary" : state\.authority/, "route must expose relational-primary only when the cutover gate is enabled");
+assert.match(route, /cutover,/, "route must expose the active cutover boolean");
 assert.doesNotMatch(route, /app\.(post|put|patch|delete)\(/, "shadow schedule route must remain read-only");
 assert.match(projection, /workforce_schedule_entries/, "projection must read relational draft schedule rows");
 assert.match(projection, /workforce_schedule_publications/, "projection must read relational publication history");
