@@ -53,6 +53,22 @@ const seeded=await request("/api/inventory/catalog/sync",{
 assert.equal(seeded.response.status,200);
 const itemId=seeded.data.item.id;
 
+for (const [location,quantity,minimum] of [
+  [source,5,2],
+  [destination,3,1],
+]) {
+  const quantitySeed=await request("/api/inventory/set-quantity",{
+    method:"POST",cookie:admin,
+    body:{itemId,locationId:location.id,quantity,note:"relocation regression seed quantity"},
+  });
+  assert.equal(quantitySeed.response.status,200,JSON.stringify(quantitySeed.data));
+  const minimumSeed=await request("/api/inventory/set-minimum",{
+    method:"POST",cookie:admin,
+    body:{itemId,locationId:location.id,minimum},
+  });
+  assert.equal(minimumSeed.response.status,200,JSON.stringify(minimumSeed.data));
+}
+
 const receive=await request("/api/inventory/receive-default",{
   method:"POST",cookie:admin,
   body:{site:"fuxing",catalogKey,locationCode:source.code},

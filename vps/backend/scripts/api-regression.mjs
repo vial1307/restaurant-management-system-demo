@@ -188,6 +188,20 @@ const managerCatalog = await request("/api/inventory/catalog/sync",{
 });
 assert.equal(managerCatalog.response.status,200);
 
+// Catalog sync creates only the item/location association. Seed relocation stock
+// through the dedicated stocktake APIs so quantity/minimum retain their proper
+// authority and audit semantics.
+const managerCatalogQuantity = await request("/api/inventory/set-quantity",{
+  method:"POST",cookie:supervisor.cookie,
+  body:{itemId:managerCatalog.data.item.id,locationId:fxFreezer.id,quantity:1,note:"regression relocate seed quantity"}
+});
+assert.equal(managerCatalogQuantity.response.status,200);
+const managerCatalogMinimum = await request("/api/inventory/set-minimum",{
+  method:"POST",cookie:supervisor.cookie,
+  body:{itemId:managerCatalog.data.item.id,locationId:fxFreezer.id,minimum:1}
+});
+assert.equal(managerCatalogMinimum.response.status,200);
+
 const relocateDefault = await request("/api/inventory/receive-default",{
   method:"POST",cookie:manager.cookie,
   body:{site:"fuxing",catalogKey:"test-manager",locationCode:"fuxing-freezer"}

@@ -1057,7 +1057,7 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   return { ok: true, changed: changes.length };
 }
 
-export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite()) {
+export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true } = {}) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
@@ -1068,7 +1068,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite())
 
   try {
     await vpsSyncCatalog(item);
-    await syncInventoryNow(site, { reloadBranch: false });
+    if (sync) await syncInventoryNow(site, { reloadBranch: false });
     return { ok: true };
   } catch (error) {
     dispatchStatus("error", { error: error.message, stage: "catalog-sync" });

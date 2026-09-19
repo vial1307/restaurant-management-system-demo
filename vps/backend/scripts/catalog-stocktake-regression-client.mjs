@@ -80,6 +80,42 @@ const locations = seeded.data.stock
 assert(locations.some((entry) => entry.code === freezer.code));
 assert(locations.some((entry) => entry.code === workNoodles.code));
 
+// Even a stocktake-capable role must not use catalog sync as a hidden quantity
+// write path. Product metadata saves can contain stale local quantities.
+const supervisorCatalogEdit = await request("/api/inventory/catalog/sync", {
+  method: "POST",
+  cookie: supervisor,
+  body: {
+    item: {
+      key: beef.item_key,
+      catalog_key: beef.catalog_key,
+      zh: beef.name_zh_tw,
+      vi: beef.name_vi,
+      unit: beef.unit,
+      work_area: beef.work_area,
+      storage_only: beef.storage_only,
+      locations,
+    },
+  },
+});
+assert.equal(
+  supervisorCatalogEdit.response.status,
+  200,
+  `stocktake-capable catalog metadata edit should remain allowed: ${JSON.stringify(supervisorCatalogEdit.data)}`
+);
+
+const afterSupervisorCatalog = await request("/api/inventory/fuxing", { cookie: admin });
+assert.equal(afterSupervisorCatalog.response.status, 200);
+const supervisorProtectedStock = afterSupervisorCatalog.data.stock.find(
+  (row) => row.item_id === beef.id && row.location_id === freezer.id
+);
+const supervisorProtectedWorkStock = afterSupervisorCatalog.data.stock.find(
+  (row) => row.item_id === beef.id && row.location_id === workNoodles.id
+);
+assert.equal(Number(supervisorProtectedStock?.quantity), 13, "stocktake-capable catalog sync overwrote quantity");
+assert.equal(Number(supervisorProtectedStock?.minimum_quantity), 5, "stocktake-capable catalog sync overwrote minimum");
+assert.equal(Number(supervisorProtectedWorkStock?.minimum_quantity), 7, "stocktake-capable catalog sync overwrote work minimum");
+
 const catalogEdit = await request("/api/inventory/catalog/sync", {
   method: "POST",
   cookie: employee,
@@ -107,6 +143,112 @@ assert.equal(Number(protectedStock.minimum_quantity), 5, "catalog sync bypassed 
 const protectedWorkStock = after.data.stock.find((row) => row.item_id === beef.id && row.location_id === workNoodles.id);
 assert(protectedWorkStock, "protected beef work stock row missing after catalog sync");
 assert.equal(Number(protectedWorkStock.minimum_quantity), 7, "catalog sync bypassed work minimum stocktake permission");
+
+// A catalog location association may be removed only after both physical
+// quantity and minimum configuration reach zero.
+const secondStorage = before.data.locations.find(
+  (location) => location.kind === "storage" && location.id !== freezer.id
+);
+assert(secondStorage, "second Fuxing storage fixture missing");
+
+const protectedItemKey = "fuxing:catalog-location-protection-regression";
+const protectedCatalogKey = "catalog-location-protection-regression";
+const createProtectedItem = await request("/api/inventory/catalog/sync", {
+  method:"POST",
+  cookie:admin,
+  body:{
+    item:{
+      key:protectedItemKey,
+      catalog_key:protectedCatalogKey,
+      zh:"品項儲位保護測試",
+      vi:"Kiểm thử bảo vệ vị trí sản phẩm",
+      unit:"包",
+      work_area:"noodles",
+      storage_only:true,
+      locations:[
+        {code:freezer.code,quantity:999,minimum:999},
+        {code:secondStorage.code,quantity:999,minimum:999},
+      ],
+    },
+  },
+});
+assert.equal(createProtectedItem.response.status,200);
+
+const protectedSnapshot=await request("/api/inventory/fuxing",{cookie:admin});
+const protectedItem=protectedSnapshot.data.items.find((item)=>item.item_key===protectedItemKey);
+assert(protectedItem,"protected-location regression item missing");
+
+const seedProtectedMinimum=await request("/api/inventory/set-minimum",{
+  method:"POST",
+  cookie:supervisor,
+  body:{itemId:protectedItem.id,locationId:freezer.id,minimum:4},
+});
+assert.equal(seedProtectedMinimum.response.status,200);
+
+const removeProtectedLocation=await request("/api/inventory/catalog/sync",{
+  method:"POST",
+  cookie:admin,
+  body:{
+    item:{
+      key:protectedItemKey,
+      catalog_key:protectedCatalogKey,
+      zh:"品項儲位保護測試",
+      vi:"Kiểm thử bảo vệ vị trí sản phẩm",
+      unit:"包",
+      work_area:"noodles",
+      storage_only:true,
+      locations:[{code:secondStorage.code,quantity:0,minimum:0}],
+    },
+  },
+});
+assert.equal(removeProtectedLocation.response.status,409,"minimum-only location removal was not blocked");
+assert.equal(removeProtectedLocation.data?.error,"LOCATION_HAS_STOCK");
+
+const clearProtectedMinimum=await request("/api/inventory/set-minimum",{
+  method:"POST",
+  cookie:supervisor,
+  body:{itemId:protectedItem.id,locationId:freezer.id,minimum:0},
+});
+assert.equal(clearProtectedMinimum.response.status,200);
+
+const removeClearedLocation=await request("/api/inventory/catalog/sync",{
+  method:"POST",
+  cookie:admin,
+  body:{
+    item:{
+      key:protectedItemKey,
+      catalog_key:protectedCatalogKey,
+      zh:"品項儲位保護測試",
+      vi:"Kiểm thử bảo vệ vị trí sản phẩm",
+      unit:"包",
+      work_area:"noodles",
+      storage_only:true,
+      locations:[{code:secondStorage.code,quantity:999,minimum:999}],
+    },
+  },
+});
+assert.equal(removeClearedLocation.response.status,200,"cleared zero-stock location association should be removable");
+
+const afterProtectedRemoval=await request("/api/inventory/fuxing",{cookie:admin});
+assert(
+  !afterProtectedRemoval.data.stock.some(
+    (row)=>row.item_id===protectedItem.id && row.location_id===freezer.id
+  ),
+  "zeroed omitted catalog location association was not removed"
+);
+const remainingProtectedRow=afterProtectedRemoval.data.stock.find(
+  (row)=>row.item_id===protectedItem.id && row.location_id===secondStorage.id
+);
+assert.equal(Number(remainingProtectedRow?.quantity),0,"catalog sync seeded quantity on new/remaining association");
+assert.equal(Number(remainingProtectedRow?.minimum_quantity),0,"catalog sync seeded minimum on new/remaining association");
+
+const archiveProtectedItem=await request("/api/inventory/catalog/archive",{
+  method:"POST",
+  cookie:admin,
+  body:{itemKey:protectedItemKey},
+});
+assert.equal(archiveProtectedItem.response.status,200);
+assert.equal(archiveProtectedItem.data?.archived,true);
 
 // Central-kitchen accounts keep inventory/catalog operational access, but they
 // are not a stocktake role. Seed one Central row as admin, prove direct stocktake
