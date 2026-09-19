@@ -30,6 +30,9 @@ assert.ok(
   "publication relational shadow must run before compatibility publication commit"
 );
 
+assert.match(shadow, /insert into public\.staff_members/);
+assert.match(shadow, /staffRoster/);
+assert.match(business, /staffRoster:Object\.hasOwn\(effectiveEditable, "shared"\)/);
 assert.match(shadow, /set active=false/);
 assert.match(shadow, /on conflict \(site_code,legacy_schedule_id\)/);
 assert.match(shadow, /insert into public\.workforce_schedule_requests/);
