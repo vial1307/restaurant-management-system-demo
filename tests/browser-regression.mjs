@@ -3,6 +3,7 @@ import { chromium } from "playwright";
 import { ACCOUNT_MODULES } from "../src/account-permissions.js";
 
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
+const API_BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const PASSWORD = "KitchenTest!123";
 
 async function login(page, username) {
@@ -22,6 +23,43 @@ async function login(page, username) {
   }, null, { timeout:30000 });
   await page.waitForSelector(".app-shell",{timeout:30000});
   await page.waitForFunction(() => !document.querySelector("#auth-login-form"), null, { timeout:30000 });
+}
+
+async function seedRoleSession(page, context, username) {
+  const response = await context.request.post(`${API_BASE}/api/auth/login`, {
+    data:{ username, password:PASSWORD },
+    failOnStatusCode:false,
+  });
+  assert.equal(response.status(),200,`${username}: API session seed failed with HTTP ${response.status()}`);
+  const setCookie = response.headersArray()
+    .filter((header)=>header.name.toLowerCase()==="set-cookie")
+    .map((header)=>header.value)
+    .find((value)=>/^kitchen_session=/i.test(value));
+  const token = setCookie?.match(/^kitchen_session=([^;]+)/i)?.[1] || "";
+  assert(token,`${username}: API session seed did not return kitchen_session`);
+
+  const target = new URL(BASE);
+  await context.addCookies([{
+    name:"kitchen_session",
+    value:token,
+    domain:target.hostname,
+    path:"/",
+    httpOnly:true,
+    secure:target.protocol==="https:",
+    sameSite:"Lax",
+  }]);
+
+  await page.goto(BASE + "/", { waitUntil:"domcontentloaded" });
+  await page.waitForFunction(() => document.documentElement.dataset.vpsAuthReady === "true", null, { timeout:15000 });
+  await page.waitForSelector(".app-shell",{timeout:30000});
+  await page.waitForFunction(() => {
+    try {
+      const session = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null");
+      return Boolean(session?.id);
+    } catch {
+      return false;
+    }
+  }, null, { timeout:30000 });
 }
 
 async function assertNoPageErrors(page, errors, label) {
@@ -259,7 +297,7 @@ async function roleDesktop(browser, username, checks) {
   const page=await context.newPage();
   const errors=[];
   page.on("pageerror",(error)=>errors.push(error.message));
-  await login(page,username);
+  await seedRoleSession(page,context,username);
   await assertRoutePermissions(page,username);
   if(checks.dashboardEdit !== undefined){
     await page.goto(BASE + "/#dashboard",{waitUntil:"domcontentloaded"});
@@ -402,7 +440,7 @@ async function responsiveAdmin(browser, viewport) {
   const page=await context.newPage();
   const errors=[];
   page.on("pageerror",(error)=>errors.push(error.message));
-  await login(page,"yangchuadmin");
+  await seedRoleSession(page,context,"yangchuadmin");
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
 
