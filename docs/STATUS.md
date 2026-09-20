@@ -44,6 +44,7 @@ Confirmed defects:
 - legacy role-name guards blocked quantity/minimum despite explicit `inventory.edit`;
 - Central overview work area/storage location were not editable or linked to the editor;
 - branch overview scalar changes rendered optimistic local state before database confirmation;
+- branch rows were rendered from the current cloud mirror while change handlers and the editor still read the stale in-memory store, so a visible edit could resolve no item and send no database request;
 - inventory realtime subscription was empty, leaving tabs/devices on 60-second polling.
 
 Candidate behavior:
@@ -51,13 +52,14 @@ Candidate behavior:
 - explicit `inventory.edit` plus site scope authorizes every exposed inventory edit; view-only and foreign-site accounts remain denied;
 - Central overview selectors use catalog sync and transactional relocation, then refresh overview/editor from PostgreSQL;
 - branch overview quantity/minimum perform no browser-only success and reconcile exactly once;
+- overview controls, quick adjustments, transfer plans and the editor all resolve today's branch item from the same authoritative cloud mirror;
 - authenticated SSE invalidates other tabs/devices in real time, with self-event suppression and coalescing;
 - polling/focus/visibility remain fallback paths;
 - dynamic API regression covers employee/central edit grants, view-only rejection and SSE delivery.
 
 ## NEXT
 
-1. Push the candidate and open its PR from the exact local commit.
+1. Update PR #133 with the authoritative-mirror correction.
 2. Run PostgreSQL/API, SSE and concurrency regression in CI.
 3. Run desktop/mobile Chromium and full-device browser certification.
 4. Merge only the exact tested head after every required check passes.

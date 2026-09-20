@@ -62,6 +62,7 @@ User-reported defects:
 - quantity/minimum writes were still re-denied by legacy role names after `inventory.edit` had been explicitly granted;
 - the Central overview showed work area and storage location as read-only even though the product editor could change them;
 - branch scalar overview edits performed an optimistic local write/full render before database confirmation;
+- the branch page rendered the current site-scoped cloud mirror, but its edit handlers and modal still looked up items in the stale long-lived store;
 - `subscribeRealtime()` was a placeholder, so another tab/device waited for focus or the 60-second poll.
 
 Candidate behavior:
@@ -69,6 +70,7 @@ Candidate behavior:
 - explicit `inventory.edit` plus allowed site scope is the single write authority for all exposed inventory fields; view-only and foreign-site accounts remain denied;
 - Central overview work-area/storage selectors persist through catalog sync/transactional relocation and reconcile the product editor from PostgreSQL;
 - branch overview quantity/minimum writes no longer mutate local state first and perform one forced authoritative reconciliation;
+- today's branch overview, quick actions, transfers and product modal all layer the same site-scoped PostgreSQL mirror over the store before resolving an item;
 - every successful inventory mutation publishes an authenticated SSE invalidation; other tabs/devices coalesce it, ignore their own source id and refresh the active permitted site;
 - polling/focus/visibility remain fallback convergence paths;
 - receive-default editing follows the same explicit edit-permission rule.

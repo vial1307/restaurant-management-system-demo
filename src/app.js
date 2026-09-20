@@ -426,9 +426,29 @@ function statCard({ label, value, unit, note, tone, iconName }) {
   </article>`;
 }
 
+function authoritativeBranchRecord(state, site = activeInventorySite()) {
+  const record = state?.records?.[state.selectedDate];
+  if (!record) return record;
+  if (inventoryCloudState() !== "ready" || !["fuxing", "yongji"].includes(site) || state.selectedDate !== formatDateKey()) {
+    return record;
+  }
+  const snapshot = inventoryBranchSnapshot(site);
+  if (!snapshot) return record;
+  return {
+    ...record,
+    inventory:snapshot.inventory,
+    workInventory:snapshot.workInventory,
+    inventorySite:site,
+  };
+}
+
 function currentContext() {
   const state = store.getState();
-  const record = state.records[state.selectedDate];
+  // Inventory cloud sync writes the authoritative PostgreSQL mirror without
+  // mutating the long-lived application store. Always layer that live mirror
+  // over today's branch record so overview controls, an already-open editor,
+  // and action handlers all read the same data that was rendered.
+  const record = authoritativeBranchRecord(state);
   const language = state.settings.language;
   const text = translate(language);
   const context = { state, record, language, text };
@@ -1664,7 +1684,7 @@ root.addEventListener("click", (event) => {
     }
     const manageAdjust = target.dataset.manageAdjust === "true" && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !manageAdjust) return;
-    const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
+    const item = authoritativeBranchRecord(state,site)?.inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"item",delta});
@@ -1678,7 +1698,7 @@ root.addEventListener("click", (event) => {
       return;
     }
     if (!canDirectInventoryAdjust()) return;
-    const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
+    const item = authoritativeBranchRecord(state,site)?.workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"workItem",delta});
@@ -1690,9 +1710,10 @@ root.addEventListener("click", (event) => {
       return;
     }
     if (!canInventoryEdit()) return;
-    const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
+    const record = authoritativeBranchRecord(state);
+    const item = record?.workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
-      const steps = workRestockTransferPlan(item, state.records[state.selectedDate]);
+      const steps = workRestockTransferPlan(item, record);
       void runCloudTransferPlan(steps, "補工作區 / Bổ sung khu làm việc", () => store.restockWorkItem(target.dataset.id));
     }
   }
@@ -1702,9 +1723,10 @@ root.addEventListener("click", (event) => {
       return;
     }
     if (!canInventoryEdit()) return;
-    const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
+    const record = authoritativeBranchRecord(state);
+    const item = record?.inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
-      const steps = storageRestockTransferPlan(item, state.records[state.selectedDate]);
+      const steps = storageRestockTransferPlan(item, record);
       void runCloudTransferPlan(steps, "儲位補貨 / Bổ sung vị trí kho", () => store.restockStorageItem(target.dataset.id));
     }
   }
@@ -1785,7 +1807,8 @@ root.addEventListener("change", (event) => {
     const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(site) && canDirectInventoryAdjust();
     const catalogMetadataEdit = ["zone","workArea"].includes(key) && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !manageQuantityEdit && !catalogMetadataEdit) { render(); return; }
-    const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === id);
+    const record = authoritativeBranchRecord(state,site);
+    const item = record?.inventory.find((entry) => entry.id === id);
     if (!item) return;
     if (key === "zone") {
       const previousZone = String(item.zone || "");
@@ -1819,7 +1842,7 @@ root.addEventListener("change", (event) => {
       const previousArea = String(item.workArea || "");
       const nextArea = String(element.value || "");
       if (!previousArea || !nextArea || previousArea === nextArea) { render(); return; }
-      const workItem = state.records[state.selectedDate].workInventory.find((entry) => entry.stockKey === item.stockKey);
+      const workItem = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
       if (workItem) {
         const sourceLocationCode = branchWorkLocationCode(site,previousArea);
         const destinationLocationCode = branchWorkLocationCode(site,nextArea);
@@ -1895,7 +1918,7 @@ root.addEventListener("change", (event) => {
     const site = activeInventorySite();
     const catalogWorkAreaEdit = key === "workArea" && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !catalogWorkAreaEdit) { render(); return; }
-    const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === id);
+    const item = authoritativeBranchRecord(state,site)?.workInventory.find((entry) => entry.id === id);
     if (!item) return;
     if (key === "workArea") {
       const previousArea = String(item.workArea || "");
@@ -2064,6 +2087,8 @@ root.addEventListener("submit", async (event) => {
   }
   if (["add-item", "edit-item"].includes(form.dataset.form)) {
     if (!canManageBranchCatalog(activeInventorySite())) { view.modal = null; render(); return; }
+    const site = activeInventorySite();
+    const inventoryRecord = authoritativeBranchRecord(state,site);
     const locations = data.getAll("zones").map((zone) => ({
       zone: String(zone),
       quantity: Number(data.get(`quantity:${zone}`)),
@@ -2074,7 +2099,7 @@ root.addEventListener("submit", async (event) => {
       return;
     }
     const stockKey = view.editingStockKey;
-    const existingItem=stockKey ? state.records[state.selectedDate].inventory.find((entry)=>entry.stockKey===stockKey) : null;
+    const existingItem=stockKey ? inventoryRecord?.inventory.find((entry)=>entry.stockKey===stockKey) : null;
     const receiveZone=String(data.get("receiveZone")||"");
     if(receiveZone && !locations.some((entry)=>entry.zone===receiveZone)){
       window.alert("Vị trí nhận cố định phải là một vị trí đang được chọn cho nguyên liệu. · 固定收貨儲位必須是此食材已勾選的存放位置。");
@@ -2092,9 +2117,8 @@ root.addEventListener("submit", async (event) => {
       workMinimum: Number(data.get("workMinimum")),
       locations,
     };
-    const site = activeInventorySite();
     const existingRows = stockKey
-      ? state.records[state.selectedDate].inventory.filter((entry) => entry.stockKey === stockKey)
+      ? inventoryRecord.inventory.filter((entry) => entry.stockKey === stockKey)
       : [];
     const selectedZones = new Set(locations.map((entry) => entry.zone));
     const existingZones = new Set(existingRows.map((entry) => entry.zone));
@@ -2116,7 +2140,7 @@ root.addEventListener("submit", async (event) => {
       storageRelocation = { sourceZone:source.zone, destinationZone:destination.zone };
     }
     const existingWorkItem = stockKey
-      ? state.records[state.selectedDate].workInventory.find((entry) => entry.stockKey === stockKey)
+      ? inventoryRecord.workInventory.find((entry) => entry.stockKey === stockKey)
       : null;
     const previousWorkArea = String(existingWorkItem?.workArea || existingItem?.workArea || "");
     const workAreaChanged = Boolean(existingWorkItem && previousWorkArea && previousWorkArea !== item.workArea);

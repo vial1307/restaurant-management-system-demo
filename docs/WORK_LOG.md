@@ -1044,3 +1044,11 @@ Second PR #133 CI attempt:
 - Chromium stopped in the new two-tab browser check because Playwright `fill()` + `Tab` did not emit the expected change mutation in this form; backend logs confirmed that no browser `set-minimum` request was sent;
 - the test now dispatches the native bubbling `change` event explicitly for the write and restore steps;
 - production was not changed by the failed candidate run.
+
+Third PR #133 CI attempt:
+
+- Deploy workflow #805 / run `35528786380` again passed preflight, API inventory/SSE, workforce API and PostgreSQL concurrency;
+- Chromium proved the failure was not a Playwright event issue: the visible branch row came from the current site-scoped cloud mirror, but its change handler looked up the item in the stale long-lived store and therefore returned before sending `set-minimum`;
+- `authoritativeBranchRecord()` now layers today's branch mirror over the store for rendering, overview handlers, quick `+ / -`, restock plans and editor submit comparisons;
+- contract coverage now prevents the overview/editor lookup paths from drifting back to the stale store;
+- production was not changed by the failed candidate run.
