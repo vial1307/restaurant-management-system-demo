@@ -468,31 +468,113 @@ export async function registerInventoryExtraRoutes(app) {
     if (!requireCatalogManager(user,site,reply)) return;
 
     try {
-      const saved = await withTransaction(async (client) => {
-        const upsert = await client.query(
-          `insert into public.inventory_items(
-             item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
-           ) values($1,$2,$3,$4,$5,$6,$7,true)
-           on conflict(item_key) do update set
-             catalog_key=excluded.catalog_key,
-             name_zh_tw=excluded.name_zh_tw,
-             name_vi=excluded.name_vi,
-             unit=excluded.unit,
-             work_area=excluded.work_area,
-             storage_only=excluded.storage_only,
-             active=true
-           returning *`,
-          [
-            itemKey,
-            String(item.catalog_key || ""),
-            String(item.zh || itemKey),
-            String(item.vi || item.zh || itemKey),
-            String(item.unit || "個"),
-            String(item.work_area || ""),
-            Boolean(item.storage_only),
-          ]
+      const result = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_catalog:${itemKey}`]
         );
-        const savedItem = upsert.rows[0];
+
+        const currentResult = await client.query(
+          `select *
+           from public.inventory_items
+           where item_key=$1
+           limit 1
+           for update`,
+          [itemKey]
+        );
+        const current = currentResult.rows[0] || null;
+
+        const locationSnapshot = async (itemId) => {
+          if (!itemId) return [];
+          const rows = await client.query(
+            `select l.id,l.code,l.kind,l.active
+             from public.inventory_stock s
+             join public.inventory_locations l on l.id=s.location_id
+             where s.item_id=$1 and l.site=$2
+             order by l.code,l.id`,
+            [itemId,site]
+          );
+          return rows.rows.map((row) => ({
+            location_id:row.id,
+            location_code:row.code,
+            kind:row.kind,
+            active:Boolean(row.active),
+          }));
+        };
+
+        const itemSnapshot = (row, locations) => row ? ({
+          item_key:row.item_key,
+          catalog_key:row.catalog_key,
+          name_zh_tw:row.name_zh_tw,
+          name_vi:row.name_vi,
+          unit:row.unit,
+          work_area:row.work_area,
+          storage_only:Boolean(row.storage_only),
+          active:Boolean(row.active),
+          locations,
+        }) : null;
+
+        const beforeLocations = await locationSnapshot(current?.id);
+        const before = itemSnapshot(current,beforeLocations);
+
+        const target = {
+          catalog_key:String(item.catalog_key || ""),
+          name_zh_tw:String(item.zh || itemKey),
+          name_vi:String(item.vi || item.zh || itemKey),
+          unit:String(item.unit || "個"),
+          work_area:String(item.work_area || ""),
+          storage_only:Boolean(item.storage_only),
+        };
+
+        let savedItem = current;
+        const metadataChanged = !current ||
+          current.catalog_key !== target.catalog_key ||
+          current.name_zh_tw !== target.name_zh_tw ||
+          current.name_vi !== target.name_vi ||
+          current.unit !== target.unit ||
+          current.work_area !== target.work_area ||
+          Boolean(current.storage_only) !== target.storage_only ||
+          !current.active;
+
+        if (!current) {
+          savedItem = (await client.query(
+            `insert into public.inventory_items(
+               item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
+             ) values($1,$2,$3,$4,$5,$6,$7,true)
+             returning *`,
+            [
+              itemKey,
+              target.catalog_key,
+              target.name_zh_tw,
+              target.name_vi,
+              target.unit,
+              target.work_area,
+              target.storage_only,
+            ]
+          )).rows[0];
+        } else if (metadataChanged) {
+          savedItem = (await client.query(
+            `update public.inventory_items
+             set catalog_key=$2,
+                 name_zh_tw=$3,
+                 name_vi=$4,
+                 unit=$5,
+                 work_area=$6,
+                 storage_only=$7,
+                 active=true
+             where id=$1
+             returning *`,
+            [
+              current.id,
+              target.catalog_key,
+              target.name_zh_tw,
+              target.name_vi,
+              target.unit,
+              target.work_area,
+              target.storage_only,
+            ]
+          )).rows[0];
+        }
 
         const wantedLocationIds = [];
         for (const loc of Array.isArray(item.locations) ? item.locations : []) {
@@ -557,9 +639,39 @@ export async function registerInventoryExtraRoutes(app) {
           );
         }
 
-        return savedItem;
+        const afterLocations = await locationSnapshot(savedItem.id);
+        const after = itemSnapshot(savedItem,afterLocations);
+        const changed = JSON.stringify(before) !== JSON.stringify(after);
+        let audit = null;
+
+        if (changed) {
+          const operation = before ? "update" : "create";
+          audit = (await client.query(
+            `insert into public.audit_logs(
+               actor_user_id,actor_username,action,entity_type,entity_id,site,
+               before_data,after_data,metadata
+             ) values(
+               $1,$2,'inventory_catalog_change','inventory_item',$3,$4,
+               $5::jsonb,$6::jsonb,
+               jsonb_build_object(
+                 'item_key',$7::text,
+                 'catalog_key',$8::text,
+                 'operation',$9::text
+               )
+             )
+             returning id,created_at`,
+            [
+              user.id,user.username,savedItem.id,site,
+              before === null ? null : JSON.stringify(before),
+              JSON.stringify(after),
+              itemKey,savedItem.catalog_key,operation
+            ]
+          )).rows[0];
+        }
+
+        return { item:savedItem,changed,audit };
       });
-      return { item:saved };
+      return result;
     } catch (error) {
       if (error?.code === "23505") return reply.code(409).send({ error:"CATALOG_CONFLICT" });
       if (error?.message === "LOCATION_HAS_STOCK") {
