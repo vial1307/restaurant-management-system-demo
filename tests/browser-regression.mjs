@@ -454,8 +454,12 @@ async function roleDesktop(browser, username, checks) {
       await peerMinimum.waitFor({state:"visible"});
       await page.waitForTimeout(250);
 
-      await sourceMinimum.fill(String(next));
-      await sourceMinimum.dispatchEvent("change");
+      const minimumWrite=page.waitForResponse((response)=>response.url().endsWith("/api/inventory/set-minimum")&&response.request().method()==="POST");
+      await sourceMinimum.evaluate((input,value)=>{
+        input.value=value;
+        input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
+      },String(next));
+      assert.equal((await minimumWrite).status(),200,"overview minimum did not persist through the database API");
       await peer.waitForFunction(
         ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
         {name:`minimum:${zone}`,value:String(next)},
@@ -463,8 +467,12 @@ async function roleDesktop(browser, username, checks) {
       );
 
       const restoredMinimum=page.locator(".inventory-table.storage-table .storage-row").first().locator('input[data-field="item"][data-key="minimum"]');
-      await restoredMinimum.fill(String(before));
-      await restoredMinimum.dispatchEvent("change");
+      const minimumRestore=page.waitForResponse((response)=>response.url().endsWith("/api/inventory/set-minimum")&&response.request().method()==="POST");
+      await restoredMinimum.evaluate((input,value)=>{
+        input.value=value;
+        input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
+      },String(before));
+      assert.equal((await minimumRestore).status(),200,"overview minimum restore did not persist through the database API");
       await peer.waitForFunction(
         ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
         {name:`minimum:${zone}`,value:String(before)},

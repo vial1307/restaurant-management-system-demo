@@ -1052,3 +1052,11 @@ Third PR #133 CI attempt:
 - `authoritativeBranchRecord()` now layers today's branch mirror over the store for rendering, overview handlers, quick `+ / -`, restock plans and editor submit comparisons;
 - contract coverage now prevents the overview/editor lookup paths from drifting back to the stale store;
 - production was not changed by the failed candidate run.
+
+Fourth PR #133 CI attempt:
+
+- Deploy workflow #806 / run `35529217177` again passed preflight and reached the browser two-tab check, while independent approval/load workflows passed;
+- the source overview still produced no `set-minimum` request in the synthetic interaction, so deploy remained skipped;
+- rendered branch controls now carry immutable `stockKey` plus rendered zone/work-area identity and can construct the database mutation target even if both the store and mirror lookup lag;
+- the browser regression now waits for HTTP 200 from the actual overview mutation before asserting SSE convergence in the already-open peer editor, and restores the fixture through the same UI/API path;
+- production was not changed by the failed candidate run.
