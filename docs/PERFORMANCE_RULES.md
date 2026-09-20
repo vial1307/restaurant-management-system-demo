@@ -29,6 +29,7 @@ When a user changes data:
 - compare server revision/version/snapshot where available before merging remote state;
 - unchanged polling/focus refresh must not cause a visible page repaint or full application render;
 - pending/success/error UI must remain responsive while the request is in flight.
+- rapid inventory `+ / −` taps for one item/location should be coalesced into a serialized delta write and one final authoritative reconciliation; do not render the whole application or refetch the complete inventory for every individual tap.
 
 ## 3. Navigation and module switching
 
@@ -101,6 +102,7 @@ Every release with frontend/sync changes must verify all applicable items:
 7. desktop and mobile produce the same business result;
 8. no new console/page errors;
 9. production smoke test passes after deployment.
+10. rapid inventory `+ / −` taps update the active row immediately, produce no duplicate concurrent write for the same item/location, and perform at most one full inventory reconciliation after the tap burst settles.
 
 ## 8. Performance incidents
 

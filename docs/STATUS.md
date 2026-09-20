@@ -27,44 +27,48 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 - Live GitHub & Handoff deployed.
 - PR #130 / production #796 verified on schema 024.
 
-## IN PROGRESS — inventory catalog audit
+## IN PROGRESS — inventory persistence and rapid-adjustment performance
 
 Branch:
 
-- `audit/inventory-config-next-20260921`
+- `fix/inventory-roundtrip-performance-20260921`
+- prerequisite catalog-audit PR #131 is merged; candidate base is `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9`.
 
 Schema:
 
 - remains `024`.
 
-Confirmed gap:
+Confirmed defects:
 
-- catalog metadata/storage-association edits had no durable before/after audit;
-- repeated no-op saves still ran the item upsert path.
+- branch/central rapid `+ / -` repeated whole-page renders and duplicate full inventory reloads;
+- work-area changes were treated as catalog association edits instead of physical stock relocation;
+- branch item edit submit referenced an undeclared `state` value and could fail before the API call;
+- central modal quantity/minimum values were not sent to their authoritative stock endpoints;
+- stocked storage changes in edit modals did not consistently use the relocation transaction.
 
 Candidate behavior:
 
-- transaction + advisory lock per item key;
-- lock existing item before comparison;
-- update metadata only on real change;
-- snapshot metadata + configured locations before/after;
-- audit action `inventory_catalog_change`;
-- entity id uses searchable `item_key`;
-- no-op save creates no audit;
-- catalog payload quantity/minimum stay non-authoritative and ignored.
+- coalesce rapid adjustments for 120 ms and send one net delta per quiet period;
+- update only the active control while pending and reconcile exactly once from PostgreSQL after success;
+- force authoritative reconciliation with visible error state after failure;
+- add transactional `POST /api/inventory/relocate-work-area` with locks, transfer history and durable audit;
+- use existing transactional storage relocation for stocked location replacements;
+- persist modal quantity/minimum through dedicated endpoints, never catalog payloads;
+- preserve catalog-manager vs stocktake capability boundaries;
+- cover both 復興 and 永吉 in dynamic work-area relocation regression.
 
 ## NEXT
 
-1. Open PR so Live Handoff publishes this branch/head/CI.
-2. Run static + API regression.
-3. Verify catalog create/no-op/update produces exactly 2 audit rows.
-4. Verify quantity/minimum stay zero for catalog-only fixture.
-5. Run browser/full-device certification.
-6. Merge only exact tested head.
-7. Deploy exact merge commit and run Inventory Site Production Audit.
-8. Continue auditing remaining inventory configuration mutations.
+1. Keep PR #132 based on `main` after merged prerequisite #131.
+2. Run PostgreSQL/API and concurrency regression in CI.
+3. Verify work-area source/destination quantity, minimum, item metadata and audit for both branches.
+4. Run desktop/mobile Chromium and full-device browser certification.
+5. Merge only this exact tested head after every required check passes.
+6. Deploy the exact merge commit and run Inventory Site Production Audit.
+7. Continue auditing remaining inventory configuration mutations.
 
 ## BLOCKED
 
 - No production data blocker.
-- Do not move catalog configuration events into `inventory_transactions`; they belong in `audit_logs`.
+- Local Docker is unavailable and Playwright browser download timed out; database/browser proof is pending CI.
+- Production remains on #796 / `21d3762`; do not claim this candidate is deployed before deploy + smoke + audit pass.

@@ -14,6 +14,7 @@ import {
   vpsSyncCatalog,
   vpsTransferInventory,
   vpsRelocateStorage,
+  vpsRelocateWorkArea,
 } from "./vps-api.js";
 import { PRIMARY_ZONES, STORAGE_KEY, WORK_AREAS, ZONES, stockKeyFor } from "./store.js";
 import {
@@ -856,6 +857,7 @@ export async function cloudAdjustQuantity({
   direction,
   amount,
   note = "",
+  sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
@@ -863,8 +865,9 @@ export async function cloudAdjustQuantity({
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
+  let data;
   try {
-    await vpsAdjustInventory({
+    data = await vpsAdjustInventory({
       itemId: resolved.item.id,
       locationId: resolved.location.id,
       direction,
@@ -875,8 +878,8 @@ export async function cloudAdjustQuantity({
     dispatchStatus("error", { error: error.message, stage: "adjust" });
     return { ok: false, fallback: false, error };
   }
-  await syncInventoryNow(resolved.location.site, { reloadBranch: false });
-  return { ok: true };
+  if (sync) await syncInventoryNow(resolved.location.site, { reloadBranch: false });
+  return { ok: true, data };
 }
 
 export async function cloudSetQuantity({
@@ -971,6 +974,7 @@ export async function cloudRelocateStorage({
   sourceLocationCode,
   destinationLocationCode,
   note = "儲位移動 / Chuyển vị trí lưu",
+  sync = true,
 }) {
   if (!(await verifyMigration())) return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
 
@@ -991,11 +995,46 @@ export async function cloudRelocateStorage({
       destinationLocationId:destination.location.id,
       note,
     });
-    await syncInventoryNow(site,{reloadBranch:false});
+    if (sync) await syncInventoryNow(site,{reloadBranch:false});
     return { ok:true,fallback:false,data };
   } catch (error) {
     dispatchStatus("error",{error:error.message,stage:"relocate-storage"});
-    await syncInventoryNow(site,{reloadBranch:false});
+    if (sync) await syncInventoryNow(site,{reloadBranch:false});
+    return { ok:false,fallback:false,error };
+  }
+}
+
+export async function cloudRelocateWorkArea({
+  itemKey,
+  sourceLocationCode,
+  destinationLocationCode,
+  note = "工作區移動 / Chuyển khu làm việc",
+  sync = true,
+}) {
+  if (!(await verifyMigration())) return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
+
+  const source = await resolveIds(itemKey,sourceLocationCode);
+  const destination = await resolveIds(itemKey,destinationLocationCode);
+  const site = source.location?.site || "";
+  if (!source.item || !source.location || !destination.location) {
+    return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
+  }
+  if (!site || destination.location.site !== site || !canManageBranchCatalog(site)) {
+    return { ok:false,fallback:false,error:new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  }
+
+  try {
+    const data = await vpsRelocateWorkArea({
+      itemId:source.item.id,
+      sourceLocationId:source.location.id,
+      destinationLocationId:destination.location.id,
+      note,
+    });
+    if (sync) await syncInventoryNow(site,{reloadBranch:false});
+    return { ok:true,fallback:false,data };
+  } catch (error) {
+    dispatchStatus("error",{error:error.message,stage:"relocate-work-area"});
+    if (sync) await syncInventoryNow(site,{reloadBranch:false});
     return { ok:false,fallback:false,error };
   }
 }
@@ -1076,7 +1115,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
   }
 }
 
-export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, [])) {
+export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENTRAL_KEY, []), { sync = true } = {}) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageCentralCatalog()) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   const catalog = buildCentralCatalog(items);
@@ -1085,7 +1124,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
 
   try {
     await vpsSyncCatalog(item);
-    await syncInventoryNow("central", { reloadBranch: false });
+    if (sync) await syncInventoryNow("central", { reloadBranch: false });
     return { ok: true };
   } catch (error) {
     dispatchStatus("error", { error: error.message, stage: "central-catalog-sync" });

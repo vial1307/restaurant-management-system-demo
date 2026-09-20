@@ -48,7 +48,48 @@ This release preserves the schema-022 inventory guarantees and production-verifi
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
-## 3. Completed: cross-site inventory tab synchronization
+## 3. Current candidate: inventory round-trip persistence and rapid adjustment performance
+
+Working branch:
+
+- `fix/inventory-roundtrip-performance-20260921`
+- prerequisite PR #131 is merged; the candidate is based on merge commit `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9`;
+- production authority remains `21d376295b6194e48bfaa599fc6c5424256a6196` until the exact candidate head passes CI, deploy, smoke and production audit.
+
+User-reported defects:
+
+- every branch/central `+ / -` click caused a full render and duplicate inventory synchronization, producing visible freezes;
+- work-area changes were sent through catalog association sync, which correctly refused to delete a stocked source association, so refresh restored the prior value;
+- branch item edit submit could throw before its API call because the current store state was referenced without being declared;
+- central edit quantity/minimum fields were not persisted because catalog sync intentionally ignores physical stock fields;
+- branch and central modal storage changes did not consistently use the dedicated relocation transaction.
+
+Candidate behavior:
+
+- rapid `+ / -` clicks update only the active quantity control, coalesce their net delta for 120 ms, send one serialized adjustment and perform one final authoritative reload;
+- failures visibly mark the row and force a fresh PostgreSQL-backed reconciliation;
+- new `POST /api/inventory/relocate-work-area` atomically moves the work-location stock row, minimum and item work-area metadata, with a transfer history row when quantity is non-zero and an `inventory_work_area_relocate` audit row for every real relocation;
+- branch/central storage edits use `relocate-storage` for stocked associations and preserve moved quantity/minimum;
+- branch and central modal edits use dedicated quantity/minimum endpoints, then perform one final authoritative reload;
+- catalog/work/storage edits use catalog-manager authorization; quantity/minimum stocktake permissions remain stricter by design;
+- API regression covers work-area relocation for both 復興 and 永吉 branches.
+
+Local verification completed:
+
+- JavaScript syntax checks: PASS;
+- static regression: PASS;
+- performance regression: PASS;
+- focused inventory hydration, cache invalidation, stocktake-boundary and scalar no-op regressions: PASS.
+
+Still required before merge/deploy:
+
+- PostgreSQL/API regression and concurrency regression in CI;
+- desktop/mobile Chromium and full-device browser certification in CI;
+- exact tested-head merge, VPS deploy, production smoke and Inventory Site Production Audit.
+
+Local Docker is unavailable and the Playwright browser download timed out in this workspace, so dynamic database and browser proof must come from GitHub CI.
+
+## 4. Completed: cross-site inventory tab synchronization
 
 User-reported problem:
 - Switching 央廚 / 復興 / 永吉 could visually change the selected site while the visible data still came from a previous site or from a recent client cache.
@@ -79,7 +120,7 @@ Important commits:
 - `483833a9` — force fresh VPS snapshot on every interactive site switch
 - `d15ae208` — static guard requiring the forced VPS refresh behavior
 
-## 4. Completed: storage relocation must use PostgreSQL
+## 5. Completed: storage relocation must use PostgreSQL
 
 User-reported problem:
 - Changing an item's storage location, e.g. 大冷凍 -> 4門冰箱 / 廚房冰箱 / 大冷藏, could fail or behave like a local/catalog metadata edit rather than a real inventory movement.
@@ -123,7 +164,7 @@ Regression proof:
 - It relocates the item to `fuxing-four`.
 - The test requires the source stock association to disappear, destination quantity/minimum to be correct, and fixed receive default to move to `fuxing-four`.
 
-## 5. Inventory invariants that must not be broken
+## 6. Inventory invariants that must not be broken
 
 - `領貨`: branch internal withdrawal/use flow.
 - `庫存轉撥`: same-site movement between storage locations.
@@ -137,7 +178,7 @@ Regression proof:
 - Never overwrite VPS stock from a stale browser snapshot.
 - Equivalent behavior must work for 央廚 / 復興 / 永吉 unless an explicit business rule differs.
 
-## 6. Super Admin / catalog synchronization state
+## 7. Super Admin / catalog synchronization state
 
 Completed:
 - Super Admin standalone panel exists at `/.admindev.html`.
@@ -151,7 +192,7 @@ Completed:
 
 Do not auto-normalize operational variants without business confirmation.
 
-## 7. Next work queue requested by product owner
+## 8. Next work queue requested by product owner
 
 Do these after inventory site/relocation stability is confirmed.
 

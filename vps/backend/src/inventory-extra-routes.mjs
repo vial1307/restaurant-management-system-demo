@@ -848,7 +848,6 @@ export async function registerInventoryExtraRoutes(app) {
         if (!String(row.item_key || "").startsWith(row.source_site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
         }
-
         const sourceResult = await client.query(
           `select quantity,minimum_quantity
            from public.inventory_stock
@@ -976,6 +975,192 @@ export async function registerInventoryExtraRoutes(app) {
     } catch (error) {
       if (error.alreadySent) return;
       return reply.code(error.statusCode || 500).send({ error:error.message || "STORAGE_RELOCATION_FAILED" });
+    }
+  });
+
+  app.post("/api/inventory/relocate-work-area", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const itemId = String(request.body?.itemId || "");
+    const sourceLocationId = String(request.body?.sourceLocationId || "");
+    const destinationLocationId = String(request.body?.destinationLocationId || "");
+    const note = String(request.body?.note || "工作區移動 / Chuyển khu làm việc");
+
+    if (!itemId || !sourceLocationId || !destinationLocationId || sourceLocationId === destinationLocationId) {
+      return reply.code(400).send({ error:"INVALID_WORK_AREA_RELOCATION" });
+    }
+
+    try {
+      const data = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_work_area_relocate:${itemId}`]
+        );
+
+        const ctx = await client.query(
+          `select
+             i.id,i.item_key,i.catalog_key,i.work_area as item_work_area,
+             s.id as source_location_id,s.site as source_site,s.code as source_code,
+             nullif(btrim(s.metadata->>'work_area'),'') as source_work_area,
+             d.id as destination_location_id,d.site as destination_site,d.code as destination_code,
+             nullif(btrim(d.metadata->>'work_area'),'') as destination_work_area
+           from public.inventory_items i
+           join public.inventory_locations s
+             on s.id=$2 and s.active=true and s.kind='work'
+           join public.inventory_locations d
+             on d.id=$3 and d.active=true and d.kind='work'
+           where i.id=$1 and i.active=true
+           limit 1`,
+          [itemId,sourceLocationId,destinationLocationId]
+        );
+        const row = ctx.rows[0];
+        if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
+        if (row.source_site !== row.destination_site) {
+          throw Object.assign(new Error("RELOCATION_MUST_STAY_IN_SITE"), { statusCode:400 });
+        }
+        if (!(await isBranchSite(row.source_site))) {
+          throw Object.assign(new Error("WORK_AREA_RELOCATION_BRANCH_ONLY"), { statusCode:400 });
+        }
+        if (!row.source_work_area || !row.destination_work_area) {
+          throw Object.assign(new Error("INVALID_WORK_AREA_LOCATION"), { statusCode:400 });
+        }
+        if (!requireCatalogManager(user,row.source_site,reply)) {
+          throw Object.assign(new Error("CATALOG_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        }
+        if (!String(row.item_key || "").startsWith(row.source_site + ":")) {
+          throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
+        }
+
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_catalog:${row.item_key}`]
+        );
+        const lockedItem = await client.query(
+          "select work_area from public.inventory_items where id=$1 for update",
+          [itemId]
+        );
+        if (String(lockedItem.rows[0]?.work_area || "") !== String(row.source_work_area || "")) {
+          throw Object.assign(new Error("WORK_AREA_SOURCE_MISMATCH"), { statusCode:409 });
+        }
+
+        const sourceResult = await client.query(
+          `select quantity,minimum_quantity
+           from public.inventory_stock
+           where item_id=$1 and location_id=$2
+           for update`,
+          [itemId,sourceLocationId]
+        );
+        if (!sourceResult.rowCount) {
+          throw Object.assign(new Error("SOURCE_WORK_AREA_NOT_CONFIGURED"), { statusCode:409 });
+        }
+
+        await client.query(
+          `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+           values($1,$2,0,0,now())
+           on conflict(item_id,location_id) do nothing`,
+          [itemId,destinationLocationId]
+        );
+        const destinationResult = await client.query(
+          `select quantity,minimum_quantity
+           from public.inventory_stock
+           where item_id=$1 and location_id=$2
+           for update`,
+          [itemId,destinationLocationId]
+        );
+
+        const sourceBefore = Number(sourceResult.rows[0].quantity || 0);
+        const sourceMinimum = Number(sourceResult.rows[0].minimum_quantity || 0);
+        const destinationBefore = Number(destinationResult.rows[0]?.quantity || 0);
+        const destinationMinimumBefore = Number(destinationResult.rows[0]?.minimum_quantity || 0);
+        const destinationAfter = destinationBefore + sourceBefore;
+        const destinationMinimumAfter = Math.max(destinationMinimumBefore,sourceMinimum);
+
+        await client.query(
+          `update public.inventory_stock
+           set quantity=$3,minimum_quantity=$4,updated_at=now()
+           where item_id=$1 and location_id=$2`,
+          [itemId,destinationLocationId,destinationAfter,destinationMinimumAfter]
+        );
+        await client.query(
+          "delete from public.inventory_stock where item_id=$1 and location_id=$2",
+          [itemId,sourceLocationId]
+        );
+        await client.query(
+          "update public.inventory_items set work_area=$2 where id=$1",
+          [itemId,row.destination_work_area]
+        );
+
+        let transaction = null;
+        if (sourceBefore > 0) {
+          transaction = (await client.query(
+            `insert into public.inventory_transactions(
+               item_id,source_location_id,destination_location_id,action,amount,note,
+               actor_user_id,actor_username,metadata
+             ) values(
+               $1,$2,$3,'transfer',$4,$5,$6,$7,
+               jsonb_build_object(
+                 'operation','relocate_work_area',
+                 'source_before',$8::numeric,'source_after',0::numeric,
+                 'destination_before',$9::numeric,'destination_after',$10::numeric,
+                 'source_minimum',$11::numeric,'destination_minimum_before',$12::numeric,
+                 'destination_minimum_after',$13::numeric
+               )
+             ) returning id,created_at`,
+            [
+              itemId,sourceLocationId,destinationLocationId,sourceBefore,note,
+              user.id,user.username,
+              sourceBefore,destinationBefore,destinationAfter,
+              sourceMinimum,destinationMinimumBefore,destinationMinimumAfter
+            ]
+          )).rows[0];
+        }
+
+        await client.query(
+          `insert into public.audit_logs(
+             actor_user_id,actor_username,action,entity_type,entity_id,site,
+             before_data,after_data,metadata
+           ) values(
+             $1,$2,'inventory_work_area_relocate','inventory_item',$3,$4,
+             jsonb_build_object(
+               'work_area',$5::text,'location_id',$6::uuid,'location_code',$7::text,
+               'quantity',$8::numeric,'minimum',$9::numeric
+             ),
+             jsonb_build_object(
+               'work_area',$10::text,'location_id',$11::uuid,'location_code',$12::text,
+               'quantity',$13::numeric,'minimum',$14::numeric
+             ),
+             jsonb_build_object('catalog_key',$15::text)
+           )`,
+          [
+            user.id,user.username,itemId,row.source_site,
+            row.source_work_area,sourceLocationId,row.source_code,sourceBefore,sourceMinimum,
+            row.destination_work_area,destinationLocationId,row.destination_code,destinationAfter,destinationMinimumAfter,
+            row.catalog_key
+          ]
+        );
+
+        return {
+          ok:true,
+          site:row.source_site,
+          item_id:itemId,
+          work_area:row.destination_work_area,
+          source_location_id:sourceLocationId,
+          destination_location_id:destinationLocationId,
+          source_before:sourceBefore,
+          source_after:0,
+          destination_before:destinationBefore,
+          destination_after:destinationAfter,
+          source_minimum:sourceMinimum,
+          destination_minimum_before:destinationMinimumBefore,
+          destination_minimum_after:destinationMinimumAfter,
+          transaction,
+        };
+      });
+      return data;
+    } catch (error) {
+      if (error.alreadySent) return;
+      return reply.code(error.statusCode || 500).send({ error:error.message || "WORK_AREA_RELOCATION_FAILED" });
     }
   });
 

@@ -189,7 +189,10 @@ a { color: inherit; text-decoration: none; }
 .mobile-field-label { display: none; }
 .inventory-select { width: 100%; min-height: 31px; padding: 0 4px; border: 1px solid transparent; border-radius: 7px; outline-color: #c4dbd0; background: transparent; color: var(--ink); font-size: 10px; }
 .inventory-select:hover, .inventory-select:focus { border-color: var(--line); background: #fbfcfb; }
-.quantity-control { display: flex; align-items: center; gap: 5px; }
+.quantity-control { position: relative; display: flex; align-items: center; gap: 5px; }
+.quantity-sync-status { position: absolute; top: calc(100% + 1px); left: 0; min-width: max-content; color: var(--muted); font-size: 8px; line-height: 1; pointer-events: none; }
+.quantity-control[data-sync-state="saving"] .quantity-input { border-color: #c4dbd0; background: #f4faf7; }
+.quantity-control[data-sync-state="error"] .quantity-input { border-color: #e5aaa4; background: #fff5f4; }
 .inventory-storage { display: grid; gap: 3px; padding: 6px 0; }
 .storage-threshold { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 9px; white-space: nowrap; }
 .storage-threshold > .minimum-input { width: 35px; padding: 4px 2px; border-color: #e8ece9; font-size: 10px; }
