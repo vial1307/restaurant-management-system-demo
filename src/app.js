@@ -1950,8 +1950,8 @@ root.addEventListener("submit", async (event) => {
     if (result.ok) {
       view.modal = null;
       view.editingStockKey = null;
-      await syncInventoryNow(site,{reloadBranch:false});
       renderWhenAuthorized();
+      void syncInventoryNow(site,{reloadBranch:false});
       return;
     }
 
