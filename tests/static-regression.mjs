@@ -20,6 +20,7 @@ import "./live-handoff-contract-regression.mjs";
 import "./inventory-minimum-history-contract-regression.mjs";
 import "./inventory-receive-default-audit-contract-regression.mjs";
 import "./inventory-catalog-audit-contract-regression.mjs";
+import "./master-data-noop-audit-contract-regression.mjs";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
