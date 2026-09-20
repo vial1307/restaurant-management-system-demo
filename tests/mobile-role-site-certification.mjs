@@ -137,7 +137,7 @@ async function assertNoHorizontalOverflow(page, label) {
 }
 
 async function waitForPermissionState(page, scopeSelector, route, expected) {
-  await page.waitForFunction(({ scopeSelector, route, expected }) => {
+  const predicate = ({ scopeSelector, route, expected }) => {
     const host = document.querySelector(scopeSelector);
     const link = host?.querySelector(`.nav-item[href="#${route}"]`);
     if (!link) return false;
@@ -145,7 +145,20 @@ async function waitForPermissionState(page, scopeSelector, route, expected) {
     if (displayed !== expected) return false;
     if (route === "schedule" && expected) return link.dataset.workforceLegacySchedule === "true";
     return true;
-  }, { scopeSelector, route, expected }, { timeout:10000 });
+  };
+  let lastError = null;
+  for (let attempt=0;attempt<2;attempt+=1) {
+    try {
+      await page.waitForFunction(predicate,{ scopeSelector, route, expected },{ timeout:10000 });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) break;
+      await page.waitForLoadState("domcontentloaded",{timeout:10000}).catch(()=>{});
+      await page.waitForTimeout(150);
+    }
+  }
+  throw lastError;
 }
 
 async function assertPermissionNavigation(page, session, label) {

@@ -115,8 +115,26 @@ async function setSite(page, site) {
   }
 }
 
+async function stableEvaluate(page, fn, arg) {
+  let lastError = null;
+  for (let attempt=0;attempt<3;attempt+=1) {
+    try {
+      return await page.evaluate(fn,arg);
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || "");
+      if (!/Execution context was destroyed|most likely because of a navigation|Target page, context or browser has been closed/i.test(message)) throw error;
+      await page.waitForLoadState("domcontentloaded",{timeout:10000}).catch(()=>{});
+      await page.waitForTimeout(100);
+    }
+  }
+  throw lastError;
+}
+
 async function assertRoutePermissions(page, username) {
-  const session = await page.evaluate(()=>JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null"));
+  await page.waitForLoadState("domcontentloaded",{timeout:10000}).catch(()=>{});
+  await page.waitForFunction(() => Boolean(localStorage.getItem("shitu-kitchen-auth-v1")),null,{timeout:10000});
+  const session = await stableEvaluate(page,()=>JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null"));
   assert(session?.permissions,`${username} session permissions missing`);
   for (const route of ACCOUNT_MODULES) {
     await page.goto(BASE + "/#" + route,{waitUntil:"domcontentloaded"});
@@ -126,7 +144,7 @@ async function assertRoutePermissions(page, username) {
       assert.equal(await page.locator(".access-empty-state").count(),0,`${username} blocked from allowed route ${route}`);
     } else {
       await page.waitForFunction((blocked)=>location.hash.replace(/^#/,"").split("?")[0]!==blocked,route);
-      const redirected = await page.evaluate(()=>location.hash.replace(/^#/,"").split("?")[0]);
+      const redirected = await stableEvaluate(page,()=>location.hash.replace(/^#/,"").split("?")[0]);
       assert.equal(session.permissions[redirected]?.view,true,`${username} redirected from ${route} to forbidden ${redirected}`);
     }
   }
