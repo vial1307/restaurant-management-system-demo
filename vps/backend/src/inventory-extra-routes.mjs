@@ -312,34 +312,80 @@ export async function registerInventoryExtraRoutes(app) {
     const itemId = String(request.body?.itemId || "");
     const locationId = String(request.body?.locationId || "");
     const minimum = Number(request.body?.minimum);
+    const note = String(request.body?.note || "標準量調整 / Điều chỉnh định mức");
 
     if (!itemId || !locationId || !Number.isFinite(minimum) || minimum < 0) {
       return reply.code(400).send({ error: "INVALID_MINIMUM" });
     }
 
-    const ctx = await pool.query(
-      `select i.item_key,l.site
-       from public.inventory_items i
-       join public.inventory_locations l on l.id=$2 and l.active=true
-       where i.id=$1 and i.active=true
-       limit 1`,
-      [itemId,locationId]
-    );
-    const row = ctx.rows[0];
-    if (!row) return reply.code(404).send({ error: "ITEM_LOCATION_NOT_FOUND" });
-    if (!requireStocktakeRole(user,row.site,reply)) return;
-    if (!String(row.item_key || "").startsWith(row.site + ":")) {
-      return reply.code(400).send({ error:"ITEM_SITE_MISMATCH" });
-    }
+    try {
+      const result = await withTransaction(async (client) => {
+        const ctx = await client.query(
+          `select i.item_key,l.site
+           from public.inventory_items i
+           join public.inventory_locations l on l.id=$2 and l.active=true
+           where i.id=$1 and i.active=true
+           limit 1`,
+          [itemId,locationId]
+        );
+        const row = ctx.rows[0];
+        if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
+        if (!requireStocktakeRole(user,row.site,reply)) {
+          throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
+        }
+        if (!String(row.item_key || "").startsWith(row.site + ":")) {
+          throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
+        }
 
-    await pool.query(
-      `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
-       values($1,$2,0,$3)
-       on conflict(item_id,location_id) do update
-       set minimum_quantity=excluded.minimum_quantity,updated_at=now()`,
-      [itemId,locationId,minimum]
-    );
-    return { ok:true };
+        await client.query(
+          `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+           values($1,$2,0,0)
+           on conflict(item_id,location_id) do nothing`,
+          [itemId,locationId]
+        );
+        const locked = await client.query(
+          "select minimum_quantity from public.inventory_stock where item_id=$1 and location_id=$2 for update",
+          [itemId,locationId]
+        );
+        const before = Number(locked.rows[0]?.minimum_quantity || 0);
+
+        await client.query(
+          "update public.inventory_stock set minimum_quantity=$3,updated_at=now() where item_id=$1 and location_id=$2",
+          [itemId,locationId,minimum]
+        );
+
+        let transaction = null;
+        if (before !== minimum) {
+          transaction = (await client.query(
+            `insert into public.inventory_transactions(
+               item_id,source_location_id,destination_location_id,action,amount,note,
+               actor_user_id,actor_username,metadata
+             ) values(
+               $1,$2,$3,'adjust',$4,$5,$6,$7,
+               jsonb_build_object(
+                 'operation','set_minimum',
+                 'before_minimum',$8::numeric,
+                 'after_minimum',$9::numeric
+               )
+             )
+             returning *`,
+            [
+              itemId,
+              minimum < before ? locationId : null,
+              minimum >= before ? locationId : null,
+              Math.abs(minimum-before),
+              note,user.id,user.username,before,minimum
+            ]
+          )).rows[0];
+        }
+
+        return { ok:true,before,after:minimum,transaction };
+      });
+      return result;
+    } catch (error) {
+      if (error.alreadySent) return;
+      return reply.code(error.statusCode || 500).send({ error:error.message || "SET_MINIMUM_FAILED" });
+    }
   });
 
   app.post("/api/inventory/catalog/sync", async (request, reply) => {
