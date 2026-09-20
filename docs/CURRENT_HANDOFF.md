@@ -53,7 +53,7 @@ Never claim a newer production SHA until its deploy + production smoke jobs are 
 Working branch:
 
 - `fix/inventory-roundtrip-performance-20260921`
-- stacked on `audit/inventory-config-next-20260921` at `c574b3ac84e7652e00959776c661496427f51ccc`;
+- prerequisite PR #131 is merged; the candidate is based on merge commit `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9`;
 - production authority remains `21d376295b6194e48bfaa599fc6c5424256a6196` until the exact candidate head passes CI, deploy, smoke and production audit.
 
 User-reported defects:

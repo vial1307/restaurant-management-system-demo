@@ -940,10 +940,10 @@ Dynamic API regression:
 
 ## 2026-09-21 — Inventory round-trip persistence and rapid-adjustment candidate
 
-Created stacked branch:
+Created continuation branch:
 
 - `fix/inventory-roundtrip-performance-20260921`;
-- based on catalog-audit head `c574b3ac84e7652e00959776c661496427f51ccc`;
+- prerequisite catalog-audit PR #131 merged as `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9` and PR #132 is based on that merge;
 - production remains Deploy #796 / `21d376295b6194e48bfaa599fc6c5424256a6196`, schema 024.
 
 Confirmed defects:

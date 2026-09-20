@@ -32,7 +32,7 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 Branch:
 
 - `fix/inventory-roundtrip-performance-20260921`
-- stacked on catalog-audit branch `audit/inventory-config-next-20260921` at `c574b3ac84e7652e00959776c661496427f51ccc`.
+- prerequisite catalog-audit PR #131 is merged; candidate base is `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9`.
 
 Schema:
 
@@ -59,11 +59,11 @@ Candidate behavior:
 
 ## NEXT
 
-1. Push this branch and open a stacked PR against `audit/inventory-config-next-20260921`.
+1. Keep PR #132 based on `main` after merged prerequisite #131.
 2. Run PostgreSQL/API and concurrency regression in CI.
 3. Verify work-area source/destination quantity, minimum, item metadata and audit for both branches.
 4. Run desktop/mobile Chromium and full-device browser certification.
-5. Merge the catalog-audit prerequisite, then merge only this exact tested head.
+5. Merge only this exact tested head after every required check passes.
 6. Deploy the exact merge commit and run Inventory Site Production Audit.
 7. Continue auditing remaining inventory configuration mutations.
 
