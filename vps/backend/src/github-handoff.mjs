@@ -62,6 +62,7 @@ async function loadLiveGithubHandoff() {
   let commits = [];
   let files = [];
   let runs = [];
+  let main = null;
   if (activePr) {
     const [commitRows,fileRows,actionData] = await Promise.all([
       githubJson(`/pulls/${activePr.number}/commits?per_page=20`),
@@ -97,6 +98,41 @@ async function loadLiveGithubHandoff() {
         created_at:run.created_at || null,
         updated_at:run.updated_at || null,
       }));
+  } else {
+    const [commitRows,actionData] = await Promise.all([
+      githubJson("/commits?sha=main&per_page=8"),
+      githubJson("/actions/runs?branch=main&per_page=30"),
+    ]);
+    commits = (Array.isArray(commitRows) ? commitRows : []).map((row) => ({
+      sha:text(row.sha),
+      short_sha:text(row.sha).slice(0,12),
+      message:text(row.commit?.message).split("\n")[0],
+      url:text(row.html_url),
+      author:text(row.author?.login || row.commit?.author?.name),
+      date:row.commit?.author?.date || null,
+    }));
+    const mainSha = commits[0]?.sha || "";
+    main = {
+      branch:"main",
+      sha:mainSha,
+      short_sha:mainSha.slice(0,12),
+      url:mainSha ? `${REPOSITORY_URL}/commit/${mainSha}` : `${REPOSITORY_URL}/tree/main`,
+    };
+    runs = (Array.isArray(actionData?.workflow_runs) ? actionData.workflow_runs : [])
+      .filter((run) => !mainSha || run.head_sha === mainSha)
+      .slice(0,20)
+      .map((run) => ({
+        id:run.id,
+        name:text(run.name),
+        run_number:run.run_number,
+        event:text(run.event),
+        status:text(run.status),
+        conclusion:run.conclusion || null,
+        url:text(run.html_url),
+        head_sha:text(run.head_sha),
+        created_at:run.created_at || null,
+        updated_at:run.updated_at || null,
+      }));
   }
 
   return {
@@ -108,6 +144,7 @@ async function loadLiveGithubHandoff() {
     repository:{ name:REPOSITORY,url:REPOSITORY_URL },
     canonical_url:PUBLIC_HANDOFF_URL,
     active_pr:activePr,
+    main,
     open_pull_requests:candidates.slice(0,5).map(pullSummary),
     commits,
     changed_files:files,
@@ -126,6 +163,7 @@ export async function getLiveGitHubHandoff({ force=false } = {}) {
       repository:{ name:REPOSITORY,url:REPOSITORY_URL },
       canonical_url:PUBLIC_HANDOFF_URL,
       active_pr:null,
+      main:null,
       open_pull_requests:[],
       commits:[],
       changed_files:[],
@@ -161,6 +199,7 @@ export async function getLiveGitHubHandoff({ force=false } = {}) {
         repository:{ name:REPOSITORY,url:REPOSITORY_URL },
         canonical_url:PUBLIC_HANDOFF_URL,
         active_pr:null,
+        main:null,
         open_pull_requests:[],
         commits:[],
         changed_files:[],
