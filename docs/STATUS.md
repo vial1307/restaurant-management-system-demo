@@ -1,67 +1,69 @@
 # Kitchen OS Engineering Status
 
-> Read this after `docs/CURRENT_HANDOFF.md`. `docs/WORK_LOG.md` is the chronological evidence log.
+> Start at the canonical Live Handoff URL, then read this repository handoff set.
 
-## Current authority
+## Canonical continuation link
+
+- https://vial1307.github.io/restaurant-management-system-demo/handoff.html
+
+This public page determines the latest open PR, branch/head SHA, changed files, recent commits and CI. When an active PR exists, it is newer work authority than stale branch strings in older log sections.
+
+## Current production authority
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #783 / run `35475816625`.
-- Verified production SHA: `5bc9d92e878510c0646acced2b8070750778529c`.
+- Verified production release: Deploy Kitchen OS to VPS #786 / run `35482680596`.
+- Verified production SHA: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
-- Post-deploy Inventory Site Production Audit #40 / run `35476066953`: PASS.
-- Cross-site violations: 0.
-- Hidden item/location/default violations: 0.
-- Production quantities unchanged by the catalog-authority release:
-  - central: 71
-  - fuxing: 1792
-  - yongji: 6
+- Inventory Site Production Audit #44 / run `35482912054`: PASS.
 
 ## DONE
 
-- Schema 023 repaired inactive-item hidden stock.
+- Schema 023 protects item archive integrity.
 - Schema 024 protects location lifecycle and receive-default routing.
-- Catalog sync is metadata/location-association only; it no longer overwrites quantity/minimum.
-- Product-modal stock changes use dedicated stocktake/minimum APIs.
-- Existing physical quantity runtime writes all have transaction history.
+- Catalog sync no longer writes physical quantity/minimum.
+- Product stock changes use dedicated stocktake/minimum APIs.
+- Super Admin generic `inventory-products` CRUD is metadata-only; create/archive/active lifecycle is blocked there.
+- PR #126 lifecycle hardening is deployed in production #786.
 
-## IN PROGRESS — Super Admin inventory lifecycle hardening
+## IN PROGRESS — Live GitHub & Handoff
 
 Branch:
 
-- `fix/super-admin-inventory-lifecycle-20260920`
+- `feat/live-github-handoff-20260920`
+
+Goal:
+
+- VPS Super Admin discovers current work directly from GitHub;
+- latest open PR supplies current branch/head/fix body;
+- changed files and commit chain are shown automatically;
+- CI is filtered to exact PR head SHA;
+- production release/schema remain runtime-derived;
+- one stable public URL is the continuation entry for dev/chat handoff.
+
+Files:
+
+- `vps/backend/src/github-handoff.mjs`
+- `vps/backend/src/super-admin-routes.mjs`
+- `src/admin-panel.js`
+- `handoff.html`
+- `tests/live-handoff-contract-regression.mjs`
 
 Schema change:
 
 - none; remains `024`.
 
-Confirmed gap:
-
-- generic Super Admin `inventory-products` CRUD could create active inventory items with no stock/storage association;
-- generic active toggle/reactivation could bypass Inventory lifecycle;
-- generic archive bypassed dedicated cleanup of stock associations and receive-default routing.
-
-Candidate behavior:
-
-- generic inventory dataset is metadata-only;
-- create disabled;
-- archive disabled;
-- `active` not editable;
-- existing metadata remains editable;
-- backend exposes lifecycle policy to frontend;
-- frontend hides unsupported lifecycle controls;
-- dynamic/static regression enforce the boundary.
-
 ## NEXT
 
-1. Run full CI.
-2. Merge only after Super Admin API/browser + full release regression pass.
-3. Deploy exact tested commit; schema remains 024.
-4. Confirm production UI smoke and Inventory Site Production Audit remain clean.
-5. Audit minimum-change history/audit semantics and remaining non-quantity inventory mutations.
+1. Run full CI for Live Handoff.
+2. Verify Super Admin API/browser still passes with deterministic CI fallback.
+3. Verify public `handoff.html` is published by GitHub Pages after merge.
+4. Deploy exact tested commit and verify `#development` shows live PR/main state correctly.
+5. Start a separate inventory minimum-history slice; do not mix it into this PR.
 
 ## BLOCKED
 
 - No production data blocker.
-- Do not re-enable generic inventory create/archive/active lifecycle in Data Tables & CRUD.
+- Do not expose credentials/secrets in Live Handoff.
+- Do not make CI depend on GitHub API availability.
