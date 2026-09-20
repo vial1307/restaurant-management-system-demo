@@ -508,8 +508,8 @@ limit 80;
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "024" ]]; then
-  echo "ERROR: schema version ${schema} is older than 024"
+if [[ "${schema}" < "025" ]]; then
+  echo "ERROR: schema version ${schema} is older than 025"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
@@ -518,6 +518,9 @@ fi
 inventory_site_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
 inventory_archive_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_archive_guard','inventory_stock_active_item_guard')")"
 inventory_location_integrity_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_locations_archive_guard','inventory_stock_active_location_guard','inventory_receive_defaults_active_location_guard')")"
+inventory_units_table="$(scalar "select count(*) from information_schema.tables where table_schema='public' and table_name='inventory_units'")"
+inventory_units_active="$(scalar "select count(*) from public.inventory_units where active=true")"
+inventory_units_fk="$(scalar "select count(*) from pg_constraint where conname='inventory_items_unit_fkey' and conrelid='public.inventory_items'::regclass and confrelid='public.inventory_units'::regclass")"
 if [[ "${inventory_site_triggers}" != "3" ]]; then
   echo "ERROR: expected 3 inventory site-isolation triggers, found ${inventory_site_triggers}"
   errors=$((errors+1))
@@ -537,6 +540,27 @@ if [[ "${inventory_location_integrity_triggers}" != "3" ]]; then
   errors=$((errors+1))
 else
   echo "OK: inventory location-integrity triggers = 3"
+fi
+
+if [[ "${inventory_units_table}" != "1" ]]; then
+  echo "ERROR: inventory_units master table is missing"
+  errors=$((errors+1))
+else
+  echo "OK: inventory_units master table exists"
+fi
+
+if [[ "${inventory_units_active}" -lt "1" ]]; then
+  echo "ERROR: inventory_units has no active unit"
+  errors=$((errors+1))
+else
+  echo "OK: active inventory units = ${inventory_units_active}"
+fi
+
+if [[ "${inventory_units_fk}" != "1" ]]; then
+  echo "ERROR: inventory_items.unit is not protected by inventory_units FK"
+  errors=$((errors+1))
+else
+  echo "OK: inventory_items unit FK = 1"
 fi
 
 revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"
