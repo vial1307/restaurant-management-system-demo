@@ -12,11 +12,11 @@ This public page determines the latest open PR, branch/head SHA, changed files, 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #786 / run `35482680596`.
-- Verified production SHA: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`.
+- Verified production release: Deploy Kitchen OS to VPS #789 / run `35495483199`.
+- Verified production SHA: `19feaa88744939eba6c6b28cdcc57b290ad72029`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
-- Inventory Site Production Audit #44 / run `35482912054`: PASS.
+- Inventory Site Production Audit #47 / run `35495707381`: PASS.
 
 ## DONE
 
@@ -27,20 +27,19 @@ This public page determines the latest open PR, branch/head SHA, changed files, 
 - Super Admin generic `inventory-products` CRUD is metadata-only; create/archive/active lifecycle is blocked there.
 - PR #126 lifecycle hardening is deployed in production #786.
 
-## IN PROGRESS — Live GitHub & Handoff
+## IN PROGRESS — Live Handoff main/release evidence patch
 
 Branch:
 
-- `feat/live-github-handoff-20260920`
+- `fix/live-handoff-main-release-evidence-20260920`
 
 Goal:
 
-- VPS Super Admin discovers current work directly from GitHub;
-- latest open PR supplies current branch/head/fix body;
-- changed files and commit chain are shown automatically;
-- CI is filtered to exact PR head SHA;
-- production release/schema remain runtime-derived;
-- one stable public URL is the continuation entry for dev/chat handoff.
+- keep the already-deployed live PR handoff behavior;
+- when no PR is open, hydrate main SHA, main commit chain and CI instead of an empty fallback;
+- derive release milestone SHA from the running VPS;
+- match Deploy/Audit evidence to the exact runtime SHA when available;
+- keep the public one-link page useful between workstreams.
 
 Files:
 
@@ -56,11 +55,11 @@ Schema change:
 
 ## NEXT
 
-1. Run full CI for Live Handoff.
-2. Verify Super Admin API/browser still passes with deterministic CI fallback.
-3. Verify public `handoff.html` is published by GitHub Pages after merge.
-4. Deploy exact tested commit and verify `#development` shows live PR/main state correctly.
-5. Start a separate inventory minimum-history slice; do not mix it into this PR.
+1. Run full CI for the main/release evidence patch.
+2. Deploy exact tested commit.
+3. Confirm public Live Handoff shows main SHA/CI when no PR is open.
+4. Confirm Super Admin release milestone matches runtime SHA instead of a stale static release.
+5. Start a separate inventory minimum-history slice.
 
 ## BLOCKED
 
