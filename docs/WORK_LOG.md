@@ -591,3 +591,65 @@ Implemented candidate behavior:
 - dynamic regression proves minimum-only location removal is blocked.
 
 No schema migration is required; schema remains 024.
+
+
+## 2026-09-20 — Release #783 and Super Admin inventory lifecycle audit
+
+### Release #783
+
+PR #125 merged as `5bc9d92e878510c0646acced2b8070750778529c`.
+
+Deploy #783 / run `35475816625` passed:
+
+- full static regression;
+- API/inventory regression including catalog stock-authority tests;
+- PostgreSQL concurrency;
+- desktop/mobile Chromium;
+- workforce/browser regressions;
+- full-device cross-browser;
+- exact tested commit deploy;
+- server-side backup `kitchen_os_20260919T232353Z.dump`;
+- schema 024 verifier;
+- DATA_INTEGRITY_OK;
+- production UI smoke.
+
+Post-deploy Inventory Site Production Audit #40 / run `35476066953`:
+
+- schema 024;
+- central quantity 71;
+- fuxing quantity 1792;
+- yongji quantity 6;
+- stock-site mismatch = 0;
+- receive-default mismatch = 0;
+- inactive item/location quantity/minimum = 0;
+- invalid receive-default checks = 0;
+- duplicate active catalog/site = 0;
+- active item missing stock/storage = 0;
+- hidden/site integrity violations = 0;
+- exact release match PASS.
+
+### Super Admin lifecycle gap
+
+Runtime inventory write scan found physical quantity paths are now transaction-backed.
+The next bypass was generic Super Admin `inventory-products` CRUD:
+
+- could create active item rows without storage association;
+- exposed `active` lifecycle toggle;
+- exposed generic archive instead of dedicated Inventory archive cleanup.
+
+Created branch:
+
+- `fix/super-admin-inventory-lifecycle-20260920`
+
+Candidate changes:
+
+- remove `active` from generic editable inventory fields;
+- disable generic inventory create;
+- disable generic inventory archive;
+- return `allowCreate=false`, `allowArchive=false`, `lifecycleManaged=true`;
+- frontend hides create/archive and explains Inventory owns lifecycle;
+- existing item metadata remains editable;
+- dynamic API regression covers create/active/archive denial + metadata edit;
+- static contract prevents future lifecycle re-exposure.
+
+No schema migration is required.

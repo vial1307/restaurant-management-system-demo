@@ -70,12 +70,12 @@ try {
   assert.equal(development.data.repository.name, "vial1307/restaurant-management-system-demo");
   assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
   assert.equal(development.data.status, "stable");
-  assert.equal(development.data.current_work.branch, "fix/inventory-catalog-sync-stock-authority-20260920");
+  assert.equal(development.data.current_work.branch, "fix/super-admin-inventory-lifecycle-20260920");
   assert.equal(development.data.current_work.candidate_schema, "024");
   assert.equal(development.data.runtime.schema.version, "024");
   assert.equal(development.data.live_production.schema, "024");
   assert.equal(development.data.release_evidence.schema, "024");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35459291983");
+  assert.equal(development.data.release_evidence.workflow_run_id, "35475816625");
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
   assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
 
@@ -201,7 +201,100 @@ try {
   assert.equal(archiveAnnouncement.response.status, 200, JSON.stringify(archiveAnnouncement.data));
   assert.equal(archiveAnnouncement.data.row.status, "archived");
 
-  const menuSeed = await DB.query(
+  const inventoryLocation = await DB.query(
+    "select id from public.inventory_locations where site='fuxing' and kind='storage' and active=true order by sort_order,code limit 1"
+  );
+  assert.equal(inventoryLocation.rowCount,1,"Fuxing storage fixture missing for Super Admin inventory lifecycle regression");
+
+  const inventorySeed = await DB.query(
+    `insert into public.inventory_items(
+       item_key,catalog_key,name_vi,name_zh_tw,unit,work_area,storage_only,active
+     ) values(
+       'fuxing:super-admin-lifecycle-regression',
+       'super-admin-lifecycle-regression',
+       'Nguyên liệu lifecycle regression',
+       '庫存生命週期回歸',
+       '包','noodles',true,true
+     )
+     on conflict(item_key) do update set
+       name_vi=excluded.name_vi,
+       name_zh_tw=excluded.name_zh_tw,
+       unit=excluded.unit,
+       work_area=excluded.work_area,
+       storage_only=excluded.storage_only,
+       active=true,
+       updated_at=now()
+     returning id`
+  );
+  const inventoryId=inventorySeed.rows[0].id;
+  await DB.query(
+    `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+     values($1,$2,0,0)
+     on conflict(item_id,location_id) do update
+     set quantity=0,minimum_quantity=0,updated_at=now()`,
+    [inventoryId,inventoryLocation.rows[0].id]
+  );
+
+  const inventoryTable = await request(
+    "/api/admin/super/data/inventory-products?q=super-admin-lifecycle-regression&page=1&pageSize=10&sort=updated_at&direction=desc",
+    { cookie:owner.cookie }
+  );
+  assert.equal(inventoryTable.response.status,200,JSON.stringify(inventoryTable.data));
+  assert.equal(inventoryTable.data.allowCreate,false);
+  assert.equal(inventoryTable.data.allowArchive,false);
+  assert.equal(inventoryTable.data.lifecycleManaged,true);
+  assert(!inventoryTable.data.editable.includes("active"),"generic inventory CRUD must not expose active lifecycle edits");
+  const inventoryRow=inventoryTable.data.rows.find((row)=>row.id===inventoryId);
+  assert(inventoryRow,"seeded inventory row missing from Super Admin dataset");
+
+  const createInventory = await request("/api/admin/super/data/inventory-products",{
+    method:"POST",cookie:owner.cookie,
+    body:{action:"save",values:{
+      item_key:"fuxing:generic-create-must-fail",
+      catalog_key:"generic-create-must-fail",
+      name_vi:"Không được tạo",
+      name_zh_tw:"不可建立",
+      unit:"包",
+      work_area:"noodles",
+      storage_only:true
+    }},
+  });
+  assert.equal(createInventory.response.status,409,JSON.stringify(createInventory.data));
+  assert.equal(createInventory.data.error,"ADMIN_INVENTORY_LIFECYCLE_MANAGED");
+
+  const activateToggle = await request("/api/admin/super/data/inventory-products",{
+    method:"POST",cookie:owner.cookie,
+    body:{action:"save",id:inventoryId,expectedRevision:inventoryRow.row_revision,values:{active:false}},
+  });
+  assert.equal(activateToggle.response.status,400,JSON.stringify(activateToggle.data));
+  assert.equal(activateToggle.data.error,"ADMIN_FIELD_NOT_ALLOWED");
+  assert.equal(activateToggle.data.field,"active");
+
+  const archiveInventory = await request("/api/admin/super/data/inventory-products",{
+    method:"POST",cookie:owner.cookie,
+    body:{action:"archive",id:inventoryId,expectedRevision:inventoryRow.row_revision},
+  });
+  assert.equal(archiveInventory.response.status,400,JSON.stringify(archiveInventory.data));
+  assert.equal(archiveInventory.data.error,"ADMIN_ARCHIVE_NOT_ALLOWED");
+
+  const updateInventoryMetadata = await request("/api/admin/super/data/inventory-products",{
+    method:"POST",cookie:owner.cookie,
+    body:{
+      action:"save",
+      id:inventoryId,
+      expectedRevision:inventoryRow.row_revision,
+      values:{name_vi:"Nguyên liệu lifecycle regression đã sửa",unit:"袋"}
+    },
+  });
+  assert.equal(updateInventoryMetadata.response.status,200,JSON.stringify(updateInventoryMetadata.data));
+  assert.equal(updateInventoryMetadata.data.row.name_vi,"Nguyên liệu lifecycle regression đã sửa");
+  assert.equal(updateInventoryMetadata.data.row.unit,"袋");
+  assert.equal(updateInventoryMetadata.data.row.active,true);
+
+  await DB.query("delete from public.inventory_stock where item_id=$1",[inventoryId]);
+  await DB.query("delete from public.inventory_items where id=$1",[inventoryId]);
+
+    const menuSeed = await DB.query(
     `insert into public.menu_items(site_code,item_code,name_vi,name_zh_tw,category,work_area,price,currency_code,active,metadata)
      values('fuxing','super-regression-menu','Món Regression','回歸菜品','test','noodles',120,'TWD',true,'{}'::jsonb)
      on conflict(site_code,item_code) do update set price=excluded.price,name_vi=excluded.name_vi,name_zh_tw=excluded.name_zh_tw,active=true,updated_at=now()\n     returning id,revision`
