@@ -188,45 +188,68 @@ function renderDevelopment() {
   const d=state.developmentStatus;
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
   const work=d.current_work||{}; const incident=work.resolved_incident||{}; const live=d.live_production||{}; const evidence=d.release_evidence||{}; const runtime=d.runtime||{}; const repo=d.repository||{};
-  const pr=work.pull_request;
+  const liveGit=d.live_github||{}; const pr=liveGit.active_pr||work.pull_request||null; const canonical=d.canonical_handoff||{};
   const status=String(d.status||"unknown").toLowerCase();
-  return `<section class="sa-two-col sa-dev-summary">
+  const liveState=liveGit.available?(liveGit.stale?"STALE":"LIVE"):"FALLBACK";
+  const workflowRows=(liveGit.workflows||[]).slice(0,12);
+  const commitRows=(liveGit.commits||[]).slice(0,8);
+  const canonicalUrl=canonical.url||liveGit.canonical_url||"";
+  return `<article class="sa-card">
+    <div class="sa-card-head"><div><h2>One-link Handoff · 單一交接連結</h2><p>Dev khác hoặc chat mới chỉ cần mở link này. Trang sẽ tự tìm PR/branch/head SHA/CI hiện tại.</p></div><span class="sa-pill ${liveGit.available?"ok":"off"}">${esc(liveState)}</span></div>
+    <div class="sa-row-actions">
+      ${canonicalUrl?`<button class="sa-btn primary" type="button" data-copy-handoff data-handoff-url="${esc(safeHref(canonicalUrl))}">Copy handoff link</button>`:""}
+      ${canonicalUrl?devLink(canonicalUrl,"Mở Live Handoff","Canonical entry / dev + chat mới"):""}
+      ${repo.pulls_url?devLink(repo.pulls_url,"Open Pull Requests","Fallback nếu live feed tạm lỗi"):""}
+    </div>
+    <p class="sa-dev-note">${esc(canonical.purpose||"")}</p>
+  </article>
+  <section class="sa-two-col sa-dev-summary">
     <article class="sa-card"><div class="sa-card-head"><div><h2>Công việc hiện tại · Current work</h2><p>${esc(d.headline||"")}</p></div><span class="sa-pill ${status==="blocked"?"off":"ok"}">${esc(String(d.status||"UNKNOWN").toUpperCase())}</span></div>
       <div class="sa-kv-grid">
         <div><small>Phase</small><strong>${esc(d.phase||"—")}</strong></div>
-        <div><small>Updated</small><strong>${esc(d.updated_at||"—")}</strong></div>
+        <div><small>GitHub refresh</small><strong>${esc(liveGit.generated_at||d.updated_at||"—")}</strong></div>
         <div><small>Branch</small><strong class="mono">${esc(work.branch||"—")}</strong></div>
+        <div><small>Head SHA</small><strong class="mono">${esc(String(pr?.head_sha||"").slice(0,12)||"—")}</strong></div>
         <div><small>${status==="stable"?"Current schema":"Candidate schema"}</small><strong>${esc(work.candidate_schema||runtime.schema?.version||"—")}</strong></div>
+        <div><small>PR</small><strong>${pr?.number?`#${esc(pr.number)}`:"—"}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
-        ${devLink(work.url,status==="stable"?"Mở main hiện tại":"Mở branch đang làm",status==="stable"?"Production source / main":"Code hiện tại / current work")}
-        ${pr?.url?devLink(pr.url,`PR #${pr.number||""}`,"Pull request hiện tại"):""}
+        ${devLink(work.url,status==="stable"?"Mở main hiện tại":"Mở công việc đang làm",status==="stable"?"Production source / main":"PR/branch hiện tại")}
+        ${pr?.url?devLink(pr.url,`PR #${pr.number||""}`,pr.title||"Pull request hiện tại"):""}
         ${work.baseline_main_url?devLink(work.baseline_main_url,status==="stable"?"Live commit":"Main baseline",String(work.baseline_main_sha||live.release||"").slice(0,12)):""}
         ${incident.failed_url?devLink(incident.failed_url,"Incident đã xử lý",incident.failed_run_id?`run ${incident.failed_run_id}`:""):""}
       </div>
     </article>
-    <article class="sa-card"><div class="sa-card-head"><div><h2>Live production · Production hiện tại</h2><p>Release và schema lấy trực tiếp từ runtime đang phục vụ request.</p></div></div>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Live production · Production hiện tại</h2><p>Release/schema lấy trực tiếp runtime; current work lấy từ GitHub live.</p></div></div>
       <div class="sa-kv-grid">
         <div><small>Live release</small><strong class="mono">${esc(live.release||runtime.release||"—")}</strong></div>
         <div><small>Live schema</small><strong>${esc(live.schema||runtime.schema?.version||"—")}</strong></div>
         <div><small>Release milestone</small><strong class="mono">${esc(String(evidence.milestone_sha||"").slice(0,12)||"—")}</strong></div>
-        <div><small>Milestone schema</small><strong>${esc(evidence.schema||"—")}</strong></div>
+        <div><small>Inventory audit</small><strong>${esc(evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:"—")}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
         ${live.commit_url?devLink(live.commit_url,"Live release commit",live.release||""):""}
         ${evidence.url?devLink(evidence.url,"Release evidence",evidence.workflow_run_id?`run ${evidence.workflow_run_id}`:""):""}
+        ${evidence.inventory_audit_url?devLink(evidence.inventory_audit_url,"Inventory production audit",evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:""):""}
         ${devLink(repo.actions_url,"GitHub Actions","CI / deploy / audit")}
-        ${devLink(repo.url,"Repository","Source of truth")}
       </div>
       <p class="sa-dev-note">${esc(live.note||evidence.note||"")}</p>
     </article>
   </section>
   <section class="sa-two-col">
-    <article class="sa-card"><div class="sa-card-head"><div><h2>Code dừng ở đâu · Exact stopping point</h2><p>Dùng phần này để dev tiếp theo biết chính xác phải mở file nào và tiếp tục từ bước nào.</p></div></div>
-      <div class="sa-dev-stop"><strong>${esc(work.stopping_point||"—")}</strong><p>${esc(incident.resolution||"")}</p></div>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Fix / stopping point hiện tại</h2><p>Nội dung này lấy từ PR body khi có PR mở; không còn phải sửa branch string thủ công trên VPS.</p></div></div>
+      <div class="sa-dev-stop"><strong>${esc(pr?.title||d.headline||"—")}</strong><p>${esc(work.stopping_point||"—")}</p></div>
       <div class="sa-code-list">${(work.code_focus||[]).map((path)=>`<code>${esc(path)}</code>`).join("")||"<span>—</span>"}</div>
     </article>
-    <article class="sa-card"><div class="sa-card-head"><div><h2>Việc tiếp theo · Next steps</h2><p>Thứ tự ưu tiên để không bỏ qua release gate.</p></div></div>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Git commit chain</h2><p>Commit gần nhất của head PR hiện tại.</p></div></div>
+      <div class="sa-list">${commitRows.map((row)=>`<div class="sa-list-row"><div><strong class="mono">${esc(row.short_sha||String(row.sha||"").slice(0,12))}</strong><small>${esc(row.message||"")}</small></div>${row.url?`<a class="sa-link" href="${esc(safeHref(row.url))}" target="_blank" rel="noreferrer">Mở</a>`:""}</div>`).join("")||`<div class="sa-empty">Không có commit chain live; dùng CURRENT_HANDOFF.md làm fallback.</div>`}</div>
+    </article>
+  </section>
+  <section class="sa-two-col">
+    <article class="sa-card"><div class="sa-card-head"><div><h2>CI của head hiện tại</h2><p>Chỉ hiển thị workflow có đúng head SHA của PR.</p></div></div>
+      <div class="sa-list">${workflowRows.map((row)=>{const ok=row.status==="completed"&&row.conclusion==="success";const stateText=`${row.status||"unknown"} / ${row.conclusion||"pending"}`;return `<div class="sa-list-row"><div><strong>${esc(row.name||"workflow")} #${esc(row.run_number||"")}</strong><small>${esc(stateText)}</small></div><span class="sa-pill ${ok?"ok":row.status==="completed"?"off":""}">${esc(row.conclusion||row.status||"pending")}</span></div>`;}).join("")||`<div class="sa-empty">Chưa có CI live cho head hiện tại hoặc GitHub feed đang fallback.</div>`}</div>
+    </article>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>Việc tiếp theo · Next steps</h2><p>Fallback workboard khi PR body chưa mô tả đủ bước kế tiếp.</p></div></div>
       <ol class="sa-dev-steps">${(d.next_steps||[]).map((step)=>`<li>${esc(step)}</li>`).join("")}</ol>
     </article>
   </section>
@@ -392,6 +415,7 @@ async function switchSection(section) {
 function bind() {
   root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
   root.querySelector("[data-refresh]")?.addEventListener("click",()=>void refreshCurrent()); root.querySelector("[data-toggle-nav]")?.addEventListener("click",()=>root.classList.toggle("nav-open"));
+  root.querySelector("[data-copy-handoff]")?.addEventListener("click",async(event)=>{const button=event.currentTarget;const url=String(button.dataset.handoffUrl||"");if(!url)return;try{await navigator.clipboard.writeText(url);button.textContent="Đã copy ✓";}catch{window.prompt("Copy handoff link:",url);}});
   root.querySelector("[data-user-new]")?.addEventListener("click",()=>openUserEditor()); root.querySelectorAll("[data-user-edit]").forEach((b)=>b.addEventListener("click",()=>openUserEditor(state.users.find((u)=>u.id===b.dataset.userEdit))));
   root.querySelectorAll("[data-user-delete]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Archive user này?"))return;try{await api(`/api/admin/users/${encodeURIComponent(b.dataset.userDelete)}`,{method:"DELETE"});state.success="Đã archive user.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
   root.querySelectorAll("[data-open-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.openDataset;state.data.page=1;state.data.result=null;await switchSection("data");await loadDataset();if(b.hasAttribute("data-new-row"))openDataEditor();}));
