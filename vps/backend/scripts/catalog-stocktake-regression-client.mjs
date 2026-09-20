@@ -211,7 +211,7 @@ const seededMinimumHistory=protectedMinimumHistory.data.transactions.find(
 );
 assert(seededMinimumHistory,"minimum change did not appear in inventory history");
 assert.equal(seededMinimumHistory.destination_location_id,freezer.id);
-assert.equal(seededMinimumHistory.actor_username,supervisorUser);
+assert.equal(seededMinimumHistory.actor_username,"supervisorfx");
 
 const removeProtectedLocation=await request("/api/inventory/catalog/sync",{
   method:"POST",
