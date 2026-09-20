@@ -790,3 +790,75 @@ Candidate implementation:
 - cloud history maps these rows to direction `minimum`;
 - UI renders `標準量調整 / Điều chỉnh định mức` and before/after;
 - dynamic regression validates change/no-op/clear history.
+
+
+## 2026-09-20 — Minimum history production #793 and receive-default audit continuation
+
+### Minimum history production verification
+
+PR #129 merged as:
+
+- `ccef35dad7027808d60b3a691925fbebc29b9eb4`.
+
+Deploy Kitchen OS to VPS #793 / run `35496998332`:
+
+- preflight/static: PASS;
+- API/inventory regression: PASS;
+- PostgreSQL concurrency: PASS;
+- desktop/mobile Chromium: PASS;
+- workforce/browser regression: PASS;
+- full-device cross-browser: PASS;
+- backup: `kitchen_os_20260920T073331Z.dump`;
+- schema 024: PASS;
+- item archive-integrity triggers = 2;
+- location-integrity triggers = 3;
+- DATA_INTEGRITY_OK;
+- Web/API/Super Admin edge healthy;
+- production UI smoke: PASS;
+- exact release: `ccef35d`.
+
+GitHub Pages #928: PASS.
+
+Inventory Site Production Audit #51 / run `35497249172`:
+
+- first attempt: FAILED before SQL execution because SSH connection was reset by peer;
+- same audit job rerun without code/data changes: PASS;
+- schema 024;
+- all cross-site / hidden inventory structural counters = 0;
+- exact release `ccef35d` PASS.
+
+### Receive-default audit defect
+
+Created branch:
+
+- `fix/inventory-receive-default-audit-20260920`.
+
+Existing behavior:
+
+- `inventory_receive_defaults` stored only latest `location_id`, `updated_by`, `updated_at`;
+- update replaced prior state;
+- delete removed the row;
+- direct configuration changes had no durable before/after history.
+
+Candidate implementation:
+
+- use `withTransaction`;
+- take a transaction advisory lock per `site + catalogKey`;
+- lock current receive-default row when present;
+- validate destination storage configuration inside the transaction;
+- suppress no-op set and no-op delete;
+- create `audit_logs` row only for real create/update/delete;
+- action: `inventory_receive_default_change`;
+- entity: `inventory_receive_default`, id `site:catalogKey`;
+- before/after store location id/code;
+- metadata stores catalog key and operation.
+
+Dynamic API regression:
+
+- dedicated two-location item;
+- create -> audit;
+- same-location save -> no audit;
+- update -> audit;
+- delete -> audit;
+- second delete -> no audit;
+- Super Admin Audit endpoint must return exactly three matching rows.
