@@ -13,7 +13,7 @@ const client = new Client({
 await client.connect();
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"024","schema 024 must be active");
+  assert.equal(schema.rows[0]?.version,"025","schema 025 must be active");
 
   const item=await client.query(
     `insert into public.inventory_items(
