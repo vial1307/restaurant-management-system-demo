@@ -10,9 +10,10 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `5bc9d92e878510c0646acced2b8070750778529c`
+- Current verified production SHA: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`
 - Production URL: `https://82.47.180.185.nip.io`
-- Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
+- Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
+- Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
 - Production database schema: PostgreSQL migrations through schema 024.
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
 - Browser localStorage is cache/UI state only; it is not an authoritative shared inventory/business database.
@@ -21,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #783
-- Run ID: `35475816625`
-- Tested/deployed commit: `5bc9d92e878510c0646acced2b8070750778529c`
+- Workflow: Deploy Kitchen OS to VPS #786
+- Run ID: `35482680596`
+- Tested/deployed commit: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -35,7 +36,7 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- Post-deploy Inventory Site Production Audit: PASS
+- Post-deploy Inventory Site Production Audit #44 / run `35482912054`: PASS
 
 Production audit after schema 022:
 
@@ -647,3 +648,52 @@ Required invariant:
 - backend must enforce the same policy even if called directly.
 
 After this slice, continue with minimum-change history/audit semantics and remaining non-quantity inventory mutations.
+
+
+## 2026-09-20 — Live GitHub & Handoff workstream
+
+Production baseline before this workstream:
+
+- release: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`;
+- Deploy Kitchen OS to VPS #786 / run `35482680596`: PASS;
+- schema: `024`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #44 / run `35482912054`: PASS.
+
+Active branch:
+
+- `feat/live-github-handoff-20260920`
+- schema change: none.
+
+### Handoff authority change
+
+The canonical entry point for another developer or a new ChatGPT conversation is:
+
+- `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
+
+Expected continuation order:
+
+1. Open the canonical Live Handoff URL.
+2. Read the active PR title/body, branch, head SHA, changed files and CI shown there.
+3. Read `docs/CURRENT_HANDOFF.md`.
+4. Read `docs/WORK_LOG.md`.
+5. Read `docs/DEVELOPMENT_RULES.md`.
+6. Continue only from the active PR/head shown by Live Handoff.
+
+The VPS Super Admin `GitHub & Handoff` section now has a server-side live GitHub feed design:
+
+- latest open PR becomes current work automatically;
+- current branch/head SHA come from GitHub;
+- PR body becomes the current fix/stopping-point description;
+- changed files become code focus;
+- recent commits form the current development chain;
+- workflow runs are filtered to the exact active PR head SHA;
+- production release/schema still come directly from the running VPS;
+- GitHub metadata is cached briefly and falls back safely if GitHub is unavailable;
+- GitHub Actions CI uses deterministic fallback so tests do not depend on external API availability.
+
+The public `handoff.html` page is intentionally limited to public repository metadata. It contains no VPS credential, database secret, SSH key or private operational data.
+
+### Next known work after Live Handoff
+
+The next inventory integrity slice already identified is `set-minimum` history/audit semantics: minimum changes currently update `inventory_stock.minimum_quantity` but do not create an `inventory_transactions`/audit history record. Do not mix that fix into the Live Handoff PR.
