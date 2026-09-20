@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`
+- Current verified production SHA: `5bc9d92e878510c0646acced2b8070750778529c`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html`
 - Production database schema: PostgreSQL migrations through schema 024.
@@ -21,9 +21,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #776
-- Run ID: `35459291983`
-- Tested/deployed commit: `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`
+- Workflow: Deploy Kitchen OS to VPS #783
+- Run ID: `35475816625`
+- Tested/deployed commit: `5bc9d92e878510c0646acced2b8070750778529c`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -230,7 +230,7 @@ Never bypass the release gates to push a fix directly to production.
 When resuming work:
 1. Fetch current `main` HEAD and read the live release/schema shown in Super Admin GitHub/Handoff.
 2. Check the newest `Deploy Kitchen OS to VPS` run before treating a newer commit as production.
-3. Current verified production baseline is #776 / `d3d5f4e73d4c5fd6f2f4f3971066f4d7e31497d2`, schema `024`.
+3. Current verified production baseline is #783 / `5bc9d92e878510c0646acced2b8070750778529c`, schema `024`.
 4. Re-test storage relocation and cross-site switching if any inventory code changes.
 5. Finish warehouse-switch UX feedback first; then continue normalized-domain/database redesign from the schema-022 green baseline, one domain at a time.
 6. Update this file, `docs/STATUS.md` and `docs/WORK_LOG.md` at the end of the next substantial work session.
@@ -597,3 +597,53 @@ Required invariant:
 - protected omitted locations return conflict rather than silently losing configuration.
 
 Historical quantity changes performed through the old catalog path cannot be reconstructed reliably because that path did not emit inventory transactions. Do not guess corrective stock values; current physical quantities must be validated by normal stocktake if operationally questioned.
+
+
+## 2026-09-20 — Release #783 catalog authority verified; Super Admin lifecycle gap
+
+Release #783 is the verified production baseline.
+
+Evidence:
+
+- commit: `5bc9d92e878510c0646acced2b8070750778529c`;
+- Deploy Kitchen OS to VPS #783 / run `35475816625`;
+- server backup: `kitchen_os_20260919T232353Z.dump`;
+- schema remains `024`;
+- preflight/API/concurrency/browser/full-device: PASS;
+- production UI smoke: PASS;
+- `DATA_INTEGRITY_OK`;
+- Inventory Site Production Audit #40 / run `35476066953`: PASS;
+- exact release: `5bc9d92`.
+
+Production inventory totals remained unchanged:
+
+- central: 71;
+- fuxing: 1792;
+- yongji: 6.
+
+All audited structural violations remain zero.
+
+### Next integrity gap
+
+Super Admin Data Tables & CRUD exposed `inventory-products` as a generic lifecycle dataset.
+
+Although `item_key` and `catalog_key` are create-only, generic CRUD could still:
+
+- create an active inventory item without any stock/storage association;
+- toggle `active` outside Inventory lifecycle;
+- archive an item without the dedicated cleanup of zero stock associations and receive-default routing.
+
+Active branch:
+
+- `fix/super-admin-inventory-lifecycle-20260920`
+- schema change: none
+
+Required invariant:
+
+- Super Admin generic CRUD may inspect and edit safe metadata for an existing inventory item;
+- item create/reactivate/archive belongs only to Inventory lifecycle APIs;
+- `active` is not a generic editable field;
+- frontend must not show create/archive controls for `inventory-products`;
+- backend must enforce the same policy even if called directly.
+
+After this slice, continue with minimum-change history/audit semantics and remaining non-quantity inventory mutations.
