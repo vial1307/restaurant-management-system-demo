@@ -7,6 +7,7 @@ import {
   vpsInventorySites,
   vpsMasterData,
   vpsReceiveDefaults,
+  vpsSaveInventoryEditor,
   vpsSchemaVersion,
   vpsSetMinimum,
   vpsSetQuantity,
@@ -24,6 +25,7 @@ import {
   inventorySiteForLocationCode,
   inventorySites,
   inventoryUiGroups,
+  inventoryUnits,
   inventoryWorkLocation,
   isBranchInventorySite,
   isKnownInventorySite,
@@ -352,6 +354,19 @@ function catalogKey(label) {
 
 export function inventoryCatalogKey(label) {
   return catalogKey(label);
+}
+
+export function inventoryUnitOptions(site = currentSite()) {
+  return inventoryUnits(site).map((unit) => ({
+    code:String(unit.code || ""),
+    zh:String(unit.name_zh_tw || unit.code || ""),
+    vi:String(unit.name_vi || unit.name_zh_tw || unit.code || ""),
+  })).filter((unit) => unit.code);
+}
+
+export function createBranchStockKey() {
+  const identifier = globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+  return `stock-${identifier}`;
 }
 
 function localReceiveDefaults() {
@@ -1055,6 +1070,69 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
 
   await syncInventoryNow(site, { reloadBranch: false });
   return { ok: true, changed: changes.length };
+}
+
+export async function cloudSaveBranchInventoryEditor({
+  site = currentSite(),
+  stockKey,
+  item,
+  locations = [],
+  workMinimum = 0,
+  receiveZone = "",
+}) {
+  if (!(await verifyMigration())) {
+    return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
+  }
+  if (!isBranchInventorySite(site) || !stockKey || !canManageBranchCatalog(site)) {
+    return { ok:false,fallback:false,error:new Error("CATALOG_EDIT_NOT_ALLOWED") };
+  }
+
+  const storageLocations = [];
+  for (const entry of Array.isArray(locations) ? locations : []) {
+    const code = branchLocationCode(site,entry.zone);
+    if (!code) {
+      return { ok:false,fallback:false,error:new Error("INVALID_LOCATION") };
+    }
+    storageLocations.push({
+      code,
+      quantity:Math.max(0,Number(entry.quantity) || 0),
+      minimum:Math.max(0,Number(entry.minimum) || 0),
+    });
+  }
+  if (!storageLocations.length) {
+    return { ok:false,fallback:false,error:new Error("INVENTORY_STORAGE_REQUIRED") };
+  }
+
+  const body = {
+    site,
+    item:{
+      key:branchItemKey(site,stockKey),
+      catalog_key:String(item?.catalogKey || catalogKey(item?.label || stockKey)),
+      zh:String(item?.label || stockKey),
+      vi:String(item?.labelVi || item?.label || stockKey),
+      unit:String(item?.unit || ""),
+      work_area:String(item?.workArea || ""),
+      storage_only:Boolean(item?.storageOnly),
+    },
+    locations:storageLocations,
+    stocktake:canDirectInventoryAdjust(),
+    workMinimum:Math.max(0,Number(workMinimum) || 0),
+  };
+
+  if (canManageReceiveDefault(site)) {
+    body.receiveDefaultLocationCode = receiveZone
+      ? branchLocationCode(site,receiveZone)
+      : "";
+  }
+
+  try {
+    const data = await vpsSaveInventoryEditor(body);
+    await syncInventoryNow(site,{reloadBranch:false});
+    return { ok:true,fallback:false,data };
+  } catch (error) {
+    dispatchStatus("error",{error:error.message,stage:"inventory-editor-save"});
+    return { ok:false,fallback:false,error };
+  }
 }
 
 export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true } = {}) {
