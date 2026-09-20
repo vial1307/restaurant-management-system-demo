@@ -16,6 +16,7 @@ import "./system-port-regression.mjs";
 import "./inventory-master-data-regression.mjs";
 import "./inventory-site-isolation-contract-regression.mjs";
 import "./super-admin-inventory-lifecycle-contract-regression.mjs";
+import "./live-handoff-contract-regression.mjs";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");

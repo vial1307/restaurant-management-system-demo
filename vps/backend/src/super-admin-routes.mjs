@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
 import { DEVELOPMENT_STATUS } from "./development-status.mjs";
+import { getLiveGitHubHandoff, PUBLIC_HANDOFF_URL } from "./github-handoff.mjs";
 
 const CODE_RE = /^[a-z][a-z0-9._-]{1,39}$/;
 const DATASETS = {
@@ -703,25 +704,62 @@ export async function registerSuperAdminRoutes(app) {
 
   app.get("/api/admin/super/development-status", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
-    const migration = await pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1");
+    const [migration,liveGithub] = await Promise.all([
+      pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1"),
+      getLiveGitHubHandoff(),
+    ]);
     const schema = migration.rows[0] || null;
     const release = process.env.APP_RELEASE || "dev";
     const repositoryUrl = DEVELOPMENT_STATUS.repository?.url || "https://github.com/vial1307/restaurant-management-system-demo";
     const releaseUrl = release && release !== "dev" ? `${repositoryUrl}/commit/${encodeURIComponent(release)}` : repositoryUrl;
+    const activePr = liveGithub?.active_pr || null;
+    const activeWork = activePr ? {
+      ...DEVELOPMENT_STATUS.current_work,
+      branch:activePr.branch,
+      url:activePr.url || `${repositoryUrl}/tree/${encodeURIComponent(activePr.branch)}`,
+      pull_request:{
+        number:activePr.number,
+        title:activePr.title,
+        url:activePr.url,
+        head_sha:activePr.head_sha,
+        base_sha:activePr.base_sha,
+        updated_at:activePr.updated_at,
+        draft:activePr.draft,
+      },
+      baseline_main_sha:release,
+      baseline_main_url:releaseUrl,
+      candidate_schema:schema?.version || null,
+      stopping_point:activePr.body || activePr.title || DEVELOPMENT_STATUS.current_work?.stopping_point || "",
+      code_focus:(liveGithub.changed_files || []).map((entry) => entry.path).filter(Boolean),
+    } : {
+      ...DEVELOPMENT_STATUS.current_work,
+      branch:"main",
+      url:`${repositoryUrl}/tree/main`,
+      pull_request:null,
+      baseline_main_sha:release,
+      baseline_main_url:releaseUrl,
+      candidate_schema:schema?.version || null,
+    };
     return {
       ...DEVELOPMENT_STATUS,
-      current_work:{
-        ...DEVELOPMENT_STATUS.current_work,
-        baseline_main_sha:release,
-        baseline_main_url:releaseUrl,
-        candidate_schema:schema?.version || null,
+      updated_at:liveGithub?.generated_at || DEVELOPMENT_STATUS.updated_at,
+      phase:activePr ? "live-github-pr" : DEVELOPMENT_STATUS.phase,
+      status:activePr ? "in_progress" : DEVELOPMENT_STATUS.status,
+      headline:activePr
+        ? `PR #${activePr.number}: ${activePr.title}`
+        : DEVELOPMENT_STATUS.headline,
+      canonical_handoff:{
+        ...(DEVELOPMENT_STATUS.canonical_handoff || {}),
+        url:liveGithub?.canonical_url || PUBLIC_HANDOFF_URL,
       },
+      current_work:activeWork,
+      live_github:liveGithub,
       live_production:{
         release,
         schema:schema?.version || null,
         commit_url:releaseUrl,
         actions_url:DEVELOPMENT_STATUS.repository?.actions_url || `${repositoryUrl}/actions`,
-        note:"Live release/schema are read from the runtime currently serving this request.",
+        note:"Live release/schema are read from the runtime currently serving this request. Active work is refreshed from GitHub with a short server-side cache.",
       },
       runtime:{ release,schema },
     };

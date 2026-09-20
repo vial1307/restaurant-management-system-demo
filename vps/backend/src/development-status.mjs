@@ -1,4 +1,5 @@
 const REPOSITORY_URL = "https://github.com/vial1307/restaurant-management-system-demo";
+const PUBLIC_HANDOFF_URL = "https://vial1307.github.io/restaurant-management-system-demo/handoff.html";
 
 function github(path = "") {
   return `${REPOSITORY_URL}${path}`;
@@ -6,55 +7,55 @@ function github(path = "") {
 
 export const DEVELOPMENT_STATUS = Object.freeze({
   updated_at:"2026-09-20",
-  phase:"super-admin-inventory-lifecycle-hardening",
+  phase:"live-github-handoff",
   status:"stable",
-  headline:"Release #783 đã production-verified trên schema 024; catalog sync không còn là stock authority. Công việc hiện tại khóa inventory lifecycle khỏi generic Super Admin CRUD để tránh tạo/reactivate/archive item ngoài luồng Inventory.",
+  headline:"Production #786 đã verified trên schema 024. GitHub & Handoff đang chuyển sang live feed để VPS tự nhận biết PR/branch/CI hiện tại thay vì phụ thuộc chuỗi hard-code.",
   repository:{
     name:"vial1307/restaurant-management-system-demo",
     url:REPOSITORY_URL,
     actions_url:github("/actions"),
     pulls_url:github("/pulls"),
   },
+  canonical_handoff:{
+    url:PUBLIC_HANDOFF_URL,
+    purpose:"Một link duy nhất để dev/chat mới đọc PR hiện tại, branch/head SHA, CI và tài liệu tiếp quản.",
+  },
   current_work:{
-    branch:"fix/super-admin-inventory-lifecycle-20260920",
-    url:github("/tree/fix/super-admin-inventory-lifecycle-20260920"),
+    branch:"main",
+    url:github("/tree/main"),
     pull_request:null,
-    baseline_main_sha:"5bc9d92e878510c0646acced2b8070750778529c",
-    baseline_main_url:github("/commits/main"),
+    baseline_main_sha:"60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c",
+    baseline_main_url:github("/commit/60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c"),
     candidate_schema:"024",
-    stopping_point:"Release #783 / 5bc9d92e878510c0646acced2b8070750778529c đã production-verified trên schema 024. Audit #40 xác nhận structural violations = 0. Candidate hiện tại biến Super Admin inventory-products thành metadata-only dataset; lifecycle phải đi qua Inventory module.",
-    resolved_incident:{
-      workflow:"Inventory hidden-stock archive integrity",
-      failed_run_id:null,
-      failed_url:null,
-      resolution:"Audit production phát hiện 4 stock rows của 2 item Fuxing đã bị archive nhưng vẫn còn quantity/minimum. Schema 023 reactivated các item này mà không thay đổi tồn kho; Audit #31 xác nhận hidden inventory và cross-site violations đều bằng 0.",
-    },
+    stopping_point:"Release #786 / 60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c đã production-verified; Inventory Site Production Audit #44 PASS. Khi có PR mở, VPS sẽ tự thay phần current work bằng PR live mới nhất.",
+    resolved_incident:null,
     code_focus:[
+      "vps/backend/src/github-handoff.mjs",
       "vps/backend/src/super-admin-routes.mjs",
       "src/admin-panel.js",
-      "vps/backend/scripts/super-admin-regression-client.mjs",
-      "tests/super-admin-inventory-lifecycle-contract-regression.mjs",
+      "handoff.html",
     ],
   },
   release_evidence:{
-    milestone_sha:"5bc9d92e878510c0646acced2b8070750778529c",
-    workflow_run_id:"35475816625",
-    url:github("/actions/runs/35475816625"),
+    milestone_sha:"60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c",
+    workflow_run_id:"35482680596",
+    url:github("/actions/runs/35482680596"),
     schema:"024",
-    note:"Release #783 passed static/API/concurrency/browser/full-device gates, server-side backup, DATA_INTEGRITY_OK, exact release verification, production UI smoke and Inventory Site Production Audit #40 with all structural violations = 0. Schema remains 024.",
+    inventory_audit_run_id:"35482912054",
+    inventory_audit_url:github("/actions/runs/35482912054"),
+    note:"Release #786 passed static/API/concurrency/browser/full-device gates, production deploy/UI smoke; Inventory Site Production Audit #44 passed on schema 024.",
   },
   documents:[
-    { label:"CURRENT_HANDOFF.md", purpose:"Trạng thái chuẩn để dev tiếp quản", url:github("/blob/main/docs/CURRENT_HANDOFF.md") },
+    { label:"CURRENT_HANDOFF.md", purpose:"Trạng thái chuẩn và invariant để dev tiếp quản", url:github("/blob/main/docs/CURRENT_HANDOFF.md") },
     { label:"WORK_LOG.md", purpose:"Nhật ký sửa lỗi / CI / deploy", url:github("/blob/main/docs/WORK_LOG.md") },
     { label:"STATUS.md", purpose:"Workboard ngắn hạn / việc đang làm", url:github("/blob/main/docs/STATUS.md") },
     { label:"DEVELOPMENT_RULES.md", purpose:"Quy tắc bắt buộc trước khi code", url:github("/blob/main/docs/DEVELOPMENT_RULES.md") },
   ],
   next_steps:[
-    "Hoàn tất Super Admin inventory lifecycle hardening: generic CRUD chỉ sửa metadata item hiện hữu.",
-    "Ẩn create/archive/active controls cho inventory-products và chặn tương ứng ở backend.",
-    "Giữ Inventory module là authority duy nhất cho create/reactivate/archive item để stock/location/default/audit nhất quán.",
+    "Hoàn tất Live GitHub Handoff: VPS tự đọc PR mở mới nhất, branch/head SHA, commits, changed files và CI.",
+    "Dùng public handoff.html làm canonical one-link entry cho dev/chat mới.",
+    "Sau khi live handoff production-verified, tiếp tục inventory minimum-change history/audit semantics.",
     "Giữ Inventory Site Production Audit bắt buộc sau deploy; structural violations phải luôn bằng 0.",
-    "Sau slice này, rà minimum-change audit/history và các mutation còn lại trước khi đóng workstream kho.",
   ],
-  security_note:"Endpoint chỉ trả metadata handoff đã lọc; không trả dữ liệu bí mật hoặc quyền truy cập hạ tầng.",
+  security_note:"Live handoff chỉ đọc metadata công khai của repository và runtime release/schema; không trả secret, credential hoặc dữ liệu nghiệp vụ.",
 });

@@ -68,14 +68,22 @@ try {
   const development = await request("/api/admin/super/development-status", { cookie:owner.cookie });
   assert.equal(development.response.status, 200, JSON.stringify(development.data));
   assert.equal(development.data.repository.name, "vial1307/restaurant-management-system-demo");
-  assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
-  assert.equal(development.data.status, "stable");
-  assert.equal(development.data.current_work.branch, "fix/super-admin-inventory-lifecycle-20260920");
+  assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/(tree|pull)\//);
+  assert(["stable","in_progress"].includes(development.data.status));
+  assert.equal(typeof development.data.current_work.branch, "string");
+  assert(development.data.current_work.branch.length > 0);
   assert.equal(development.data.current_work.candidate_schema, "024");
   assert.equal(development.data.runtime.schema.version, "024");
   assert.equal(development.data.live_production.schema, "024");
   assert.equal(development.data.release_evidence.schema, "024");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35475816625");
+  assert.equal(development.data.release_evidence.workflow_run_id, "35482680596");
+  assert.equal(development.data.release_evidence.inventory_audit_run_id, "35482912054");
+  assert.match(development.data.canonical_handoff.url, /vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html/);
+  assert.equal(development.data.live_github.source, "github-api-live");
+  assert.equal(typeof development.data.live_github.available, "boolean");
+  assert(Array.isArray(development.data.live_github.commits));
+  assert(Array.isArray(development.data.live_github.changed_files));
+  assert(Array.isArray(development.data.live_github.workflows));
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
   assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
 

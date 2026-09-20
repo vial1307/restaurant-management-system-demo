@@ -271,6 +271,10 @@ A change is not considered complete if it works only on the device, page, module
 
 ## Engineering status and handoff discipline
 
+- Canonical continuation entry: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`. A new developer or new ChatGPT session must open this first.
+- Live Handoff is allowed to supersede stale branch/head strings in older log sections because it reads the current open PR directly from GitHub. Production authority still requires verified runtime/deploy evidence.
+- After opening Live Handoff, read `docs/CURRENT_HANDOFF.md`, `docs/STATUS.md`, `docs/WORK_LOG.md`, and this file before changing production code.
+
 - After reading `docs/CURRENT_HANDOFF.md`, read `docs/STATUS.md` for the concise DONE / IN PROGRESS / NEXT / BLOCKED workboard before changing code.
 - `docs/CURRENT_HANDOFF.md` is the production/architecture continuation contract; `docs/STATUS.md` is the short active workboard; `docs/WORK_LOG.md` is chronological evidence. Do not use a GitHub issue, chat message, or local note as a competing source of truth.
 - Before handing work to another developer, update all three documents when their scope changed and state the exact stopping point.
