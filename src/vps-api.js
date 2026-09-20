@@ -4,7 +4,7 @@ const inventoryCache = new Map();
 const masterDataCache = new Map();
 const receiveDefaultsCache = new Map();
 const INVENTORY_CACHE_MS = 1200;
-const MASTER_DATA_CACHE_MS = 5000;
+const MASTER_DATA_CACHE_MS = 60000;
 const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
 const AUTH_LOGIN_GRACE_MS = 5000;
@@ -311,6 +311,18 @@ export async function vpsSyncCatalog(item) {
     body: { item },
   });
   invalidateVpsInventoryCache("");
+  invalidateVpsReceiveDefaultsCache();
+  return result;
+}
+
+export async function vpsSaveInventoryEditor(body) {
+  const site = String(body?.site || "");
+  const result = await apiRequest("/api/inventory/editor/save", {
+    method:"POST",
+    body,
+    timeoutMs:20000,
+  });
+  invalidateVpsInventoryCache(site);
   invalidateVpsReceiveDefaultsCache();
   return result;
 }
