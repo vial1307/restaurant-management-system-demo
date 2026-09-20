@@ -96,8 +96,13 @@ assert.match(
 );
 assert.match(
   app,
-  /if \(result\.ok\) \{[\s\S]{0,260}await syncInventoryNow\(site,\{reloadBranch:false\}\)/,
-  "ingredient editor should perform one authoritative refresh after the single bulk write"
+  /if \(result\.ok\) \{[\s\S]{0,180}renderWhenAuthorized\(\);[\s\S]{0,100}void syncInventoryNow\(site,\{reloadBranch:false\}\)/,
+  "ingredient editor should close/render immediately after DB commit and refresh the authoritative snapshot in background"
+);
+assert.doesNotMatch(
+  app,
+  /if \(result\.ok\) \{[\s\S]{0,220}await syncInventoryNow\(site,\{reloadBranch:false\}\)/,
+  "post-commit snapshot refresh must not keep the modal blocked"
 );
 
 assert.match(deploy, /KITCHEN_EXACT_TARGET_V1/, "deploy must enforce the exact-target contract");
