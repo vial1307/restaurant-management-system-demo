@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `ccef35dad7027808d60b3a691925fbebc29b9eb4`
+- Current verified production SHA: `21d376295b6194e48bfaa599fc6c5424256a6196`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #793
-- Run ID: `35496998332`
-- Tested/deployed commit: `ccef35dad7027808d60b3a691925fbebc29b9eb4`
+- Workflow: Deploy Kitchen OS to VPS #796
+- Run ID: `35500763361`
+- Tested/deployed commit: `21d376295b6194e48bfaa599fc6c5424256a6196`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -36,7 +36,7 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- Post-deploy Inventory Site Production Audit #51 / run `35497249172`: PASS after rerun (initial attempt hit transient SSH reset before SQL audit executed)
+- Post-deploy Inventory Site Production Audit #54 / run `35500993290`: PASS
 
 Production audit after schema 022:
 
@@ -817,3 +817,60 @@ Dynamic API regression uses a dedicated two-location fixture and verifies exactl
 3. update location -> audit update;
 4. delete default -> audit delete;
 5. delete again -> no audit.
+
+
+## 2026-09-21 — Receive-default audit production #796; catalog audit slice
+
+Receive-default audit is production verified.
+
+Production evidence:
+
+- PR #130 merged as `21d376295b6194e48bfaa599fc6c5424256a6196`;
+- Deploy Kitchen OS to VPS #796 / run `35500763361`: PASS;
+- schema: `024`;
+- backup: `kitchen_os_20260920T085648Z.dump`;
+- `DATA_INTEGRITY_OK`;
+- Web/API/Super Admin edge healthy;
+- production UI smoke: PASS;
+- GitHub Pages #929: PASS;
+- Inventory Site Production Audit #54 / run `35500993290`: PASS;
+- `inventory_site_integrity_violations = 0`;
+- `inventory_hidden_integrity_violations = 0`;
+- exact release check: `21d3762`.
+
+### Active inventory slice — catalog configuration audit
+
+Branch:
+
+- `audit/inventory-config-next-20260921`
+- schema change: none; remains `024`.
+
+Confirmed gap:
+
+- `POST /api/inventory/catalog/sync` changed item metadata and storage associations without a durable audit row;
+- prior values for name/unit/work area/storage-only/catalog key/location associations were overwritten;
+- repeated no-op saves still executed the item upsert path.
+
+Candidate invariant:
+
+- catalog sync runs in one transaction;
+- same `itemKey` writes serialize through a transaction advisory lock;
+- existing item row is locked before comparison;
+- item metadata is updated only when values actually change;
+- before/after snapshots include item metadata and configured site location codes;
+- real create/update writes `audit_logs.action='inventory_catalog_change'`;
+- `entity_type='inventory_item'`;
+- `entity_id=item_key` for searchable audit history;
+- metadata stores `item_key`, `catalog_key`, and operation `create/update`;
+- no-op save creates no audit;
+- request quantity/minimum remain ignored by catalog sync;
+- new location associations are always created with quantity=0 and minimum=0;
+- protected omitted associations with quantity/minimum > 0 remain blocked.
+
+Dynamic API regression verifies:
+
+1. create catalog item -> audit create;
+2. identical save -> no audit;
+3. metadata + location update -> audit update;
+4. Super Admin Audit returns exactly two rows for that item key;
+5. quantity/minimum stay zero despite non-zero values supplied in catalog payload.
