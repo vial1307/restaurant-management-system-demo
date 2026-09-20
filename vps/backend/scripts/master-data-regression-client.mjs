@@ -128,6 +128,44 @@ try {
   assert.equal(audit.rows[0]?.action, "master_location_create");
   assert.equal(audit.rows[0]?.site, "fuxing");
 
+  const locationAuditCountBeforeNoop = await DB.query(
+    `select count(*)::int as count from public.audit_logs
+     where actor_user_id=$1 and entity_type='inventory_location' and entity_id=$2`,
+    [manager.user.id,createdLocation.data.location.id]
+  );
+  const locationNoop = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{
+      action:"save",
+      id:createdLocation.data.location.id,
+      site:"fuxing",
+      code:"fuxing-regression-cold-room",
+      name_zh_tw:"回歸冷藏",
+      name_vi:"Kho mát regression",
+      kind:"storage",
+      sort_order:88,
+      active:true,
+      metadata:{ regression:true },
+    },
+  });
+  assert.equal(locationNoop.response.status,200,JSON.stringify(locationNoop.data));
+  assert.equal(
+    locationNoop.data.location.updated_at,
+    createdLocation.data.location.updated_at,
+    "no-op location save churned updated_at"
+  );
+  const locationAuditCountAfterNoop = await DB.query(
+    `select count(*)::int as count from public.audit_logs
+     where actor_user_id=$1 and entity_type='inventory_location' and entity_id=$2`,
+    [manager.user.id,createdLocation.data.location.id]
+  );
+  assert.equal(
+    locationAuditCountAfterNoop.rows[0].count,
+    locationAuditCountBeforeNoop.rows[0].count,
+    "no-op location save created audit noise"
+  );
+
   const employeeWrite = await request("/api/master-data/locations", {
     method:"POST",
     cookie:employee.cookie,
@@ -162,6 +200,43 @@ try {
   assert.equal(createdWorkArea.response.status, 200, JSON.stringify(createdWorkArea.data));
   assert.equal(createdWorkArea.data.workArea.code, "bar");
 
+  const workAreaAuditCountBeforeNoop = await DB.query(
+    `select count(*)::int as count from public.audit_logs
+     where actor_user_id=$1 and entity_type='work_area' and entity_id='fuxing:bar'`,
+    [manager.user.id]
+  );
+  const workAreaNoop = await request("/api/master-data/work-areas", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{
+      action:"save",
+      site:"fuxing",
+      code:"bar",
+      department_code:"inside",
+      name_zh_tw:"吧台",
+      name_vi:"Quầy bar",
+      sort_order:80,
+      active:true,
+      metadata:{ regression:true },
+    },
+  });
+  assert.equal(workAreaNoop.response.status,200,JSON.stringify(workAreaNoop.data));
+  assert.equal(
+    workAreaNoop.data.workArea.updated_at,
+    createdWorkArea.data.workArea.updated_at,
+    "no-op work-area save churned updated_at"
+  );
+  const workAreaAuditCountAfterNoop = await DB.query(
+    `select count(*)::int as count from public.audit_logs
+     where actor_user_id=$1 and entity_type='work_area' and entity_id='fuxing:bar'`,
+    [manager.user.id]
+  );
+  assert.equal(
+    workAreaAuditCountAfterNoop.rows[0].count,
+    workAreaAuditCountBeforeNoop.rows[0].count,
+    "no-op work-area save created audit noise"
+  );
+
   const archiveWorkArea = await request("/api/master-data/work-areas", {
     method:"POST",
     cookie:manager.cookie,
@@ -177,6 +252,42 @@ try {
   });
   assert.equal(archiveLocation.response.status, 200, JSON.stringify(archiveLocation.data));
   assert.equal(archiveLocation.data.location.active, false);
+
+  const repeatedWorkAreaArchive = await request("/api/master-data/work-areas", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{ action:"archive",site:"fuxing",code:"bar" },
+  });
+  assert.equal(repeatedWorkAreaArchive.response.status,200,JSON.stringify(repeatedWorkAreaArchive.data));
+  assert.equal(
+    repeatedWorkAreaArchive.data.workArea.updated_at,
+    archiveWorkArea.data.workArea.updated_at,
+    "repeated work-area archive churned updated_at"
+  );
+  const workAreaArchiveAuditCount = await DB.query(
+    `select count(*)::int as count from public.audit_logs
+     where actor_user_id=$1 and action='master_work_area_archive' and entity_id='fuxing:bar'`,
+    [manager.user.id]
+  );
+  assert.equal(workAreaArchiveAuditCount.rows[0].count,1,"repeated work-area archive created duplicate audit");
+
+  const repeatedLocationArchive = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{ action:"archive",site:"fuxing",id:createdLocation.data.location.id },
+  });
+  assert.equal(repeatedLocationArchive.response.status,200,JSON.stringify(repeatedLocationArchive.data));
+  assert.equal(
+    repeatedLocationArchive.data.location.updated_at,
+    archiveLocation.data.location.updated_at,
+    "repeated location archive churned updated_at"
+  );
+  const locationArchiveAuditCount = await DB.query(
+    `select count(*)::int as count from public.audit_logs
+     where actor_user_id=$1 and action='master_location_archive' and entity_id=$2`,
+    [manager.user.id,createdLocation.data.location.id]
+  );
+  assert.equal(locationArchiveAuditCount.rows[0].count,1,"repeated location archive created duplicate audit");
 
   // A brand-new branch exists only in PostgreSQL. No JS site enum is changed.
   await DB.query(
