@@ -232,6 +232,108 @@ assert.equal(receiveCreateLog.metadata?.operation,"create");
 assert.equal(receiveCreateLog.before_data,null);
 assert.equal(receiveCreateLog.after_data?.location_code,fxFreezer.code);
 
+const catalogAuditKey="fuxing:catalog-audit-regression";
+const catalogAuditCatalogKey="catalog-audit-regression";
+const catalogAuditCreate=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:manager.cookie,
+  body:{item:{
+    key:catalogAuditKey,
+    catalog_key:catalogAuditCatalogKey,
+    zh:"品項稽核測試",
+    vi:"Kiểm thử audit sản phẩm",
+    unit:"包",
+    work_area:"noodles",
+    storage_only:false,
+    locations:[{code:fxFreezer.code,quantity:999,minimum:999}],
+  }}
+});
+assert.equal(catalogAuditCreate.response.status,200);
+assert.equal(catalogAuditCreate.data?.changed,true);
+assert(catalogAuditCreate.data?.audit?.id);
+
+const catalogAuditNoop=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:manager.cookie,
+  body:{item:{
+    key:catalogAuditKey,
+    catalog_key:catalogAuditCatalogKey,
+    zh:"品項稽核測試",
+    vi:"Kiểm thử audit sản phẩm",
+    unit:"包",
+    work_area:"noodles",
+    storage_only:false,
+    locations:[{code:fxFreezer.code,quantity:111,minimum:222}],
+  }}
+});
+assert.equal(catalogAuditNoop.response.status,200);
+assert.equal(catalogAuditNoop.data?.changed,false);
+assert.equal(catalogAuditNoop.data?.audit,null);
+
+const catalogAuditUpdate=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:manager.cookie,
+  body:{item:{
+    key:catalogAuditKey,
+    catalog_key:catalogAuditCatalogKey,
+    zh:"品項稽核測試更新",
+    vi:"Kiểm thử audit sản phẩm cập nhật",
+    unit:"盒",
+    work_area:"meat",
+    storage_only:true,
+    locations:[
+      {code:fxFreezer.code,quantity:333,minimum:444},
+      {code:fxFour.code,quantity:555,minimum:666},
+    ],
+  }}
+});
+assert.equal(catalogAuditUpdate.response.status,200);
+assert.equal(catalogAuditUpdate.data?.changed,true);
+assert(catalogAuditUpdate.data?.audit?.id);
+
+const catalogAuditSnapshot=(await inventory(admin.cookie,"fuxing")).data;
+const catalogAuditItem=catalogAuditSnapshot.items.find((entry)=>entry.item_key===catalogAuditKey);
+assert(catalogAuditItem,"catalog audit item missing after update");
+assert.equal(catalogAuditItem.name_zh_tw,"品項稽核測試更新");
+assert.equal(catalogAuditItem.name_vi,"Kiểm thử audit sản phẩm cập nhật");
+assert.equal(catalogAuditItem.unit,"盒");
+assert.equal(catalogAuditItem.work_area,"meat");
+assert.equal(catalogAuditItem.storage_only,true);
+const catalogAuditStock=catalogAuditSnapshot.stock.filter((row)=>row.item_id===catalogAuditItem.id);
+assert.equal(catalogAuditStock.length,2);
+for(const row of catalogAuditStock){
+  assert.equal(Number(row.quantity),0,"catalog sync seeded physical quantity");
+  assert.equal(Number(row.minimum_quantity),0,"catalog sync seeded physical minimum");
+}
+
+const catalogAuditLog=await request(
+  `/api/admin/super/audit?action=inventory_catalog_change&site=fuxing&q=${encodeURIComponent(catalogAuditKey)}&pageSize=100`,
+  {cookie:admin.cookie}
+);
+assert.equal(catalogAuditLog.response.status,200);
+assert.equal(catalogAuditLog.data?.rows?.length,2,"catalog audit should contain exactly create/update");
+const [catalogUpdateLog,catalogCreateLog]=catalogAuditLog.data.rows;
+for(const row of catalogAuditLog.data.rows){
+  assert.equal(row.actor_username,"managerfx");
+  assert.equal(row.action,"inventory_catalog_change");
+  assert.equal(row.entity_type,"inventory_item");
+  assert.equal(row.entity_id,catalogAuditKey);
+  assert.equal(row.site,"fuxing");
+  assert.equal(row.metadata?.item_key,catalogAuditKey);
+  assert.equal(row.metadata?.catalog_key,catalogAuditCatalogKey);
+}
+assert.equal(catalogUpdateLog.metadata?.operation,"update");
+assert.equal(catalogUpdateLog.before_data?.name_zh_tw,"品項稽核測試");
+assert.equal(catalogUpdateLog.after_data?.name_zh_tw,"品項稽核測試更新");
+assert.deepEqual(
+  new Set(catalogUpdateLog.before_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code])
+);
+assert.deepEqual(
+  new Set(catalogUpdateLog.after_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxFour.code])
+);
+assert.equal(catalogCreateLog.metadata?.operation,"create");
+assert.equal(catalogCreateLog.before_data,null);
+assert.equal(catalogCreateLog.after_data?.item_key,catalogAuditKey);
+
 const employeeSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:employee.cookie,
   body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:99}
