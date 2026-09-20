@@ -455,6 +455,441 @@ export async function registerInventoryExtraRoutes(app) {
     }
   });
 
+  app.post("/api/inventory/editor/save", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const site = String(request.body?.site || "").trim();
+    const item = request.body?.item && typeof request.body.item === "object"
+      ? request.body.item
+      : null;
+    const itemKey = String(item?.key || "").trim();
+    const catalogKey = String(item?.catalog_key || "").trim();
+    const nameZhTw = String(item?.zh || "").trim();
+    const nameVi = String(item?.vi || item?.zh || "").trim();
+    const unit = String(item?.unit || "").trim();
+    const workArea = String(item?.work_area || "").trim();
+    const storageOnly = Boolean(item?.storage_only);
+    const wantsStocktake = request.body?.stocktake === true;
+    const receiveDefaultRequested = Object.prototype.hasOwnProperty.call(
+      request.body || {},
+      "receiveDefaultLocationCode"
+    );
+    const receiveDefaultLocationCode = receiveDefaultRequested
+      ? String(request.body?.receiveDefaultLocationCode || "").trim()
+      : "";
+    const workMinimum = Number(request.body?.workMinimum);
+    const rawLocations = Array.isArray(request.body?.locations)
+      ? request.body.locations
+      : [];
+
+    if (
+      !item ||
+      !(await activeSite(site)) ||
+      !itemKey ||
+      !itemKey.startsWith(site + ":") ||
+      !catalogKey ||
+      !nameZhTw ||
+      !nameVi ||
+      !unit ||
+      !workArea
+    ) {
+      return reply.code(400).send({ error:"INVALID_INVENTORY_EDITOR_ITEM" });
+    }
+    if (!requireCatalogManager(user,site,reply)) return;
+    if (wantsStocktake && !canStocktakeRole(user,site)) {
+      return reply.code(403).send({ error:"STOCKTAKE_ROLE_REQUIRED" });
+    }
+    if (receiveDefaultRequested && !(await canManageReceiveDefault(user,site))) {
+      return reply.code(403).send({ error:"RECEIVE_DEFAULT_MANAGER_REQUIRED" });
+    }
+
+    const normalizedLocations = [];
+    const seenCodes = new Set();
+    for (const raw of rawLocations) {
+      const code = String(raw?.code || "").trim();
+      if (!code || seenCodes.has(code)) continue;
+      const quantity = Number(raw?.quantity);
+      const minimum = Number(raw?.minimum);
+      if (
+        wantsStocktake &&
+        (!Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(minimum) || minimum < 0)
+      ) {
+        return reply.code(400).send({ error:"INVALID_INVENTORY_EDITOR_STOCK" });
+      }
+      seenCodes.add(code);
+      normalizedLocations.push({
+        code,
+        quantity:wantsStocktake ? quantity : null,
+        minimum:wantsStocktake ? minimum : null,
+      });
+    }
+    if (!normalizedLocations.length) {
+      return reply.code(400).send({ error:"INVENTORY_STORAGE_REQUIRED" });
+    }
+    if (wantsStocktake && (!Number.isFinite(workMinimum) || workMinimum < 0)) {
+      return reply.code(400).send({ error:"INVALID_WORK_MINIMUM" });
+    }
+
+    try {
+      const result = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_editor:${itemKey}`]
+        );
+
+        const unitResult = await client.query(
+          "select code from public.inventory_units where code=$1 and active=true limit 1",
+          [unit]
+        );
+        if (!unitResult.rowCount) {
+          throw Object.assign(new Error("INVENTORY_UNIT_NOT_FOUND"), { statusCode:409 });
+        }
+
+        const currentItemResult = await client.query(
+          "select * from public.inventory_items where item_key=$1 for update",
+          [itemKey]
+        );
+        const currentItem = currentItemResult.rows[0] || null;
+
+        const savedItem = (await client.query(
+          `insert into public.inventory_items(
+             item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
+           ) values($1,$2,$3,$4,$5,$6,$7,true)
+           on conflict(item_key) do update set
+             catalog_key=excluded.catalog_key,
+             name_zh_tw=excluded.name_zh_tw,
+             name_vi=excluded.name_vi,
+             unit=excluded.unit,
+             work_area=excluded.work_area,
+             storage_only=excluded.storage_only,
+             active=true
+           returning *`,
+          [itemKey,catalogKey,nameZhTw,nameVi,unit,workArea,storageOnly]
+        )).rows[0];
+
+        const storageCodes = normalizedLocations.map((entry) => entry.code);
+        const storageResult = await client.query(
+          `select id,code,kind,metadata
+           from public.inventory_locations
+           where site=$1
+             and active=true
+             and kind='storage'
+             and code=any($2::text[])
+           order by code`,
+          [site,storageCodes]
+        );
+        if (storageResult.rowCount !== storageCodes.length) {
+          throw Object.assign(new Error("INVENTORY_STORAGE_LOCATION_NOT_FOUND"), { statusCode:409 });
+        }
+        const storageByCode = new Map(storageResult.rows.map((row) => [row.code,row]));
+
+        let workLocation = null;
+        if (!storageOnly) {
+          const workResult = await client.query(
+            `select id,code,kind,metadata
+             from public.inventory_locations
+             where site=$1
+               and active=true
+               and kind='work'
+               and (
+                 metadata->>'work_area'=$2
+                 or metadata->>'ui_key'=$2
+               )
+             order by sort_order,code
+             limit 1`,
+            [site,workArea]
+          );
+          workLocation = workResult.rows[0] || null;
+          if (!workLocation) {
+            throw Object.assign(new Error("INVENTORY_WORK_LOCATION_NOT_FOUND"), { statusCode:409 });
+          }
+        }
+
+        const wantedLocationIds = [
+          ...storageResult.rows.map((row) => row.id),
+          ...(workLocation ? [workLocation.id] : []),
+        ];
+
+        for (const locationId of wantedLocationIds) {
+          await client.query(
+            `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+             values($1,$2,0,0,now())
+             on conflict(item_id,location_id) do nothing`,
+            [savedItem.id,locationId]
+          );
+        }
+
+        const lockedStock = await client.query(
+          `select s.location_id,l.code as location_code,l.kind,
+                  s.quantity,s.minimum_quantity
+           from public.inventory_stock s
+           join public.inventory_locations l on l.id=s.location_id
+           where s.item_id=$1 and l.site=$2
+           order by s.location_id
+           for update of s`,
+          [savedItem.id,site]
+        );
+        const stockByLocation = new Map(
+          lockedStock.rows.map((row) => [row.location_id,row])
+        );
+
+        const protectedOmitted = lockedStock.rows.filter((row) => (
+          !wantedLocationIds.includes(row.location_id) &&
+          (Number(row.quantity || 0) > 0 || Number(row.minimum_quantity || 0) > 0)
+        ));
+        if (protectedOmitted.length) {
+          throw Object.assign(new Error("LOCATION_HAS_STOCK"), {
+            statusCode:409,
+            details:protectedOmitted.map((row) => ({
+              locationId:row.location_id,
+              locationCode:row.location_code,
+              quantity:Number(row.quantity || 0),
+              minimum:Number(row.minimum_quantity || 0),
+            })),
+          });
+        }
+
+        if (wantedLocationIds.length) {
+          await client.query(
+            `delete from public.inventory_stock
+             where item_id=$1
+               and location_id in (
+                 select l.id
+                 from public.inventory_locations l
+                 where l.site=$2
+               )
+               and not(location_id=any($3::uuid[]))
+               and quantity=0
+               and minimum_quantity=0`,
+            [savedItem.id,site,wantedLocationIds]
+          );
+        }
+
+        let quantityChanges = 0;
+        let minimumChanges = 0;
+
+        const writeQuantityChange = async (locationId,before,after) => {
+          if (before === after) return;
+          await client.query(
+            `insert into public.inventory_transactions(
+               item_id,source_location_id,destination_location_id,action,amount,note,
+               actor_user_id,actor_username,metadata
+             ) values(
+               $1,$2,$3,'adjust',$4,$5,$6,$7,
+               jsonb_build_object(
+                 'operation','editor_set_quantity',
+                 'before_quantity',$8::numeric,
+                 'after_quantity',$9::numeric
+               )
+             )`,
+            [
+              savedItem.id,
+              after < before ? locationId : null,
+              after >= before ? locationId : null,
+              Math.abs(after-before),
+              "品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
+              user.id,user.username,before,after
+            ]
+          );
+          quantityChanges += 1;
+        };
+
+        const writeMinimumChange = async (locationId,before,after) => {
+          if (before === after) return;
+          await client.query(
+            `insert into public.inventory_transactions(
+               item_id,source_location_id,destination_location_id,action,amount,note,
+               actor_user_id,actor_username,metadata
+             ) values(
+               $1,$2,$3,'adjust',$4,$5,$6,$7,
+               jsonb_build_object(
+                 'operation','set_minimum',
+                 'before_minimum',$8::numeric,
+                 'after_minimum',$9::numeric,
+                 'source','inventory_editor'
+               )
+             )`,
+            [
+              savedItem.id,
+              after < before ? locationId : null,
+              after >= before ? locationId : null,
+              Math.abs(after-before),
+              "標準量調整 / Điều chỉnh định mức",
+              user.id,user.username,before,after
+            ]
+          );
+          minimumChanges += 1;
+        };
+
+        if (wantsStocktake) {
+          for (const entry of normalizedLocations) {
+            const location = storageByCode.get(entry.code);
+            const current = stockByLocation.get(location.id);
+            const beforeQuantity = Number(current?.quantity || 0);
+            const beforeMinimum = Number(current?.minimum_quantity || 0);
+            if (beforeQuantity !== entry.quantity || beforeMinimum !== entry.minimum) {
+              await client.query(
+                `update public.inventory_stock
+                 set quantity=$3,minimum_quantity=$4,updated_at=now()
+                 where item_id=$1 and location_id=$2`,
+                [savedItem.id,location.id,entry.quantity,entry.minimum]
+              );
+            }
+            await writeQuantityChange(location.id,beforeQuantity,entry.quantity);
+            await writeMinimumChange(location.id,beforeMinimum,entry.minimum);
+          }
+
+          if (workLocation) {
+            const current = stockByLocation.get(workLocation.id);
+            const beforeMinimum = Number(current?.minimum_quantity || 0);
+            if (beforeMinimum !== workMinimum) {
+              await client.query(
+                `update public.inventory_stock
+                 set minimum_quantity=$3,updated_at=now()
+                 where item_id=$1 and location_id=$2`,
+                [savedItem.id,workLocation.id,workMinimum]
+              );
+            }
+            await writeMinimumChange(workLocation.id,beforeMinimum,workMinimum);
+          }
+        }
+
+        let receiveDefaultChanged = false;
+        if (receiveDefaultRequested) {
+          await client.query(
+            "select pg_advisory_xact_lock(hashtext($1))",
+            [`inventory_receive_default:${site}:${catalogKey}`]
+          );
+          const currentDefault = (await client.query(
+            `select d.location_id,l.code as location_code
+             from public.inventory_receive_defaults d
+             join public.inventory_locations l on l.id=d.location_id
+             where d.site=$1 and d.catalog_key=$2
+             for update of d`,
+            [site,catalogKey]
+          )).rows[0] || null;
+
+          if (!receiveDefaultLocationCode) {
+            if (currentDefault) {
+              await client.query(
+                "delete from public.inventory_receive_defaults where site=$1 and catalog_key=$2",
+                [site,catalogKey]
+              );
+              await client.query(
+                `insert into public.audit_logs(
+                   actor_user_id,actor_username,action,entity_type,entity_id,site,
+                   before_data,after_data,metadata
+                 ) values(
+                   $1,$2,'inventory_receive_default_change','inventory_receive_default',$3,$4,
+                   jsonb_build_object('location_id',$5::uuid,'location_code',$6::text),
+                   null,
+                   jsonb_build_object('catalog_key',$7::text,'operation','delete','source','inventory_editor')
+                 )`,
+                [
+                  user.id,user.username,`${site}:${catalogKey}`,site,
+                  currentDefault.location_id,currentDefault.location_code,catalogKey
+                ]
+              );
+              receiveDefaultChanged = true;
+            }
+          } else {
+            const target = storageByCode.get(receiveDefaultLocationCode);
+            if (!target) {
+              throw Object.assign(new Error("RECEIVE_DEFAULT_LOCATION_NOT_CONFIGURED"), { statusCode:409 });
+            }
+            if (currentDefault?.location_id !== target.id) {
+              await client.query(
+                `insert into public.inventory_receive_defaults(site,catalog_key,location_id,updated_by,updated_at)
+                 values($1,$2,$3,$4,now())
+                 on conflict(site,catalog_key) do update
+                 set location_id=excluded.location_id,
+                     updated_by=excluded.updated_by,
+                     updated_at=now()`,
+                [site,catalogKey,target.id,user.id]
+              );
+              await client.query(
+                `insert into public.audit_logs(
+                   actor_user_id,actor_username,action,entity_type,entity_id,site,
+                   before_data,after_data,metadata
+                 ) values(
+                   $1,$2,'inventory_receive_default_change','inventory_receive_default',$3,$4,
+                   $5::jsonb,
+                   jsonb_build_object('location_id',$6::uuid,'location_code',$7::text),
+                   jsonb_build_object(
+                     'catalog_key',$8::text,
+                     'operation',$9::text,
+                     'source','inventory_editor'
+                   )
+                 )`,
+                [
+                  user.id,user.username,`${site}:${catalogKey}`,site,
+                  currentDefault
+                    ? JSON.stringify({
+                        location_id:currentDefault.location_id,
+                        location_code:currentDefault.location_code,
+                      })
+                    : null,
+                  target.id,target.code,catalogKey,currentDefault ? "update" : "create"
+                ]
+              );
+              receiveDefaultChanged = true;
+            }
+          }
+        }
+
+        const finalStock = await client.query(
+          `select s.item_id,s.location_id,s.quantity,s.minimum_quantity,s.updated_at,
+                  l.code as location_code,l.kind,l.metadata as location_metadata
+           from public.inventory_stock s
+           join public.inventory_locations l on l.id=s.location_id
+           where s.item_id=$1 and l.site=$2 and l.active=true
+           order by l.sort_order,l.code`,
+          [savedItem.id,site]
+        );
+
+        const finalDefault = await client.query(
+          `select d.site,d.catalog_key,d.location_id,d.updated_at,l.code as location_code
+           from public.inventory_receive_defaults d
+           join public.inventory_locations l on l.id=d.location_id
+           where d.site=$1 and d.catalog_key=$2
+           limit 1`,
+          [site,catalogKey]
+        );
+
+        return {
+          ok:true,
+          item:savedItem,
+          stock:finalStock.rows,
+          receiveDefault:finalDefault.rows[0] || null,
+          changes:{
+            created:!currentItem,
+            quantity:quantityChanges,
+            minimum:minimumChanges,
+            receiveDefault:receiveDefaultChanged,
+          },
+        };
+      });
+      return result;
+    } catch (error) {
+      if (error?.code === "23505") {
+        return reply.code(409).send({ error:"CATALOG_CONFLICT" });
+      }
+      if (error?.code === "23503") {
+        return reply.code(409).send({ error:"INVENTORY_MASTER_DATA_CONFLICT" });
+      }
+      if (error?.message === "LOCATION_HAS_STOCK") {
+        return reply.code(409).send({
+          error:"LOCATION_HAS_STOCK",
+          details:Array.isArray(error.details) ? error.details : [],
+        });
+      }
+      return reply.code(error.statusCode || 500).send({
+        error:error.message || "INVENTORY_EDITOR_SAVE_FAILED",
+      });
+    }
+  });
+
   app.post("/api/inventory/catalog/sync", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
