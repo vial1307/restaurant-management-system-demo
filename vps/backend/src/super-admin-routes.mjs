@@ -156,7 +156,7 @@ function validateDatasetValues(name, config, raw, { isCreate = false, current = 
   const policy = DATASET_POLICY[name] || {};
   const unknown = Object.keys(raw).filter((column) => !config.editable.includes(column));
   if (unknown.length) {
-    throw Object.assign(new Error("ADMIN_FIELD_NOT_ALLOWED"), { statusCode:400, fields:unknown });
+    throw Object.assign(new Error("ADMIN_FIELD_NOT_ALLOWED"), { statusCode:400, field:unknown[0], fields:unknown });
   }
   if (Object.prototype.hasOwnProperty.call(raw,"metadata") && (raw.metadata === null || typeof raw.metadata !== "object" || Array.isArray(raw.metadata))) {
     throw Object.assign(new Error("ADMIN_METADATA_OBJECT_REQUIRED"), { statusCode:400, field:"metadata" });
