@@ -150,41 +150,6 @@ const yjWorkNoodles = yongjiData.locations.find((loc) => loc.code === "yongji-wo
 const yjWorkMeat = yongjiData.locations.find((loc) => loc.code === "yongji-work-meat");
 assert(beefFx && tofuFx && beefYj && tofuYj && fxFreezer && fxFour && fxWorkNoodles && fxWorkMeat && yjFreezer && yjFour && yjWorkNoodles && yjWorkMeat);
 
-assert.equal((await request("/api/inventory/events")).response.status,401,"inventory event stream must require authentication");
-const eventAbort=new AbortController();
-const eventResponse=await fetch(BASE+"/api/inventory/events?clientId=api-regression-listener",{
-  headers:{cookie:employee.cookie},
-  signal:eventAbort.signal,
-});
-assert.equal(eventResponse.status,200,"authenticated inventory event stream failed");
-assert.match(eventResponse.headers.get("content-type")||"",/text\/event-stream/);
-const eventReader=eventResponse.body.getReader();
-let eventBuffer="";
-async function nextInventoryEvent(eventName,timeoutMs=5000){
-  const deadline=Date.now()+timeoutMs;
-  while(Date.now()<deadline){
-    const split=eventBuffer.indexOf("\n\n");
-    if(split>=0){
-      const block=eventBuffer.slice(0,split);
-      eventBuffer=eventBuffer.slice(split+2);
-      const type=block.match(/^event:\s*(.+)$/m)?.[1];
-      if(type!==eventName)continue;
-      const data=block.match(/^data:\s*(.+)$/m)?.[1]||"null";
-      return JSON.parse(data);
-    }
-    const remaining=Math.max(1,deadline-Date.now());
-    let timeoutId=0;
-    const result=await Promise.race([
-      eventReader.read(),
-      new Promise((_,reject)=>{timeoutId=setTimeout(()=>reject(new Error(`SSE_TIMEOUT_${eventName}`)),remaining);}),
-    ]).finally(()=>clearTimeout(timeoutId));
-    if(result.done)throw new Error(`SSE_CLOSED_${eventName}`);
-    eventBuffer+=new TextDecoder().decode(result.value,{stream:true}).replaceAll("\r\n","\n");
-  }
-  throw new Error(`SSE_TIMEOUT_${eventName}`);
-}
-await nextInventoryEvent("ready");
-
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:manager.cookie})).response.status,403);
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:admin.cookie})).response.status,200);
 
@@ -373,6 +338,41 @@ assert.deepEqual(
 assert.equal(catalogCreateLog.metadata?.operation,"create");
 assert.equal(catalogCreateLog.before_data,null);
 assert.equal(catalogCreateLog.after_data?.item_key,catalogAuditKey);
+
+assert.equal((await request("/api/inventory/events")).response.status,401,"inventory event stream must require authentication");
+const eventAbort=new AbortController();
+const eventResponse=await fetch(BASE+"/api/inventory/events?clientId=api-regression-listener",{
+  headers:{cookie:employee.cookie},
+  signal:eventAbort.signal,
+});
+assert.equal(eventResponse.status,200,"authenticated inventory event stream failed");
+assert.match(eventResponse.headers.get("content-type")||"",/text\/event-stream/);
+const eventReader=eventResponse.body.getReader();
+let eventBuffer="";
+async function nextInventoryEvent(eventName,timeoutMs=5000){
+  const deadline=Date.now()+timeoutMs;
+  while(Date.now()<deadline){
+    const split=eventBuffer.indexOf("\n\n");
+    if(split>=0){
+      const block=eventBuffer.slice(0,split);
+      eventBuffer=eventBuffer.slice(split+2);
+      const type=block.match(/^event:\s*(.+)$/m)?.[1];
+      if(type!==eventName)continue;
+      const data=block.match(/^data:\s*(.+)$/m)?.[1]||"null";
+      return JSON.parse(data);
+    }
+    const remaining=Math.max(1,deadline-Date.now());
+    let timeoutId=0;
+    const result=await Promise.race([
+      eventReader.read(),
+      new Promise((_,reject)=>{timeoutId=setTimeout(()=>reject(new Error(`SSE_TIMEOUT_${eventName}`)),remaining);}),
+    ]).finally(()=>clearTimeout(timeoutId));
+    if(result.done)throw new Error(`SSE_CLOSED_${eventName}`);
+    eventBuffer+=new TextDecoder().decode(result.value,{stream:true}).replaceAll("\r\n","\n");
+  }
+  throw new Error(`SSE_TIMEOUT_${eventName}`);
+}
+await nextInventoryEvent("ready");
 
 const employeeSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:employee.cookie,

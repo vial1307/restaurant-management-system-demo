@@ -1030,3 +1030,10 @@ Pending CI proof:
 - concurrency regression;
 - desktop/mobile Chromium and full-device browser certification;
 - exact tested-head merge, VPS deploy, production smoke and Inventory Site Production Audit.
+
+First PR #133 CI attempt:
+
+- Deploy workflow #803 / run `35528428165` preflight: PASS;
+- API regression stopped before browser/deploy because the SSE listener had been opened before earlier catalog/receive-default fixtures, so the assertion consumed an older valid invalidation with an empty source id instead of the writer event;
+- runtime behavior was correct; the test ordering was corrected by opening the listener immediately before the mutation under test;
+- production was not changed by the failed candidate run.
