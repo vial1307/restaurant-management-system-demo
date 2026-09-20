@@ -22,6 +22,20 @@ function object(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])])
+    );
+  }
+  return value;
+}
+
+function jsonEqual(left, right) {
+  return JSON.stringify(canonicalJson(left ?? {})) === JSON.stringify(canonicalJson(right ?? {}));
+}
+
 function canManageAll(user) {
   return hasCapability(user, "system.master_data.manage");
 }
@@ -223,6 +237,7 @@ export async function registerMasterDataRoutes(app) {
           const current = currentResult.rows[0];
           if (!current) throw Object.assign(new Error("LOCATION_NOT_FOUND"), { statusCode: 404 });
           if (current.site !== site) throw Object.assign(new Error("LOCATION_SITE_MISMATCH"), { statusCode: 409 });
+          if (!current.active) return current;
           await assertLocationCanArchive(client, id);
           const result = await client.query(
             `update public.inventory_locations
@@ -289,6 +304,16 @@ export async function registerMasterDataRoutes(app) {
         if (code && code !== current.code) {
           throw Object.assign(new Error("LOCATION_CODE_IMMUTABLE"), { statusCode: 409 });
         }
+
+        const unchanged =
+          current.name_zh_tw === nameZhTw &&
+          current.name_vi === nameVi &&
+          current.kind === kind &&
+          Number(current.sort_order || 0) === sortOrder &&
+          Boolean(current.active) === active &&
+          jsonEqual(current.metadata, metadata);
+        if (unchanged) return current;
+
         if (kind !== current.kind) await assertLocationCanChangeKind(client, id);
         if (!active && current.active) await assertLocationCanArchive(client, id);
 
@@ -341,6 +366,7 @@ export async function registerMasterDataRoutes(app) {
 
         if (action === "archive") {
           if (!current) throw Object.assign(new Error("WORK_AREA_NOT_FOUND"), { statusCode: 404 });
+          if (!current.active) return current;
           const result = await client.query(
             `update public.work_areas
              set active=false,updated_by_user_id=$3,updated_at=now()
@@ -399,6 +425,15 @@ export async function registerMasterDataRoutes(app) {
           });
           return result.rows[0];
         }
+
+        const unchanged =
+          current.department_code === departmentCode &&
+          current.name_vi === nameVi &&
+          current.name_zh_tw === nameZhTw &&
+          Boolean(current.active) === active &&
+          Number(current.sort_order || 0) === sortOrder &&
+          jsonEqual(current.metadata, metadata);
+        if (unchanged) return current;
 
         const result = await client.query(
           `update public.work_areas
