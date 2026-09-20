@@ -34,6 +34,15 @@ function normalizedWorkArea(row) {
   };
 }
 
+function normalizedInventoryUnit(row) {
+  if (!row?.code) return null;
+  return {
+    ...row,
+    code:String(row.code),
+    metadata:normalizedMetadata(row.metadata),
+  };
+}
+
 function assertMasterSnapshotReady(site, locations) {
   const mode = String(site?.metadata?.inventory_mode || "");
   if (!site?.code || !["central","branch"].includes(mode)) {
@@ -100,9 +109,12 @@ export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
   const workAreas = (Array.isArray(snapshot.workAreas) ? snapshot.workAreas : [])
     .map(normalizedWorkArea)
     .filter(Boolean);
+  const inventoryUnits = (Array.isArray(snapshot.inventoryUnits) ? snapshot.inventoryUnits : [])
+    .map(normalizedInventoryUnit)
+    .filter(Boolean);
   assertMasterSnapshotReady(site, locations);
   sites.set(code, site);
-  const next = { site, locations, workAreas };
+  const next = { site, locations, workAreas, inventoryUnits };
   snapshots.set(code, next);
   return next;
 }
@@ -120,6 +132,12 @@ export function inventoryLocations(siteCode, kind = "") {
 
 export function inventoryWorkAreas(siteCode) {
   return [...(inventoryMasterSnapshot(siteCode)?.workAreas || [])]
+    .filter((row) => row.active !== false)
+    .sort((a,b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || a.code.localeCompare(b.code));
+}
+
+export function inventoryUnits(siteCode) {
+  return [...(inventoryMasterSnapshot(siteCode)?.inventoryUnits || [])]
     .filter((row) => row.active !== false)
     .sort((a,b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || a.code.localeCompare(b.code));
 }
