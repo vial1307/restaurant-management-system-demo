@@ -70,12 +70,12 @@ try {
   assert.equal(development.data.repository.name, "vial1307/restaurant-management-system-demo");
   assert.match(development.data.current_work.url, /github\.com\/vial1307\/restaurant-management-system-demo\/tree\//);
   assert.equal(development.data.status, "stable");
-  assert.equal(development.data.current_work.branch, "fix/inventory-catalog-sync-stock-authority-20260920");
+  assert.equal(development.data.current_work.branch, "fix/super-admin-inventory-lifecycle-20260920");
   assert.equal(development.data.current_work.candidate_schema, "024");
   assert.equal(development.data.runtime.schema.version, "024");
   assert.equal(development.data.live_production.schema, "024");
   assert.equal(development.data.release_evidence.schema, "024");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35459291983");
+  assert.equal(development.data.release_evidence.workflow_run_id, "35475816625");
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
   assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
 
