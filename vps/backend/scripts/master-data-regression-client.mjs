@@ -71,6 +71,15 @@ try {
     "inventory items must be rejected when work_area is not active master data for the site"
   );
 
+  await assert.rejects(
+    DB.query(
+      `insert into public.inventory_items(item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active)
+       values('fuxing:invalid-unit-regression','invalid-unit-regression','錯誤單位','Đơn vị sai','UNIT_DOES_NOT_EXIST','noodles',false,true)`
+    ),
+    (error) => error?.code === "23503",
+    "inventory items must reject units that do not exist in inventory_units"
+  );
+
   const admin = await login("yangchuadmin");
   const manager = await login("managerfx");
   const employee = await login("employeefx");
@@ -84,6 +93,13 @@ try {
   assert.equal(adminMaster.data.site.code, "fuxing");
   assert.equal(adminMaster.data.permissions.manageLocations, true);
   assert.equal(adminMaster.data.permissions.manageWorkAreas, true);
+  assert(Array.isArray(adminMaster.data.inventoryUnits), "inventory unit master data missing from site snapshot");
+  for (const code of ["盒","包","箱","斤","片","個","隻","塊","條","kg"]) {
+    assert(
+      adminMaster.data.inventoryUnits.some((unit)=>unit.code===code && unit.active!==false),
+      `canonical inventory unit missing: ${code}`
+    );
+  }
 
   const managerMaster = await request("/api/master-data/fuxing?includeInactive=true", { cookie:manager.cookie });
   assert.equal(managerMaster.response.status, 200);
