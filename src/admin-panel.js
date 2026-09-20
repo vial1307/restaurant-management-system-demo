@@ -21,7 +21,7 @@ const DATASET_META = {
   ]},
   "inventory-products":{ label:"Nguyên liệu kho · 庫存品項", archive:"Ngừng dùng · 停用", fields:[
     ["item_key","Item key","text"],["catalog_key","Catalog key","text"],["name_vi","Tên VI","text"],["name_zh_tw","中文名稱","text"],
-    ["unit","Đơn vị · 單位","text"],["work_area","Khu làm việc · 工作區","text"],["storage_only","Chỉ lưu kho · 僅倉儲","boolean"],["active","Hoạt động · 啟用","boolean"],
+    ["unit","Đơn vị · 單位","text"],["work_area","Khu làm việc · 工作區","text"],["storage_only","Chỉ lưu kho · 僅倉儲","boolean"],
   ]},
   "sop-documents":{ label:"SOP Documents", archive:"Ngừng dùng · 停用", fields:[
     ["site_code","Chi nhánh · 據點","site"],["sop_code","Mã SOP","text"],["menu_item_id","Menu item UUID","text"],["work_area","Khu làm việc · 工作區","text"],
@@ -270,10 +270,17 @@ function renderDataFilters() {
 }
 function renderData() {
   const result=state.data.result; const rows=result?.rows||[]; const columns=result?.columns||[]; const p=result?.pagination||{page:1,pages:1,total:0};
-  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Data Tables & CRUD</h2><p>Chỉ các bảng/column nằm trong whitelist backend mới được truy cập.</p></div><button class="sa-btn primary" type="button" data-data-new>＋ Thêm dữ liệu</button></div>
+  const allowCreate=result ? result.allowCreate!==false : state.data.name!=="inventory-products";
+  const allowArchive=result ? result.allowArchive!==false : state.data.name!=="inventory-products";
+  const lifecycleManaged=Boolean(result?.lifecycleManaged || state.data.name==="inventory-products");
+  const lifecycleNote=lifecycleManaged
+    ? `<div class="sa-empty"><strong>Inventory lifecycle được quản lý tại module Kho · 庫存模組管理生命週期</strong><br><small>Data Tables chỉ sửa metadata. Thêm mới / kích hoạt / ngừng dùng phải thực hiện trong Inventory để giữ stock, location, receive-default và audit nhất quán.</small></div>`
+    : "";
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Data Tables & CRUD</h2><p>Chỉ các bảng/column nằm trong whitelist backend mới được truy cập.</p></div>${allowCreate?`<button class="sa-btn primary" type="button" data-data-new>＋ Thêm dữ liệu</button>`:""}</div>
   <div class="sa-tabs">${Object.entries(DATASET_META).map(([key,meta])=>`<button type="button" class="sa-tab ${state.data.name===key?"active":""}" data-dataset="${esc(key)}">${esc(meta.label)}</button>`).join("")}</div>
+  ${lifecycleNote}
   ${renderDataFilters()}
-  ${state.data.loading?`<div class="sa-empty">Đang tải…</div>`:`<div class="sa-table-wrap"><table class="sa-table data-table"><thead><tr>${columns.map((column)=>`<th><button type="button" class="sa-sort" data-sort="${esc(column)}">${esc(column)}${state.data.sort===column?(state.data.direction==="asc"?" ↑":" ↓"):""}</button></th>`).join("")}<th></th></tr></thead><tbody>${rows.map((row)=>`<tr>${columns.map((column)=>`<td title="${esc(typeof row[column]==="object"?json(row[column]):row[column])}">${esc(display(row[column]))}</td>`).join("")}<td><div class="sa-row-actions"><button class="sa-btn small" data-data-edit="${esc(row.id)}">Sửa</button><button class="sa-btn small danger" data-data-archive="${esc(row.id)}">${esc(DATASET_META[state.data.name]?.archive||"Archive")}</button></div></td></tr>`).join("")}</tbody></table></div>`}
+  ${state.data.loading?`<div class="sa-empty">Đang tải…</div>`:`<div class="sa-table-wrap"><table class="sa-table data-table"><thead><tr>${columns.map((column)=>`<th><button type="button" class="sa-sort" data-sort="${esc(column)}">${esc(column)}${state.data.sort===column?(state.data.direction==="asc"?" ↑":" ↓"):""}</button></th>`).join("")}<th></th></tr></thead><tbody>${rows.map((row)=>`<tr>${columns.map((column)=>`<td title="${esc(typeof row[column]==="object"?json(row[column]):row[column])}">${esc(display(row[column]))}</td>`).join("")}<td><div class="sa-row-actions"><button class="sa-btn small" data-data-edit="${esc(row.id)}">Sửa</button>${allowArchive?`<button class="sa-btn small danger" data-data-archive="${esc(row.id)}">${esc(DATASET_META[state.data.name]?.archive||"Archive")}</button>`:""}</div></td></tr>`).join("")}</tbody></table></div>`}
   <div class="sa-pagination"><span>${esc(p.total||0)} rows · page ${esc(p.page||1)}/${esc(p.pages||1)}</span><div><button class="sa-btn small" data-page="${Math.max(1,(p.page||1)-1)}" ${(p.page||1)<=1?"disabled":""}>←</button><button class="sa-btn small" data-page="${Math.min(p.pages||1,(p.page||1)+1)}" ${(p.page||1)>=(p.pages||1)?"disabled":""}>→</button></div></div></article>`;
 }
 
@@ -350,6 +357,7 @@ function fieldControl(name,label,type,value,locked=false) {
   const val=type==="datetime"&&value?new Date(value).toISOString().slice(0,16):(value??"");return `<label><span>${esc(label)}</span><input name="${esc(name)}" type="${type==="datetime"?"datetime-local":type}" value="${esc(val)}" ${locked?"readonly":""}>${lockNote}</label>`;
 }
 function openDataEditor(row=null) {
+  if(!row && state.data.result?.allowCreate===false)return;
   const meta=DATASET_META[state.data.name]; const createOnly=new Set(state.data.result?.createOnly||[]);
   const host=modal(`${row?"Sửa":"Thêm"} · ${meta.label}`,`<form data-data-form><div class="sa-form-grid">${meta.fields.map(([name,label,type])=>fieldControl(name,label,type,row?.[name]??(name==="currency_code"?"TWD":undefined),Boolean(row&&createOnly.has(name)))).join("")}</div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu Database</button></div></form>`); const form=host.querySelector("[data-data-form]");
   form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const values={};try{for(const [name,,type] of meta.fields){if(row&&createOnly.has(name))continue;if(type==="boolean")values[name]=form.elements[name].checked;else if(type==="number")values[name]=fd.get(name)===""?null:Number(fd.get(name));else if(type==="json")values[name]=JSON.parse(String(fd.get(name)||"{}"));else if(type==="datetime")values[name]=fd.get(name)?new Date(String(fd.get(name))).toISOString():null;else values[name]=String(fd.get(name)||"");}await api(`/api/admin/super/data/${encodeURIComponent(state.data.name)}`,{method:"POST",body:{action:"save",id:row?.id,expectedRevision:row?.row_revision||"",values}});host.remove();state.success="Đã lưu dữ liệu.";await Promise.all([loadDataset(),loadCore()]);}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error)==="ADMIN_ROW_STALE"?"Dữ liệu đã được thay đổi ở phiên khác. Hãy đóng form, tải lại rồi sửa trên bản mới nhất.":errorText(error);}});
