@@ -146,6 +146,7 @@ jobs:
           test -f vps/backend/scripts/workforce-approval-regression-client.mjs
           test -f vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
           test -f vps/backend/scripts/api-regression-v6.mjs
+          test -f vps/backend/scripts/inventory-editor-bulk-regression-client.mjs
           test -f vps/backend/scripts/inventory-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
           test -f tests/inventory-archive-integrity-contract-regression.mjs
@@ -159,6 +160,7 @@ jobs:
           test -f vps/database/migrations/006_business_module_revisions.sql
           test -f vps/database/migrations/023_inventory_archive_integrity.sql
           test -f vps/database/migrations/024_inventory_location_archive_integrity.sql
+          test -f vps/database/migrations/025_inventory_units_and_editor_master_data.sql
 
   regression:
     runs-on: ubuntu-latest
