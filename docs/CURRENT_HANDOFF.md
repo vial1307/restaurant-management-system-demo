@@ -697,3 +697,38 @@ The public `handoff.html` page is intentionally limited to public repository met
 ### Next known work after Live Handoff
 
 The next inventory integrity slice already identified is `set-minimum` history/audit semantics: minimum changes currently update `inventory_stock.minimum_quantity` but do not create an `inventory_transactions`/audit history record. Do not mix that fix into the Live Handoff PR.
+
+
+## 2026-09-20 — Live Handoff production #789 and main-state follow-up
+
+Live GitHub & Handoff from PR #127 is now production-verified:
+
+- production SHA: `19feaa88744939eba6c6b28cdcc57b290ad72029`;
+- Deploy Kitchen OS to VPS #789 / run `35495483199`: PASS;
+- production UI smoke: PASS;
+- schema: `024`;
+- Inventory Site Production Audit #47 / run `35495707381`: PASS;
+- GitHub Pages #927: PASS.
+
+Canonical continuation link remains:
+
+- `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
+
+Follow-up branch:
+
+- `fix/live-handoff-main-release-evidence-20260920`
+
+Reason:
+
+- active PR mode is already live and automatic;
+- between PRs, the public page previously only said “main” without showing exact main SHA/CI;
+- Super Admin runtime release was correct, but release-evidence card could still show the previous static workflow milestone.
+
+Patch invariant:
+
+- no open PR => live feed returns current main SHA, commit chain and workflows for that SHA;
+- runtime release SHA is always the displayed release milestone;
+- Deploy/Audit evidence is used only when it matches the exact runtime SHA;
+- if live GitHub evidence is unavailable, runtime release/schema remain authoritative and stale workflow IDs are not presented as current evidence.
+
+After this patch is production-verified, continue with the separate inventory `set-minimum` history/audit workstream.
