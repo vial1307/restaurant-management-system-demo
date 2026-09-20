@@ -995,18 +995,22 @@ function branchInventoryHistoryView(rows, language="vi", cloud=false) {
     : "Xem người thao tác, thời gian, số lượng, kho nguồn và kho đích.";
   const actionLabel={
     in:"進貨入庫", pick:"領貨", use:"使用", return:"歸位", ship:"出貨", transfer:"庫存轉撥", adjust:"盤點調整",
+    minimum:language==="zh"?"標準量調整":"Điều chỉnh định mức · 標準量調整",
     out:"出庫",
   };
   const body=(rows||[]).map((entry)=>{
     if(cloud){
       const direction=entry.direction||"";
-      const sign=direction==="out"?"−":direction==="in"?"+":"↔";
+      const sign=direction==="out"?"−":direction==="in"?"+":direction==="minimum"?"Δ":"↔";
       const tone=direction==="out"?"history-out":direction==="in"?"history-in":"history-adjust";
       const actor=entry.actor?.display_name||entry.actor?.username||"—";
       const item=entry.item?.name_zh_tw||"—";
       const unit=entry.item?.unit||"";
       const location=entry.location?.name_zh_tw||"";
-      return `<article><div><strong>${escapeHtml(item)}</strong><small>${escapeHtml(new Date(entry.created_at).toLocaleString("zh-TW"))} · ${escapeHtml(actor)} · ${escapeHtml(entry.note||actionLabel[direction]||direction)}</small></div><span>${escapeHtml(location)}</span><strong class="${tone}">${sign}${escapeHtml(entry.amount)} ${escapeHtml(unit)}</strong><small>${escapeHtml(entry.before_quantity)} → ${escapeHtml(entry.after_quantity)}</small></article>`;
+      const transitionPrefix=direction==="minimum"
+        ? (language==="zh"?"標準量 ":"Định mức · 標準量 ")
+        : "";
+      return `<article><div><strong>${escapeHtml(item)}</strong><small>${escapeHtml(new Date(entry.created_at).toLocaleString("zh-TW"))} · ${escapeHtml(actor)} · ${escapeHtml(entry.note||actionLabel[direction]||direction)}</small></div><span>${escapeHtml(location)}</span><strong class="${tone}">${sign}${escapeHtml(entry.amount)} ${escapeHtml(unit)}</strong><small>${escapeHtml(transitionPrefix)}${escapeHtml(entry.before_quantity)} → ${escapeHtml(entry.after_quantity)}</small></article>`;
     }
     const action=entry.action||"";
     const source=entry.source||"";

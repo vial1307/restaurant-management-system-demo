@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`
+- Current verified production SHA: `19feaa88744939eba6c6b28cdcc57b290ad72029`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #786
-- Run ID: `35482680596`
-- Tested/deployed commit: `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`
+- Workflow: Deploy Kitchen OS to VPS #789
+- Run ID: `35495483199`
+- Tested/deployed commit: `19feaa88744939eba6c6b28cdcc57b290ad72029`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -36,7 +36,7 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- Post-deploy Inventory Site Production Audit #44 / run `35482912054`: PASS
+- Post-deploy Inventory Site Production Audit #47 / run `35495707381`: PASS
 
 Production audit after schema 022:
 
@@ -697,3 +697,57 @@ The public `handoff.html` page is intentionally limited to public repository met
 ### Next known work after Live Handoff
 
 The next inventory integrity slice already identified is `set-minimum` history/audit semantics: minimum changes currently update `inventory_stock.minimum_quantity` but do not create an `inventory_transactions`/audit history record. Do not mix that fix into the Live Handoff PR.
+
+
+## 2026-09-20 — Live Handoff production verified; minimum-history slice
+
+Live GitHub & Handoff is now production verified.
+
+Production evidence:
+
+- merge/release SHA: `19feaa88744939eba6c6b28cdcc57b290ad72029`;
+- Deploy Kitchen OS to VPS #789 / run `35495483199`: PASS;
+- schema: `024`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- GitHub Pages build/deploy #927: PASS;
+- Inventory Site Production Audit #47 / run `35495707381`: PASS;
+- `inventory_site_integrity_violations = 0`;
+- `inventory_hidden_integrity_violations = 0`;
+- exact release check: `19feaa8`.
+
+Canonical continuation entry remains:
+
+- `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
+
+### Active inventory slice
+
+Branch:
+
+- `fix/inventory-minimum-history-20260920`
+- schema change: none; remains `024`.
+
+Confirmed defect:
+
+- `POST /api/inventory/set-minimum` changed `inventory_stock.minimum_quantity`;
+- the mutation did not create `inventory_transactions`;
+- the Inventory History view therefore could not show who changed an item minimum, when it changed, or its before/after values.
+
+Candidate invariant:
+
+- minimum changes are transactional;
+- stock row is locked before reading the previous minimum;
+- no-op save does not create duplicate history;
+- real change writes `inventory_transactions.action='adjust'`;
+- metadata uses `operation='set_minimum'`, `before_minimum`, `after_minimum`;
+- increase/decrease anchors the same location through destination/source so existing site history query includes the event;
+- frontend maps this metadata to a distinct `minimum` history direction;
+- UI label is `標準量調整 / Điều chỉnh định mức`;
+- no schema migration is needed because the existing `adjust` transaction action contract is reused.
+
+Dynamic regression uses a zero-minimum fixture to prove:
+
+1. `0 -> 4` creates history;
+2. `4 -> 4` creates no duplicate history;
+3. `4 -> 0` creates the second history event;
+4. admin History API returns actor/location/before/after correctly.

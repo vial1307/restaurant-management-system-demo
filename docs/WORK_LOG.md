@@ -719,3 +719,74 @@ Next separate defect already confirmed during read-only audit:
 
 - `POST /api/inventory/set-minimum` mutates `minimum_quantity` without transaction/audit history;
 - this must be fixed in a separate slice after Live Handoff production verification.
+
+
+## 2026-09-20 — Live Handoff production #789 and minimum-history continuation
+
+### Live Handoff verified
+
+PR #127 merged as `19feaa88744939eba6c6b28cdcc57b290ad72029`.
+
+Deploy #789 / run `35495483199`:
+
+- preflight/static: PASS;
+- API/inventory regression: PASS;
+- PostgreSQL concurrency: PASS;
+- desktop/mobile Chromium: PASS;
+- workforce/browser regression: PASS;
+- full-device cross-browser: PASS;
+- server backup: `kitchen_os_20260920T065921Z.dump`;
+- schema 024: PASS;
+- item archive-integrity triggers = 2;
+- location-integrity triggers = 3;
+- DATA_INTEGRITY_OK;
+- Web/API/Super Admin edge healthy;
+- production UI smoke: PASS;
+- release: `19feaa8`.
+
+GitHub Pages #927 deployed the canonical handoff page successfully.
+
+Inventory Site Production Audit #47 / run `35495707381`:
+
+- schema 024;
+- stock-site mismatch = 0;
+- receive-default mismatch = 0;
+- inactive item quantity/minimum = 0;
+- inactive location quantity/minimum = 0;
+- invalid receive-default checks = 0;
+- duplicate active catalog/site groups = 0;
+- active items missing stock/storage = 0;
+- site integrity violations = 0;
+- hidden integrity violations = 0;
+- exact release `19feaa8` PASS.
+
+Canonical continuation URL:
+
+- https://vial1307.github.io/restaurant-management-system-demo/handoff.html
+
+### Minimum-history defect
+
+Created branch:
+
+- `fix/inventory-minimum-history-20260920`
+
+Existing behavior:
+
+- `set-minimum` wrote `inventory_stock.minimum_quantity` directly;
+- no inventory transaction was created;
+- Inventory History only reads `inventory_transactions`, so the change was invisible.
+
+Candidate implementation:
+
+- wrap `set-minimum` in `withTransaction`;
+- create zero association only if missing;
+- lock stock row and read current minimum;
+- update minimum;
+- if changed, insert an `adjust` transaction with:
+  - `operation=set_minimum`;
+  - `before_minimum`;
+  - `after_minimum`;
+- no-op saves create no transaction;
+- cloud history maps these rows to direction `minimum`;
+- UI renders `標準量調整 / Điều chỉnh định mức` and before/after;
+- dynamic regression validates change/no-op/clear history.

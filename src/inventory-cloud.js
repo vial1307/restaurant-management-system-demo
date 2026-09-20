@@ -1178,12 +1178,17 @@ export async function getCloudInventoryHistory(site = currentSite(), limit = 200
     return tx.map((entry) => {
       const locationId = entry.destination_location_id || entry.source_location_id || "";
       const meta = entry.metadata || {};
-      const before = meta.before_quantity ?? meta.source_before ?? meta.destination_before ?? "";
-      const after = meta.after_quantity ?? meta.source_after ?? meta.destination_after ?? "";
+      const minimumChange = meta.operation === "set_minimum";
+      const before = minimumChange
+        ? meta.before_minimum ?? ""
+        : meta.before_quantity ?? meta.source_before ?? meta.destination_before ?? "";
+      const after = minimumChange
+        ? meta.after_minimum ?? ""
+        : meta.after_quantity ?? meta.source_after ?? meta.destination_after ?? "";
       return {
         ...entry,
         location_id: locationId,
-        direction: entry.action || "",
+        direction: minimumChange ? "minimum" : entry.action || "",
         before_quantity: before,
         after_quantity: after,
         actor_id: entry.actor_user_id,
