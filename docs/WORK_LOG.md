@@ -1037,3 +1037,10 @@ First PR #133 CI attempt:
 - API regression stopped before browser/deploy because the SSE listener had been opened before earlier catalog/receive-default fixtures, so the assertion consumed an older valid invalidation with an empty source id instead of the writer event;
 - runtime behavior was correct; the test ordering was corrected by opening the listener immediately before the mutation under test;
 - production was not changed by the failed candidate run.
+
+Second PR #133 CI attempt:
+
+- Deploy workflow #804 / run `35528594733` preflight, API inventory/SSE, workforce API and PostgreSQL concurrency: PASS;
+- Chromium stopped in the new two-tab browser check because Playwright `fill()` + `Tab` did not emit the expected change mutation in this form; backend logs confirmed that no browser `set-minimum` request was sent;
+- the test now dispatches the native bubbling `change` event explicitly for the write and restore steps;
+- production was not changed by the failed candidate run.

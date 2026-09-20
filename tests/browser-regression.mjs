@@ -455,7 +455,7 @@ async function roleDesktop(browser, username, checks) {
       await page.waitForTimeout(250);
 
       await sourceMinimum.fill(String(next));
-      await sourceMinimum.press("Tab");
+      await sourceMinimum.dispatchEvent("change");
       await peer.waitForFunction(
         ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
         {name:`minimum:${zone}`,value:String(next)},
@@ -464,7 +464,7 @@ async function roleDesktop(browser, username, checks) {
 
       const restoredMinimum=page.locator(".inventory-table.storage-table .storage-row").first().locator('input[data-field="item"][data-key="minimum"]');
       await restoredMinimum.fill(String(before));
-      await restoredMinimum.press("Tab");
+      await restoredMinimum.dispatchEvent("change");
       await peer.waitForFunction(
         ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
         {name:`minimum:${zone}`,value:String(before)},
