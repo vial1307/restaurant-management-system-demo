@@ -42,12 +42,11 @@ const DATASETS = {
     table:"public.inventory_items",
     id:"id",
     columns:["id","item_key","catalog_key","name_vi","name_zh_tw","unit","work_area","storage_only","active","created_at","updated_at"],
-    editable:["item_key","catalog_key","name_vi","name_zh_tw","unit","work_area","storage_only","active"],
+    editable:["item_key","catalog_key","name_vi","name_zh_tw","unit","work_area","storage_only"],
     searchable:["item_key","catalog_key","name_vi","name_zh_tw","unit","work_area"],
     sortable:["updated_at","item_key","catalog_key","name_vi","name_zh_tw","active"],
     defaultSort:"updated_at",
     siteExpression:"split_part(item_key,':',1)",
-    archive:{ column:"active", value:false },
   },
   "sop-documents": {
     table:"public.sop_documents",
@@ -81,6 +80,8 @@ const DATASET_POLICY = {
   "inventory-products": {
     required:["item_key","catalog_key","name_vi","name_zh_tw","unit","work_area"],
     createOnly:["item_key","catalog_key"],
+    allowCreate:false,
+    lifecycleManaged:true,
     textLimits:{ item_key:240,catalog_key:180,name_vi:240,name_zh_tw:240,unit:40,work_area:120 },
   },
   "sop-documents": {
@@ -326,6 +327,9 @@ async function listDataset(name, query) {
     columns:config.columns,
     editable:config.editable,
     createOnly:DATASET_POLICY[name]?.createOnly || [],
+    allowCreate:DATASET_POLICY[name]?.allowCreate !== false,
+    allowArchive:Boolean(config.archive),
+    lifecycleManaged:Boolean(DATASET_POLICY[name]?.lifecycleManaged),
     rows:rows.rows.map(({ __total,__revision, ...row }) => ({...row,row_revision:__revision})),
     pagination:{ page,pageSize,total,pages:Math.max(1,Math.ceil(total / pageSize)) },
     sort:{ key:sort,direction },
@@ -361,6 +365,9 @@ async function saveDatasetRow(user, name, body) {
       return {...saved,row_revision:String(saved.revision)};
     }
     if (action !== "save") throw Object.assign(new Error("INVALID_ADMIN_DATA_ACTION"), { statusCode:400 });
+    if (!id && DATASET_POLICY[name]?.allowCreate === false) {
+      throw Object.assign(new Error("ADMIN_INVENTORY_LIFECYCLE_MANAGED"), { statusCode:409 });
+    }
     const raw = object(body?.values);
     validateDatasetValues(name,config,raw,{isCreate:!id});
     let entries = config.editable
