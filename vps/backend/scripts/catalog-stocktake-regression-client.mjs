@@ -184,6 +184,34 @@ const seedProtectedMinimum=await request("/api/inventory/set-minimum",{
   body:{itemId:protectedItem.id,locationId:freezer.id,minimum:4},
 });
 assert.equal(seedProtectedMinimum.response.status,200);
+assert.equal(Number(seedProtectedMinimum.data?.before),0);
+assert.equal(Number(seedProtectedMinimum.data?.after),4);
+assert.equal(seedProtectedMinimum.data?.transaction?.action,"adjust");
+assert.equal(seedProtectedMinimum.data?.transaction?.metadata?.operation,"set_minimum");
+assert.equal(Number(seedProtectedMinimum.data?.transaction?.metadata?.before_minimum),0);
+assert.equal(Number(seedProtectedMinimum.data?.transaction?.metadata?.after_minimum),4);
+
+const repeatProtectedMinimum=await request("/api/inventory/set-minimum",{
+  method:"POST",
+  cookie:supervisor,
+  body:{itemId:protectedItem.id,locationId:freezer.id,minimum:4},
+});
+assert.equal(repeatProtectedMinimum.response.status,200);
+assert.equal(Number(repeatProtectedMinimum.data?.before),4);
+assert.equal(Number(repeatProtectedMinimum.data?.after),4);
+assert.equal(repeatProtectedMinimum.data?.transaction,null,"no-op minimum save created duplicate history");
+
+const protectedMinimumHistory=await request("/api/inventory/fuxing/transactions?limit=100",{cookie:admin});
+assert.equal(protectedMinimumHistory.response.status,200);
+const seededMinimumHistory=protectedMinimumHistory.data.transactions.find(
+  (entry)=>entry.item_id===protectedItem.id
+    && entry.metadata?.operation==="set_minimum"
+    && Number(entry.metadata?.before_minimum)===0
+    && Number(entry.metadata?.after_minimum)===4
+);
+assert(seededMinimumHistory,"minimum change did not appear in inventory history");
+assert.equal(seededMinimumHistory.destination_location_id,freezer.id);
+assert.equal(seededMinimumHistory.actor_username,supervisorUser);
 
 const removeProtectedLocation=await request("/api/inventory/catalog/sync",{
   method:"POST",
@@ -210,6 +238,19 @@ const clearProtectedMinimum=await request("/api/inventory/set-minimum",{
   body:{itemId:protectedItem.id,locationId:freezer.id,minimum:0},
 });
 assert.equal(clearProtectedMinimum.response.status,200);
+assert.equal(Number(clearProtectedMinimum.data?.before),4);
+assert.equal(Number(clearProtectedMinimum.data?.after),0);
+assert.equal(clearProtectedMinimum.data?.transaction?.metadata?.operation,"set_minimum");
+assert.equal(clearProtectedMinimum.data?.transaction?.source_location_id,freezer.id);
+assert.equal(Number(clearProtectedMinimum.data?.transaction?.metadata?.before_minimum),4);
+assert.equal(Number(clearProtectedMinimum.data?.transaction?.metadata?.after_minimum),0);
+
+const protectedMinimumHistoryAfterClear=await request("/api/inventory/fuxing/transactions?limit=100",{cookie:admin});
+assert.equal(protectedMinimumHistoryAfterClear.response.status,200);
+const protectedMinimumEntries=protectedMinimumHistoryAfterClear.data.transactions.filter(
+  (entry)=>entry.item_id===protectedItem.id && entry.metadata?.operation==="set_minimum"
+);
+assert.equal(protectedMinimumEntries.length,2,"minimum history should contain exactly change and clear records");
 
 const removeClearedLocation=await request("/api/inventory/catalog/sync",{
   method:"POST",
