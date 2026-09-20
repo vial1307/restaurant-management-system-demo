@@ -936,3 +936,48 @@ Dynamic API regression:
 - update metadata and add second location -> audit update;
 - Super Admin Audit must return exactly create + update for that item key;
 - both stock rows must remain 0/0.
+
+
+## 2026-09-21 — Inventory round-trip persistence and rapid-adjustment candidate
+
+Created stacked branch:
+
+- `fix/inventory-roundtrip-performance-20260921`;
+- based on catalog-audit head `c574b3ac84e7652e00959776c661496427f51ccc`;
+- production remains Deploy #796 / `21d376295b6194e48bfaa599fc6c5424256a6196`, schema 024.
+
+Confirmed defects:
+
+- every rapid branch/central `+ / -` action updated the store or page and triggered a full render, then cloud synchronization triggered another full inventory fetch/render;
+- work-area changes used catalog sync, but a stocked old work-location association cannot be removed by catalog configuration, so reload restored the old value;
+- branch item form submit referenced `state` without declaring it and could fail before persistence;
+- central modal quantity/minimum values were only present in the catalog payload, where physical stock fields are intentionally ignored;
+- stocked storage replacements in edit modals did not consistently use `relocate-storage`.
+
+Candidate implementation:
+
+- coalesce rapid controls for 120 ms, serialize net adjustments and perform one final authoritative reconciliation;
+- add pending/saved/error row feedback without whole-page render per tap;
+- add `POST /api/inventory/relocate-work-area` with site/capability validation, advisory and row locks, atomic source-to-destination quantity/minimum move, item metadata update, transfer history and `inventory_work_area_relocate` audit;
+- route branch work-area controls through the relocation endpoint;
+- route protected branch/central storage replacements through `relocate-storage`;
+- persist branch/central quantity and minimum through dedicated stock APIs;
+- restore branch edit submit state declaration;
+- add static contract coverage and dynamic API regression for both 復興 and 永吉 work-area relocation.
+
+Local verification:
+
+- syntax checks: PASS;
+- `tests/static-regression.mjs`: PASS;
+- `tests/performance-regression.mjs`: PASS;
+- focused scalar no-op, hydration authority, empty snapshot, sync serialization, cache invalidation and branch/central stocktake-boundary regressions: PASS;
+- `git diff --check`: PASS.
+
+Pending CI proof:
+
+- PostgreSQL/API regression;
+- PostgreSQL concurrency regression;
+- desktop/mobile Chromium regression;
+- full-device cross-browser regression.
+
+Local Docker was unavailable and Playwright Chromium download timed out, so no local dynamic database/browser result is claimed.

@@ -297,6 +297,10 @@ export function vpsRelocateStorage(body) {
   return vpsInventoryMutation("/api/inventory/relocate-storage", body);
 }
 
+export function vpsRelocateWorkArea(body) {
+  return vpsInventoryMutation("/api/inventory/relocate-work-area", body);
+}
+
 export function vpsDirectTransfer(body) {
   return vpsInventoryMutation("/api/inventory/direct-transfer", body);
 }

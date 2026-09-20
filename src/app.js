@@ -40,6 +40,7 @@ import {
   cloudAdjustQuantity,
   cloudArchiveBranchItem,
   cloudRelocateStorage,
+  cloudRelocateWorkArea,
   cloudSetMinimum,
   cloudSetQuantity,
   cloudSetReceiveDefault,
@@ -203,6 +204,125 @@ function accountSession() {
 
 function accountCan(moduleKey, action = "view") {
   return accountCanPermission(accountSession(), moduleKey, action);
+}
+
+const QUICK_ADJUST_DEBOUNCE_MS = 120;
+const branchQuickAdjustments = new Map();
+
+function branchQuantityInput(kind, id) {
+  return root.querySelector(
+    `[data-field="${kind}"][data-key="quantity"][data-id="${CSS.escape(String(id || ""))}"]`
+  );
+}
+
+function patchBranchQuickAdjustment(entry, status = "saving") {
+  const input = branchQuantityInput(entry.kind,entry.id);
+  if (!input) return;
+  input.value = String(Math.max(0,Number(entry.visibleQuantity) || 0));
+  const control = input.closest(".quantity-control");
+  if (!control) return;
+  control.dataset.syncState = status;
+  control.setAttribute("aria-busy",status === "saving" ? "true" : "false");
+  const live = control.querySelector("[data-quantity-sync-status]");
+  if (live) live.textContent = status === "saving"
+    ? "Đang lưu… · 儲存中…"
+    : status === "error" ? "Lưu thất bại · 儲存失敗" : "Đã lưu · 已儲存";
+}
+
+async function flushBranchQuickAdjustment(key) {
+  const entry = branchQuickAdjustments.get(key);
+  if (!entry || entry.inFlight || entry.reconciling) return;
+  const delta = Number(entry.queuedDelta || 0);
+  if (!delta) {
+    branchQuickAdjustments.delete(key);
+    patchBranchQuickAdjustment(entry,"saved");
+    return;
+  }
+
+  entry.queuedDelta = 0;
+  entry.inFlight = true;
+  patchBranchQuickAdjustment(entry,"saving");
+  const result = await cloudAdjustQuantity({
+    itemKey:entry.itemKey,
+    locationCode:entry.locationCode,
+    direction:delta > 0 ? "in" : "out",
+    amount:Math.abs(delta),
+    note:entry.note,
+    sync:false,
+  });
+  entry.inFlight = false;
+
+  if (!result.ok) {
+    entry.queuedDelta = 0;
+    entry.failed = true;
+    patchBranchQuickAdjustment(entry,"error");
+    window.shituNotify?.({
+      type:"error",
+      title:"Không thể cập nhật tồn kho · 庫存更新失敗",
+      body:"Database chưa xác nhận thay đổi; hệ thống đang tải lại số lượng thật. · 資料庫尚未確認，系統正重新載入實際數量。",
+    });
+    await syncInventoryNow(entry.site,{reloadBranch:false,force:true});
+    if (branchQuickAdjustments.get(key) === entry) branchQuickAdjustments.delete(key);
+    return;
+  }
+
+  entry.confirmedQuantity = Number(result.data?.after ?? (entry.confirmedQuantity + delta));
+  entry.visibleQuantity = Math.max(0,entry.confirmedQuantity + Number(entry.queuedDelta || 0));
+  patchBranchQuickAdjustment(entry,entry.queuedDelta ? "saving" : "saved");
+
+  if (entry.queuedDelta) {
+    void flushBranchQuickAdjustment(key);
+    return;
+  }
+
+  entry.reconciling = true;
+  await syncInventoryNow(entry.site,{reloadBranch:false,force:true});
+  entry.reconciling = false;
+  if (branchQuickAdjustments.get(key) !== entry) return;
+  if (entry.queuedDelta) {
+    patchBranchQuickAdjustment(entry,"saving");
+    void flushBranchQuickAdjustment(key);
+    return;
+  }
+  branchQuickAdjustments.delete(key);
+  patchBranchQuickAdjustment(entry,"saved");
+}
+
+function queueBranchQuickAdjustment({ site, item, kind, delta }) {
+  const locationCode = kind === "workItem"
+    ? branchWorkLocationCode(site,item.workArea)
+    : branchLocationCode(site,item.zone);
+  const itemKey = branchItemKey(site,item.stockKey);
+  if (!site || !itemKey || !locationCode || !Number.isFinite(delta) || !delta) return false;
+
+  const key = `${itemKey}|${locationCode}`;
+  let entry = branchQuickAdjustments.get(key);
+  if (!entry) {
+    entry = {
+      site,itemKey,locationCode,kind,id:item.id,
+      confirmedQuantity:Math.max(0,Number(item.quantity) || 0),
+      visibleQuantity:Math.max(0,Number(item.quantity) || 0),
+      queuedDelta:0,inFlight:false,reconciling:false,failed:false,timer:0,
+      note:kind === "workItem"
+        ? "工作區數量調整 / Điều chỉnh số lượng khu làm việc"
+        : "庫存快速調整 / Điều chỉnh nhanh tồn kho",
+    };
+    branchQuickAdjustments.set(key,entry);
+  }
+
+  if (entry.failed) return false;
+
+  const next = Math.max(0,entry.visibleQuantity + delta);
+  const actualDelta = next - entry.visibleQuantity;
+  if (!actualDelta) return false;
+  entry.visibleQuantity = next;
+  entry.queuedDelta += actualDelta;
+  patchBranchQuickAdjustment(entry,"saving");
+  if (!entry.inFlight && !entry.reconciling) {
+    clearTimeout(entry.timer);
+    entry.timer = window.setTimeout(() => { void flushBranchQuickAdjustment(key); },QUICK_ADJUST_DEBOUNCE_MS);
+  }
+  return true;
 }
 
 function applyAccountEditState() {
@@ -511,7 +631,7 @@ function quantityControl(item, kind = "item", manageAdjust = false) {
     : `<strong class="quantity-readonly" aria-label="Current quantity">${escapeHtml(item.quantity)}</strong>`;
   const decrease = direct ? `<button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="-1"${manageAttribute} aria-label="Decrease">${icon("minus")}</button>` : "";
   const increase = direct ? `<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}" data-delta="1"${manageAttribute} aria-label="Increase">${icon("plus")}</button>` : "";
-  return `<div class="quantity-control">${decrease}${value}${increase}<small>${escapeHtml(item.unit)}</small></div>`;
+  return `<div class="quantity-control">${decrease}${value}${increase}<small>${escapeHtml(item.unit)}</small><span class="quantity-sync-status" data-quantity-sync-status role="status" aria-live="polite"></span></div>`;
 }
 
 function inventoryStatusBadge(item, text) {
@@ -1547,23 +1667,7 @@ root.addEventListener("click", (event) => {
     const item = state.records[state.selectedDate].inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const delta = Number(target.dataset.delta);
-      const next = Math.max(0, Number(item.quantity || 0) + delta);
-      const actualDelta = next - Number(item.quantity || 0);
-      if (actualDelta) {
-        store.updateItem(item.id, "quantity", next);
-        void cloudAdjustQuantity({
-          itemKey: branchItemKey(activeInventorySite(), item.stockKey),
-          locationCode: branchLocationCode(activeInventorySite(), item.zone),
-          direction: actualDelta > 0 ? "in" : "out",
-          amount: Math.abs(actualDelta),
-          note: "庫存快速調整 / Điều chỉnh nhanh tồn kho",
-        }).then((result) => {
-          if (!result.ok && !result.fallback) {
-            store.updateItem(item.id, "quantity", Number(item.quantity || 0) - actualDelta);
-            void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-          }
-        });
-      }
+      queueBranchQuickAdjustment({site,item,kind:"item",delta});
     }
   }
   if (action === "adjust-work-item") {
@@ -1577,23 +1681,7 @@ root.addEventListener("click", (event) => {
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const delta = Number(target.dataset.delta);
-      const next = Math.max(0, Number(item.quantity || 0) + delta);
-      const actualDelta = next - Number(item.quantity || 0);
-      if (actualDelta) {
-        store.updateWorkItem(item.id, "quantity", next);
-        void cloudAdjustQuantity({
-          itemKey: branchItemKey(activeInventorySite(), item.stockKey),
-          locationCode: branchWorkLocationCode(activeInventorySite(), item.workArea),
-          direction: actualDelta > 0 ? "in" : "out",
-          amount: Math.abs(actualDelta),
-          note: "工作區數量調整 / Điều chỉnh số lượng khu làm việc",
-        }).then((result) => {
-          if (!result.ok && !result.fallback) {
-            store.updateWorkItem(item.id, "quantity", Number(item.quantity || 0) - actualDelta);
-            void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-          }
-        });
-      }
+      queueBranchQuickAdjustment({site,item,kind:"workItem",delta});
     }
   }
   if (action === "restock-work-item" && !target.disabled) {
@@ -1713,7 +1801,10 @@ root.addEventListener("change", (event) => {
         destinationLocationCode,
         note:"儲位移動 / Chuyển vị trí lưu",
       }).then((result) => {
-        if (result.ok) return;
+        if (result.ok) {
+          window.shituNotify?.({type:"success",title:"Đã lưu vị trí cất · 儲位已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
+          return;
+        }
         window.alert(
           result.error?.message === "SOURCE_STORAGE_NOT_CONFIGURED"
             ? "Vị trí nguồn không còn trong database. Dữ liệu sẽ được tải lại. · 來源儲位已不在資料庫，系統將重新載入。"
@@ -1723,6 +1814,32 @@ root.addEventListener("change", (event) => {
         render();
       });
       return;
+    }
+    if (key === "workArea") {
+      const previousArea = String(item.workArea || "");
+      const nextArea = String(element.value || "");
+      if (!previousArea || !nextArea || previousArea === nextArea) { render(); return; }
+      const workItem = state.records[state.selectedDate].workInventory.find((entry) => entry.stockKey === item.stockKey);
+      if (workItem) {
+        const sourceLocationCode = branchWorkLocationCode(site,previousArea);
+        const destinationLocationCode = branchWorkLocationCode(site,nextArea);
+        if (!sourceLocationCode || !destinationLocationCode) { render(); return; }
+        element.disabled = true;
+        void cloudRelocateWorkArea({
+          itemKey:branchItemKey(site,item.stockKey),
+          sourceLocationCode,
+          destinationLocationCode,
+          note:"工作區移動 / Chuyển khu làm việc",
+        }).then((result) => {
+          if (result.ok) {
+            window.shituNotify?.({type:"success",title:"Đã lưu khu làm việc · 工作區已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
+            return;
+          }
+          window.alert("Không thể đổi khu làm việc trong database. Dữ liệu thật sẽ được tải lại. · 無法在資料庫中變更工作區，系統將重新載入實際資料。");
+          void syncInventoryNow(site,{reloadBranch:false,force:true});
+        });
+        return;
+      }
     }
     if (key === "quantity") {
       const previous = Number(item.quantity || 0);
@@ -1765,7 +1882,9 @@ root.addEventListener("change", (event) => {
       if (!result.ok && !result.fallback) {
         store.updateItem(id, key, previous);
         void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
+        return;
       }
+      window.shituNotify?.({type:"success",title:"Đã lưu nguyên liệu · 品項已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
     });
   }
   if (field === "workItem") {
@@ -1775,9 +1894,34 @@ root.addEventListener("change", (event) => {
       render();
       return;
     }
-    if (!canDirectInventoryAdjust()) { render(); return; }
+    const site = activeInventorySite();
+    const catalogWorkAreaEdit = key === "workArea" && canManageBranchCatalog(site);
+    if (!canDirectInventoryAdjust() && !catalogWorkAreaEdit) { render(); return; }
     const item = state.records[state.selectedDate].workInventory.find((entry) => entry.id === id);
     if (!item) return;
+    if (key === "workArea") {
+      const previousArea = String(item.workArea || "");
+      const nextArea = String(element.value || "");
+      if (!previousArea || !nextArea || previousArea === nextArea) { render(); return; }
+      const sourceLocationCode = branchWorkLocationCode(site,previousArea);
+      const destinationLocationCode = branchWorkLocationCode(site,nextArea);
+      if (!sourceLocationCode || !destinationLocationCode) { render(); return; }
+      element.disabled = true;
+      void cloudRelocateWorkArea({
+        itemKey:branchItemKey(site,item.stockKey),
+        sourceLocationCode,
+        destinationLocationCode,
+        note:"工作區移動 / Chuyển khu làm việc",
+      }).then((result) => {
+        if (result.ok) {
+          window.shituNotify?.({type:"success",title:"Đã lưu khu làm việc · 工作區已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
+          return;
+        }
+        window.alert("Không thể đổi khu làm việc trong database. Dữ liệu thật sẽ được tải lại. · 無法在資料庫中變更工作區，系統將重新載入實際資料。");
+        void syncInventoryNow(site,{reloadBranch:false,force:true});
+      });
+      return;
+    }
     if (key === "quantity") {
       if (!canDirectInventoryAdjust()) { render(); return; }
       const previous = Number(item.quantity || 0);
@@ -1819,7 +1963,9 @@ root.addEventListener("change", (event) => {
       if (!result.ok && !result.fallback) {
         store.updateWorkItem(id, key, previous);
         void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
+        return;
       }
+      window.shituNotify?.({type:"success",title:"Đã lưu nguyên liệu · 品項已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
     });
   }
   if (field === "calendarMonth") { view.calendarMonth = Number(element.value); render(); }
@@ -1890,6 +2036,7 @@ root.addEventListener("compositionend", (event) => {
 root.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
+  const state = store.getState();
   const formName = form.dataset.form || "";
   const requiredEditModule = FORM_EDIT_MODULE[formName];
   if (requiredEditModule && !accountCan(requiredEditModule, "edit")) return;
@@ -1950,14 +2097,75 @@ root.addEventListener("submit", async (event) => {
       locations,
     };
     const site = activeInventorySite();
+    const existingRows = stockKey
+      ? state.records[state.selectedDate].inventory.filter((entry) => entry.stockKey === stockKey)
+      : [];
+    const selectedZones = new Set(locations.map((entry) => entry.zone));
+    const existingZones = new Set(existingRows.map((entry) => entry.zone));
+    const removedLocations = existingRows.filter((entry) => !selectedZones.has(entry.zone));
+    const addedLocations = locations.filter((entry) => !existingZones.has(entry.zone));
+    const protectedRemovedLocations = removedLocations.filter((entry) =>
+      Number(entry.quantity || 0) > 0 || Number(entry.minimum || 0) > 0
+    );
+    let storageRelocation = null;
+    if (protectedRemovedLocations.length) {
+      if (removedLocations.length !== 1 || addedLocations.length !== 1) {
+        window.alert("Khi vị trí cũ còn tồn/định mức, hãy đổi một vị trí cũ sang đúng một vị trí mới trong mỗi lần lưu để hệ thống chuyển dữ liệu an toàn. · 舊儲位仍有庫存／標準量時，每次請只將一個舊儲位改為一個新儲位，以便安全移動資料。");
+        return;
+      }
+      const source = removedLocations[0];
+      const destination = addedLocations[0];
+      destination.quantity = Number(source.quantity || 0);
+      destination.minimum = Math.max(Number(destination.minimum || 0),Number(source.minimum || 0));
+      storageRelocation = { sourceZone:source.zone, destinationZone:destination.zone };
+    }
+    const existingWorkItem = stockKey
+      ? state.records[state.selectedDate].workInventory.find((entry) => entry.stockKey === stockKey)
+      : null;
+    const previousWorkArea = String(existingWorkItem?.workArea || existingItem?.workArea || "");
+    const workAreaChanged = Boolean(existingWorkItem && previousWorkArea && previousWorkArea !== item.workArea);
+    if (storageRelocation && workAreaChanged) {
+      window.alert("Để tránh lưu dở dang, hãy đổi khu cất và khu làm việc thành hai lần lưu riêng. · 為避免部分儲存，請分兩次變更儲位與工作區。");
+      return;
+    }
     const saveButtons = form.closest(".ingredient-modal")?.querySelectorAll("[data-save-item]") || [];
     for (const button of saveButtons) {
       button.disabled = true;
       button.textContent = "Đang lưu vào database… · 正在儲存…";
     }
-    view.modal = null;
-    view.editingStockKey = null;
     if (form.dataset.form === "edit-item") {
+      if (storageRelocation) {
+        const relocation = await cloudRelocateStorage({
+          itemKey:branchItemKey(site,stockKey),
+          sourceLocationCode:branchLocationCode(site,storageRelocation.sourceZone),
+          destinationLocationCode:branchLocationCode(site,storageRelocation.destinationZone),
+          note:"品項儲位變更 / Đổi vị trí cất của nguyên liệu",
+          sync:false,
+        });
+        if (!relocation.ok) {
+          for (const button of saveButtons) button.disabled = false;
+          window.alert("Không thể chuyển vị trí cất trong database; biểu mẫu vẫn được giữ để kiểm tra. · 儲位無法在資料庫中移動，表單已保留供檢查。");
+          await syncInventoryNow(site,{reloadBranch:false,force:true});
+          return;
+        }
+      }
+      if (workAreaChanged) {
+        const relocation = await cloudRelocateWorkArea({
+          itemKey:branchItemKey(site,stockKey),
+          sourceLocationCode:branchWorkLocationCode(site,previousWorkArea),
+          destinationLocationCode:branchWorkLocationCode(site,item.workArea),
+          note:"品項工作區變更 / Đổi khu làm việc của nguyên liệu",
+          sync:false,
+        });
+        if (!relocation.ok) {
+          for (const button of saveButtons) button.disabled = false;
+          window.alert("Không thể lưu khu làm việc vào database; biểu mẫu vẫn được giữ để kiểm tra. · 工作區無法寫入資料庫，表單已保留供檢查。");
+          await syncInventoryNow(site,{reloadBranch:false,force:true});
+          return;
+        }
+      }
+      view.modal = null;
+      view.editingStockKey = null;
       store.updateIngredient(stockKey, item);
       const result = await cloudSyncBranchCatalogItem(stockKey, site, { sync:false });
       if (result.ok) {
@@ -1975,7 +2183,7 @@ root.addEventListener("submit", async (event) => {
               locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
             })
           : {ok:stockResult.ok,skipped:true};
-        await syncInventoryNow(site, { reloadBranch: false });
+        await syncInventoryNow(site, { reloadBranch: false, force:true });
         if (!stockResult.ok) {
           window.alert("Thông tin sản phẩm đã lưu, nhưng tồn kho/định mức chưa lưu hoàn tất. Dữ liệu thật từ database đã được tải lại; hãy kiểm tra và thử lại phần tồn kho. · 品項資料已儲存，但庫存／標準量尚未完整寫入；系統已重新載入資料庫實際資料，請確認後再試。");
         } else if (!receiveResult.ok) {
@@ -1989,6 +2197,8 @@ root.addEventListener("submit", async (event) => {
         await syncInventoryNow(site, { reloadBranch: true });
       }
     } else {
+      view.modal = null;
+      view.editingStockKey = null;
       const createdStockKey=store.addItem(item);
       const result=createdStockKey
         ? await cloudSyncBranchCatalogItem(createdStockKey,site,{sync:false})
@@ -2008,7 +2218,7 @@ root.addEventListener("submit", async (event) => {
               locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
             })
           : {ok:stockResult.ok,skipped:true};
-        await syncInventoryNow(site, { reloadBranch: false });
+        await syncInventoryNow(site, { reloadBranch: false, force:true });
         if (!stockResult.ok) {
           window.alert("Sản phẩm đã được tạo, nhưng tồn kho/định mức chưa lưu hoàn tất. Dữ liệu thật từ database đã được tải lại; hãy mở sản phẩm và thử lại phần tồn kho. · 品項已建立，但庫存／標準量尚未完整寫入；系統已重新載入資料庫實際資料，請重新開啟品項再試。");
         } else if (!receiveResult.ok) {
@@ -2018,7 +2228,7 @@ root.addEventListener("submit", async (event) => {
         if(createdStockKey) store.removeIngredient(createdStockKey);
         window.alert("Không thể lưu sản phẩm vào database; dữ liệu tạm đã được hoàn tác. · 無法儲存品項至資料庫，暫存資料已還原。");
       }
-      await syncInventoryNow(site,{reloadBranch:false});
+      await syncInventoryNow(site,{reloadBranch:false,force:true});
     }
   }
 });

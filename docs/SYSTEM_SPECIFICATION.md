@@ -391,6 +391,12 @@ Admin retains archive/deactivation control.
 
 Saving a product must persist to VPS PostgreSQL. A failed VPS write must not be shown as successful simply because local cache changed.
 
+Changing a branch product's work area is a physical work-location relocation, not a browser-only catalog edit. The VPS must move the existing work quantity and minimum to the selected work location, update `inventory_items.work_area`, and write the configuration/stock audit in one PostgreSQL transaction before the frontend reports success.
+
+Changing a product's storage location must continue to use the dedicated transactional relocation API. The frontend must reconcile from the authoritative response/snapshot for 央廚, 復興店 and 永吉店; refresh must never restore the previous location after a confirmed save.
+
+Rapid `+ / −` stock adjustments must keep the row responsive. Consecutive taps for the same item/location may be coalesced into one delta mutation, but the final delta must be applied atomically on PostgreSQL, remain auditable, show pending/error state, and reconcile once from the confirmed server result. A tap must not cause a whole-page render followed by a duplicate inventory reload.
+
 ---
 
 ## 7. Inventory alert and pre-shift rules

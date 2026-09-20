@@ -10,6 +10,7 @@ import {
   centralLocationCode,
   cloudAdjustQuantity,
   cloudArchiveCentralItem,
+  cloudRelocateStorage,
   cloudSetMinimum,
   cloudSetQuantity,
   cloudSyncCentralCatalogItem,
@@ -39,6 +40,8 @@ const CENTRAL_WORK_AREAS = [
   { id:"meat", zh:"肉區", vi:"Khu thịt" },
 ];
 const CENTRAL_UNITS = ["包","盒","箱","斤","片","個","隻","塊","條","顆","手","kg"];
+const CENTRAL_QUICK_ADJUST_DEBOUNCE_MS = 120;
+const centralQuickAdjustments = new Map();
 
 const DEFAULT_PRODUCTS = [
   ["麻辣湯(3000cc/包)", "Nước lẩu mala 3000cc", "包", "央廚冷凍"],
@@ -87,6 +90,100 @@ const DEFAULT_PRODUCTS = [
 
 function session() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
+}
+
+function patchCentralQuickAdjustment(entry,status="saving") {
+  const input=document.querySelector(`[data-central-set-qty="${CSS.escape(String(entry.id||""))}"]`);
+  if(!input)return;
+  input.value=String(Math.max(0,Number(entry.visibleQuantity)||0));
+  const control=input.closest(".quantity-control");
+  if(!control)return;
+  control.dataset.syncState=status;
+  control.setAttribute("aria-busy",status==="saving"?"true":"false");
+  const live=control.querySelector("[data-quantity-sync-status]");
+  if(live)live.textContent=status==="saving"
+    ? "Đang lưu… · 儲存中…"
+    : status==="error"?"Lưu thất bại · 儲存失敗":"Đã lưu · 已儲存";
+}
+
+async function flushCentralQuickAdjustment(key){
+  const entry=centralQuickAdjustments.get(key);
+  if(!entry||entry.inFlight||entry.reconciling)return;
+  const delta=Number(entry.queuedDelta||0);
+  if(!delta){
+    centralQuickAdjustments.delete(key);
+    patchCentralQuickAdjustment(entry,"saved");
+    return;
+  }
+  entry.queuedDelta=0;
+  entry.inFlight=true;
+  patchCentralQuickAdjustment(entry,"saving");
+  const result=await cloudAdjustQuantity({
+    itemKey:entry.itemKey,
+    locationCode:entry.locationCode,
+    direction:delta>0?"in":"out",
+    amount:Math.abs(delta),
+    note:"央廚庫存快速調整 / Điều chỉnh nhanh tồn kho bếp trung tâm",
+    sync:false,
+  });
+  entry.inFlight=false;
+  if(!result.ok){
+    entry.queuedDelta=0;
+    entry.failed=true;
+    patchCentralQuickAdjustment(entry,"error");
+    window.shituNotify?.({
+      type:"error",
+      title:"Không thể cập nhật tồn kho · 庫存更新失敗",
+      body:"Database chưa xác nhận thay đổi; hệ thống đang tải lại số lượng thật. · 資料庫尚未確認，系統正重新載入實際數量。",
+    });
+    await syncInventoryNow("central",{reloadBranch:false,force:true});
+    if(centralQuickAdjustments.get(key)===entry)centralQuickAdjustments.delete(key);
+    return;
+  }
+  entry.confirmedQuantity=Number(result.data?.after??(entry.confirmedQuantity+delta));
+  entry.visibleQuantity=Math.max(0,entry.confirmedQuantity+Number(entry.queuedDelta||0));
+  patchCentralQuickAdjustment(entry,entry.queuedDelta?"saving":"saved");
+  if(entry.queuedDelta){
+    void flushCentralQuickAdjustment(key);
+    return;
+  }
+  entry.reconciling=true;
+  await syncInventoryNow("central",{reloadBranch:false,force:true});
+  entry.reconciling=false;
+  if(centralQuickAdjustments.get(key)!==entry)return;
+  if(entry.queuedDelta){
+    patchCentralQuickAdjustment(entry,"saving");
+    void flushCentralQuickAdjustment(key);
+    return;
+  }
+  centralQuickAdjustments.delete(key);
+  patchCentralQuickAdjustment(entry,"saved");
+}
+
+function queueCentralQuickAdjustment(input,delta){
+  const itemKey=String(input?.dataset.centralItemKey||"");
+  const locationCode=String(input?.dataset.centralLocationCode||"");
+  const id=String(input?.dataset.centralSetQty||"");
+  if(!itemKey||!locationCode||!id||!Number.isFinite(delta)||!delta)return false;
+  const key=`${itemKey}|${locationCode}`;
+  let entry=centralQuickAdjustments.get(key);
+  if(!entry){
+    const current=Math.max(0,Number(input.value)||0);
+    entry={id,itemKey,locationCode,confirmedQuantity:current,visibleQuantity:current,queuedDelta:0,inFlight:false,reconciling:false,failed:false,timer:0};
+    centralQuickAdjustments.set(key,entry);
+  }
+  if(entry.failed)return false;
+  const next=Math.max(0,entry.visibleQuantity+delta);
+  const actualDelta=next-entry.visibleQuantity;
+  if(!actualDelta)return false;
+  entry.visibleQuantity=next;
+  entry.queuedDelta+=actualDelta;
+  patchCentralQuickAdjustment(entry,"saving");
+  if(!entry.inFlight&&!entry.reconciling){
+    clearTimeout(entry.timer);
+    entry.timer=window.setTimeout(()=>{void flushCentralQuickAdjustment(key);},CENTRAL_QUICK_ADJUST_DEBOUNCE_MS);
+  }
+  return true;
 }
 function announceCentralStock(items) {
   queueMicrotask(() => {
@@ -711,7 +808,7 @@ function centralStockStatus(quantity,minimum){
 function centralQuantityControl({id,itemKey,locationCode,quantity,unit,direct,manageAdjust=false}){
   if(!direct) return `<div class="quantity-control"><strong class="quantity-readonly">${Number(quantity||0)}</strong><small>${esc(unit)}</small></div>`;
   const manageAttribute=manageAdjust?' data-central-manage-adjust="true"':"";
-  return `<div class="quantity-control central-quantity-control"><button class="quantity-button" type="button" data-central-step="${esc(id)}" data-delta="-1"${manageAttribute} aria-label="Decrease">−</button><input class="quantity-input" type="number" min="0" inputmode="numeric" value="${Number(quantity||0)}" data-central-set-qty="${esc(id)}" data-central-item-key="${esc(itemKey)}" data-central-location-code="${esc(locationCode)}"${manageAttribute}><button class="quantity-button plus" type="button" data-central-step="${esc(id)}" data-delta="1"${manageAttribute} aria-label="Increase">＋</button><small>${esc(unit)}</small></div>`;
+  return `<div class="quantity-control central-quantity-control"><button class="quantity-button" type="button" data-central-step="${esc(id)}" data-delta="-1"${manageAttribute} aria-label="Decrease">−</button><input class="quantity-input" type="number" min="0" inputmode="numeric" value="${Number(quantity||0)}" data-central-set-qty="${esc(id)}" data-central-item-key="${esc(itemKey)}" data-central-location-code="${esc(locationCode)}"${manageAttribute}><button class="quantity-button plus" type="button" data-central-step="${esc(id)}" data-delta="1"${manageAttribute} aria-label="Increase">＋</button><small>${esc(unit)}</small><span class="quantity-sync-status" data-quantity-sync-status role="status" aria-live="polite"></span></div>`;
 }
 
 function stockView(items, selectedZone, query, directAdjust = false, { inventoryView="storage", canManageCatalog=false, workMap={} } = {}) {
@@ -937,11 +1034,17 @@ function bindCentral(user) {
     const editorKey = String(editorForm.dataset.editorKey || "new");
     const editing = editorKey !== "new";
     const oldRows = editing ? oldItems.filter((row) => centralProductKey(row) === editorKey) : [];
+    let storageRelocation = null;
     if (editing) {
-      const removedWithStock = oldRows.find((row) => !selectedZones.includes(row.zone) && Number(row.qty || 0) > 0);
-      if (removedWithStock) {
-        alert("儲位仍有庫存，請先將數量調整為 0，再取消該存放位置。");
-        return;
+      const removedRows=oldRows.filter((row)=>!selectedZones.includes(row.zone));
+      const addedZones=selectedZones.filter((zone)=>!oldRows.some((row)=>row.zone===zone));
+      const protectedRemoved=removedRows.filter((row)=>Number(row.qty||0)>0||Number(row.minimum||0)>0);
+      if(protectedRemoved.length){
+        if(removedRows.length!==1||addedZones.length!==1){
+          alert("舊儲位仍有庫存／標準量時，每次請只將一個舊儲位改為一個新儲位，以便安全移動資料。");
+          return;
+        }
+        storageRelocation={source:removedRows[0],destinationZone:addedZones[0]};
       }
     }
 
@@ -951,19 +1054,26 @@ function bindCentral(user) {
       || (editing ? String(editorKey).replace(/^central:/, "") : `custom-${Date.now()}`);
     const itemKey = first?.itemKey || `central:${rawBaseId}`;
     const catalogKey = first?.catalogKey || zh.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
-    const nextRows = selectedZones.map((zone) => ({
-      id: `${rawBaseId}@${centralLocationCode(zone)}`,
-      baseId: rawBaseId,
-      itemKey,
-      catalogKey,
-      zh,
-      vi,
-      unit,
-      workArea,
-      zone,
-      qty: Math.max(0, Number(data.get(`central-quantity:${zone}`)) || 0),
-      minimum: Math.max(0, Number(data.get(`central-minimum:${zone}`)) || 0),
-    }));
+    const nextRows = selectedZones.map((zone) => {
+      const relocatedSource=storageRelocation?.destinationZone===zone?storageRelocation.source:null;
+      return {
+        id: `${rawBaseId}@${centralLocationCode(zone)}`,
+        baseId: rawBaseId,
+        itemKey,
+        catalogKey,
+        zh,
+        vi,
+        unit,
+        workArea,
+        zone,
+        qty: relocatedSource
+          ? Math.max(0,Number(relocatedSource.qty)||0)
+          : Math.max(0, Number(data.get(`central-quantity:${zone}`)) || 0),
+        minimum: relocatedSource
+          ? Math.max(Number(relocatedSource.minimum||0),Math.max(0,Number(data.get(`central-minimum:${zone}`))||0))
+          : Math.max(0, Number(data.get(`central-minimum:${zone}`)) || 0),
+      };
+    });
     const nextItems = editing
       ? oldItems.filter((row) => centralProductKey(row) !== editorKey).concat(nextRows)
       : oldItems.concat(nextRows);
@@ -977,8 +1087,23 @@ function bindCentral(user) {
       button.disabled = true;
       button.textContent = "Đang lưu vào database… · 正在儲存…";
     }
+    if(storageRelocation){
+      const relocation=await cloudRelocateStorage({
+        itemKey,
+        sourceLocationCode:centralLocationCode(storageRelocation.source.zone),
+        destinationLocationCode:centralLocationCode(storageRelocation.destinationZone),
+        note:"央廚品項儲位變更 / Đổi vị trí cất nguyên liệu bếp trung tâm",
+        sync:false,
+      });
+      if(!relocation.ok){
+        for(const button of saveButtons)button.disabled=false;
+        alert("儲位無法在資料庫中移動，表單已保留供檢查。");
+        await syncInventoryNow("central",{reloadBranch:false,force:true});
+        return;
+      }
+    }
     saveStock(nextItems);
-    const result = await cloudSyncCentralCatalogItem(itemKey, nextItems);
+    const result = await cloudSyncCentralCatalogItem(itemKey,nextItems,{sync:false});
     if (!result.ok || result.fallback) {
       saveStock(oldItems);
       const message = result.error?.message === "LOCATION_HAS_STOCK"
@@ -989,8 +1114,28 @@ function bindCentral(user) {
       centralPage(user);
       return;
     }
+    if (stocktakeWritable) {
+      for (const row of nextRows) {
+        const locationCode=centralLocationCode(row.zone);
+        const quantityResult=await cloudSetQuantity({
+          itemKey,
+          locationCode,
+          quantity:row.qty,
+          note:"央廚品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu bếp trung tâm",
+          sync:false,
+        });
+        const minimumResult=quantityResult.ok
+          ? await cloudSetMinimum({itemKey,locationCode,minimum:row.minimum,sync:false})
+          : quantityResult;
+        if (!quantityResult.ok || !minimumResult.ok) {
+          alert("品項資料已儲存，但庫存／標準量尚未完整寫入；系統將重新載入資料庫實際資料。");
+          await syncInventoryNow("central",{reloadBranch:false,force:true});
+          return;
+        }
+      }
+    }
     content.dataset.centralEditor = "";
-    centralPage(user);
+    await syncInventoryNow("central",{reloadBranch:false,force:true});
   };
   content.querySelectorAll("[data-central-product-delete]").forEach((button) => {
     button.onclick = async () => {
@@ -1036,11 +1181,11 @@ function bindCentral(user) {
       direction,
       amount,
       note: direction === "in" ? "央廚進貨入庫" : "央廚領料／出庫",
+      sync:false,
     });
 
     if (result.ok) {
-      await syncInventoryNow("central", { reloadBranch: false });
-      centralPage(user);
+      await syncInventoryNow("central", { reloadBranch: false, force:true });
       return;
     }
     if (result.fallback) {
@@ -1061,10 +1206,9 @@ function bindCentral(user) {
     const next=Math.max(0,Number(input.value)||0);
     if(!itemKey||!locationCode)return;
     input.disabled=true;
-    const result=await cloudSetQuantity({itemKey,locationCode,quantity:next,note:"盤點調整 / Điều chỉnh kiểm kê"});
+    const result=await cloudSetQuantity({itemKey,locationCode,quantity:next,note:"盤點調整 / Điều chỉnh kiểm kê",sync:false});
     if(result.ok){
-      await syncInventoryNow("central",{reloadBranch:false});
-      centralPage(user);
+      await syncInventoryNow("central",{reloadBranch:false,force:true});
       return;
     }
     if(result.fallback){
@@ -1087,11 +1231,10 @@ function bindCentral(user) {
   }
 
   content.querySelectorAll("[data-central-step]").forEach((button)=>{
-    button.onclick=async()=>{
+    button.onclick=()=>{
       const input=content.querySelector(`[data-central-set-qty="${CSS.escape(button.dataset.centralStep)}"]`);
       if(!input)return;
-      input.value=String(Math.max(0,Number(input.value||0)+Number(button.dataset.delta||0)));
-      await commitCentralQuantity(input);
+      queueCentralQuickAdjustment(input,Number(button.dataset.delta||0));
     };
   });
   content.querySelectorAll("input[data-central-set-qty][data-central-item-key]").forEach((input)=>{
@@ -1105,10 +1248,10 @@ function bindCentral(user) {
         itemKey:input.dataset.centralItemKey,
         locationCode:input.dataset.centralLocationCode,
         minimum:Math.max(0,Number(input.value)||0),
+        sync:false,
       });
       if(result.ok){
-        await syncInventoryNow("central",{reloadBranch:false});
-        centralPage(user);
+        await syncInventoryNow("central",{reloadBranch:false,force:true});
         return;
       }
       input.disabled=false;
@@ -1132,11 +1275,11 @@ function bindCentral(user) {
       locationCode: centralLocationCode(item.zone),
       quantity: next,
       note: "央廚盤點調整 / Điều chỉnh kiểm kê bếp trung tâm",
+      sync:false,
     });
 
     if (result.ok) {
-      await syncInventoryNow("central", { reloadBranch: false });
-      centralPage(user);
+      await syncInventoryNow("central", { reloadBranch: false, force:true });
       return;
     }
     if (result.fallback) {

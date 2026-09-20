@@ -141,9 +141,13 @@ const beefYj = yongjiData.items.find((item) => item.catalog_key === "beef");
 const tofuYj = yongjiData.items.find((item) => item.catalog_key === "tofu");
 const fxFreezer = fuxingData.locations.find((loc) => loc.code === "fuxing-freezer");
 const fxFour = fuxingData.locations.find((loc) => loc.code === "fuxing-four");
+const fxWorkNoodles = fuxingData.locations.find((loc) => loc.code === "fuxing-work-noodles");
+const fxWorkMeat = fuxingData.locations.find((loc) => loc.code === "fuxing-work-meat");
 const yjFreezer = yongjiData.locations.find((loc) => loc.code === "yongji-freezer");
 const yjFour = yongjiData.locations.find((loc) => loc.code === "yongji-four");
-assert(beefFx && tofuFx && beefYj && tofuYj && fxFreezer && fxFour && yjFreezer && yjFour);
+const yjWorkNoodles = yongjiData.locations.find((loc) => loc.code === "yongji-work-noodles");
+const yjWorkMeat = yongjiData.locations.find((loc) => loc.code === "yongji-work-meat");
+assert(beefFx && tofuFx && beefYj && tofuYj && fxFreezer && fxFour && fxWorkNoodles && fxWorkMeat && yjFreezer && yjFour && yjWorkNoodles && yjWorkMeat);
 
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:manager.cookie})).response.status,403);
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:admin.cookie})).response.status,200);
@@ -422,6 +426,63 @@ assert.equal(Number(relocatedStock.minimum_quantity),1);
 const relocatedDefault = await request("/api/inventory/receive-defaults?sites=fuxing&catalogKeys=test-manager",{cookie:admin.cookie});
 assert.equal(relocatedDefault.response.status,200);
 assert.equal(relocatedDefault.data.defaults?.[0]?.location_code,"fuxing-four");
+
+for (const fixture of [
+  {site:"fuxing",cookie:manager.cookie,storage:fxFreezer,source:fxWorkNoodles,destination:fxWorkMeat},
+  {site:"yongji",cookie:managerYj.cookie,storage:yjFreezer,source:yjWorkNoodles,destination:yjWorkMeat},
+]) {
+  const itemKey=`${fixture.site}:work-area-relocation-regression`;
+  const catalogKey=`work-area-relocation-${fixture.site}`;
+  const saved=await request("/api/inventory/catalog/sync",{
+    method:"POST",cookie:fixture.cookie,
+    body:{item:{
+      key:itemKey,catalog_key:catalogKey,zh:"工作區移動測試",vi:`Kiểm thử đổi khu ${fixture.site}`,
+      unit:"包",work_area:"noodles",storage_only:false,
+      locations:[{code:fixture.storage.code},{code:fixture.source.code}],
+    }}
+  });
+  assert.equal(saved.response.status,200,`work-area fixture create failed for ${fixture.site}`);
+  assert.equal((await request("/api/inventory/set-quantity",{
+    method:"POST",cookie:admin.cookie,
+    body:{itemId:saved.data.item.id,locationId:fixture.source.id,quantity:3,note:"work area relocation seed"}
+  })).response.status,200);
+  assert.equal((await request("/api/inventory/set-minimum",{
+    method:"POST",cookie:admin.cookie,
+    body:{itemId:saved.data.item.id,locationId:fixture.source.id,minimum:2}
+  })).response.status,200);
+
+  const moved=await request("/api/inventory/relocate-work-area",{
+    method:"POST",cookie:fixture.cookie,
+    body:{
+      itemId:saved.data.item.id,
+      sourceLocationId:fixture.source.id,
+      destinationLocationId:fixture.destination.id,
+      note:"regression relocate work area",
+    }
+  });
+  assert.equal(moved.response.status,200,`work-area relocation failed for ${fixture.site}`);
+  assert.equal(moved.data.work_area,"meat");
+  assert.equal(Number(moved.data.source_before),3);
+  assert.equal(Number(moved.data.destination_after),3);
+  assert.equal(Number(moved.data.destination_minimum_after),2);
+
+  const snapshot=(await inventory(admin.cookie,fixture.site)).data;
+  const persisted=snapshot.items.find((item)=>item.item_key===itemKey);
+  assert.equal(persisted?.work_area,"meat",`work area metadata did not persist for ${fixture.site}`);
+  assert.equal(snapshot.stock.some((row)=>row.item_id===persisted.id&&row.location_id===fixture.source.id),false);
+  const target=snapshot.stock.find((row)=>row.item_id===persisted.id&&row.location_id===fixture.destination.id);
+  assert.equal(Number(target?.quantity),3);
+  assert.equal(Number(target?.minimum_quantity),2);
+
+  const audit=await request(
+    `/api/admin/super/audit?action=inventory_work_area_relocate&site=${fixture.site}&q=${encodeURIComponent(saved.data.item.id)}&pageSize=20`,
+    {cookie:admin.cookie}
+  );
+  assert.equal(audit.response.status,200);
+  assert.equal(audit.data?.rows?.length,1);
+  assert.equal(audit.data.rows[0].before_data?.work_area,"noodles");
+  assert.equal(audit.data.rows[0].after_data?.work_area,"meat");
+}
 
 for (const [site, locationCode] of [["yongji","yongji-freezer"],["central","central-freezer"]]) {
   const itemKey = `${site}:save-button-regression`;
