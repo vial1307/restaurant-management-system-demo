@@ -1079,6 +1079,7 @@ export async function cloudSaveBranchInventoryEditor({
   locations = [],
   workMinimum = 0,
   receiveZone = "",
+  sync = true,
 }) {
   if (!(await verifyMigration())) {
     return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
@@ -1127,7 +1128,7 @@ export async function cloudSaveBranchInventoryEditor({
 
   try {
     const data = await vpsSaveInventoryEditor(body);
-    await syncInventoryNow(site,{reloadBranch:false});
+    if (sync) await syncInventoryNow(site,{reloadBranch:false});
     return { ok:true,fallback:false,data };
   } catch (error) {
     dispatchStatus("error",{error:error.message,stage:"inventory-editor-save"});
