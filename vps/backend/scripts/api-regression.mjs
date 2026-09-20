@@ -189,7 +189,7 @@ const receiveAuditUpdate=await request("/api/inventory/receive-default",{
 });
 assert.equal(receiveAuditUpdate.response.status,200);
 assert.equal(receiveAuditUpdate.data?.changed,true);
-assert(receiveAuditUpdate.data?.deleted,false);
+assert.equal(receiveAuditUpdate.data?.deleted,false);
 
 const receiveAuditDelete=await request("/api/inventory/receive-default",{
   method:"POST",cookie:manager.cookie,
