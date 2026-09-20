@@ -37,8 +37,9 @@ assert.match(page,/DEVELOPMENT_RULES\.md/);
 assert.match(page,/pulls\?state=open/);
 assert.match(page,/actions\/runs\?branch=/);
 
-assert.match(status,/phase:"live-github-handoff"/);
-assert.match(status,/workflow_run_id:"35482680596"/);
-assert.match(status,/inventory_audit_run_id:"35482912054"/);
+assert.match(status,/canonical_handoff:\{/);
+assert.match(status,/url:PUBLIC_HANDOFF_URL/);
+assert.match(status,/workflow_run_id:"\d+"/);
+assert.match(status,/inventory_audit_run_id:"\d+"/);
 
 console.log("LIVE_HANDOFF_CONTRACT_OK");
