@@ -661,7 +661,7 @@ export async function registerInventoryExtraRoutes(app) {
              )
              returning id,created_at`,
             [
-              user.id,user.username,savedItem.id,site,
+              user.id,user.username,itemKey,site,
               before === null ? null : JSON.stringify(before),
               JSON.stringify(after),
               itemKey,savedItem.catalog_key,operation
