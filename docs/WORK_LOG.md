@@ -719,3 +719,37 @@ Next separate defect already confirmed during read-only audit:
 
 - `POST /api/inventory/set-minimum` mutates `minimum_quantity` without transaction/audit history;
 - this must be fixed in a separate slice after Live Handoff production verification.
+
+
+## 2026-09-20 — Live Handoff production #789
+
+PR #127 merged as `19feaa88744939eba6c6b28cdcc57b290ad72029`.
+
+Verified:
+
+- Deploy #789 / run `35495483199`: PASS;
+- Master Data/Admin regression: PASS;
+- isolated load smoke: PASS;
+- VPS Capacity Audit #8: PASS;
+- Pages #927: PASS;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #47 / run `35495707381`: PASS.
+
+Follow-up gap found after deployment:
+
+- public handoff no-PR state did not show exact main SHA/CI;
+- Super Admin release milestone could still display static fallback workflow evidence from the previous release.
+
+Created branch:
+
+- `fix/live-handoff-main-release-evidence-20260920`.
+
+Candidate patch:
+
+- hydrate `main` commit chain and Actions when no PR is open;
+- derive release milestone SHA from runtime `APP_RELEASE`;
+- only show Deploy/Audit run IDs when they match the exact runtime SHA;
+- otherwise show runtime release/schema as authority without stale workflow IDs;
+- public handoff no-PR view shows main SHA, latest commit and CI.
+
+No schema migration.

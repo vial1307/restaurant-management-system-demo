@@ -76,8 +76,9 @@ try {
   assert.equal(development.data.runtime.schema.version, "024");
   assert.equal(development.data.live_production.schema, "024");
   assert.equal(development.data.release_evidence.schema, "024");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35482680596");
-  assert.equal(development.data.release_evidence.inventory_audit_run_id, "35482912054");
+  assert.equal(development.data.release_evidence.milestone_sha, development.data.runtime.release);
+  assert.equal(development.data.release_evidence.workflow_run_id, null);
+  assert.equal(development.data.release_evidence.inventory_audit_run_id, null);
   assert.match(development.data.canonical_handoff.url, /vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html/);
   assert.equal(development.data.live_github.source, "github-api-live");
   assert.equal(typeof development.data.live_github.available, "boolean");
