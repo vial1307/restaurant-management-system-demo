@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `19feaa88744939eba6c6b28cdcc57b290ad72029`
+- Current verified production SHA: `ccef35dad7027808d60b3a691925fbebc29b9eb4`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #789
-- Run ID: `35495483199`
-- Tested/deployed commit: `19feaa88744939eba6c6b28cdcc57b290ad72029`
+- Workflow: Deploy Kitchen OS to VPS #793
+- Run ID: `35496998332`
+- Tested/deployed commit: `ccef35dad7027808d60b3a691925fbebc29b9eb4`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -36,7 +36,7 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- Post-deploy Inventory Site Production Audit #47 / run `35495707381`: PASS
+- Post-deploy Inventory Site Production Audit #51 / run `35497249172`: PASS after rerun (initial attempt hit transient SSH reset before SQL audit executed)
 
 Production audit after schema 022:
 
@@ -751,3 +751,69 @@ Dynamic regression uses a zero-minimum fixture to prove:
 2. `4 -> 4` creates no duplicate history;
 3. `4 -> 0` creates the second history event;
 4. admin History API returns actor/location/before/after correctly.
+
+
+## 2026-09-20 — Minimum history production #793; receive-default audit slice
+
+Minimum-history work is production verified.
+
+Production evidence:
+
+- PR #129 merged as `ccef35dad7027808d60b3a691925fbebc29b9eb4`;
+- Deploy Kitchen OS to VPS #793 / run `35496998332`: PASS;
+- schema: `024`;
+- server backup: `kitchen_os_20260920T073331Z.dump`;
+- `DATA_INTEGRITY_OK`;
+- Web/API/Super Admin edge healthy;
+- production UI smoke: PASS;
+- GitHub Pages #928: PASS;
+- exact release: `ccef35d`.
+
+Inventory Site Production Audit #51 / run `35497249172`:
+
+- first attempt failed before SQL audit because SSH was reset by the VPS (`kex_exchange_identification: Connection reset by peer`);
+- rerun succeeded without code/data change;
+- `stock_site_mismatch = 0`;
+- `receive_default_site_mismatch = 0`;
+- inactive item/location positive quantity/minimum = 0;
+- invalid receive-default checks = 0;
+- duplicate active catalog/site groups = 0;
+- active items missing stock/storage rows = 0;
+- `inventory_site_integrity_violations = 0`;
+- `inventory_hidden_integrity_violations = 0`;
+- exact release check: `ccef35d`.
+
+### Active inventory slice — receive-default audit
+
+Branch:
+
+- `fix/inventory-receive-default-audit-20260920`
+- schema change: none; remains `024`.
+
+Confirmed gap:
+
+- `POST /api/inventory/receive-default` stored only the latest `updated_by` / `updated_at`;
+- changing A -> B overwrote prior context;
+- deleting a receive-default removed the routing row and its actor context entirely;
+- no persistent before/after audit existed for direct receive-default edits.
+
+Candidate invariant:
+
+- create/update/delete run inside one DB transaction;
+- an advisory transaction lock serializes the same `site + catalogKey` even when no receive-default row exists yet;
+- an existing receive-default row is also locked before change;
+- no-op set and no-op delete change nothing and create no audit;
+- real changes write `audit_logs.action='inventory_receive_default_change'`;
+- `entity_type='inventory_receive_default'`;
+- `entity_id='site:catalogKey'`;
+- before/after store `location_id` and `location_code`;
+- metadata stores `catalog_key` and operation `create/update/delete`;
+- physical inventory history remains separate because receive-default is routing configuration, not stock movement.
+
+Dynamic API regression uses a dedicated two-location fixture and verifies exactly three audit rows:
+
+1. create default -> audit create;
+2. save same location -> no audit;
+3. update location -> audit update;
+4. delete default -> audit delete;
+5. delete again -> no audit.
