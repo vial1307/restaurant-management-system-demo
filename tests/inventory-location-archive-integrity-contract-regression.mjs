@@ -27,7 +27,7 @@ assert.match(
   "location archive API must expose an explicit protected-stock conflict"
 );
 
-assert.match(verifier,/schema version \$\{schema\} is older than 024/);
+assert.match(verifier,/schema version \$\{schema\} is older than 025/);
 assert.match(verifier,/inventory location-integrity triggers = 3/);
 assert.match(verifier,/inactive inventory locations with protected stock\/config/);
 
