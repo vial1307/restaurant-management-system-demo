@@ -19,10 +19,15 @@ assert(app.includes("canManageReceiveDefault,"), "branch editor does not import 
 assert(app.includes("const receiveDefaultEditable = canManageReceiveDefault(activeInventorySite());"), "branch editor does not derive receiving-default editability from the dedicated boundary");
 assert(app.includes('disabled aria-disabled="true"'), "non-manager receiving-default selector is not disabled");
 assert(app.includes('type="hidden" name="receiveZone"'), "read-only receiving-default UI must preserve the existing value on product save");
-assert.equal(
-  (app.match(/const receiveResult = stockResult\.ok && canManageReceiveDefault\(site\)/g) || []).length,
-  2,
-  "both add/edit product save paths must require successful stock persistence and receiving-default authority before writing"
+assert.match(
+  cloud,
+  /if \(canManageReceiveDefault\(site\)\) \{[\s\S]{0,180}body\.receiveDefaultLocationCode/,
+  "bulk ingredient save must omit receive-default changes for unauthorized catalog editors"
+);
+assert.match(
+  backend,
+  /receiveDefaultRequested && !\(await canManageReceiveDefault\(user,site\)\)[\s\S]{0,160}RECEIVE_DEFAULT_MANAGER_REQUIRED/,
+  "bulk backend endpoint must independently enforce receiving-default ownership"
 );
 
 assert(backend.includes("async function canManageReceiveDefault(user, site)"), "backend receiving-default permission boundary missing");
