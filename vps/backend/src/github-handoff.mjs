@@ -116,6 +116,23 @@ async function loadLiveGithubHandoff() {
 }
 
 export async function getLiveGitHubHandoff({ force=false } = {}) {
+  if (process.env.GITHUB_LIVE_HANDOFF_DISABLED === "1" || process.env.GITHUB_ACTIONS === "true") {
+    return {
+      available:false,
+      stale:false,
+      source:"github-api-live",
+      generated_at:new Date().toISOString(),
+      cache_ttl_seconds:CACHE_TTL_MS / 1000,
+      repository:{ name:REPOSITORY,url:REPOSITORY_URL },
+      canonical_url:PUBLIC_HANDOFF_URL,
+      active_pr:null,
+      open_pull_requests:[],
+      commits:[],
+      changed_files:[],
+      workflows:[],
+      error:"GITHUB_LIVE_HANDOFF_DISABLED",
+    };
+  }
   const now = Date.now();
   if (!force && cache.value && cache.expiresAt > now) return cache.value;
   if (inFlight) return inFlight;
