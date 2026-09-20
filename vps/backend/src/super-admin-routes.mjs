@@ -713,6 +713,31 @@ export async function registerSuperAdminRoutes(app) {
     const repositoryUrl = DEVELOPMENT_STATUS.repository?.url || "https://github.com/vial1307/restaurant-management-system-demo";
     const releaseUrl = release && release !== "dev" ? `${repositoryUrl}/commit/${encodeURIComponent(release)}` : repositoryUrl;
     const activePr = liveGithub?.active_pr || null;
+    const liveRuns = Array.isArray(liveGithub?.workflows) ? liveGithub.workflows : [];
+    const releaseRun = liveRuns.find((run) => (
+      run.head_sha === release &&
+      run.name === "Deploy Kitchen OS to VPS" &&
+      run.status === "completed" &&
+      run.conclusion === "success"
+    )) || null;
+    const inventoryAuditRun = liveRuns.find((run) => (
+      run.head_sha === release &&
+      run.name === "Inventory Site Production Audit" &&
+      run.status === "completed" &&
+      run.conclusion === "success"
+    )) || null;
+    const releaseEvidence = {
+      ...DEVELOPMENT_STATUS.release_evidence,
+      milestone_sha:release,
+      schema:schema?.version || null,
+      workflow_run_id:releaseRun?.id || null,
+      url:releaseRun?.url || (DEVELOPMENT_STATUS.repository?.actions_url || `${repositoryUrl}/actions`),
+      inventory_audit_run_id:inventoryAuditRun?.id || null,
+      inventory_audit_url:inventoryAuditRun?.url || null,
+      note:releaseRun
+        ? "Release evidence is matched live to the exact runtime SHA from GitHub Actions."
+        : "Runtime release/schema are authoritative; exact GitHub workflow evidence is unavailable in the current live-feed snapshot.",
+    };
     const activeWork = activePr ? {
       ...DEVELOPMENT_STATUS.current_work,
       branch:activePr.branch,
@@ -753,6 +778,7 @@ export async function registerSuperAdminRoutes(app) {
         url:liveGithub?.canonical_url || PUBLIC_HANDOFF_URL,
       },
       current_work:activeWork,
+      release_evidence:releaseEvidence,
       live_github:liveGithub,
       live_production:{
         release,
