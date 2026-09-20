@@ -76,8 +76,7 @@ const assistantReceiveDefault = await request("/api/inventory/receive-default",{
   cookie:assistant.cookie,
   body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"},
 });
-assert.equal(assistantReceiveDefault.response.status,403);
-assert.equal(assistantReceiveDefault.data.error,"RECEIVE_DEFAULT_MANAGER_REQUIRED");
+assert.equal(assistantReceiveDefault.response.status,200,"explicit inventory edit permission must authorize receiving-default writes even without the legacy capability");
 
 assert.equal(remote.data.user.role,"remote_only");
 assert.equal(remote.data.user.permissions.remote?.view,true);

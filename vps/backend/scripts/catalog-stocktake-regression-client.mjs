@@ -291,10 +291,9 @@ const archiveProtectedItem=await request("/api/inventory/catalog/archive",{
 assert.equal(archiveProtectedItem.response.status,200);
 assert.equal(archiveProtectedItem.data?.archived,true);
 
-// Central-kitchen accounts keep inventory/catalog operational access, but they
-// are not a stocktake role. Seed one Central row as admin, prove direct stocktake
-// endpoints reject the Central role, then prove Central catalog sync cannot
-// overwrite the seeded quantity/minimum either.
+// Central-kitchen accounts with explicit inventory edit access can use the same
+// stock endpoints as the overview/editor. Catalog sync still cannot overwrite
+// the dedicated physical quantity/minimum authority.
 const centralBefore = await request("/api/inventory/central", { cookie: admin });
 assert.equal(centralBefore.response.status, 200);
 const centralItem = centralBefore.data.items.find((item) => item.catalog_key === "save-button-central")
@@ -318,18 +317,16 @@ assert.equal(adminCentralMinimum.response.status, 200);
 const centralDirectQuantity = await request("/api/inventory/set-quantity", {
   method: "POST",
   cookie: central,
-  body: { itemId: centralItem.id, locationId: centralFreezer.id, quantity: 999 },
+  body: { itemId: centralItem.id, locationId: centralFreezer.id, quantity: 19 },
 });
-assert.equal(centralDirectQuantity.response.status, 403, "central role unexpectedly received direct quantity stocktake authority");
-assert.equal(centralDirectQuantity.data?.error, "STOCKTAKE_ROLE_REQUIRED");
+assert.equal(centralDirectQuantity.response.status, 200, "central inventory editor could not persist quantity");
 
 const centralDirectMinimum = await request("/api/inventory/set-minimum", {
   method: "POST",
   cookie: central,
-  body: { itemId: centralItem.id, locationId: centralFreezer.id, minimum: 999 },
+  body: { itemId: centralItem.id, locationId: centralFreezer.id, minimum: 8 },
 });
-assert.equal(centralDirectMinimum.response.status, 403, "central role unexpectedly received minimum stocktake authority");
-assert.equal(centralDirectMinimum.data?.error, "STOCKTAKE_ROLE_REQUIRED");
+assert.equal(centralDirectMinimum.response.status, 200, "central inventory editor could not persist minimum");
 
 const centralSeeded = await request("/api/inventory/central", { cookie: admin });
 assert.equal(centralSeeded.response.status, 200);
@@ -369,7 +366,7 @@ const protectedCentralStock = centralAfter.data.stock.find(
   (row) => row.item_id === centralItem.id && row.location_id === centralFreezer.id
 );
 assert(protectedCentralStock, "protected central stock row missing after catalog sync");
-assert.equal(Number(protectedCentralStock.quantity), 17, "central catalog sync bypassed stocktake quantity permission");
-assert.equal(Number(protectedCentralStock.minimum_quantity), 6, "central catalog sync bypassed stocktake minimum permission");
+assert.equal(Number(protectedCentralStock.quantity), 19, "central catalog sync bypassed dedicated quantity authority");
+assert.equal(Number(protectedCentralStock.minimum_quantity), 8, "central catalog sync bypassed dedicated minimum authority");
 
 console.log("catalog stocktake API regression passed");

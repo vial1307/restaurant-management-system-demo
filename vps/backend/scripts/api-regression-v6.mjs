@@ -34,14 +34,6 @@ const migrated = source
   .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"024");')
   .replace(oldSharedStaffFixture, scopedSharedStaffFixture)
   .replace(oldEmployeeStateRegression, scopedEmployeeStateRegression)
-  .replace(
-    oldEmployeeStocktakeAssertion,
-    `assert.equal(employeeSet.response.status,403);\nassert.equal(employeeSet.data.error,"STOCKTAKE_ROLE_REQUIRED");`
-  )
-  .replace(
-    oldSupervisorReceiveDefaultAssertion,
-    `const supervisorReceiveDefault = await request("/api/inventory/receive-default",{\n  method:"POST",cookie:supervisor.cookie,\n  body:{site:"fuxing",catalogKey:"beef",locationCode:"fuxing-four"}\n});\nassert.equal(supervisorReceiveDefault.response.status,403);\nassert.equal(supervisorReceiveDefault.data.error,"RECEIVE_DEFAULT_MANAGER_REQUIRED");`
-  )
   .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression);
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);

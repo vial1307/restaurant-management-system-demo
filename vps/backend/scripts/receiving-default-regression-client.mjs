@@ -43,22 +43,20 @@ const employee = await login("employeefx");
 const central = await login("centralreg");
 
 for (const [label, cookie] of [["employee", employee], ["supervisor", supervisor]]) {
-  const denied = await request("/api/inventory/receive-default", {
+  const saved = await request("/api/inventory/receive-default", {
     method: "POST",
     cookie,
     body: { site:"fuxing", catalogKey:"beef", locationCode:"fuxing-four" },
   });
-  assert.equal(denied.response.status, 403, `${label} unexpectedly changed a branch-owned receiving default`);
-  assert.equal(denied.data?.error, "RECEIVE_DEFAULT_MANAGER_REQUIRED");
+  assert.equal(saved.response.status, 200, `${label} explicit inventory edit grant did not authorize the receiving default`);
 }
 
-const centralDenied = await request("/api/inventory/receive-default", {
+const centralSaved = await request("/api/inventory/receive-default", {
   method: "POST",
   cookie: central,
   body: { site:"central", catalogKey:"beef", locationCode:"central-freezer" },
 });
-assert.equal(centralDenied.response.status, 403, "central-kitchen role unexpectedly received receiving-default ownership authority");
-assert.equal(centralDenied.data?.error, "RECEIVE_DEFAULT_MANAGER_REQUIRED");
+assert.equal(centralSaved.response.status, 200, "central inventory editor could not save its allowed receiving default");
 
 const managerSaved = await request("/api/inventory/receive-default", {
   method: "POST",

@@ -14,11 +14,13 @@ The inventory module has five staff-facing flows:
 4. 庫存轉撥 / Điều chuyển nội bộ
 5. 出貨 / Xuất hàng sang cơ sở khác
 
-Admin-only stocktake/catalog controls remain separate:
+Permission-controlled stocktake/catalog controls remain separate:
 - 盤點調整 / Điều chỉnh kiểm kê
 - 安全庫存 / Tồn an toàn
 - item/catalog/location management
 - audit/history
+
+An explicit `inventory.edit` grant authorizes these editable inventory controls inside the user's allowed site scope. The backend enforces the same permission; a legacy role name must not silently re-deny an administrator's explicit grant.
 
 The current staging phase does not require manager approval or receiving confirmation. Every mutation applies immediately and records the authenticated operator.
 
@@ -113,10 +115,10 @@ Fields:
 - quantity
 
 Destination-storage rule:
-- 復興店 / 永吉店 managers own the product storage configuration for their branch.
+- Accounts with branch-scoped `inventory.edit` own the product storage configuration for their allowed branch.
 - If the receiving branch already has the product and it has exactly one configured storage location, 出貨 selects that location automatically.
-- If the receiving branch has the product in multiple storage locations, the branch manager must set 央廚出貨收貨儲位 / receiving location for factory shipments. Factory staff cannot choose arbitrarily.
-- If an existing branch product has multiple locations and no receiving location is configured, 出貨 is blocked until the branch manager completes the setting.
+- If the receiving branch has the product in multiple storage locations, an account with branch-scoped `inventory.edit` must set 央廚出貨收貨儲位 / receiving location for factory shipments. Factory staff cannot choose arbitrarily.
+- If an existing branch product has multiple locations and no receiving location is configured, 出貨 is blocked until an authorized branch inventory editor completes the setting.
 - Only when the receiving branch does not yet have that product may factory staff choose the destination storage for that shipment.
 - A factory staff shipment choice never automatically becomes the branch's permanent receiving-location setting.
 
@@ -202,7 +204,7 @@ The operation:
 - no manager approval
 - no receiving confirmation
 - operator audit stored in PostgreSQL
-- focus/visibility refresh plus periodic polling
+- authenticated SSE invalidation for real-time cross-tab/device convergence, with focus/visibility refresh plus periodic polling as fallback
 - automatic PostgreSQL backups before deployment
 
 Approval should be added as a policy layer, not by changing the meaning of 領貨 or 出貨.

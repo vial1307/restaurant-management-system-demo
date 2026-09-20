@@ -341,6 +341,10 @@ async function roleDesktop(browser, username, checks) {
     assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation tabs must match branch layout");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
     assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
+    if(checks.manage === true){
+      assert((await page.locator("select[data-central-inline-work-area]").count()) > 0,"central overview work-area editors missing");
+      assert((await page.locator("select[data-central-inline-zone]").count()) > 0,"central overview storage editors missing");
+    }
     await page.locator('[data-central-view="work"]').click();
     assert((await page.locator(".inventory-table.work-table .central-row").count()) > 0,"central work overview cards missing");
     await page.locator('[data-central-view="storage"]').click();
@@ -427,6 +431,47 @@ async function roleDesktop(browser, username, checks) {
       }
       await page.locator('button[data-action="close-modal"]').first().click();
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
+    }
+    if(username === "employeefx" && checks.stocktake === true){
+      const peer=await context.newPage();
+      peer.on("pageerror",(error)=>errors.push(`peer: ${error.message}`));
+      await peer.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
+      await peer.locator(".app-shell").waitFor({state:"visible",timeout:15000});
+      await setSite(peer,"fuxing");
+
+      const sourceRow=page.locator(".inventory-table.storage-table .storage-row").first();
+      const peerRow=peer.locator(".inventory-table.storage-table .storage-row").first();
+      await sourceRow.waitFor({state:"visible"});
+      await peerRow.waitFor({state:"visible"});
+      const zone=await sourceRow.locator('select[data-field="item"][data-key="zone"]').inputValue();
+      const stockKey=await sourceRow.locator('[data-action="open-edit-item"]').getAttribute("data-stock-key");
+      const sourceMinimum=sourceRow.locator('input[data-field="item"][data-key="minimum"]');
+      const before=Math.max(0,Number(await sourceMinimum.inputValue())||0);
+      const next=before+1;
+
+      await peer.locator(`[data-action="open-edit-item"][data-stock-key="${stockKey}"]`).click();
+      const peerMinimum=peer.locator(`input[name="minimum:${zone}"]`);
+      await peerMinimum.waitFor({state:"visible"});
+      await page.waitForTimeout(250);
+
+      await sourceMinimum.fill(String(next));
+      await sourceMinimum.press("Tab");
+      await peer.waitForFunction(
+        ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
+        {name:`minimum:${zone}`,value:String(next)},
+        {timeout:10000}
+      );
+
+      const restoredMinimum=page.locator(".inventory-table.storage-table .storage-row").first().locator('input[data-field="item"][data-key="minimum"]');
+      await restoredMinimum.fill(String(before));
+      await restoredMinimum.press("Tab");
+      await peer.waitForFunction(
+        ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
+        {name:`minimum:${zone}`,value:String(before)},
+        {timeout:10000}
+      );
+      await peer.locator('button[data-action="close-modal"]').first().click();
+      await peer.close();
     }
     if(checks.operations === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count(),0);
@@ -555,10 +600,10 @@ const browser=await chromium.launch({headless:true});
 try{
   await adminDesktop(browser);
   await roleDesktop(browser,"managerfx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:true});
-  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,receiveDefault:false,dashboardEdit:false});
-  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,receiveDefault:false,dashboardEdit:false});
+  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:false});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:false});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
-  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:false});
+  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:true});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});
   await responsiveAdmin(browser,{width:440,height:956});

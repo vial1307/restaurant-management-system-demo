@@ -16,6 +16,7 @@ globalThis.window = {
 let inventoryGets = 0;
 let failNextMutation = false;
 const mutationPosts = [];
+const mutationClientIds = [];
 
 globalThis.fetch = async (path, options = {}) => {
   const url = String(path);
@@ -29,6 +30,7 @@ globalThis.fetch = async (path, options = {}) => {
   }
   if (method === "POST" && url.startsWith("/api/inventory/")) {
     mutationPosts.push(url);
+    mutationClientIds.push(options.headers?.["X-Kitchen-Client-Id"] || "");
     if (failNextMutation) {
       failNextMutation = false;
       return new Response(JSON.stringify({ error: "TEST_MUTATION_FAILED" }), {
@@ -98,5 +100,7 @@ assert.deepEqual(
   ],
   "inventory mutation coverage drifted"
 );
+assert.equal(new Set(mutationClientIds).size,1,"one browser tab must use one stable inventory realtime client id");
+assert(mutationClientIds[0],"inventory mutations must send the realtime source client id");
 
 console.log("VPS_INVENTORY_READ_AFTER_WRITE_CACHE_OK");

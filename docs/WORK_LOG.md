@@ -981,3 +981,52 @@ Pending CI proof:
 - full-device cross-browser regression.
 
 Local Docker was unavailable and Playwright Chromium download timed out, so no local dynamic database/browser result is claimed.
+
+
+## 2026-09-21 — Inventory overview/editor real-time convergence candidate
+
+Verified baseline before this slice:
+
+- PR #132 merged and deployed as `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`;
+- Deploy Kitchen OS to VPS #802 / run `35526347373`: PASS;
+- GitHub Pages #931: PASS;
+- Inventory Site Production Audit #61 / run `35526617408`: PASS;
+- schema remains `024`.
+
+Branch:
+
+- `fix/inventory-live-editor-sync-20260921`.
+
+Confirmed gaps:
+
+- direct quantity/minimum APIs and UI controls still used a legacy manager/supervisor/admin name gate after explicit `inventory.edit` was granted;
+- Central overview rendered work area and storage location as read-only;
+- Central product save referenced an out-of-scope `stocktakeWritable` variable before dedicated quantity/minimum persistence;
+- branch overview scalar edits wrote local cache and rendered before VPS confirmation;
+- `subscribeRealtime()` did not create any transport, so another tab/device depended on focus or 60-second polling.
+
+Candidate implementation:
+
+- `inventory.edit` plus allowed site scope is the shared frontend/backend authority for quantity, minimum, catalog, relocation and receive-default controls;
+- Central overview work-area changes use catalog sync; storage changes use the transactional relocation endpoint; both force PostgreSQL reconciliation and update the editor;
+- branch overview quantity/minimum inputs wait for their dedicated VPS APIs and one forced snapshot before success;
+- authenticated `/api/inventory/events` SSE broadcasts payload-free invalidation metadata after successful inventory writes;
+- each browser tab sends a stable source client id, ignores its own SSE echo, coalesces remote events for 120 ms and force-refreshes the active permitted site;
+- polling/focus/visibility remain fallback convergence paths;
+- server shutdown closes SSE clients cleanly.
+
+Local verification:
+
+- JavaScript syntax checks: PASS;
+- `tests/static-regression.mjs`: PASS;
+- `tests/performance-regression.mjs`: PASS;
+- `tests/vps-inventory-cache-invalidation-regression.mjs`: PASS;
+- live-edit/realtime contract regression: PASS;
+- `git diff --check`: PASS.
+
+Pending CI proof:
+
+- PostgreSQL/API SSE delivery and permission round-trip;
+- concurrency regression;
+- desktop/mobile Chromium and full-device browser certification;
+- exact tested-head merge, VPS deploy, production smoke and Inventory Site Production Audit.

@@ -348,8 +348,8 @@ The receiving branch owns its own product storage configuration.
 If the destination branch already has a product:
 
 - exactly one configured storage location -> shipment must use it automatically
-- multiple configured storage locations -> branch manager must configure `央廚出貨收貨儲位` / default receiving location
-- receiving-default writes are restricted to the receiving site's manager or admin; supervisor/employee/central shipping roles may consume routing metadata but cannot change a branch-owned default
+- multiple configured storage locations -> an account with receiving-site `inventory.edit` must configure `央廚出貨收貨儲位` / default receiving location
+- receiving-default writes require explicit `inventory.edit` within the receiving site's allowed scope; role names do not override that grant, while view-only and foreign-site accounts remain denied
 - multiple locations + no receiving default -> shipment is blocked
 
 Factory/central-kitchen staff may not arbitrarily choose a different location when the branch already owns the configuration.
@@ -381,7 +381,9 @@ Rules:
 - correction cannot set quantity below zero
 - server locks/rechecks current stock
 - before and after values must be recorded
-- supervisor/manager/admin stocktake controls remain role/permission constrained
+- explicit `inventory.edit` permission is the stocktake authority for the user's allowed site scope
+- a role name must not re-deny quantity or minimum editing after an administrator has granted `inventory.edit`
+- users with view-only inventory access remain read-only
 
 ### 6.9 Catalog editing
 
@@ -390,6 +392,8 @@ Users with authorized inventory edit access can manage allowed catalog data at t
 Admin retains archive/deactivation control.
 
 Saving a product must persist to VPS PostgreSQL. A failed VPS write must not be shown as successful simply because local cache changed.
+
+The inventory overview and the product editor are two views of the same PostgreSQL item/location records. Every editable overview field (work area, storage location, quantity and per-location minimum) must use the same authoritative mutation paths as the editor, then reconcile both views from the confirmed server snapshot. This rule applies equally to 央廚, 復興店, 永吉店 and every future active site.
 
 Changing a branch product's work area is a physical work-location relocation, not a browser-only catalog edit. The VPS must move the existing work quantity and minimum to the selected work location, update `inventory_items.work_area`, and write the configuration/stock audit in one PostgreSQL transaction before the frontend reports success.
 
@@ -980,7 +984,9 @@ Database backup is required before deployment/migration when the deployment pipe
 - VPS/PostgreSQL is source of truth.
 - Inventory must refresh from VPS after relevant account/site/date/navigation changes.
 - Non-inventory business state syncs by site and account permission.
-- Focus, transition back to visible state, and online recovery must refresh shared business state until a future SSE/WebSocket implementation replaces polling/fallback behavior.
+- Authenticated Server-Sent Events provide the primary real-time invalidation signal for inventory mutations across tabs and devices. The signal contains no inventory payload; every recipient reloads the authoritative snapshot for its active permitted site.
+- One successful inventory mutation produces one coalescible invalidation signal. A client may ignore its own signal because its mutation flow already performs authoritative reconciliation.
+- Polling, focus, transition back to visible state, and online recovery remain fallback convergence paths when the real-time connection is unavailable.
 - Before any business-state refresh or full-page reload that could discard an eligible unsaved local business edit, the client must attempt to persist the current edit to VPS first.
 - If that persistence attempt fails, a stale business-state reload or language/profile-triggered page reload must be blocked rather than silently discarding the local edit.
 - When an authentication/profile refresh and a language-triggered safe reload happen in the same synchronization cycle, exactly one persistence path owns the business-state save; duplicate writes/revision bumps are not allowed.

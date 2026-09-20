@@ -11,6 +11,21 @@ const AUTH_LOGIN_GRACE_MS = 5000;
 let lastSuccessfulLoginAt = 0;
 let authMeInFlight = null;
 let adminUsersInFlight = null;
+let inventoryClientId = "";
+
+export function vpsInventoryClientId() {
+  if (inventoryClientId) return inventoryClientId;
+  const key = "shitu-inventory-client-id-v1";
+  try {
+    inventoryClientId = window.sessionStorage.getItem(key) || "";
+  } catch {}
+  if (!inventoryClientId) {
+    inventoryClientId = globalThis.crypto?.randomUUID?.()
+      || `inventory-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    try { window.sessionStorage.setItem(key, inventoryClientId); } catch {}
+  }
+  return inventoryClientId;
+}
 
 export function invalidateVpsInventoryCache(site = "") {
   if (site) inventoryCache.delete(site);
@@ -64,6 +79,9 @@ export async function apiRequest(path, {
 
   let response;
   try {
+    const inventoryMutationHeaders = method !== "GET" && String(path).startsWith("/api/inventory/")
+      ? { "X-Kitchen-Client-Id": vpsInventoryClientId() }
+      : {};
     response = await fetch(path, {
       method,
       credentials: "same-origin",
@@ -71,6 +89,7 @@ export async function apiRequest(path, {
       signal: controller.signal,
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...inventoryMutationHeaders,
         ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),

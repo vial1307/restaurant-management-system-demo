@@ -4,12 +4,13 @@ const BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
 const PASSWORD = "KitchenTest!123";
 const MODULES = ["dashboard","inventory","procurement","reservations","preparation","menu","sop","skills","attendance","schedule","reports","remote","settings"];
 
-async function request(path, { method="GET", body, cookie } = {}) {
+async function request(path, { method="GET", body, cookie, headers={} } = {}) {
   const response = await fetch(BASE + path, {
     method,
     headers: {
       ...(body === undefined ? {} : { "content-type":"application/json" }),
       ...(cookie ? { cookie } : {}),
+      ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -148,6 +149,41 @@ const yjFour = yongjiData.locations.find((loc) => loc.code === "yongji-four");
 const yjWorkNoodles = yongjiData.locations.find((loc) => loc.code === "yongji-work-noodles");
 const yjWorkMeat = yongjiData.locations.find((loc) => loc.code === "yongji-work-meat");
 assert(beefFx && tofuFx && beefYj && tofuYj && fxFreezer && fxFour && fxWorkNoodles && fxWorkMeat && yjFreezer && yjFour && yjWorkNoodles && yjWorkMeat);
+
+assert.equal((await request("/api/inventory/events")).response.status,401,"inventory event stream must require authentication");
+const eventAbort=new AbortController();
+const eventResponse=await fetch(BASE+"/api/inventory/events?clientId=api-regression-listener",{
+  headers:{cookie:employee.cookie},
+  signal:eventAbort.signal,
+});
+assert.equal(eventResponse.status,200,"authenticated inventory event stream failed");
+assert.match(eventResponse.headers.get("content-type")||"",/text\/event-stream/);
+const eventReader=eventResponse.body.getReader();
+let eventBuffer="";
+async function nextInventoryEvent(eventName,timeoutMs=5000){
+  const deadline=Date.now()+timeoutMs;
+  while(Date.now()<deadline){
+    const split=eventBuffer.indexOf("\n\n");
+    if(split>=0){
+      const block=eventBuffer.slice(0,split);
+      eventBuffer=eventBuffer.slice(split+2);
+      const type=block.match(/^event:\s*(.+)$/m)?.[1];
+      if(type!==eventName)continue;
+      const data=block.match(/^data:\s*(.+)$/m)?.[1]||"null";
+      return JSON.parse(data);
+    }
+    const remaining=Math.max(1,deadline-Date.now());
+    let timeoutId=0;
+    const result=await Promise.race([
+      eventReader.read(),
+      new Promise((_,reject)=>{timeoutId=setTimeout(()=>reject(new Error(`SSE_TIMEOUT_${eventName}`)),remaining);}),
+    ]).finally(()=>clearTimeout(timeoutId));
+    if(result.done)throw new Error(`SSE_CLOSED_${eventName}`);
+    eventBuffer+=new TextDecoder().decode(result.value,{stream:true}).replaceAll("\r\n","\n");
+  }
+  throw new Error(`SSE_TIMEOUT_${eventName}`);
+}
+await nextInventoryEvent("ready");
 
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:manager.cookie})).response.status,403);
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:admin.cookie})).response.status,200);
@@ -340,10 +376,28 @@ assert.equal(catalogCreateLog.after_data?.item_key,catalogAuditKey);
 
 const employeeSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:employee.cookie,
+  headers:{"x-kitchen-client-id":"api-regression-writer"},
   body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:99}
 });
 assert.equal(employeeSet.response.status,200);
 assert.equal(Number(employeeSet.data.after),99);
+const realtimeEvent=await nextInventoryEvent("inventory");
+assert.equal(realtimeEvent.sourceClientId,"api-regression-writer","inventory mutation did not publish its realtime source client id");
+assert(Number.isFinite(Number(realtimeEvent.revision)),"inventory realtime revision missing");
+eventAbort.abort();
+await eventReader.cancel().catch(()=>{});
+
+const employeeMinimum = await request("/api/inventory/set-minimum",{
+  method:"POST",cookie:employee.cookie,
+  body:{itemId:beefFx.id,locationId:fxFreezer.id,minimum:3}
+});
+assert.equal(employeeMinimum.response.status,200,"employee with inventory.edit could not persist minimum");
+const parttimeMinimum = await request("/api/inventory/set-minimum",{
+  method:"POST",cookie:parttime.cookie,
+  body:{itemId:beefFx.id,locationId:fxFreezer.id,minimum:99}
+});
+assert.equal(parttimeMinimum.response.status,403,"view-only inventory account changed a minimum");
+assert.equal(parttimeMinimum.data.error,"INVENTORY_EDIT_NOT_ALLOWED");
 
 const supervisorSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:supervisor.cookie,

@@ -1842,37 +1842,35 @@ root.addEventListener("change", (event) => {
       }
     }
     if (key === "quantity") {
-      const previous = Number(item.quantity || 0);
       const next = Math.max(0, Number(element.value) || 0);
-      store.updateItem(id, key, next);
+      element.disabled = true;
       void cloudSetQuantity({
-        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
-        locationCode: branchLocationCode(activeInventorySite(), item.zone),
+        itemKey: branchItemKey(site, item.stockKey),
+        locationCode: branchLocationCode(site, item.zone),
         quantity: next,
         note: "盤點調整 / Điều chỉnh kiểm kê",
         allowInventoryEditor:manageQuantityEdit,
-      }).then((result) => {
-        if (!result.ok && !result.fallback) {
-          store.updateItem(id, key, previous);
-          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-        }
+        sync:false,
+      }).then(async(result) => {
+        await syncInventoryNow(site,{reloadBranch:false,force:true});
+        if (!result.ok) window.alert("Không lưu được số lượng vào database. · 數量無法儲存至資料庫。");
+        else window.shituNotify?.({type:"success",title:"Đã lưu số lượng · 數量已儲存",body:"Database và menu chỉnh sửa đã được đồng bộ. · 資料庫與編輯選單已同步。"});
       });
       return;
     }
     if (key === "minimum") {
       if (!canDirectInventoryAdjust()) { render(); return; }
-      const previous = Number(item.minimum || 0);
       const next = Math.max(0, Number(element.value) || 0);
-      store.updateItem(id, key, next);
+      element.disabled = true;
       void cloudSetMinimum({
-        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
-        locationCode: branchLocationCode(activeInventorySite(), item.zone),
+        itemKey: branchItemKey(site, item.stockKey),
+        locationCode: branchLocationCode(site, item.zone),
         minimum: next,
-      }).then((result) => {
-        if (!result.ok && !result.fallback) {
-          store.updateItem(id, key, previous);
-          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-        }
+        sync:false,
+      }).then(async(result) => {
+        await syncInventoryNow(site,{reloadBranch:false,force:true});
+        if (!result.ok) window.alert("Không lưu được định mức vào database. · 標準量無法儲存至資料庫。");
+        else window.shituNotify?.({type:"success",title:"Đã lưu định mức · 標準量已儲存",body:"Database và menu chỉnh sửa đã được đồng bộ. · 資料庫與編輯選單已同步。"});
       });
       return;
     }
@@ -1924,36 +1922,34 @@ root.addEventListener("change", (event) => {
     }
     if (key === "quantity") {
       if (!canDirectInventoryAdjust()) { render(); return; }
-      const previous = Number(item.quantity || 0);
       const next = Math.max(0, Number(element.value) || 0);
-      store.updateWorkItem(id, key, next);
+      element.disabled = true;
       void cloudSetQuantity({
-        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
-        locationCode: branchWorkLocationCode(activeInventorySite(), item.workArea),
+        itemKey: branchItemKey(site, item.stockKey),
+        locationCode: branchWorkLocationCode(site, item.workArea),
         quantity: next,
         note: "工作區盤點調整 / Điều chỉnh kiểm kê khu làm việc",
-      }).then((result) => {
-        if (!result.ok && !result.fallback) {
-          store.updateWorkItem(id, key, previous);
-          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-        }
+        sync:false,
+      }).then(async(result) => {
+        await syncInventoryNow(site,{reloadBranch:false,force:true});
+        if (!result.ok) window.alert("Không lưu được số lượng khu làm việc vào database. · 工作區數量無法儲存至資料庫。");
+        else window.shituNotify?.({type:"success",title:"Đã lưu số lượng · 數量已儲存",body:"Database và menu chỉnh sửa đã được đồng bộ. · 資料庫與編輯選單已同步。"});
       });
       return;
     }
     if (key === "minimum") {
       if (!canDirectInventoryAdjust()) { render(); return; }
-      const previous = Number(item.minimum || 0);
       const next = Math.max(0, Number(element.value) || 0);
-      store.updateWorkItem(id, key, next);
+      element.disabled = true;
       void cloudSetMinimum({
-        itemKey: branchItemKey(activeInventorySite(), item.stockKey),
-        locationCode: branchWorkLocationCode(activeInventorySite(), item.workArea),
+        itemKey: branchItemKey(site, item.stockKey),
+        locationCode: branchWorkLocationCode(site, item.workArea),
         minimum: next,
-      }).then((result) => {
-        if (!result.ok && !result.fallback) {
-          store.updateWorkItem(id, key, previous);
-          void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-        }
+        sync:false,
+      }).then(async(result) => {
+        await syncInventoryNow(site,{reloadBranch:false,force:true});
+        if (!result.ok) window.alert("Không lưu được định mức khu làm việc vào database. · 工作區標準量無法儲存至資料庫。");
+        else window.shituNotify?.({type:"success",title:"Đã lưu định mức · 標準量已儲存",body:"Database và menu chỉnh sửa đã được đồng bộ. · 資料庫與編輯選單已同步。"});
       });
       return;
     }

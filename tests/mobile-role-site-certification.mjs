@@ -10,13 +10,13 @@ const ENGINES = { chromium, webkit };
 const CASES = [
   { engine:"chromium", username:"managerfx", role:"manager", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:true },
   { engine:"chromium", username:"manageryj", role:"manager", site:"yongji", foreign:"fuxing", width:412, height:915, manage:true, operations:true, stocktake:true, receiveDefault:true },
-  { engine:"chromium", username:"supervisorfx", role:"supervisor", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:false },
-  { engine:"chromium", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:412, height:915, manage:true, operations:true, stocktake:false, receiveDefault:false },
+  { engine:"chromium", username:"supervisorfx", role:"supervisor", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:true },
+  { engine:"chromium", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:412, height:915, manage:true, operations:true, stocktake:true, receiveDefault:true },
   { engine:"chromium", username:"parttimefx", role:"parttime", site:"fuxing", foreign:"yongji", width:390, height:844, manage:false, operations:false, stocktake:false, receiveDefault:false },
-  { engine:"chromium", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:412, height:915, central:true, manage:true, operations:true, stocktake:false },
+  { engine:"chromium", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:412, height:915, central:true, manage:true, operations:true, stocktake:true },
   { engine:"webkit", username:"managerfx", role:"manager", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:true },
-  { engine:"webkit", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:false, receiveDefault:false },
-  { engine:"webkit", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:390, height:844, central:true, manage:true, operations:true, stocktake:false },
+  { engine:"webkit", username:"employeefx", role:"employee", site:"fuxing", foreign:"yongji", width:390, height:844, manage:true, operations:true, stocktake:true, receiveDefault:true },
+  { engine:"webkit", username:"centralreg", role:"central", site:"central", foreign:"fuxing", width:390, height:844, central:true, manage:true, operations:true, stocktake:true },
 ];
 
 function inventorySiteFromUrl(url) {
@@ -256,6 +256,9 @@ async function assertCentralInventoryRole(page, testCase, label) {
     assert.equal(await manage.count(), 0, `${label}: central manage visible without authority`);
     return;
   }
+  assert((await page.locator("select[data-central-inline-work-area]").count()) > 0, `${label}: Central overview work-area editors missing`);
+  assert((await page.locator("select[data-central-inline-zone]").count()) > 0, `${label}: Central overview storage editors missing`);
+  await assertNoHorizontalOverflow(page, `${label}-central-overview`);
   await manage.waitFor({ state:"visible", timeout:10000 });
   await manage.click();
   const directControls = await page.locator('[data-central-manage-adjust="true"]').count();
