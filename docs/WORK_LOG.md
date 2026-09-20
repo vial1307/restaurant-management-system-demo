@@ -653,3 +653,69 @@ Candidate changes:
 - static contract prevents future lifecycle re-exposure.
 
 No schema migration is required.
+
+
+## 2026-09-20 — Production #786 and Live GitHub Handoff
+
+### Production #786
+
+PR #126 (Super Admin inventory lifecycle hardening) merged as:
+
+- `60684bb3bb38d5f6af3a4c25f8991fc2ecc1c17c`.
+
+Deploy Kitchen OS to VPS #786 / run `35482680596`:
+
+- preflight/static: PASS;
+- API/inventory: PASS;
+- PostgreSQL concurrency: PASS;
+- desktop/mobile Chromium: PASS;
+- workforce/browser regressions: PASS;
+- full-device cross-browser: PASS;
+- SSH deploy: PASS;
+- production release/health: PASS;
+- production UI smoke: PASS.
+
+Inventory Site Production Audit #44 / run `35482912054`: PASS.
+
+VPS Capacity Audit #7 / run `35482680608`: PASS.
+
+Observed read-only capacity snapshot:
+
+- 2 vCPU;
+- 3.8 GiB RAM;
+- host memory snapshot: about 332 MiB used, about 3.4 GiB available;
+- root virtual disk device: 50 GiB;
+- PostgreSQL data directory: about 67 MiB;
+- backup directory: about 20 MiB / 80 dump files;
+- kitchen-os-web: about 13.88 MiB memory;
+- kitchen-os-api: about 24.5 MiB memory;
+- kitchen-os-db: about 32.63 MiB memory.
+
+### Live GitHub & Handoff request
+
+User requested that Super Admin GitHub & Handoff update the current development chain/fix directly from VPS/GitHub and provide one link that another developer or a future chat can use to continue.
+
+Created branch:
+
+- `feat/live-github-handoff-20260920`.
+
+Implementation candidate:
+
+- cached VPS GitHub feed discovers latest open PR;
+- active PR supplies branch/head/base/title/body;
+- PR changed files become code focus;
+- recent PR commits become development chain;
+- Actions runs are filtered to the exact PR head SHA;
+- Super Admin displays live/fallback state and a copyable canonical handoff link;
+- public `handoff.html` independently reads public GitHub state for new-dev/new-chat access;
+- CI disables external GitHub calls and checks deterministic response shape;
+- static regression protects the one-link/live-feed contract.
+
+Canonical continuation URL:
+
+- https://vial1307.github.io/restaurant-management-system-demo/handoff.html
+
+Next separate defect already confirmed during read-only audit:
+
+- `POST /api/inventory/set-minimum` mutates `minimum_quantity` without transaction/audit history;
+- this must be fixed in a separate slice after Live Handoff production verification.
