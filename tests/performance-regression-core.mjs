@@ -81,18 +81,24 @@ assert.match(uiRefresh, /observer\?\.takeRecords\(\)/, "DOM patch observer must 
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not trigger a whole-app render");
 assert.doesNotMatch(app, /function applyInventorySearchDom[\s\S]{0,2500}render\(\)/, "inventory search must remain local-DOM filtered");
 
+assert.match(api,/MASTER_DATA_CACHE_MS\s*=\s*60000/,"inventory master data should not refetch on every short UI refresh");
+assert.match(api,/vpsSaveInventoryEditor[\s\S]{0,300}\/api\/inventory\/editor\/save/,"ingredient editor must use the bulk VPS endpoint");
 assert.equal(
-  (app.match(/const receiveResult = stockResult\.ok && canManageReceiveDefault\(site\)/g) || []).length,
-  2,
-  "both product create/edit flows must require successful stock persistence and receiving-default authority"
+  (app.match(/await cloudSaveBranchInventoryEditor\(\{/g) || []).length,
+  1,
+  "add/edit ingredient modal must share one bulk write request"
 );
-assert.equal((app.match(/\? await cloudSetReceiveDefault\(\{/g) || []).length, 2, "authorized product create/edit flows must still persist receiving-default configuration");
-assert.equal(
-  (app.match(/: \{ok:stockResult\.ok,skipped:true\};/g) || []).length,
-  2,
-  "skipped receiving-default writes must preserve a preceding stock persistence failure"
+assert.doesNotMatch(app,/async function persistCatalogStocktakeFields/,"sequential per-location save helper must remain removed");
+assert.match(
+  inventoryCloud,
+  /if \(canManageReceiveDefault\(site\)\) \{[\s\S]{0,180}body\.receiveDefaultLocationCode/,
+  "bulk save may include receive-default only when the dedicated permission boundary allows it"
 );
-assert.match(app, /else if \(!receiveResult\.ok\) \{[\s\S]{0,500}window\.alert/, "receive-default persistence failures must be visible instead of silently reporting a complete save");
+assert.match(
+  app,
+  /if \(result\.ok\) \{[\s\S]{0,260}await syncInventoryNow\(site,\{reloadBranch:false\}\)/,
+  "ingredient editor should perform one authoritative refresh after the single bulk write"
+);
 
 assert.match(deploy, /KITCHEN_EXACT_TARGET_V1/, "deploy must enforce the exact-target contract");
 assert.match(deploy, /DEPLOY_TARGET_REQUIRED/, "deploy must refuse an unpinned main-branch release");
