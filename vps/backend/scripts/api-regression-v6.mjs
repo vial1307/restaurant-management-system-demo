@@ -46,6 +46,7 @@ const migrated = source
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
+await import("./inventory-editor-bulk-regression-client.mjs");
 await import("./receiving-default-regression-client.mjs");
 await import("./receive-default-primary-backfill-regression.mjs");
 await import("./inventory-identity-majority-sync-regression.mjs");
