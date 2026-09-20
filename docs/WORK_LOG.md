@@ -862,3 +862,77 @@ Dynamic API regression:
 - delete -> audit;
 - second delete -> no audit;
 - Super Admin Audit endpoint must return exactly three matching rows.
+
+
+## 2026-09-21 — Receive-default audit production #796 and catalog audit continuation
+
+### Receive-default audit production verification
+
+PR #130 merged as:
+
+- `21d376295b6194e48bfaa599fc6c5424256a6196`.
+
+Deploy Kitchen OS to VPS #796 / run `35500763361`:
+
+- preflight/static: PASS;
+- API/inventory regression: PASS;
+- PostgreSQL concurrency: PASS;
+- desktop/mobile Chromium: PASS;
+- workforce/browser regression: PASS;
+- full-device cross-browser: PASS;
+- backup: `kitchen_os_20260920T085648Z.dump`;
+- schema 024: PASS;
+- inventory location-integrity triggers = 3;
+- DATA_INTEGRITY_OK;
+- Web/API/Super Admin edge healthy;
+- production UI smoke: PASS;
+- exact release: `21d3762`.
+
+GitHub Pages #929: PASS.
+
+Inventory Site Production Audit #54 / run `35500993290`:
+
+- schema 024;
+- stock-site mismatch = 0;
+- receive-default site mismatch = 0;
+- inactive item/location positive quantity/minimum = 0;
+- invalid receive-default checks = 0;
+- duplicate active catalog/site groups = 0;
+- active items missing stock/storage rows = 0;
+- site integrity violations = 0;
+- hidden integrity violations = 0;
+- exact release `21d3762` PASS.
+
+### Catalog configuration audit defect
+
+Created branch:
+
+- `audit/inventory-config-next-20260921`.
+
+Existing behavior:
+
+- `catalog/sync` updated item metadata and zero-stock storage associations without persistent before/after audit;
+- no-op saves still passed through the upsert path;
+- quantity/minimum values in catalog payload were already intentionally ignored and must remain ignored.
+
+Candidate implementation:
+
+- transaction + advisory lock per `itemKey`;
+- lock current item row;
+- compare metadata before update;
+- skip item update when metadata is unchanged;
+- snapshot item metadata + site location associations before/after;
+- write `audit_logs` only when actual configuration changed;
+- action `inventory_catalog_change`;
+- entity `inventory_item`;
+- entity id uses `item_key`;
+- operation metadata `create/update`;
+- new association rows stay at quantity=0/minimum=0.
+
+Dynamic API regression:
+
+- create dedicated catalog item in one location;
+- identical save with different payload quantity/minimum -> no audit and no physical stock change;
+- update metadata and add second location -> audit update;
+- Super Admin Audit must return exactly create + update for that item key;
+- both stock rows must remain 0/0.
