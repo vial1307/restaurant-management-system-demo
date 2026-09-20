@@ -8,31 +8,30 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #793 / run `35496998332`.
-- Verified production SHA: `ccef35dad7027808d60b3a691925fbebc29b9eb4`.
+- Verified production release: Deploy Kitchen OS to VPS #796 / run `35500763361`.
+- Verified production SHA: `21d376295b6194e48bfaa599fc6c5424256a6196`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
-- GitHub Pages #928: PASS.
-- Inventory Site Production Audit #51 / run `35497249172`: PASS after rerun.
-- Initial Audit #51 attempt: transient SSH reset before SQL checks; no data failure.
+- GitHub Pages #929: PASS.
+- Inventory Site Production Audit #54 / run `35500993290`: PASS.
 - Inventory site integrity violations: 0.
 - Hidden inventory violations: 0.
 
 ## DONE
 
 - Item/location lifecycle and site-integrity hardening.
-- Catalog sync removed from physical stock authority.
-- Generic Super Admin inventory lifecycle bypass closed.
-- Live GitHub & Handoff deployed.
+- Catalog sync removed from quantity/minimum authority.
 - Minimum changes are transactional and visible in Inventory History.
-- No-op minimum saves do not create duplicate history.
-- PR #129 / production #793 verified on schema 024.
+- Receive-default create/update/delete are durably audited.
+- No-op receive-default saves/deletes create no audit.
+- Live GitHub & Handoff deployed.
+- PR #130 / production #796 verified on schema 024.
 
-## IN PROGRESS — receive-default audit
+## IN PROGRESS — inventory catalog audit
 
 Branch:
 
-- `fix/inventory-receive-default-audit-20260920`
+- `audit/inventory-config-next-20260921`
 
 Schema:
 
@@ -40,33 +39,32 @@ Schema:
 
 Confirmed gap:
 
-- direct receive-default edits preserved only the latest row state;
-- delete removed the row entirely;
-- there was no durable before/after audit trail.
+- catalog metadata/storage-association edits had no durable before/after audit;
+- repeated no-op saves still ran the item upsert path.
 
 Candidate behavior:
 
-- transaction for create/update/delete;
-- advisory lock serializes `site + catalogKey` even when row is absent;
-- existing row is locked before change;
-- no-op set/delete creates no audit and no timestamp churn;
-- real changes write `audit_logs`;
-- action: `inventory_receive_default_change`;
-- metadata operation: `create/update/delete`;
-- before/after: location id + location code;
-- Super Admin Audit API can filter these entries.
+- transaction + advisory lock per item key;
+- lock existing item before comparison;
+- update metadata only on real change;
+- snapshot metadata + configured locations before/after;
+- audit action `inventory_catalog_change`;
+- entity id uses searchable `item_key`;
+- no-op save creates no audit;
+- catalog payload quantity/minimum stay non-authoritative and ignored.
 
 ## NEXT
 
-1. Open PR so Live Handoff publishes this branch/head/fix chain.
-2. Run static + API regression; confirm dedicated fixture produces exactly 3 audit rows.
-3. Run full browser/full-device certification.
-4. Merge only exact tested head.
-5. Deploy exact merge commit; schema stays 024.
-6. Run Inventory Site Production Audit; retry only transport failures, never integrity failures.
-7. Continue auditing remaining non-quantity inventory configuration mutations.
+1. Open PR so Live Handoff publishes this branch/head/CI.
+2. Run static + API regression.
+3. Verify catalog create/no-op/update produces exactly 2 audit rows.
+4. Verify quantity/minimum stay zero for catalog-only fixture.
+5. Run browser/full-device certification.
+6. Merge only exact tested head.
+7. Deploy exact merge commit and run Inventory Site Production Audit.
+8. Continue auditing remaining inventory configuration mutations.
 
 ## BLOCKED
 
 - No production data blocker.
-- Keep receive-default configuration audit separate from physical `inventory_transactions`.
+- Do not move catalog configuration events into `inventory_transactions`; they belong in `audit_logs`.
