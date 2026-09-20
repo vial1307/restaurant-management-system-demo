@@ -13,6 +13,7 @@ assert(start>=0 && end>start,"receive-default route block missing");
 const route=backend.slice(start,end);
 
 assert.match(route,/withTransaction\(async \(client\) =>/,"receive-default must be transactional");
+assert.match(route,/pg_advisory_xact_lock\(hashtext\(\$1\)\)/,"receive-default create/update/delete must serialize even when no row exists");
 assert.match(route,/for update of d/,"receive-default must lock the current routing row");
 assert.match(route,/current\?\.location_id === target\.id/,"same-location save must be a no-op");
 assert.match(route,/deleted:false,changed:false,audit:null/);
