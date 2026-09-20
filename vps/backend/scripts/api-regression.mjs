@@ -148,6 +148,90 @@ assert(beefFx && tofuFx && beefYj && tofuYj && fxFreezer && fxFour && yjFreezer 
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:manager.cookie})).response.status,403);
 assert.equal((await request("/api/inventory/fuxing/transactions",{cookie:admin.cookie})).response.status,200);
 
+const receiveAuditCatalogKey="receive-default-audit-regression";
+const receiveAuditEntityId=`fuxing:${receiveAuditCatalogKey}`;
+const receiveAuditItem=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:admin.cookie,
+  body:{item:{
+    key:receiveAuditEntityId,
+    catalog_key:receiveAuditCatalogKey,
+    zh:"收貨儲位稽核測試",
+    vi:"Kiểm thử audit vị trí nhận hàng",
+    unit:"包",work_area:"noodles",storage_only:true,
+    locations:[
+      {code:fxFreezer.code,quantity:0,minimum:0},
+      {code:fxFour.code,quantity:0,minimum:0},
+    ],
+  }}
+});
+assert.equal(receiveAuditItem.response.status,200);
+
+const receiveAuditCreate=await request("/api/inventory/receive-default",{
+  method:"POST",cookie:manager.cookie,
+  body:{site:"fuxing",catalogKey:receiveAuditCatalogKey,locationCode:fxFreezer.code}
+});
+assert.equal(receiveAuditCreate.response.status,200);
+assert.equal(receiveAuditCreate.data?.changed,true);
+assert.equal(receiveAuditCreate.data?.deleted,false);
+assert(receiveAuditCreate.data?.audit?.id);
+
+const receiveAuditNoop=await request("/api/inventory/receive-default",{
+  method:"POST",cookie:manager.cookie,
+  body:{site:"fuxing",catalogKey:receiveAuditCatalogKey,locationCode:fxFreezer.code}
+});
+assert.equal(receiveAuditNoop.response.status,200);
+assert.equal(receiveAuditNoop.data?.changed,false);
+assert.equal(receiveAuditNoop.data?.audit,null);
+
+const receiveAuditUpdate=await request("/api/inventory/receive-default",{
+  method:"POST",cookie:manager.cookie,
+  body:{site:"fuxing",catalogKey:receiveAuditCatalogKey,locationCode:fxFour.code}
+});
+assert.equal(receiveAuditUpdate.response.status,200);
+assert.equal(receiveAuditUpdate.data?.changed,true);
+assert.equal(receiveAuditUpdate.data?.deleted,false);
+
+const receiveAuditDelete=await request("/api/inventory/receive-default",{
+  method:"POST",cookie:manager.cookie,
+  body:{site:"fuxing",catalogKey:receiveAuditCatalogKey,locationCode:""}
+});
+assert.equal(receiveAuditDelete.response.status,200);
+assert.equal(receiveAuditDelete.data?.changed,true);
+assert.equal(receiveAuditDelete.data?.deleted,true);
+
+const receiveAuditDeleteNoop=await request("/api/inventory/receive-default",{
+  method:"POST",cookie:manager.cookie,
+  body:{site:"fuxing",catalogKey:receiveAuditCatalogKey,locationCode:""}
+});
+assert.equal(receiveAuditDeleteNoop.response.status,200);
+assert.equal(receiveAuditDeleteNoop.data?.changed,false);
+assert.equal(receiveAuditDeleteNoop.data?.audit,null);
+
+const receiveAuditLog=await request(
+  `/api/admin/super/audit?action=inventory_receive_default_change&site=fuxing&q=${encodeURIComponent(receiveAuditCatalogKey)}&pageSize=100`,
+  {cookie:admin.cookie}
+);
+assert.equal(receiveAuditLog.response.status,200);
+assert.equal(receiveAuditLog.data?.rows?.length,3,"receive-default audit should contain exactly create/update/delete");
+const [receiveDeleteLog,receiveUpdateLog,receiveCreateLog]=receiveAuditLog.data.rows;
+for(const row of receiveAuditLog.data.rows){
+  assert.equal(row.actor_username,"managerfx");
+  assert.equal(row.action,"inventory_receive_default_change");
+  assert.equal(row.entity_type,"inventory_receive_default");
+  assert.equal(row.entity_id,receiveAuditEntityId);
+  assert.equal(row.site,"fuxing");
+  assert.equal(row.metadata?.catalog_key,receiveAuditCatalogKey);
+}
+assert.equal(receiveDeleteLog.metadata?.operation,"delete");
+assert.equal(receiveDeleteLog.before_data?.location_code,fxFour.code);
+assert.equal(receiveDeleteLog.after_data,null);
+assert.equal(receiveUpdateLog.metadata?.operation,"update");
+assert.equal(receiveUpdateLog.before_data?.location_code,fxFreezer.code);
+assert.equal(receiveUpdateLog.after_data?.location_code,fxFour.code);
+assert.equal(receiveCreateLog.metadata?.operation,"create");
+assert.equal(receiveCreateLog.before_data,null);
+assert.equal(receiveCreateLog.after_data?.location_code,fxFreezer.code);
+
 const employeeSet = await request("/api/inventory/set-quantity",{
   method:"POST",cookie:employee.cookie,
   body:{itemId:beefFx.id,locationId:fxFreezer.id,quantity:99}

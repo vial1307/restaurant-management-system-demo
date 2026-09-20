@@ -183,49 +183,116 @@ export async function registerInventoryExtraRoutes(app) {
     }
     if (!(await requireReceiveDefaultManager(user, site, reply))) return;
 
-    if (!locationCode) {
-      await pool.query(
-        "delete from public.inventory_receive_defaults where site=$1 and catalog_key=$2",
-        [site,catalogKey]
-      );
-      return { ok:true, deleted:true };
+    try {
+      const result = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_receive_default:${site}:${catalogKey}`]
+        );
+        const currentResult = await client.query(
+          `select d.location_id,l.code as location_code
+           from public.inventory_receive_defaults d
+           join public.inventory_locations l on l.id=d.location_id
+           where d.site=$1 and d.catalog_key=$2
+           for update of d`,
+          [site,catalogKey]
+        );
+        const current = currentResult.rows[0] || null;
+
+        if (!locationCode) {
+          if (!current) return { ok:true,deleted:false,changed:false,audit:null };
+
+          await client.query(
+            "delete from public.inventory_receive_defaults where site=$1 and catalog_key=$2",
+            [site,catalogKey]
+          );
+          const audit = (await client.query(
+            `insert into public.audit_logs(
+               actor_user_id,actor_username,action,entity_type,entity_id,site,
+               before_data,after_data,metadata
+             ) values(
+               $1,$2,'inventory_receive_default_change','inventory_receive_default',$3,$4,
+               jsonb_build_object('location_id',$5::uuid,'location_code',$6::text),
+               null,
+               jsonb_build_object('catalog_key',$7::text,'operation','delete')
+             )
+             returning id,created_at`,
+            [
+              user.id,user.username,`${site}:${catalogKey}`,site,
+              current.location_id,current.location_code,catalogKey
+            ]
+          )).rows[0];
+          return { ok:true,deleted:true,changed:true,audit };
+        }
+
+        const loc = await client.query(
+          `select id,code
+           from public.inventory_locations
+           where site=$1 and code=$2 and kind='storage' and active=true
+           limit 1`,
+          [site,locationCode]
+        );
+        if (!loc.rowCount) {
+          throw Object.assign(new Error("LOCATION_NOT_FOUND"), { statusCode:404 });
+        }
+        const target = loc.rows[0];
+
+        const configured = await client.query(
+          `select 1
+           from public.inventory_items i
+           join public.inventory_stock s on s.item_id=i.id
+           where i.active=true
+             and i.catalog_key=$1
+             and i.item_key like $2
+             and s.location_id=$3
+           limit 1`,
+          [catalogKey,site + ":%",target.id]
+        );
+        if (!configured.rowCount) {
+          throw Object.assign(new Error("RECEIVE_DEFAULT_LOCATION_NOT_CONFIGURED"), { statusCode:409 });
+        }
+
+        if (current?.location_id === target.id) {
+          return { ok:true,deleted:false,changed:false,audit:null };
+        }
+
+        await client.query(
+          `insert into public.inventory_receive_defaults(site,catalog_key,location_id,updated_by,updated_at)
+           values($1,$2,$3,$4,now())
+           on conflict(site,catalog_key) do update
+           set location_id=excluded.location_id,
+               updated_by=excluded.updated_by,
+               updated_at=now()`,
+          [site,catalogKey,target.id,user.id]
+        );
+
+        const operation = current ? "update" : "create";
+        const audit = (await client.query(
+          `insert into public.audit_logs(
+             actor_user_id,actor_username,action,entity_type,entity_id,site,
+             before_data,after_data,metadata
+           ) values(
+             $1,$2,'inventory_receive_default_change','inventory_receive_default',$3,$4,
+             $5::jsonb,
+             jsonb_build_object('location_id',$6::uuid,'location_code',$7::text),
+             jsonb_build_object('catalog_key',$8::text,'operation',$9::text)
+           )
+           returning id,created_at`,
+          [
+            user.id,user.username,`${site}:${catalogKey}`,site,
+            current ? JSON.stringify({location_id:current.location_id,location_code:current.location_code}) : null,
+            target.id,target.code,catalogKey,operation
+          ]
+        )).rows[0];
+
+        return { ok:true,deleted:false,changed:true,audit };
+      });
+      return result;
+    } catch (error) {
+      return reply.code(error.statusCode || 500).send({
+        error:error.message || "RECEIVE_DEFAULT_SAVE_FAILED",
+      });
     }
-
-    const loc = await pool.query(
-      `select id
-       from public.inventory_locations
-       where site=$1 and code=$2 and kind='storage' and active=true
-       limit 1`,
-      [site,locationCode]
-    );
-    if (!loc.rowCount) return reply.code(404).send({ error: "LOCATION_NOT_FOUND" });
-
-    const configured = await pool.query(
-      `select 1
-       from public.inventory_items i
-       join public.inventory_stock s on s.item_id=i.id
-       where i.active=true
-         and i.catalog_key=$1
-         and i.item_key like $2
-         and s.location_id=$3
-       limit 1`,
-      [catalogKey,site + ":%",loc.rows[0].id]
-    );
-    if (!configured.rowCount) {
-      return reply.code(409).send({ error: "RECEIVE_DEFAULT_LOCATION_NOT_CONFIGURED" });
-    }
-
-    await pool.query(
-      `insert into public.inventory_receive_defaults(site,catalog_key,location_id,updated_by,updated_at)
-       values($1,$2,$3,$4,now())
-       on conflict(site,catalog_key) do update
-       set location_id=excluded.location_id,
-           updated_by=excluded.updated_by,
-           updated_at=now()`,
-      [site,catalogKey,loc.rows[0].id,user.id]
-    );
-
-    return { ok:true };
   });
 
   app.post("/api/inventory/set-quantity", async (request, reply) => {
