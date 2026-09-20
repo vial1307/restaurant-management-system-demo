@@ -185,6 +185,10 @@ export async function registerInventoryExtraRoutes(app) {
 
     try {
       const result = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_receive_default:${site}:${catalogKey}`]
+        );
         const currentResult = await client.query(
           `select d.location_id,l.code as location_code
            from public.inventory_receive_defaults d
