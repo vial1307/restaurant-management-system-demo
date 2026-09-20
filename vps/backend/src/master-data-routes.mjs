@@ -92,7 +92,7 @@ async function writeAudit(client, user, {
 
 async function siteSnapshot(site, includeInactive) {
   const activeClause = includeInactive ? "" : "and active=true";
-  const [siteResult, departments, locations, workAreas] = await Promise.all([
+  const [siteResult, departments, locations, workAreas, inventoryUnits] = await Promise.all([
     pool.query(
       `select code,name_vi,name_zh_tw,timezone_name,currency_code,active,sort_order,metadata,created_at,updated_at
        from public.sites where code=$1 limit 1`,
@@ -120,6 +120,13 @@ async function siteSnapshot(site, includeInactive) {
        order by sort_order,code`,
       [site]
     ),
+    pool.query(
+      `select code,name_vi,name_zh_tw,active,sort_order,metadata,
+              updated_by_user_id,created_at,updated_at
+       from public.inventory_units
+       where ${includeInactive ? "true" : "active=true"}
+       order by sort_order,code`
+    ),
   ]);
 
   return {
@@ -127,6 +134,7 @@ async function siteSnapshot(site, includeInactive) {
     departments: departments.rows,
     locations: locations.rows,
     workAreas: workAreas.rows,
+    inventoryUnits: inventoryUnits.rows,
   };
 }
 
