@@ -55,9 +55,27 @@ try{
   const candidates=pulls.filter((pr)=>pr?.head?.repo?.full_name===REPO);
   const pr=candidates.find((row)=>!row.draft)||candidates[0]||null;
   if(!pr){
+    const [commits,runsData]=await Promise.all([
+      request("/commits?sha=main&per_page=8"),
+      request("/actions/runs?branch=main&per_page=30")
+    ]);
+    const mainSha=commits[0]?.sha||"";
+    const runs=(runsData.workflow_runs||[]).filter((r)=>!mainSha||r.head_sha===mainSha).slice(0,20);
+    const workflowHtml=runs.length?runs.map((r)=>{
+      const state=r.status==="completed"?(r.conclusion==="success"?"ok":"bad"):"warn";
+      return `<li><a href="${esc(r.html_url)}" target="_blank" rel="noreferrer">${esc(r.name)} #${esc(r.run_number)}</a> — <span class="${state}">${esc(r.status)} / ${esc(r.conclusion||"pending")}</span></li>`;
+    }).join(""):"<li>Chưa có workflow cho main SHA hiện tại.</li>";
     app.innerHTML=`<h2>Không có PR đang mở · main là điểm tiếp quản</h2>
-      <p>Đọc CURRENT_HANDOFF.md → WORK_LOG.md → DEVELOPMENT_RULES.md, sau đó kiểm tra GitHub Actions trước khi tạo branch mới.</p>
-      <div class="links"><a href="https://github.com/${REPO}/actions" target="_blank">GitHub Actions ↗</a><a href="https://github.com/${REPO}/commits/main" target="_blank">main ↗</a></div>`;
+      <div class="grid">
+        <div class="kv"><small>Branch</small><b><code>main</code></b></div>
+        <div class="kv"><small>Main SHA</small><b><code>${esc(short(mainSha))}</code></b></div>
+        <div class="kv"><small>Latest commit</small><b>${esc(String(commits[0]?.commit?.message||"").split("\n")[0]||"—")}</b></div>
+        <div class="kv"><small>Updated</small><b>${esc(commits[0]?.commit?.author?.date||"—")}</b></div>
+      </div>
+      <p>Đọc CURRENT_HANDOFF.md → WORK_LOG.md → DEVELOPMENT_RULES.md, sau đó tạo branch/PR mới. Khi PR mở, trang này tự chuyển sang PR đó.</p>
+      <div class="links"><a href="https://github.com/${REPO}/actions" target="_blank">GitHub Actions ↗</a><a href="https://github.com/${REPO}/commits/main" target="_blank">main ↗</a></div>
+      <h3>Commit chain trên main</h3><ul>${commits.map((c)=>`<li><a href="${esc(c.html_url)}" target="_blank" rel="noreferrer"><code>${esc(short(c.sha))}</code></a> · ${esc(String(c.commit?.message||"").split("\n")[0])}</li>`).join("")}</ul>
+      <h3>CI của main SHA hiện tại</h3><ul>${workflowHtml}</ul>`;
   }else{
     const [commits,files,runsData]=await Promise.all([
       request(`/pulls/${pr.number}/commits?per_page=20`),
