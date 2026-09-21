@@ -193,6 +193,7 @@ jobs:
       TEST_API_BASE: "http://127.0.0.1:8080"
       TEST_WEB_BASE: "http://localhost:3000"
       PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+      WORKFORCE_SCHEDULE_RELATIONAL_READ: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
