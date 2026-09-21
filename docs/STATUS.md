@@ -8,12 +8,12 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #802 / run `35526347373`.
-- Verified production SHA: `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`.
+- Verified production release: Deploy Kitchen OS to VPS #815 / run `35549929164`.
+- Verified production SHA: `09e2fffc80bf186d15054002c00421a2a5525e8f`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
-- GitHub Pages #931: PASS.
-- Inventory Site Production Audit #61 / run `35526617408`: PASS.
+- GitHub Pages #933: PASS.
+- Deploy-integrated inventory site/data-integrity audit: PASS.
 - Inventory site integrity violations: 0.
 - Hidden inventory violations: 0.
 
@@ -26,47 +26,31 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 - No-op receive-default saves/deletes create no audit.
 - Live GitHub & Handoff deployed.
 - Inventory catalog/work/storage/modal round-trip and rapid `+ / -` performance fix (PR #132) deployed.
-- Production #802 verified on schema 024.
+- Inventory overview/editor writes persist with explicit `inventory.edit` + site scope and synchronize through authenticated SSE (PR #133).
+- Central/Fuxing/Yongji two-tab database round-trip and peer-editor repaint regression: PASS.
+- Production #815 verified on schema 024.
 
-## IN PROGRESS — inventory overview/editor real-time convergence
+## IN PROGRESS — normalized-domain continuation
 
 Branch:
 
-- `fix/inventory-live-editor-sync-20260921`
-- candidate base is verified production `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`.
+- no open application candidate at this checkpoint;
+- baseline is verified production `09e2fffc80bf186d15054002c00421a2a5525e8f`.
 
 Schema:
 
 - remains `024`.
 
-Confirmed defects:
-
-- legacy role-name guards blocked quantity/minimum despite explicit `inventory.edit`;
-- Central overview work area/storage location were not editable or linked to the editor;
-- branch overview scalar changes rendered optimistic local state before database confirmation;
-- branch rows were rendered from the current cloud mirror while change handlers and the editor still read the stale in-memory store, so a visible edit could resolve no item and send no database request;
-- inventory realtime subscription was empty, leaving tabs/devices on 60-second polling.
-
-Candidate behavior:
-
-- explicit `inventory.edit` plus site scope authorizes every exposed inventory edit; view-only and foreign-site accounts remain denied;
-- Central overview selectors use catalog sync and transactional relocation, then refresh overview/editor from PostgreSQL;
-- branch overview quantity/minimum perform no browser-only success and reconcile exactly once;
-- overview controls, quick adjustments, transfer plans and the editor all resolve today's branch item from the same authoritative cloud mirror;
-- authenticated SSE invalidates other tabs/devices in real time, with self-event suppression and coalescing;
-- polling/focus/visibility remain fallback paths;
-- dynamic API regression covers employee/central edit grants, view-only rejection and SSE delivery.
+The secure Admin/Data surface and VPS metrics are already production work. The next database stage must use the existing additive cutover discipline rather than create another writable authority.
 
 ## NEXT
 
-1. Update PR #133 with the authoritative-mirror correction.
-2. Run PostgreSQL/API, SSE and concurrency regression in CI.
-3. Run desktop/mobile Chromium and full-device browser certification.
-4. Merge only the exact tested head after every required check passes.
-5. Deploy the exact merge commit and run Inventory Site Production Audit.
+1. Verify workforce schedule relational/compatibility parity on the current production release.
+2. Prepare a separate reviewed change enabling `WORKFORCE_SCHEDULE_RELATIONAL_READ` with an immediate flag rollback path.
+3. Keep compatibility schedule writes and module revision concurrency during the read-observation period.
+4. After stable production evidence, select the next normalized business domain; do not retire compatibility data in the same step.
 
 ## BLOCKED
 
 - No production data blocker.
-- Local Docker is unavailable and Playwright browser download timed out; database/browser proof is pending CI.
-- Production remains on #802 / `9bc9ad5`; do not claim this candidate is deployed before deploy + smoke + audit pass.
+- Production load/stress testing, deeper per-record business concurrency and literal physical-device certification remain approval/operational-setup items in `docs/PENDING_APPROVAL.md`.

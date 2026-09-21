@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`
+- Current verified production SHA: `09e2fffc80bf186d15054002c00421a2a5525e8f`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #802
-- Run ID: `35526347373`
-- Tested/deployed commit: `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`
+- Workflow: Deploy Kitchen OS to VPS #815
+- Run ID: `35549929164`
+- Tested/deployed commit: `09e2fffc80bf186d15054002c00421a2a5525e8f`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -36,8 +36,8 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- GitHub Pages #931: PASS
-- Post-deploy Inventory Site Production Audit #61 / run `35526617408`: PASS
+- GitHub Pages #933: PASS
+- Deploy-integrated inventory site/data-integrity audit: PASS
 
 Production audit after schema 022:
 
@@ -45,17 +45,20 @@ Production audit after schema 022:
 - `receive_default_site_mismatch = 0`
 - `unknown_item_site = 0`
 
-This release preserves the schema-022 inventory guarantees and production-verifies transactional workforce schedule shadow writes plus post-deploy schedule parity/backfill checks.
+This release includes PR #133 inventory overview/editor PostgreSQL persistence and authenticated SSE convergence for Central, Fuxing and Yongji. PR #134 changed only the mobile permission-certification wait budget; its assertions and application behavior are unchanged.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
-## 3. Current candidate: inventory overview/editor real-time convergence
+## 3. Completed: inventory overview/editor real-time convergence
 
-Working branch:
+Production evidence:
 
-- `fix/inventory-live-editor-sync-20260921`
-- based on verified production `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`;
-- schema remains `024`.
+- PR #133 merged as `a5da75d4dac54c38abbf825bc1d247798d25ba14`;
+- final production source includes the test-only PR #134 merge `09e2fffc80bf186d15054002c00421a2a5525e8f`;
+- Deploy #815 / run `35549929164`: PASS;
+- exact release endpoint: `09e2fff`;
+- schema remains `024`;
+- preflight, API, PostgreSQL concurrency, desktop/mobile Chromium, full-device cross-browser, deploy, health/release and production UI smoke: PASS.
 
 User-reported defects:
 
@@ -65,7 +68,7 @@ User-reported defects:
 - the branch page rendered the current site-scoped cloud mirror, but its edit handlers and modal still looked up items in the stale long-lived store;
 - `subscribeRealtime()` was a placeholder, so another tab/device waited for focus or the 60-second poll.
 
-Candidate behavior:
+Production behavior:
 
 - explicit `inventory.edit` plus allowed site scope is the single write authority for all exposed inventory fields; view-only and foreign-site accounts remain denied;
 - Central overview work-area/storage selectors persist through catalog sync/transactional relocation and reconcile the product editor from PostgreSQL;
@@ -75,21 +78,14 @@ Candidate behavior:
 - polling/focus/visibility remain fallback convergence paths;
 - receive-default editing follows the same explicit edit-permission rule.
 
-Local verification completed:
+Two-tab browser regression proves an overview minimum write reaches PostgreSQL and repaints an already-open peer editor from the forced SSE snapshot. Direct rendered database item/location IDs prevent stale UI lookup from suppressing a valid write. Cross-tab shared `localStorage` equality no longer suppresses the peer document repaint.
 
-- JavaScript syntax checks: PASS;
-- `tests/static-regression.mjs`: PASS;
-- `tests/performance-regression.mjs`: PASS;
-- inventory cache/source-client-id and live-edit/realtime contract regressions: PASS;
-- `git diff --check`: PASS.
+### Exact next work
 
-Still required before merge/deploy:
-
-- PostgreSQL/API regression and concurrency regression in CI;
-- desktop/mobile Chromium and full-device browser certification in CI;
-- exact tested-head merge, VPS deploy, production smoke and Inventory Site Production Audit.
-
-Local Docker is unavailable and the Playwright browser download timed out in this workspace, so dynamic database and browser proof must come from GitHub CI.
+1. Preserve the inventory write/realtime invariants; do not reopen them as browser-local state.
+2. Continue normalized-domain/database redesign one domain at a time.
+3. The prepared workforce-schedule relational read gate remains the nearest cutover candidate: verify current production parity/backfill, then enable relational read only in a separate reviewed change with the flag rollback path retained.
+4. Keep compatibility schedule writes until relational reads have remained stable in production; compatibility retirement is a later explicit stage.
 
 ## 4. Completed: cross-site inventory tab synchronization
 

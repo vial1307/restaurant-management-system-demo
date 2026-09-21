@@ -1098,3 +1098,29 @@ Ninth PR #133 CI attempt:
 - the cause was cross-tab `localStorage`: the writer tab stored the new snapshot first, so the peer's forced SSE fetch compared equal and suppressed its document-local update event even though that peer's DOM was stale;
 - every forced remote reconciliation now emits the inventory-updated event when data compares equal, making each tab repaint from the authoritative snapshot without adding another database write;
 - production was not changed by the failed candidate run.
+
+## 2026-09-21 — Inventory realtime production #815 and next domain handoff
+
+Final inventory verification:
+
+- PR #133 passed Deploy workflow #812, including API/SSE, PostgreSQL concurrency, two-tab overview-to-editor convergence, desktop/mobile Chromium and full-device cross-browser coverage;
+- PR #133 merged as `a5da75d4dac54c38abbf825bc1d247798d25ba14`;
+- main deploy #813 was blocked only by unrelated mobile permission-test hydration timeouts at different accounts;
+- PR #134 changed only that existing test's per-attempt wait budget from 10 to 20 seconds without changing predicates, retries, assertions or application behavior;
+- PR #134 passed workflow #814 and merged as `09e2fffc80bf186d15054002c00421a2a5525e8f`.
+
+Deploy Kitchen OS to VPS #815 / run `35549929164`:
+
+- preflight/static/performance/runtime sync: PASS;
+- API inventory/SSE and workforce API: PASS;
+- PostgreSQL concurrency: PASS;
+- desktop/mobile Chromium: PASS;
+- full-device cross-browser: PASS;
+- exact tested-SHA deploy with backup/rollback: PASS;
+- deploy-integrated inventory site/data-integrity audit: PASS;
+- schema `024`: PASS;
+- API/database health and release `09e2fff`: PASS;
+- production UI smoke: PASS;
+- GitHub Pages #933: PASS.
+
+The inventory overview/editor persistence and realtime workstream is complete. The next non-approval workstream is normalized-domain continuation. Workforce schedule is the nearest prepared domain: verify current production parity/backfill, then enable relational read only through a separate reviewed flag change while compatibility writes and rollback remain active.
