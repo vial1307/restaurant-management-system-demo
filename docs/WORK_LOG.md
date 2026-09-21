@@ -1075,3 +1075,10 @@ Sixth PR #133 CI attempt:
 - branch quantity/minimum and rapid `+ / -` controls now carry the authoritative item/location UUIDs already returned in the rendered snapshot and send those IDs directly to the mutation API, with the former key/code resolver retained only as backward-compatible fallback;
 - the two-tab browser gate explicitly requires both rendered PostgreSQL IDs before executing the overview write;
 - production was not changed by the failed candidate run.
+
+Seventh PR #133 CI attempt:
+
+- Deploy workflow #809 / run `35548327477` passed preflight and confirmed both rendered PostgreSQL IDs were present, but still observed no mutation response;
+- the next browser gate records whether the synthetic change reaches `#app`, whether the application disables the control at mutation start, and the exact edit permission/date/cloud readiness state;
+- this diagnostic is intentionally before merge/deploy so the final correction is based on the actual failed boundary rather than another assumption;
+- production was not changed by the failed candidate run.

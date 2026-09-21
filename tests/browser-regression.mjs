@@ -456,11 +456,33 @@ async function roleDesktop(browser, username, checks) {
       await peerMinimum.waitFor({state:"visible"});
       await page.waitForTimeout(250);
 
+      await page.evaluate(()=>{
+        window.__inventoryChangeProbe=0;
+        document.querySelector("#app")?.addEventListener("change",()=>{ window.__inventoryChangeProbe+=1; },{capture:true,once:true});
+      });
       const minimumWrite=page.waitForResponse((response)=>response.url().endsWith("/api/inventory/set-minimum")&&response.request().method()==="POST");
       await sourceMinimum.evaluate((input,value)=>{
         input.value=value;
         input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
       },String(next));
+      const dispatchDiagnostic=await page.evaluate(()=>{
+        const input=document.querySelector('.inventory-table.storage-table .storage-row input[data-field="item"][data-key="minimum"]');
+        const auth=JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null");
+        const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
+        const today=new Date();
+        const todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+        return {
+          probe:window.__inventoryChangeProbe,
+          disabled:Boolean(input?.disabled),
+          dataset:{...(input?.dataset||{})},
+          inventoryEdit:Boolean(auth?.permissions?.inventory?.edit),
+          selectedDate:state?.selectedDate||"",
+          todayKey,
+          cloud:localStorage.getItem("shitu-inventory-cloud-v2"),
+        };
+      });
+      assert.equal(dispatchDiagnostic.probe,1,`overview change did not reach app root: ${JSON.stringify(dispatchDiagnostic)}`);
+      assert.equal(dispatchDiagnostic.disabled,true,`overview change handler returned before mutation: ${JSON.stringify(dispatchDiagnostic)}`);
       assert.equal((await minimumWrite).status(),200,"overview minimum did not persist through the database API");
       await peer.waitForFunction(
         ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
