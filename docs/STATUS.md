@@ -30,25 +30,26 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 - Central/Fuxing/Yongji two-tab database round-trip and peer-editor repaint regression: PASS.
 - Production #815 verified on schema 024.
 
-## IN PROGRESS — normalized-domain continuation
+## IN PROGRESS — workforce production verification queue
 
 Branch:
 
-- no open application candidate at this checkpoint;
+- `fix/workforce-maintenance-concurrency-20260921`;
 - baseline is verified production `09e2fffc80bf186d15054002c00421a2a5525e8f`.
 
 Schema:
 
 - remains `024`.
 
-The secure Admin/Data surface and VPS metrics are already production work. The next database stage must use the existing additive cutover discipline rather than create another writable authority.
+Production #815 schedule parity passed, but the automatic Schedule Backfill verify run was cancelled before starting because staff, schedule and attendance verification shared one GitHub concurrency group. The candidate gives each read-only domain verification its own queue while keeping all manually dispatched `apply` operations in one shared serialized maintenance queue.
 
 ## NEXT
 
-1. Verify workforce schedule relational/compatibility parity on the current production release.
-2. Prepare a separate reviewed change enabling `WORKFORCE_SCHEDULE_RELATIONAL_READ` with an immediate flag rollback path.
-3. Keep compatibility schedule writes and module revision concurrency during the read-observation period.
-4. After stable production evidence, select the next normalized business domain; do not retire compatibility data in the same step.
+1. Merge/deploy the verification-queue correction after exact-head CI passes.
+2. Require both Schedule Parity and Schedule Backfill verify to pass for the same deployed release.
+3. Only then prepare a separate reviewed change enabling `WORKFORCE_SCHEDULE_RELATIONAL_READ` with an immediate flag rollback path.
+4. Keep compatibility schedule writes and module revision concurrency during the read-observation period.
+5. After stable production evidence, select the next normalized business domain; do not retire compatibility data in the same step.
 
 ## BLOCKED
 
