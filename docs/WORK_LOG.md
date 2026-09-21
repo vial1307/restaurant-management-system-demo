@@ -1060,3 +1060,10 @@ Fourth PR #133 CI attempt:
 - rendered branch controls now carry immutable `stockKey` plus rendered zone/work-area identity and can construct the database mutation target even if both the store and mirror lookup lag;
 - the browser regression now waits for HTTP 200 from the actual overview mutation before asserting SSE convergence in the already-open peer editor, and restores the fixture through the same UI/API path;
 - production was not changed by the failed candidate run.
+
+Fifth PR #133 CI attempt:
+
+- Deploy workflow #807 / run `35529510211` passed preflight; Super Admin Browser Regression #93, Workforce Approval Diagnostic #217 and Isolated API Load Smoke #408 all passed independently;
+- the database mutation assertion timed out before any `set-minimum` request, proving the rendered identity was present but the delegated bubble-phase `change` handler was not reached;
+- the root change handler now runs in capture phase, before nested feature/compatibility layers can stop bubbling, while retaining the same permission and PostgreSQL mutation checks;
+- production was not changed by the failed candidate run.

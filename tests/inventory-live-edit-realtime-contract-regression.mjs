@@ -45,6 +45,8 @@ assert.match(app,/function authoritativeBranchRecord\([\s\S]{0,700}inventoryBran
 assert.match(app,/function inventoryControlItem\([\s\S]{0,800}dataset\?\.stockKey/,"rendered inventory controls must carry a database mutation identity even if the in-memory store lags");
 assert.match(app,/const record = authoritativeBranchRecord\(state,site\);[\s\S]{0,220}inventoryControlItem\(element,record,"item"\)/,"branch overview handlers must resolve the rendered item from the authoritative mirror/control identity");
 assert.match(app,/const inventoryRecord = authoritativeBranchRecord\(state,site\)[\s\S]{0,700}inventoryRecord\?\.inventory\.find/,"branch editor submit must compare against the authoritative mirror");
+const changeHandler=app.slice(app.indexOf('root.addEventListener("change"'),app.indexOf('root.addEventListener("input"'));
+assert.match(changeHandler,/\}, true\);/,"inventory change delegation must run in capture phase so nested UI layers cannot swallow database writes");
 
 assert.match(realtime,/app\.get\("\/api\/inventory\/events"[\s\S]*?requireUser[\s\S]*?hasPermission\(user, "inventory", "view"\)/,"SSE stream must be authenticated and inventory-view authorized");
 assert.match(realtime,/app\.addHook\("onResponse"[\s\S]*?route\.startsWith\("\/api\/inventory\/"\)[\s\S]*?publishInventoryInvalidation/,"successful inventory mutations must publish realtime invalidation");

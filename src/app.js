@@ -1796,6 +1796,9 @@ root.addEventListener("click", (event) => {
   if (action === "reset" && window.confirm(translate(state.settings.language).resetConfirm)) store.reset();
 });
 
+// Capture changes before feature overlays or compatibility layers can stop
+// bubbling. Inventory controls are rendered inside the stable app root and
+// must always reach the PostgreSQL mutation handler.
 root.addEventListener("change", (event) => {
   const element = event.target;
   if(element.matches?.('input[name="zones"]')){
@@ -2014,7 +2017,7 @@ root.addEventListener("change", (event) => {
   if (field === "calendarYear") { view.calendarYear = Number(element.value); render(); }
   if (field === "setting") store.updateSetting(key, element.value);
   if (field === "task") store.toggleTask(id);
-});
+}, true);
 
 const inventorySearchCorpusCache = new WeakMap();
 
