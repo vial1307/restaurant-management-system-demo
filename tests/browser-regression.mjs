@@ -341,6 +341,10 @@ async function roleDesktop(browser, username, checks) {
     assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation tabs must match branch layout");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
     assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
+    if(checks.manage === true){
+      assert((await page.locator("select[data-central-inline-work-area]").count()) > 0,"central overview work-area editors missing");
+      assert((await page.locator("select[data-central-inline-zone]").count()) > 0,"central overview storage editors missing");
+    }
     await page.locator('[data-central-view="work"]').click();
     assert((await page.locator(".inventory-table.work-table .central-row").count()) > 0,"central work overview cards missing");
     await page.locator('[data-central-view="storage"]').click();
@@ -427,6 +431,79 @@ async function roleDesktop(browser, username, checks) {
       }
       await page.locator('button[data-action="close-modal"]').first().click();
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
+    }
+    if(username === "employeefx" && checks.stocktake === true){
+      const peer=await context.newPage();
+      peer.on("pageerror",(error)=>errors.push(`peer: ${error.message}`));
+      await peer.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
+      await peer.locator(".app-shell").waitFor({state:"visible",timeout:15000});
+      await setSite(peer,"fuxing");
+
+      const sourceRow=page.locator(".inventory-table.storage-table .storage-row").first();
+      const peerRow=peer.locator(".inventory-table.storage-table .storage-row").first();
+      await sourceRow.waitFor({state:"visible"});
+      await peerRow.waitFor({state:"visible"});
+      const zone=await sourceRow.locator('select[data-field="item"][data-key="zone"]').inputValue();
+      const stockKey=await sourceRow.locator('[data-action="open-edit-item"]').getAttribute("data-stock-key");
+      const sourceMinimum=sourceRow.locator('input[data-field="item"][data-key="minimum"]');
+      assert(await sourceMinimum.getAttribute("data-cloud-item-id"),"overview minimum is missing the rendered PostgreSQL item id");
+      assert(await sourceMinimum.getAttribute("data-cloud-location-id"),"overview minimum is missing the rendered PostgreSQL location id");
+      const before=Math.max(0,Number(await sourceMinimum.inputValue())||0);
+      const next=before+1;
+
+      await peer.locator(`[data-action="open-edit-item"][data-stock-key="${stockKey}"]`).click();
+      const peerMinimum=peer.locator(`input[name="minimum:${zone}"]`);
+      await peerMinimum.waitFor({state:"visible"});
+      await page.waitForTimeout(250);
+
+      await page.evaluate(()=>{
+        window.__inventoryChangeProbe=0;
+        document.querySelector("#app")?.addEventListener("change",()=>{ window.__inventoryChangeProbe+=1; },{capture:true,once:true});
+      });
+      const minimumWrite=page.waitForResponse((response)=>response.url().endsWith("/api/inventory/set-minimum")&&response.request().method()==="POST");
+      await sourceMinimum.evaluate((input,value)=>{
+        input.value=value;
+        input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
+      },String(next));
+      const dispatchDiagnostic=await page.evaluate(()=>{
+        const input=document.querySelector('.inventory-table.storage-table .storage-row input[data-field="item"][data-key="minimum"]');
+        const auth=JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null");
+        const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
+        const today=new Date();
+        const todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+        return {
+          probe:window.__inventoryChangeProbe,
+          disabled:Boolean(input?.disabled),
+          dataset:{...(input?.dataset||{})},
+          inventoryEdit:Boolean(auth?.permissions?.inventory?.edit),
+          selectedDate:state?.selectedDate||"",
+          todayKey,
+          cloud:localStorage.getItem("shitu-inventory-cloud-v2"),
+        };
+      });
+      assert.equal(dispatchDiagnostic.probe,1,`overview change did not reach app root: ${JSON.stringify(dispatchDiagnostic)}`);
+      assert.equal(dispatchDiagnostic.disabled,true,`overview change handler returned before mutation: ${JSON.stringify(dispatchDiagnostic)}`);
+      assert.equal((await minimumWrite).status(),200,"overview minimum did not persist through the database API");
+      await peer.waitForFunction(
+        ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
+        {name:`minimum:${zone}`,value:String(next)},
+        {timeout:10000}
+      );
+
+      const restoredMinimum=page.locator(".inventory-table.storage-table .storage-row").first().locator('input[data-field="item"][data-key="minimum"]');
+      const minimumRestore=page.waitForResponse((response)=>response.url().endsWith("/api/inventory/set-minimum")&&response.request().method()==="POST");
+      await restoredMinimum.evaluate((input,value)=>{
+        input.value=value;
+        input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
+      },String(before));
+      assert.equal((await minimumRestore).status(),200,"overview minimum restore did not persist through the database API");
+      await peer.waitForFunction(
+        ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
+        {name:`minimum:${zone}`,value:String(before)},
+        {timeout:10000}
+      );
+      await peer.locator('button[data-action="close-modal"]').first().click();
+      await peer.close();
     }
     if(checks.operations === false){
       assert.equal(await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').count(),0);
@@ -555,10 +632,10 @@ const browser=await chromium.launch({headless:true});
 try{
   await adminDesktop(browser);
   await roleDesktop(browser,"managerfx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:true});
-  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,receiveDefault:false,dashboardEdit:false});
-  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:false,receiveDefault:false,dashboardEdit:false});
+  await roleDesktop(browser,"supervisorfx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:false});
+  await roleDesktop(browser,"employeefx",{manage:true,operations:true,stocktake:true,receiveDefault:true,dashboardEdit:false});
   await roleDesktop(browser,"parttimefx",{manage:false,operations:false,dashboardEdit:false});
-  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:false});
+  await roleDesktop(browser,"centralreg",{central:true,manage:true,stocktake:true});
   await responsiveAdmin(browser,{width:359,height:740});
   await responsiveAdmin(browser,{width:390,height:844});
   await responsiveAdmin(browser,{width:440,height:956});

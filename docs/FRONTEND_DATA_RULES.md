@@ -131,6 +131,8 @@ Do not duplicate the same business fact into independent unsynchronized state st
 
 When one module changes a shared entity, dependent modules must consume the same canonical server-backed state or a deterministic derived state.
 
+If a page is rendered from a server-backed mirror, its event handlers and open editors must resolve entities from that same mirror. They must not render a current value and then look up the mutation target in an older in-memory store.
+
 ## 6. Branch functional parity
 
 Central Kitchen, Fuxing and Yongji must share the same implementation pattern and functional semantics for equivalent features unless the specification explicitly defines a branch-specific exception.

@@ -1,6 +1,6 @@
 # Kitchen OS — Current Development Handoff
 
-Last updated: 2026-09-20 (Asia/Taipei)
+Last updated: 2026-09-21 (Asia/Taipei)
 
 This document is the current continuation point for any developer or future ChatGPT session working on Kitchen OS. It must be updated whenever a significant production fix, schema migration, deployment, or workstream handoff occurs.
 
@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `21d376295b6194e48bfaa599fc6c5424256a6196`
+- Current verified production SHA: `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #796
-- Run ID: `35500763361`
-- Tested/deployed commit: `21d376295b6194e48bfaa599fc6c5424256a6196`
+- Workflow: Deploy Kitchen OS to VPS #802
+- Run ID: `35526347373`
+- Tested/deployed commit: `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -36,7 +36,8 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- Post-deploy Inventory Site Production Audit #54 / run `35500993290`: PASS
+- GitHub Pages #931: PASS
+- Post-deploy Inventory Site Production Audit #61 / run `35526617408`: PASS
 
 Production audit after schema 022:
 
@@ -48,38 +49,39 @@ This release preserves the schema-022 inventory guarantees and production-verifi
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
-## 3. Current candidate: inventory round-trip persistence and rapid adjustment performance
+## 3. Current candidate: inventory overview/editor real-time convergence
 
 Working branch:
 
-- `fix/inventory-roundtrip-performance-20260921`
-- prerequisite PR #131 is merged; the candidate is based on merge commit `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9`;
-- production authority remains `21d376295b6194e48bfaa599fc6c5424256a6196` until the exact candidate head passes CI, deploy, smoke and production audit.
+- `fix/inventory-live-editor-sync-20260921`
+- based on verified production `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`;
+- schema remains `024`.
 
 User-reported defects:
 
-- every branch/central `+ / -` click caused a full render and duplicate inventory synchronization, producing visible freezes;
-- work-area changes were sent through catalog association sync, which correctly refused to delete a stocked source association, so refresh restored the prior value;
-- branch item edit submit could throw before its API call because the current store state was referenced without being declared;
-- central edit quantity/minimum fields were not persisted because catalog sync intentionally ignores physical stock fields;
-- branch and central modal storage changes did not consistently use the dedicated relocation transaction.
+- quantity/minimum writes were still re-denied by legacy role names after `inventory.edit` had been explicitly granted;
+- the Central overview showed work area and storage location as read-only even though the product editor could change them;
+- branch scalar overview edits performed an optimistic local write/full render before database confirmation;
+- the branch page rendered the current site-scoped cloud mirror, but its edit handlers and modal still looked up items in the stale long-lived store;
+- `subscribeRealtime()` was a placeholder, so another tab/device waited for focus or the 60-second poll.
 
 Candidate behavior:
 
-- rapid `+ / -` clicks update only the active quantity control, coalesce their net delta for 120 ms, send one serialized adjustment and perform one final authoritative reload;
-- failures visibly mark the row and force a fresh PostgreSQL-backed reconciliation;
-- new `POST /api/inventory/relocate-work-area` atomically moves the work-location stock row, minimum and item work-area metadata, with a transfer history row when quantity is non-zero and an `inventory_work_area_relocate` audit row for every real relocation;
-- branch/central storage edits use `relocate-storage` for stocked associations and preserve moved quantity/minimum;
-- branch and central modal edits use dedicated quantity/minimum endpoints, then perform one final authoritative reload;
-- catalog/work/storage edits use catalog-manager authorization; quantity/minimum stocktake permissions remain stricter by design;
-- API regression covers work-area relocation for both 復興 and 永吉 branches.
+- explicit `inventory.edit` plus allowed site scope is the single write authority for all exposed inventory fields; view-only and foreign-site accounts remain denied;
+- Central overview work-area/storage selectors persist through catalog sync/transactional relocation and reconcile the product editor from PostgreSQL;
+- branch overview quantity/minimum writes no longer mutate local state first and perform one forced authoritative reconciliation;
+- today's branch overview, quick actions, transfers and product modal all layer the same site-scoped PostgreSQL mirror over the store before resolving an item;
+- every successful inventory mutation publishes an authenticated SSE invalidation; other tabs/devices coalesce it, ignore their own source id and refresh the active permitted site;
+- polling/focus/visibility remain fallback convergence paths;
+- receive-default editing follows the same explicit edit-permission rule.
 
 Local verification completed:
 
 - JavaScript syntax checks: PASS;
-- static regression: PASS;
-- performance regression: PASS;
-- focused inventory hydration, cache invalidation, stocktake-boundary and scalar no-op regressions: PASS.
+- `tests/static-regression.mjs`: PASS;
+- `tests/performance-regression.mjs`: PASS;
+- inventory cache/source-client-id and live-edit/realtime contract regressions: PASS;
+- `git diff --check`: PASS.
 
 Still required before merge/deploy:
 
@@ -171,8 +173,8 @@ Regression proof:
 - `出貨`: cross-site transfer.
 - Cross-site direct transfer must remain atomic: source decrement + destination increment in one DB transaction.
 - Internal location relocation is not a catalog metadata edit.
-- Quantity/minimum stocktake permissions remain stricter than catalog metadata permissions.
-- Receiving-default routing is database-backed and manager/admin controlled.
+- Quantity/minimum, catalog metadata and receiving-default writes require explicit `inventory.edit` within allowed site scope; a role name cannot re-deny a granted edit permission.
+- Receiving-default routing remains database-backed and site-scoped.
 - No browser code may connect directly to PostgreSQL.
 - Every inventory mutation must be authenticated, authorized, validated and auditable server-side.
 - Never overwrite VPS stock from a stale browser snapshot.

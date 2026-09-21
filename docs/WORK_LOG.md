@@ -981,3 +981,120 @@ Pending CI proof:
 - full-device cross-browser regression.
 
 Local Docker was unavailable and Playwright Chromium download timed out, so no local dynamic database/browser result is claimed.
+
+
+## 2026-09-21 — Inventory overview/editor real-time convergence candidate
+
+Verified baseline before this slice:
+
+- PR #132 merged and deployed as `9bc9ad5f3571e197070a9430ff9e4c7bc3123f6a`;
+- Deploy Kitchen OS to VPS #802 / run `35526347373`: PASS;
+- GitHub Pages #931: PASS;
+- Inventory Site Production Audit #61 / run `35526617408`: PASS;
+- schema remains `024`.
+
+Branch:
+
+- `fix/inventory-live-editor-sync-20260921`.
+
+Confirmed gaps:
+
+- direct quantity/minimum APIs and UI controls still used a legacy manager/supervisor/admin name gate after explicit `inventory.edit` was granted;
+- Central overview rendered work area and storage location as read-only;
+- Central product save referenced an out-of-scope `stocktakeWritable` variable before dedicated quantity/minimum persistence;
+- branch overview scalar edits wrote local cache and rendered before VPS confirmation;
+- `subscribeRealtime()` did not create any transport, so another tab/device depended on focus or 60-second polling.
+
+Candidate implementation:
+
+- `inventory.edit` plus allowed site scope is the shared frontend/backend authority for quantity, minimum, catalog, relocation and receive-default controls;
+- Central overview work-area changes use catalog sync; storage changes use the transactional relocation endpoint; both force PostgreSQL reconciliation and update the editor;
+- branch overview quantity/minimum inputs wait for their dedicated VPS APIs and one forced snapshot before success;
+- authenticated `/api/inventory/events` SSE broadcasts payload-free invalidation metadata after successful inventory writes;
+- each browser tab sends a stable source client id, ignores its own SSE echo, coalesces remote events for 120 ms and force-refreshes the active permitted site;
+- polling/focus/visibility remain fallback convergence paths;
+- server shutdown closes SSE clients cleanly.
+
+Local verification:
+
+- JavaScript syntax checks: PASS;
+- `tests/static-regression.mjs`: PASS;
+- `tests/performance-regression.mjs`: PASS;
+- `tests/vps-inventory-cache-invalidation-regression.mjs`: PASS;
+- live-edit/realtime contract regression: PASS;
+- `git diff --check`: PASS.
+
+Pending CI proof:
+
+- PostgreSQL/API SSE delivery and permission round-trip;
+- concurrency regression;
+- desktop/mobile Chromium and full-device browser certification;
+- exact tested-head merge, VPS deploy, production smoke and Inventory Site Production Audit.
+
+First PR #133 CI attempt:
+
+- Deploy workflow #803 / run `35528428165` preflight: PASS;
+- API regression stopped before browser/deploy because the SSE listener had been opened before earlier catalog/receive-default fixtures, so the assertion consumed an older valid invalidation with an empty source id instead of the writer event;
+- runtime behavior was correct; the test ordering was corrected by opening the listener immediately before the mutation under test;
+- production was not changed by the failed candidate run.
+
+Second PR #133 CI attempt:
+
+- Deploy workflow #804 / run `35528594733` preflight, API inventory/SSE, workforce API and PostgreSQL concurrency: PASS;
+- Chromium stopped in the new two-tab browser check because Playwright `fill()` + `Tab` did not emit the expected change mutation in this form; backend logs confirmed that no browser `set-minimum` request was sent;
+- the test now dispatches the native bubbling `change` event explicitly for the write and restore steps;
+- production was not changed by the failed candidate run.
+
+Third PR #133 CI attempt:
+
+- Deploy workflow #805 / run `35528786380` again passed preflight, API inventory/SSE, workforce API and PostgreSQL concurrency;
+- Chromium proved the failure was not a Playwright event issue: the visible branch row came from the current site-scoped cloud mirror, but its change handler looked up the item in the stale long-lived store and therefore returned before sending `set-minimum`;
+- `authoritativeBranchRecord()` now layers today's branch mirror over the store for rendering, overview handlers, quick `+ / -`, restock plans and editor submit comparisons;
+- contract coverage now prevents the overview/editor lookup paths from drifting back to the stale store;
+- production was not changed by the failed candidate run.
+
+Fourth PR #133 CI attempt:
+
+- Deploy workflow #806 / run `35529217177` again passed preflight and reached the browser two-tab check, while independent approval/load workflows passed;
+- the source overview still produced no `set-minimum` request in the synthetic interaction, so deploy remained skipped;
+- rendered branch controls now carry immutable `stockKey` plus rendered zone/work-area identity and can construct the database mutation target even if both the store and mirror lookup lag;
+- the browser regression now waits for HTTP 200 from the actual overview mutation before asserting SSE convergence in the already-open peer editor, and restores the fixture through the same UI/API path;
+- production was not changed by the failed candidate run.
+
+Fifth PR #133 CI attempt:
+
+- Deploy workflow #807 / run `35529510211` passed preflight; Super Admin Browser Regression #93, Workforce Approval Diagnostic #217 and Isolated API Load Smoke #408 all passed independently;
+- the database mutation assertion timed out before any `set-minimum` request, proving the rendered identity was present but the delegated bubble-phase `change` handler was not reached;
+- the root change handler now runs in capture phase, before nested feature/compatibility layers can stop bubbling, while retaining the same permission and PostgreSQL mutation checks;
+- production was not changed by the failed candidate run.
+
+Sixth PR #133 CI attempt:
+
+- Deploy workflow #808 / run `35547995698` passed preflight; its browser mutation still stopped before POST while API logs showed schema/snapshot resolution requests;
+- the remaining failure boundary was frontend cache lookup from rendered `stockKey + ui location` back to PostgreSQL UUIDs;
+- branch quantity/minimum and rapid `+ / -` controls now carry the authoritative item/location UUIDs already returned in the rendered snapshot and send those IDs directly to the mutation API, with the former key/code resolver retained only as backward-compatible fallback;
+- the two-tab browser gate explicitly requires both rendered PostgreSQL IDs before executing the overview write;
+- production was not changed by the failed candidate run.
+
+Seventh PR #133 CI attempt:
+
+- Deploy workflow #809 / run `35548327477` passed preflight and confirmed both rendered PostgreSQL IDs were present, but still observed no mutation response;
+- the next browser gate records whether the synthetic change reaches `#app`, whether the application disables the control at mutation start, and the exact edit permission/date/cloud readiness state;
+- this diagnostic is intentionally before merge/deploy so the final correction is based on the actual failed boundary rather than another assumption;
+- production was not changed by the failed candidate run.
+
+Eighth PR #133 CI attempt:
+
+- Deploy workflow #810 / run `35548488809` passed preflight, API inventory/SSE, workforce API and PostgreSQL concurrency before the browser gate stopped;
+- the added boundary probe exposed the exact frontend exception: the delegated root `change` handler referenced `state` without initializing it, so every inventory overview change returned through the global error observer before a mutation could start;
+- the handler now captures one current store snapshot at event entry, restoring the shared state needed by quantity, minimum, work-area and storage-location writes while keeping the rendered PostgreSQL identity path;
+- static, performance and syntax regression suites pass after the correction;
+- production was not changed by the failed candidate run.
+
+Ninth PR #133 CI attempt:
+
+- Deploy workflow #811 / run `35548641153` passed preflight, API inventory/SSE, workforce API and PostgreSQL concurrency;
+- Chromium confirmed the outside minimum edit now reached `POST /api/inventory/set-minimum`; only the already-open peer editor failed to repaint before its timeout;
+- the cause was cross-tab `localStorage`: the writer tab stored the new snapshot first, so the peer's forced SSE fetch compared equal and suppressed its document-local update event even though that peer's DOM was stale;
+- every forced remote reconciliation now emits the inventory-updated event when data compares equal, making each tab repaint from the authoritative snapshot without adding another database write;
+- production was not changed by the failed candidate run.

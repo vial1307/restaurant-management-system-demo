@@ -5,6 +5,7 @@ import { pool, withTransaction } from "./db.mjs";
 import { hashPassword, verifyPassword } from "./password.mjs";
 import { registerAdminRoutes } from "./admin-routes.mjs";
 import { registerInventoryExtraRoutes } from "./inventory-extra-routes.mjs";
+import { registerInventoryRealtime } from "./inventory-realtime.mjs";
 import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
 import { hydrateUserAccess } from "./access-control.mjs";
 import { activeSite } from "./site-registry.mjs";
@@ -28,6 +29,7 @@ const app = Fastify({
 });
 
 await app.register(cookie);
+await registerInventoryRealtime(app);
 await registerAdminRoutes(app);
 await registerInventoryExtraRoutes(app);
 await registerBusinessStateRoutes(app);

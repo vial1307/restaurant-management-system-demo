@@ -9,19 +9,6 @@ function requireInventory(user, site, action, reply) {
   return false;
 }
 
-function canStocktakeRole(user, site) {
-  return siteAllowed(user, site)
-    && hasPermission(user, "inventory", "edit")
-    && (user.role === "admin" || ["manager","supervisor"].includes(user.role));
-}
-
-function requireStocktakeRole(user, site, reply) {
-  if (!requireInventory(user, site, "edit", reply)) return false;
-  if (canStocktakeRole(user, site)) return true;
-  reply.code(403).send({ error: "STOCKTAKE_ROLE_REQUIRED" });
-  return false;
-}
-
 function requireCatalogManager(user, site, reply) {
   // Catalogue access follows the explicit inventory edit permission. Role
   // names must not silently override a permission granted by an administrator.
@@ -29,9 +16,7 @@ function requireCatalogManager(user, site, reply) {
 }
 
 async function canManageReceiveDefault(user, site) {
-  if (!siteAllowed(user, site) || !hasPermission(user, "inventory", "edit")) return false;
-  if (user.role === "admin") return true;
-  return user.role === "manager" && await isBranchSite(site);
+  return siteAllowed(user, site) && hasPermission(user, "inventory", "edit");
 }
 
 async function requireReceiveDefaultManager(user, site, reply) {
@@ -320,8 +305,8 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireStocktakeRole(user, row.site, reply)) {
-          throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
+        if (!requireInventory(user, row.site, "edit", reply)) {
+          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
         }
         if (!String(row.item_key || "").startsWith(row.site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
@@ -397,8 +382,8 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireStocktakeRole(user,row.site,reply)) {
-          throw Object.assign(new Error("STOCKTAKE_ROLE_REQUIRED"), { statusCode:403, alreadySent:true });
+        if (!requireInventory(user,row.site,"edit",reply)) {
+          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
         }
         if (!String(row.item_key || "").startsWith(row.site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });

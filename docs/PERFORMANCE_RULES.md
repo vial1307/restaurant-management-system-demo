@@ -30,6 +30,7 @@ When a user changes data:
 - unchanged polling/focus refresh must not cause a visible page repaint or full application render;
 - pending/success/error UI must remain responsive while the request is in flight.
 - rapid inventory `+ / −` taps for one item/location should be coalesced into a serialized delta write and one final authoritative reconciliation; do not render the whole application or refetch the complete inventory for every individual tap.
+- real-time inventory invalidations must be coalesced before refresh, ignore the originating browser tab when its mutation already reconciles, and render only when the authoritative snapshot actually changed.
 
 ## 3. Navigation and module switching
 

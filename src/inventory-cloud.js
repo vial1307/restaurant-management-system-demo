@@ -3,6 +3,7 @@ import {
   vpsAdjustInventory,
   vpsArchiveCatalogItem,
   vpsInventory,
+  vpsInventoryClientId,
   vpsInventoryHistory,
   vpsInventorySites,
   vpsMasterData,
@@ -58,6 +59,9 @@ let inventorySyncTail = Promise.resolve();
 let lastSite = "";
 let siteRegistryInFlight = null;
 let activeSiteSwitchSerial = 0;
+let realtimeSource = null;
+let realtimeUserId = "";
+let realtimeRefreshTimer = 0;
 const cache = {
   itemsByKey: new Map(),
   locationsByCode: new Map(),
@@ -185,6 +189,10 @@ export function canManageCentralCatalog() {
     && (role() === "admin" || ["central","all"].includes(s?.location));
 }
 
+function canManageSiteCatalog(site) {
+  return site === "central" ? canManageCentralCatalog() : canManageBranchCatalog(site);
+}
+
 export function canViewBranchCatalogManagement(site = activeInventorySite()) {
   const s=session();
   if (!hasInventoryPermission("edit") || !isBranchInventorySite(site)) return false;
@@ -205,21 +213,14 @@ export function canManageBranchCatalog(site = activeInventorySite()) {
 
 export function canManageReceiveDefault(site = activeInventorySite()) {
   const s = session();
-  if (!s || !hasInventoryPermission("edit")) return false;
-  const currentRole = role();
-  if (currentRole === "admin") return isKnownInventorySite(site);
-  return currentRole === "manager"
-    && isBranchInventorySite(site)
-    && (s.location === site || s.location === "all");
+  if (!s || !hasInventoryPermission("edit") || !isKnownInventorySite(site)) return false;
+  return s.location === site || s.location === "all";
 }
 
 export function canDirectInventoryAdjust() {
-  if (!canInventoryEdit()) return false;
-  const currentRole = role();
-  const s=session();
-  const site=activeInventorySite();
-  if (currentRole === "admin") return true;
-  return ["manager","supervisor"].includes(currentRole) && (s?.location === site || s?.location === "all");
+  // Explicit module permission is authoritative. Role names must not silently
+  // revoke controls after an administrator grants inventory edit access.
+  return canInventoryEdit();
 }
 
 export function activeInventorySite() {
@@ -820,6 +821,14 @@ async function runInventorySync(site, { reloadBranch = false, force = false } = 
     const rows = await fetchSite(site, { force });
     clearAuthSyncRetry();
     const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
+    // localStorage is shared by tabs on the same origin. The writer tab can
+    // update it before a peer handles the SSE invalidation, making the peer's
+    // data comparison look unchanged even though its DOM is stale. A forced
+    // reconciliation is an explicit remote invalidation, so always notify the
+    // current document to repaint from the authoritative snapshot.
+    if (force && !changed) {
+      window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{ site } }));
+    }
     void reloadBranch;
     dispatchStatus("synced", { site, count: rows.length });
     return changed;
@@ -852,6 +861,9 @@ async function resolveIds(itemKey, locationCode) {
 }
 
 export async function cloudAdjustQuantity({
+  itemId = "",
+  locationId = "",
+  site = "",
   itemKey,
   locationCode,
   direction,
@@ -861,7 +873,9 @@ export async function cloudAdjustQuantity({
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
-  const resolved = await resolveIds(itemKey, locationCode);
+  const resolved = itemId && locationId
+    ? { item:{ id:itemId }, location:{ id:locationId, site } }
+    : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
@@ -883,6 +897,9 @@ export async function cloudAdjustQuantity({
 }
 
 export async function cloudSetQuantity({
+  itemId = "",
+  locationId = "",
+  site = "",
   itemKey,
   locationCode,
   quantity,
@@ -893,7 +910,9 @@ export async function cloudSetQuantity({
   void allowInventoryEditor;
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
-  const resolved = await resolveIds(itemKey, locationCode);
+  const resolved = itemId && locationId
+    ? { item:{ id:itemId }, location:{ id:locationId, site } }
+    : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   try {
     await vpsSetQuantity({
@@ -911,6 +930,9 @@ export async function cloudSetQuantity({
 }
 
 export async function cloudSetMinimum({
+  itemId = "",
+  locationId = "",
+  site = "",
   itemKey,
   locationCode,
   minimum,
@@ -918,7 +940,9 @@ export async function cloudSetMinimum({
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
-  const resolved = await resolveIds(itemKey, locationCode);
+  const resolved = itemId && locationId
+    ? { item:{ id:itemId }, location:{ id:locationId, site } }
+    : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   try {
     await vpsSetMinimum({
@@ -984,7 +1008,7 @@ export async function cloudRelocateStorage({
   if (!source.item || !source.location || !destination.location) {
     return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
   }
-  if (!site || destination.location.site !== site || !canManageBranchCatalog(site)) {
+  if (!site || destination.location.site !== site || !canManageSiteCatalog(site)) {
     return { ok:false,fallback:false,error:new Error("CATALOG_EDIT_NOT_ALLOWED") };
   }
 
@@ -1248,12 +1272,46 @@ export async function getCloudInventoryHistory(site = currentSite(), limit = 200
 async function subscribeRealtime(site) {
   if (!(await verifyMigration()) || !site) return;
   lastSite = site;
+  const s = session();
+  if (!s?.id || typeof EventSource === "undefined") return;
+  if (realtimeSource && realtimeUserId === s.id) return;
+  realtimeSource?.close();
+  realtimeSource = null;
+  realtimeUserId = s.id;
+  const clientId = vpsInventoryClientId();
+  const source = new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
+  realtimeSource = source;
+  source.addEventListener("inventory", (event) => {
+    let payload = null;
+    try { payload = JSON.parse(event.data || "null"); } catch {}
+    if (payload?.sourceClientId && payload.sourceClientId === clientId) return;
+    clearTimeout(realtimeRefreshTimer);
+    realtimeRefreshTimer = window.setTimeout(() => {
+      const activeSite = currentSite();
+      if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+    }, 120);
+  });
+}
+
+function closeRealtime() {
+  realtimeSource?.close();
+  realtimeSource = null;
+  realtimeUserId = "";
+  clearTimeout(realtimeRefreshTimer);
 }
 
 async function boot() {
   if (document.documentElement.dataset.vpsAuthReady !== "true") return;
   const s = session();
-  if (!isInventoryBackendConfigured() || !s) return;
+  if (!isInventoryBackendConfigured() || !s) {
+    closeRealtime();
+    return;
+  }
+  if (bootedUserId && bootedUserId !== s.id && polling) {
+    clearInterval(polling);
+    polling = 0;
+    closeRealtime();
+  }
   if (bootedUserId === s.id && polling) return;
   if (!(await verifyMigration())) return;
   await ensureSiteRegistry();
@@ -1276,6 +1334,9 @@ async function boot() {
 
 window.addEventListener("shitu:auth-synced", () => { void boot(); });
 window.addEventListener("shitu:vps-auth-ready", () => { void boot(); });
+window.addEventListener("shitu:auth-expired", () => {
+  closeRealtime();
+});
 window.addEventListener("focus", () => {
   if (document.documentElement.dataset.vpsAuthReady === "true") void syncInventoryNow(currentSite());
 });

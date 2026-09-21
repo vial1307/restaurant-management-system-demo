@@ -40,10 +40,10 @@ Browser localStorage may be used only as cache/offline fallback/UI state, never 
 
 - All shared business data must use PostgreSQL on the VPS as the source of truth.
 - All data-changing runtime actions must go through the VPS API.
-- Use focus/visibility refresh and periodic polling until VPS SSE/WebSocket synchronization is introduced.
+- Use authenticated VPS Server-Sent Events for real-time inventory invalidation. Focus/visibility refresh and periodic polling remain fallback convergence paths.
 - Writes must be idempotent or auditable when possible.
 - Inventory mutations must create transaction/audit records.
-- Direct stocktake correction is restricted to authorized roles/permissions and must record before/after values.
+- Direct stocktake correction requires explicit inventory edit permission within the account's site scope and must record before/after values. A role name must not revoke an explicit edit grant.
 - Never silently overwrite VPS quantities/business state from a stale device.
 - A local cache write is not a successful save.
 - Every data-changing action must show success only after VPS/API confirmation and must show a useful error when validation, permission, network, API or database persistence fails.
@@ -155,8 +155,7 @@ Core path:
 Current stack:
 - VPS session authentication
 - PostgreSQL behind the Node.js API
-- polling plus focus/visibility refresh
-- optional future WebSocket/SSE without changing the UI permission model
+- authenticated SSE inventory invalidation plus polling and focus/visibility fallback
 
 Third-party services must not silently become authoritative for core authentication, permissions, inventory, business persistence or critical synchronization. Any future external service integration must document its purpose, data exposure, failure mode and removal/migration path.
 
