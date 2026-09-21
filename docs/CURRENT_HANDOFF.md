@@ -87,6 +87,13 @@ Two-tab browser regression proves an overview minimum write reaches PostgreSQL a
 3. The prepared workforce-schedule relational read gate remains the nearest cutover candidate: verify current production parity/backfill, then enable relational read only in a separate reviewed change with the flag rollback path retained.
 4. Keep compatibility schedule writes until relational reads have remained stable in production; compatibility retirement is a later explicit stage.
 
+Current verification blocker found on 2026-09-21:
+
+- Schedule Parity #96 / run `35550219935` passed against exact production release `09e2fff`.
+- Schedule Backfill #307 / run `35550219973` did not execute; GitHub cancelled it because staff, schedule and attendance automatic verification shared the same `kitchen-os-production-maintenance` concurrency group.
+- Candidate `fix/workforce-maintenance-concurrency-20260921` separates the three read-only verify queues while retaining one shared serialized group for manually dispatched `apply` operations.
+- Do not enable `WORKFORCE_SCHEDULE_RELATIONAL_READ` until the corrected Schedule Backfill verify passes against the same deployed release as Schedule Parity.
+
 ## 4. Completed: cross-site inventory tab synchronization
 
 User-reported problem:
