@@ -1124,3 +1124,20 @@ Deploy Kitchen OS to VPS #815 / run `35549929164`:
 - GitHub Pages #933: PASS.
 
 The inventory overview/editor persistence and realtime workstream is complete. The next non-approval workstream is normalized-domain continuation. Workforce schedule is the nearest prepared domain: verify current production parity/backfill, then enable relational read only through a separate reviewed flag change while compatibility writes and rollback remain active.
+
+## 2026-09-21 — Workforce production verification queue correction
+
+Production evidence review found:
+
+- Schedule Parity #96 / run `35550219935` passed against exact release `09e2fff`.
+- Schedule Backfill #307 / run `35550219973` was cancelled before its job started.
+- GitHub reported `Canceling since a higher priority waiting request for kitchen-os-production-maintenance exists`.
+- Staff, schedule and attendance workflow-run verification all used the same workflow-level concurrency group. GitHub retains at most one running and one pending member of a group, so simultaneous post-deploy verification could cancel a required domain check even with `cancel-in-progress: false`.
+
+Candidate correction:
+
+- automatic/read-only staff, schedule and attendance verification each use a domain-specific concurrency group;
+- all manually dispatched `apply` modes continue to share `kitchen-os-production-maintenance-apply`, preserving serialized production writes and backups;
+- regression coverage requires both the shared apply group and each unique verify group;
+- no schema, application read authority or business data changes are included;
+- `WORKFORCE_SCHEDULE_RELATIONAL_READ` remains OFF until corrected parity and backfill verification pass on the same production release.
