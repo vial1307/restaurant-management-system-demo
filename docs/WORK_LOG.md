@@ -1148,3 +1148,20 @@ CI follow-up:
 - PR #136 reproduced the same local proxy warning in the mobile role/site certification while API/SSE, PostgreSQL concurrency, Chromium and the independent relational backfill regression all passed;
 - the browser gate now suppresses only the exact WebKit + local test proxy + `/api/inventory/events` access-control message;
 - Chromium, non-local URLs, other API paths and every other page error remain blocking; dedicated SSE API/two-tab coverage remains unchanged.
+
+## 2026-09-21 — Workforce schedule relational read cutover candidate
+
+Cutover prerequisite is now complete on one exact production release:
+
+- queue correction PR #136 merged/deployed as `30fd1ddff89cd821b5a66fe54ececca9f9e9825f` through deploy #823 / run `35571481421`;
+- Schedule Parity #105 / run `35571899839` passed against release `30fd1dd`;
+- Schedule Backfill verify #316 / run `35571899835` passed against the same release `30fd1dd`.
+
+The separate read-cutover candidate:
+
+- defaults `WORKFORCE_SCHEDULE_RELATIONAL_READ=true` in VPS Compose;
+- executes the entire deploy API/browser/PostgreSQL regression job with the gate enabled;
+- keeps the backend parser fail-closed when no environment configuration is supplied;
+- keeps compatibility JSON writes and module revision concurrency active;
+- retains immediate rollback by setting `WORKFORCE_SCHEDULE_RELATIONAL_READ=false` in VPS `.env` and recreating the app container;
+- does not change schema or retire compatibility data.
