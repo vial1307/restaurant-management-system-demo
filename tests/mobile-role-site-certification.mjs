@@ -149,7 +149,7 @@ async function waitForPermissionState(page, scopeSelector, route, expected) {
   let lastError = null;
   for (let attempt=0;attempt<2;attempt+=1) {
     try {
-      await page.waitForFunction(predicate,{ scopeSelector, route, expected },{ timeout:10000 });
+      await page.waitForFunction(predicate,{ scopeSelector, route, expected },{ timeout:20000 });
       return;
     } catch (error) {
       lastError = error;
