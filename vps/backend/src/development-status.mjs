@@ -30,10 +30,10 @@ export const DEVELOPMENT_STATUS = Object.freeze({
     stopping_point:"Release #815 / 09e2fffc80bf186d15054002c00421a2a5525e8f đã production-verified. Inventory overview/editor ghi PostgreSQL và hội tụ realtime cho Central/Fuxing/Yongji; deploy-integrated inventory/data-integrity audit PASS.",
     resolved_incident:null,
     code_focus:[
-      "vps/backend/src/workforce-schedule-read-authority.mjs",
-      "vps/backend/src/workforce-schedule-relational-state.mjs",
-      "vps/backend/scripts/workforce-schedule-backfill.mjs",
       ".github/workflows/workforce-schedule-production-backfill.yml",
+      ".github/workflows/workforce-staff-production-backfill.yml",
+      ".github/workflows/workforce-attendance-production-backfill.yml",
+      "tests/workforce-schedule-production-workflow-regression.mjs",
     ],
   },
   release_evidence:{
@@ -52,7 +52,8 @@ export const DEVELOPMENT_STATUS = Object.freeze({
     { label:"DEVELOPMENT_RULES.md", purpose:"Quy tắc bắt buộc trước khi code", url:github("/blob/main/docs/DEVELOPMENT_RULES.md") },
   ],
   next_steps:[
-    "Kiểm tra parity/backfill của workforce schedule trên release production hiện tại.",
+    "Tách các hàng đợi verify-only staff/schedule/attendance để Schedule Backfill không bị hủy trước khi chạy.",
+    "Yêu cầu Schedule Parity và Schedule Backfill verify cùng PASS trên một release production trước khi cutover.",
     "Chỉ bật relational schedule read trong một thay đổi review riêng; giữ flag rollback về compatibility JSON.",
     "Tiếp tục compatibility schedule writes và module revision concurrency trong giai đoạn quan sát.",
     "Sau khi read cutover ổn định mới chọn domain chuẩn hóa tiếp theo; không retire compatibility data trong cùng bước.",

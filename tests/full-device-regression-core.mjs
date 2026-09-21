@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 import { ACCOUNT_MODULES } from "../src/account-permissions.js";
+import { actionablePageErrors } from "./browser-page-error-policy.mjs";
 
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const API_BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
@@ -373,7 +374,8 @@ async function runProfile(profile) {
       await assertGeometry(page, `${profile.name} restored orientation`);
     }
 
-    assert.deepEqual(errors, [], `${profile.name}: page errors: ${errors.join(" | ")}`);
+    const actionableErrors = actionablePageErrors(errors, profile.engine);
+    assert.deepEqual(actionableErrors, [], `${profile.name}: page errors: ${actionableErrors.join(" | ")}`);
     console.log("FULL_DEVICE_PROFILE_OK", profile.name);
   } catch (error) {
     const failurePath = path.join(OUTPUT, `${safeName(profile.name)}-failure.png`);

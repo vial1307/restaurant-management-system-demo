@@ -3,10 +3,22 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
-const workflow = fs.readFileSync(
-  path.join(ROOT, ".github/workflows/workforce-schedule-production-backfill.yml"),
-  "utf8"
-);
+const readWorkflow = (name) => fs.readFileSync(path.join(ROOT, `.github/workflows/${name}`), "utf8");
+const workflow = readWorkflow("workforce-schedule-production-backfill.yml");
+const maintenanceWorkflows = [
+  ["schedule", workflow],
+  ["staff", readWorkflow("workforce-staff-production-backfill.yml")],
+  ["attendance", readWorkflow("workforce-attendance-production-backfill.yml")],
+];
+
+for (const [domain, source] of maintenanceWorkflows) {
+  assert.match(
+    source,
+    new RegExp(`group: \\$\\{\\{[^\\n]+kitchen-os-production-maintenance-apply[^\\n]+kitchen-os-production-${domain}-verify[^\\n]+\\}\\}`),
+    `${domain} automatic verify must not compete with other production verification workflows`
+  );
+  assert.match(source, /cancel-in-progress: false/, `${domain} maintenance must not cancel its active operation`);
+}
 
 assert.match(workflow, /workflow_run:[\s\S]*Deploy Kitchen OS to VPS/, "schedule maintenance must follow the production deploy workflow");
 assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/, "automatic schedule verification must require a successful deploy");
