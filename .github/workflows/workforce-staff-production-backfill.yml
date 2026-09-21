@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: kitchen-os-production-maintenance
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && 'kitchen-os-production-maintenance-apply' || 'kitchen-os-production-staff-verify' }}
   cancel-in-progress: false
 
 jobs:
