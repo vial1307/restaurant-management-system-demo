@@ -821,6 +821,14 @@ async function runInventorySync(site, { reloadBranch = false, force = false } = 
     const rows = await fetchSite(site, { force });
     clearAuthSyncRetry();
     const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
+    // localStorage is shared by tabs on the same origin. The writer tab can
+    // update it before a peer handles the SSE invalidation, making the peer's
+    // data comparison look unchanged even though its DOM is stale. A forced
+    // reconciliation is an explicit remote invalidation, so always notify the
+    // current document to repaint from the authoritative snapshot.
+    if (force && !changed) {
+      window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{ site } }));
+    }
     void reloadBranch;
     dispatchStatus("synced", { site, count: rows.length });
     return changed;

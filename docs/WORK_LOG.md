@@ -1090,3 +1090,11 @@ Eighth PR #133 CI attempt:
 - the handler now captures one current store snapshot at event entry, restoring the shared state needed by quantity, minimum, work-area and storage-location writes while keeping the rendered PostgreSQL identity path;
 - static, performance and syntax regression suites pass after the correction;
 - production was not changed by the failed candidate run.
+
+Ninth PR #133 CI attempt:
+
+- Deploy workflow #811 / run `35548641153` passed preflight, API inventory/SSE, workforce API and PostgreSQL concurrency;
+- Chromium confirmed the outside minimum edit now reached `POST /api/inventory/set-minimum`; only the already-open peer editor failed to repaint before its timeout;
+- the cause was cross-tab `localStorage`: the writer tab stored the new snapshot first, so the peer's forced SSE fetch compared equal and suppressed its document-local update event even though that peer's DOM was stale;
+- every forced remote reconciliation now emits the inventory-updated event when data compares equal, making each tab repaint from the authoritative snapshot without adding another database write;
+- production was not changed by the failed candidate run.
