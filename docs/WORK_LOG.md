@@ -1067,3 +1067,11 @@ Fifth PR #133 CI attempt:
 - the database mutation assertion timed out before any `set-minimum` request, proving the rendered identity was present but the delegated bubble-phase `change` handler was not reached;
 - the root change handler now runs in capture phase, before nested feature/compatibility layers can stop bubbling, while retaining the same permission and PostgreSQL mutation checks;
 - production was not changed by the failed candidate run.
+
+Sixth PR #133 CI attempt:
+
+- Deploy workflow #808 / run `35547995698` passed preflight; its browser mutation still stopped before POST while API logs showed schema/snapshot resolution requests;
+- the remaining failure boundary was frontend cache lookup from rendered `stockKey + ui location` back to PostgreSQL UUIDs;
+- branch quantity/minimum and rapid `+ / -` controls now carry the authoritative item/location UUIDs already returned in the rendered snapshot and send those IDs directly to the mutation API, with the former key/code resolver retained only as backward-compatible fallback;
+- the two-tab browser gate explicitly requires both rendered PostgreSQL IDs before executing the overview write;
+- production was not changed by the failed candidate run.

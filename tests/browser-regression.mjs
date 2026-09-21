@@ -446,6 +446,8 @@ async function roleDesktop(browser, username, checks) {
       const zone=await sourceRow.locator('select[data-field="item"][data-key="zone"]').inputValue();
       const stockKey=await sourceRow.locator('[data-action="open-edit-item"]').getAttribute("data-stock-key");
       const sourceMinimum=sourceRow.locator('input[data-field="item"][data-key="minimum"]');
+      assert(await sourceMinimum.getAttribute("data-cloud-item-id"),"overview minimum is missing the rendered PostgreSQL item id");
+      assert(await sourceMinimum.getAttribute("data-cloud-location-id"),"overview minimum is missing the rendered PostgreSQL location id");
       const before=Math.max(0,Number(await sourceMinimum.inputValue())||0);
       const next=before+1;
 

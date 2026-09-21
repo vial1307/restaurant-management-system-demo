@@ -853,6 +853,9 @@ async function resolveIds(itemKey, locationCode) {
 }
 
 export async function cloudAdjustQuantity({
+  itemId = "",
+  locationId = "",
+  site = "",
   itemKey,
   locationCode,
   direction,
@@ -862,7 +865,9 @@ export async function cloudAdjustQuantity({
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
-  const resolved = await resolveIds(itemKey, locationCode);
+  const resolved = itemId && locationId
+    ? { item:{ id:itemId }, location:{ id:locationId, site } }
+    : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
@@ -884,6 +889,9 @@ export async function cloudAdjustQuantity({
 }
 
 export async function cloudSetQuantity({
+  itemId = "",
+  locationId = "",
+  site = "",
   itemKey,
   locationCode,
   quantity,
@@ -894,7 +902,9 @@ export async function cloudSetQuantity({
   void allowInventoryEditor;
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
-  const resolved = await resolveIds(itemKey, locationCode);
+  const resolved = itemId && locationId
+    ? { item:{ id:itemId }, location:{ id:locationId, site } }
+    : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   try {
     await vpsSetQuantity({
@@ -912,6 +922,9 @@ export async function cloudSetQuantity({
 }
 
 export async function cloudSetMinimum({
+  itemId = "",
+  locationId = "",
+  site = "",
   itemKey,
   locationCode,
   minimum,
@@ -919,7 +932,9 @@ export async function cloudSetMinimum({
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
-  const resolved = await resolveIds(itemKey, locationCode);
+  const resolved = itemId && locationId
+    ? { item:{ id:itemId }, location:{ id:locationId, site } }
+    : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   try {
     await vpsSetMinimum({

@@ -43,10 +43,12 @@ assert.match(app,/key === "workArea"[\s\S]{0,900}cloudRelocateWorkArea/,"branch 
 assert.match(app,/key === "minimum"[\s\S]{0,500}cloudSetMinimum/,"branch overview minimum must use its PostgreSQL endpoint");
 assert.match(app,/function authoritativeBranchRecord\([\s\S]{0,700}inventoryBranchSnapshot\(site\)/,"branch controls and editor must share the authoritative cloud mirror");
 assert.match(app,/function inventoryControlItem\([\s\S]{0,800}dataset\?\.stockKey/,"rendered inventory controls must carry a database mutation identity even if the in-memory store lags");
+assert.match(app,/data-cloud-item-id=[\s\S]{0,220}data-cloud-location-id=/,"rendered branch controls must carry authoritative PostgreSQL ids");
 assert.match(app,/const record = authoritativeBranchRecord\(state,site\);[\s\S]{0,220}inventoryControlItem\(element,record,"item"\)/,"branch overview handlers must resolve the rendered item from the authoritative mirror/control identity");
 assert.match(app,/const inventoryRecord = authoritativeBranchRecord\(state,site\)[\s\S]{0,700}inventoryRecord\?\.inventory\.find/,"branch editor submit must compare against the authoritative mirror");
 const changeHandler=app.slice(app.indexOf('root.addEventListener("change"'),app.indexOf('root.addEventListener("input"'));
 assert.match(changeHandler,/\}, true\);/,"inventory change delegation must run in capture phase so nested UI layers cannot swallow database writes");
+assert.match(cloud,/cloudSetMinimum\(\{[\s\S]{0,220}itemId = ""[\s\S]{0,220}locationId = ""[\s\S]{0,500}itemId && locationId/,"minimum writes must accept the PostgreSQL ids already present in the rendered snapshot");
 
 assert.match(realtime,/app\.get\("\/api\/inventory\/events"[\s\S]*?requireUser[\s\S]*?hasPermission\(user, "inventory", "view"\)/,"SSE stream must be authenticated and inventory-view authorized");
 assert.match(realtime,/app\.addHook\("onResponse"[\s\S]*?route\.startsWith\("\/api\/inventory\/"\)[\s\S]*?publishInventoryInvalidation/,"successful inventory mutations must publish realtime invalidation");
