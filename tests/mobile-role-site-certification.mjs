@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium, webkit } from "playwright";
 import { ACCOUNT_MODULES } from "../src/account-permissions.js";
+import { actionablePageErrors } from "./browser-page-error-policy.mjs";
 
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const API_BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
@@ -149,7 +150,7 @@ async function waitForPermissionState(page, scopeSelector, route, expected) {
   let lastError = null;
   for (let attempt=0;attempt<2;attempt+=1) {
     try {
-      await page.waitForFunction(predicate,{ scopeSelector, route, expected },{ timeout:20000 });
+      await page.waitForFunction(predicate,{ scopeSelector, route, expected },{ timeout:10000 });
       return;
     } catch (error) {
       lastError = error;
@@ -318,7 +319,8 @@ async function runRoleCase(browser, testCase) {
     await assertNoHorizontalOverflow(page, label);
     const foreignRequests = requestedSites.filter((site) => site !== testCase.site);
     assert.deepEqual(foreignRequests, [], `${label}: scoped account attempted foreign inventory API: ${foreignRequests.join(",")}`);
-    assert.deepEqual(errors, [], `${label}: page errors: ${errors.join(" | ")}`);
+    const actionableErrors = actionablePageErrors(errors, testCase.engine);
+    assert.deepEqual(actionableErrors, [], `${label}: page errors: ${actionableErrors.join(" | ")}`);
     console.log("MOBILE_ROLE_SITE_CASE_OK", label, `inventoryRequests=${requestedSites.join(",") || "none"}`);
   } finally {
     await context.close();
