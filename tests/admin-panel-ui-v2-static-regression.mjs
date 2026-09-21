@@ -32,6 +32,11 @@ assert.match(sectionsJs, /data-export/);
 assert.match(sectionsCss, /\.sa-section-hero-v2/);
 assert.match(sectionsCss, /\.sa-table-v2/);
 assert.match(sectionsCss, /\.sa-dev-link/);
+assert.match(
+  sectionsCss,
+  /\.sa-dev-steps li\{[^}]*overflow-wrap:anywhere[^}]*word-break:break-word/,
+  "development next steps must wrap long runtime flags on narrow devices"
+);
 assert.match(shellJs, /\["development", "⌘"\]/);
 assert.match(sectionsCss, /@media\(max-width:720px\)/);
 
