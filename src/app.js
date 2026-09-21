@@ -1807,6 +1807,7 @@ root.addEventListener("click", (event) => {
 // must always reach the PostgreSQL mutation handler.
 root.addEventListener("change", (event) => {
   const element = event.target;
+  const state = store.getState();
   if(element.matches?.('input[name="zones"]')){
     syncReceiveZoneOptions(element.closest("form"));
     return;

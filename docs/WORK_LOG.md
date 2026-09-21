@@ -1082,3 +1082,11 @@ Seventh PR #133 CI attempt:
 - the next browser gate records whether the synthetic change reaches `#app`, whether the application disables the control at mutation start, and the exact edit permission/date/cloud readiness state;
 - this diagnostic is intentionally before merge/deploy so the final correction is based on the actual failed boundary rather than another assumption;
 - production was not changed by the failed candidate run.
+
+Eighth PR #133 CI attempt:
+
+- Deploy workflow #810 / run `35548488809` passed preflight, API inventory/SSE, workforce API and PostgreSQL concurrency before the browser gate stopped;
+- the added boundary probe exposed the exact frontend exception: the delegated root `change` handler referenced `state` without initializing it, so every inventory overview change returned through the global error observer before a mutation could start;
+- the handler now captures one current store snapshot at event entry, restoring the shared state needed by quantity, minimum, work-area and storage-location writes while keeping the rendered PostgreSQL identity path;
+- static, performance and syntax regression suites pass after the correction;
+- production was not changed by the failed candidate run.
