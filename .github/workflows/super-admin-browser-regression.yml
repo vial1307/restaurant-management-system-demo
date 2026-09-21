@@ -9,6 +9,8 @@ on:
       - ".admindev.html"
       - "src/admin-panel*.js"
       - "src/admin-panel*.css"
+      - "src/admin-inventory-*.js"
+      - "src/admin-inventory-*.css"
       - "src/vps-api.js"
       - "tests/super-admin-panel-browser-regression.mjs"
       - "tests/admin-panel-ui-v2-static-regression.mjs"

@@ -1,4 +1,6 @@
 import { apiRequest, vpsListUsers, vpsMe } from "./vps-api.js";
+import { createInventoryDatabase } from "./admin-inventory-database.js";
+const inventoryDatabase = createInventoryDatabase();
 
 const root = document.querySelector("#admin-app");
 const SECTIONS = ["overview","development","users","content","data","stores","settings","logs"];
@@ -38,7 +40,7 @@ let sectionLoadSeq = 0;
 const state = {
   me:null, loading:true, error:"", success:"", section:"overview",
   overview:null, systemMetrics:null, developmentStatus:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
-  data:{ name:"announcements",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
+  data:{ name:"inventory-products",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
   audit:{ q:"",site:"",action:"",actor:"",page:1,pageSize:25,result:null,loading:false },
 };
 
@@ -86,6 +88,7 @@ function errorText(error) { return error?.payload?.error || error?.code || error
 
 async function api(path,options) { return apiRequest(path,options); }
 async function loadDataset() {
+  if(state.data.name==="inventory-products")return;
   state.data.loading=true; render();
   const params=new URLSearchParams({ page:String(state.data.page),pageSize:String(state.data.pageSize) });
   if(state.data.q)params.set("q",state.data.q); if(state.data.site)params.set("site",state.data.site); if(state.data.status)params.set("status",state.data.status);
@@ -292,6 +295,7 @@ function renderDataFilters() {
   return `<form class="sa-filterbar" data-data-filter><input name="q" value="${esc(state.data.q)}" placeholder="Tìm kiếm…"><select name="site"><option value="">Tất cả site</option>${state.sites.map((site)=>`<option value="${esc(site.code)}" ${state.data.site===site.code?"selected":""}>${esc(siteName(site.code))}</option>`).join("")}</select><select name="status">${statusOptions.replace(`value="${esc(state.data.status)}"`,`value="${esc(state.data.status)}" selected`)}</select><button class="sa-btn" type="submit">Lọc</button></form>`;
 }
 function renderData() {
+  if(state.data.name==="inventory-products")return `<article class="sa-card" data-module-v2="data"><div class="sa-tabs">${Object.entries(DATASET_META).map(([key,meta])=>`<button type="button" class="sa-tab ${state.data.name===key?"active":""}" data-dataset="${esc(key)}">${esc(meta.label)}</button>`).join("")}</div><div class="idb-workspace" data-inventory-database></div></article>`;
   const result=state.data.result; const rows=result?.rows||[]; const columns=result?.columns||[]; const p=result?.pagination||{page:1,pages:1,total:0};
   const allowCreate=result ? result.allowCreate!==false : state.data.name!=="inventory-products";
   const allowArchive=result ? result.allowArchive!==false : state.data.name!=="inventory-products";
@@ -336,6 +340,7 @@ function sectionHtml() {
   if(state.section==="data")return renderData(); if(state.section==="stores")return renderStores(); if(state.section==="settings")return renderSettings(); return renderLogs();
 }
 function render() {
+  inventoryDatabase.detach();
   if(!root)return;
   if(state.loading){root.className="admin-loading";root.textContent="Kitchen OS · Super Admin…";return;}
   if(!state.me){root.className="admin-loading";root.innerHTML=`<div class="sa-gate"><h1>Phiên đăng nhập không hợp lệ</h1><a class="sa-btn primary" href="./">Đăng nhập Kitchen OS</a></div>`;return;}
@@ -400,6 +405,9 @@ async function switchSection(section) {
   state.success="";
   const loadSeq=++sectionLoadSeq;
   render();
+  // The dedicated inventory workspace owns its scoped reads; do not remount it
+  // after another unrelated eight-request core refresh.
+  if(section==="data"&&state.data.name==="inventory-products"&&state.sites.length)return;
   try {
     await loadCore();
     if(loadSeq!==sectionLoadSeq)return;
@@ -413,6 +421,8 @@ async function switchSection(section) {
   }
 }
 function bind() {
+  const inventoryHost=root.querySelector("[data-inventory-database]");
+  if(inventoryHost)inventoryDatabase.mount(inventoryHost,{sites:state.sites,me:state.me});
   root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
   root.querySelector("[data-refresh]")?.addEventListener("click",()=>void refreshCurrent()); root.querySelector("[data-toggle-nav]")?.addEventListener("click",()=>root.classList.toggle("nav-open"));
   root.querySelector("[data-copy-handoff]")?.addEventListener("click",async(event)=>{const button=event.currentTarget;const url=String(button.dataset.handoffUrl||"");if(!url)return;try{await navigator.clipboard.writeText(url);button.textContent="Đã copy ✓";}catch{window.prompt("Copy handoff link:",url);}});
@@ -420,7 +430,7 @@ function bind() {
   root.querySelectorAll("[data-user-delete]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Archive user này?"))return;try{await api(`/api/admin/users/${encodeURIComponent(b.dataset.userDelete)}`,{method:"DELETE"});state.success="Đã archive user.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
   root.querySelectorAll("[data-open-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.openDataset;state.data.page=1;state.data.result=null;await switchSection("data");await loadDataset();if(b.hasAttribute("data-new-row"))openDataEditor();}));
   root.querySelectorAll("[data-sop-review]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm(b.dataset.decision==="approved"?"Duyệt version SOP này?":"Từ chối version SOP này?"))return;try{await api(`/api/admin/super/sop-versions/${encodeURIComponent(b.dataset.sopReview)}/review`,{method:"POST",body:{decision:b.dataset.decision}});state.success="Đã cập nhật SOP.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
-  root.querySelectorAll("[data-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.dataset;state.data.page=1;state.data.q="";state.data.site="";state.data.status="";state.data.sort="";state.data.result=null;await loadDataset();}));
+  root.querySelectorAll("[data-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.dataset;state.data.page=1;state.data.q="";state.data.site="";state.data.status="";state.data.sort="";state.data.result=null;if(state.data.name==="inventory-products")render();else await loadDataset();}));
   root.querySelector("[data-data-filter]")?.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(event.currentTarget);state.data.q=String(fd.get("q")||"");state.data.site=String(fd.get("site")||"");state.data.status=String(fd.get("status")||"");state.data.page=1;await loadDataset();});
   root.querySelectorAll("[data-sort]").forEach((b)=>b.addEventListener("click",async()=>{state.data.direction=state.data.sort===b.dataset.sort&&state.data.direction==="asc"?"desc":"asc";state.data.sort=b.dataset.sort;await loadDataset();}));
   root.querySelectorAll("[data-page]").forEach((b)=>b.addEventListener("click",async()=>{state.data.page=Number(b.dataset.page)||1;await loadDataset();}));

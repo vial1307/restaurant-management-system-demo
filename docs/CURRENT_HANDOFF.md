@@ -6,11 +6,19 @@ This document is the current continuation point for any developer or future Chat
 
 Do not store credentials, private keys, passwords, database secrets, or SSH secrets in this repository.
 
+## Current candidate — Super Admin branch inventory database
+
+Branch `feat/super-admin-branch-inventory-database-20260921` adds a dedicated inventory Database workspace while retaining the other generic data tables. It supports independent site layouts, bilingual item/location/work-area editing, per-location stock/minimum actions, receiving defaults, relocation, history and local-site integrity checks. Existing work-stock must move through relocation; metadata saves do not replay quantities.
+
+Optional stale-write guards and append-only stock associations preserve concurrent changes. Master-data/catalog writes publish inventory invalidations; dirty forms retain input until explicitly closed. No schema migration or destructive data conversion.
+
+Local static/performance/Super Admin contracts pass. API/database round trips and browser/device tests are added to CI; candidate completion and production deployment remain unverified. Browser access to the local server is blocked by the cloud browser environment. Resume from CI for this branch and do not mark it deployed until exact-SHA deployment and production smoke pass. Older workforce candidate notes below are historical; PR #137 is already merged.
+
 ## 1. Repository / production authority
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `30fd1ddff89cd821b5a66fe54ececca9f9e9825f`
+- Current verified production SHA: `00949bec772bcc04441626903411020f2e3e7023`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +30,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #823
-- Run ID: `35571481421`
-- Tested/deployed commit: `30fd1ddff89cd821b5a66fe54ececca9f9e9825f`
+- Workflow: Deploy Kitchen OS to VPS #828
+- Run ID: `35573596640`
+- Tested/deployed commit: `00949bec772bcc04441626903411020f2e3e7023`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
