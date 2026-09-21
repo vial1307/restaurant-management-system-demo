@@ -10,7 +10,7 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `09e2fffc80bf186d15054002c00421a2a5525e8f`
+- Current verified production SHA: `30fd1ddff89cd821b5a66fe54ececca9f9e9825f`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -22,9 +22,9 @@ Do not store credentials, private keys, passwords, database secrets, or SSH secr
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #815
-- Run ID: `35549929164`
-- Tested/deployed commit: `09e2fffc80bf186d15054002c00421a2a5525e8f`
+- Workflow: Deploy Kitchen OS to VPS #823
+- Run ID: `35571481421`
+- Tested/deployed commit: `30fd1ddff89cd821b5a66fe54ececca9f9e9825f`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -36,8 +36,9 @@ The current verified production deployment is:
 - Production UI smoke: PASS
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
-- GitHub Pages #933: PASS
 - Deploy-integrated inventory site/data-integrity audit: PASS
+- Schedule Parity #105 / run `35571899839`: PASS on exact release `30fd1dd`
+- Schedule Backfill verify #316 / run `35571899835`: PASS on exact release `30fd1dd`
 
 Production audit after schema 022:
 
@@ -45,7 +46,7 @@ Production audit after schema 022:
 - `receive_default_site_mismatch = 0`
 - `unknown_item_site = 0`
 
-This release includes PR #133 inventory overview/editor PostgreSQL persistence and authenticated SSE convergence for Central, Fuxing and Yongji. PR #134 changed only the mobile permission-certification wait budget; its assertions and application behavior are unchanged.
+This release includes PR #133 inventory overview/editor PostgreSQL persistence and authenticated SSE convergence for Central, Fuxing and Yongji, plus PR #136 verification-queue isolation. The two required schedule verification workflows both completed on the exact deployed release.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
@@ -84,15 +85,16 @@ Two-tab browser regression proves an overview minimum write reaches PostgreSQL a
 
 1. Preserve the inventory write/realtime invariants; do not reopen them as browser-local state.
 2. Continue normalized-domain/database redesign one domain at a time.
-3. The prepared workforce-schedule relational read gate remains the nearest cutover candidate: verify current production parity/backfill, then enable relational read only in a separate reviewed change with the flag rollback path retained.
+3. Review and deploy the separate workforce-schedule relational read candidate only after its full regression job passes with the gate ON.
 4. Keep compatibility schedule writes until relational reads have remained stable in production; compatibility retirement is a later explicit stage.
 
-Current verification blocker found on 2026-09-21:
+Verification prerequisite completed on 2026-09-21:
 
-- Schedule Parity #96 / run `35550219935` passed against exact production release `09e2fff`.
-- Schedule Backfill #307 / run `35550219973` did not execute; GitHub cancelled it because staff, schedule and attendance automatic verification shared the same `kitchen-os-production-maintenance` concurrency group.
-- Candidate `fix/workforce-maintenance-concurrency-20260921` separates the three read-only verify queues while retaining one shared serialized group for manually dispatched `apply` operations.
-- Do not enable `WORKFORCE_SCHEDULE_RELATIONAL_READ` until the corrected Schedule Backfill verify passes against the same deployed release as Schedule Parity.
+- Queue correction PR #136 merged as `30fd1ddff89cd821b5a66fe54ececca9f9e9825f` and deployed through #823 / run `35571481421`.
+- Schedule Parity #105 / run `35571899839` passed against exact production release `30fd1dd`.
+- Schedule Backfill verify #316 / run `35571899835` passed against the same exact release `30fd1dd`.
+- The separate cutover candidate defaults VPS relational schedule reads ON and runs the complete deploy regression job with the gate ON.
+- Compatibility schedule writes and module revision tokens remain active. Immediate rollback is `WORKFORCE_SCHEDULE_RELATIONAL_READ=false` in VPS `.env` followed by app-container recreation.
 
 ## 4. Completed: cross-site inventory tab synchronization
 
