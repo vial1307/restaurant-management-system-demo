@@ -1141,3 +1141,10 @@ Candidate correction:
 - regression coverage requires both the shared apply group and each unique verify group;
 - no schema, application read authority or business data changes are included;
 - `WORKFORCE_SCHEDULE_RELATIONAL_READ` remains OFF until corrected parity and backfill verification pass on the same production release.
+
+CI follow-up:
+
+- main deploy #817 first hit, then passed after rerun, a WebKit-only page error for the local test reverse proxy's authenticated inventory SSE URL;
+- PR #136 reproduced the same local proxy warning in the mobile role/site certification while API/SSE, PostgreSQL concurrency, Chromium and the independent relational backfill regression all passed;
+- the browser gate now suppresses only the exact WebKit + local test proxy + `/api/inventory/events` access-control message;
+- Chromium, non-local URLs, other API paths and every other page error remain blocking; dedicated SSE API/two-tab coverage remains unchanged.
