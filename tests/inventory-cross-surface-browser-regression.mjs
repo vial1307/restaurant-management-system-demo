@@ -30,7 +30,8 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
     const stamp=Date.now().toString(36);
     for(const site of ["central","fuxing","yongji"]) {
       const key=`cross-${stamp}-${site}`, area=`cross-${stamp}`, code=`${site}-${key}`;
-      await api('/api/master-data/work-areas',{action:"save",site,code:area,name_vi:area,name_zh_tw:area,active:true,department_code:"kitchen"});
+      const master=await api(`/api/master-data/${site}`);
+      await api('/api/master-data/work-areas',{action:"save",site,code:area,name_vi:area,name_zh_tw:area,active:true,department_code:master.departments.find(d=>d.active)?.code||""});
       const {location}=await api('/api/master-data/locations',{action:"save",site,code,kind:"storage",name_vi:key,name_zh_tw:key,active:true,metadata:{ui_key:key,storage_group:"primary"}});
       const locations=[{code}];
       if(site!=="central") {
