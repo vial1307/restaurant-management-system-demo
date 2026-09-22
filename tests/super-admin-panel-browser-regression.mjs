@@ -196,6 +196,17 @@ async function runSuperAdminProfile(profile) {
       await workspace.locator('[data-idb-search] button').click();
       await workspace.locator(`[data-idb-action="master"][data-id="${code}"]`).click();
       await workspace.locator('[data-idb-form] [name="name_vi"]').fill(`Đã sửa ${code}`);
+      const remoteSave=await context.request.post(`${BASE}/api/master-data/work-areas`,{data:{action:"save",site:"fuxing",code,name_vi:`Thiết bị khác ${code}`,name_zh_tw:`測試區 ${code}`,active:true}});
+      assert.equal(remoteSave.status(),200,"peer work-area edit failed");
+      await page.waitForFunction(()=>document.querySelector("[data-idb-remote]")?.textContent.includes("Có thay đổi"));
+      assert.equal(await workspace.locator('[data-idb-form] [name="name_vi"]').inputValue(),`Đã sửa ${code}`,"peer refresh must retain the dirty form");
+      await workspace.locator('[data-idb-form] button[type="submit"]').click();
+      await page.waitForFunction(()=>document.querySelector("[data-idb-form-error]")?.textContent.includes("MASTER_DATA_STALE"));
+      assert.equal(await workspace.locator('[data-idb-form] [name="name_vi"]').inputValue(),`Đã sửa ${code}`,"stale write must retain input");
+      page.once("dialog",(dialog)=>dialog.accept());
+      await workspace.locator('[data-idb-action="close"]').click();
+      await workspace.locator(`[data-idb-action="master"][data-id="${code}"]`).click();
+      await workspace.locator('[data-idb-form] [name="name_vi"]').fill(`Đã sửa ${code}`);
       await workspace.locator('[data-idb-form] button[type="submit"]').click();
       await page.waitForFunction(()=>!document.querySelector("[data-idb-form]"));
       await page.reload({waitUntil:"domcontentloaded"});
@@ -208,6 +219,10 @@ async function runSuperAdminProfile(profile) {
       assert.match(await workspace.textContent(),new RegExp(`Đã sửa ${code}`));
       await assertFit(page,`${profile.name} persisted branch area`);
     }
+    await workspace.locator('[data-idb-action="tab-items"]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-idb-action="refresh"]')?.disabled);
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:path.join(OUTPUT,`${profile.name}-inventory-database.png`),fullPage:false});
     // Preserve the other data tables rather than replacing generic CRUD.
     await page.locator('[data-dataset="announcements"]').click();
     await page.locator("[data-data-filter]").waitFor({state:"visible"});

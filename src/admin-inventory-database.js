@@ -119,7 +119,14 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       master=nextMaster;snapshot=nextSnapshot;if(nextHistory)history=nextHistory.transactions||[];
       remote=false;loading=false;if(changed||!quiet)render();
       if(refreshQueued){refreshQueued=false;sync();}return true;
-    } catch(error) { if(seq===generation){loading=false;message=errorCode(error);failed=true;render();}return false; }
+    } catch(error) {
+      if(seq===generation){
+        loading=false;message=errorCode(error);failed=true;
+        // A failed background read is no reason to recreate an open form.
+        if(quiet&&(editor||pending))notify(message,true);else render();
+      }
+      return false;
+    }
   }
   async function action(data) {
     const name=data.idbAction;
