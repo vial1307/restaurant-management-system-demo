@@ -116,6 +116,24 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const latest=await api(`/api/inventory/${site}`);
       assert.equal(latest.items.find(i=>i.id===item.id).name_vi,`Remote ${key}`,`${site}: stale editor overwrote peer metadata`);
       await main.locator(site==="central"?'button[data-central-editor-close]':'.ingredient-modal .icon-button[data-action="close-modal"]').click();
+      if(site==="fuxing") {
+        await main.locator('[data-action="open-add-item"]').first().click();
+        const addedName=`Added ${key}`;
+        await form.locator('[name="label"]').fill(addedName);
+        await form.locator('[name="labelVi"]').fill(addedName);
+        await form.locator('[name="workArea"]').selectOption(area);
+        for(const selected of await form.locator('[name="zones"]:checked').all()) await selected.uncheck();
+        await form.locator(`[name="zones"][value="${key}"]`).check();
+        await form.locator(`[name="quantity:${key}"]`).fill('2');
+        await form.locator(`[name="minimum:${key}"]`).fill('3');
+        await form.locator('button[type="submit"]').click();
+        await form.waitFor({state:"detached",timeout:12000});
+        await waitText(adminPage,'[data-inventory-database] tbody',addedName);
+        const afterAdd=await api(`/api/inventory/${site}`);
+        const created=afterAdd.items.find(i=>i.name_vi===addedName);
+        assert(created,`${site}: add must persist before closing`);
+        assert.equal(Number(afterAdd.stock.find(s=>s.item_id===created.id&&s.location_id===location.id).quantity),2);
+      }
       console.log('INVENTORY_CROSS_SURFACE_SITE_OK',profile.name,site);
     }
     assert.deepEqual(errors,[]);

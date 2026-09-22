@@ -51,7 +51,7 @@ assert.doesNotMatch(
 );
 assert.match(
   cloud,
-  /cloudSyncBranchCatalogItem\(stockKey, site = currentSite\(\), \{ sync = true \} = \{\}\)/,
+  /cloudSyncBranchCatalogItem\(stockKey, site = currentSite\(\), \{ sync = true, draft = null \} = \{\}\)/,
   "catalog metadata sync must support deferring refresh while dedicated stock APIs run"
 );
 
@@ -62,12 +62,12 @@ assert.match(
 );
 assert.match(
   app,
-  /cloudSyncBranchCatalogItem\(stockKey, site, \{ sync:false \}\)[\s\S]*?persistCatalogStocktakeFields/,
+  /cloudSyncBranchCatalogItem\(stockKey, site, \{ sync:false, draft:item \}\)[\s\S]*?persistCatalogStocktakeFields/,
   "edit-item save must sync metadata before dedicated stock fields"
 );
 assert.match(
   app,
-  /cloudSyncBranchCatalogItem\(createdStockKey,site,\{sync:false\}\)[\s\S]*?persistCatalogStocktakeFields/,
+  /cloudSyncBranchCatalogItem\(createdStockKey,site,\{sync:false,draft:item\}\)[\s\S]*?persistCatalogStocktakeFields/,
   "add-item save must sync metadata before dedicated stock fields"
 );
 

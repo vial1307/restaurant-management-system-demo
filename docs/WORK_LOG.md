@@ -3,6 +3,8 @@
 
 ## 2026-09-22 — Main website / Super Admin synchronization correction
 
+- Cross-surface CI additionally reproduced a branch editor bug: cloud-hydrated items were displayed from the authoritative mirror, but saves were rebuilt from the stale legacy store. Branch add/edit now sends the explicit form draft to the existing catalog API, preserves failed forms and closes only after confirmed operations. Site switching explicitly activates the target master snapshot after the site commit.
+
 - Specification updated before implementation with cross-surface, branch-isolation and compact-action acceptance criteria.
 - Removed Central's hard-coded master lists and translated labels; database UI keys remain stable identities. Central overview editor now opens outside the Manage tab.
 - Master-only changes repaint on fallback refresh; SSE ready reconciles missed updates; background destination reads no longer replace active-site choices.

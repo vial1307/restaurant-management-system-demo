@@ -3,6 +3,8 @@
 
 ## Active correction — 2026-09-22 (not deployed)
 
+- Cross-surface CI additionally reproduced a branch editor bug: cloud-hydrated items were displayed from the authoritative mirror, but saves were rebuilt from the stale legacy store. Branch add/edit now sends the explicit form draft to the existing catalog API, preserves failed forms and closes only after confirmed operations. Site switching explicitly activates the target master snapshot after the site commit.
+
 - User reported Super Admin location/ingredient changes not reflected on the main website.
 - Root causes found: Central rendered hard-coded work-area/storage labels; stock-only equality skipped master-only fallback refresh; cross-site shipping reads could replace active branch choices. Central overview edit also set editor state without rendering its modal.
 - Candidate branch: `fix/inventory-admin-main-sync-20260922`, based on verified production #832 (`5cc4f90`) and docs main `eb9e38d`.

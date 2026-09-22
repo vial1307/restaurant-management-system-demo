@@ -284,6 +284,7 @@ export async function switchActiveInventorySite(site) {
     if (serial !== activeSiteSwitchSerial) return false;
 
     localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
+    syncUiMasterData(targetSite, inventoryMasterSnapshot(targetSite));
     if (isBranchInventorySite(targetSite)) applyBranch(rows, targetSite);
     else applyCentral(rows);
     dispatchStatus("synced", { site:targetSite, count:rows.length, switch:true });
@@ -1126,13 +1127,24 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   return { ok: true, changed: changes.length };
 }
 
-export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true } = {}) {
+export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true, draft = null } = {}) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
-  const catalog = buildBranchCatalog(site);
-  const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
+  // An editor may display an item received from another device which the
+  // legacy store has never seen. Send its explicit draft, never reconstruct
+  // that save from the store's older cache. Stock still uses dedicated APIs.
+  const item = draft ? {
+    key:branchItemKey(site,stockKey), catalog_key:draft.catalogKey,
+    zh:draft.label, vi:draft.labelVi, unit:draft.unit,
+    work_area:draft.workArea, storage_only:Boolean(draft.storageOnly),
+    locations:[
+      ...draft.locations.map((location) => ({ code:branchLocationCode(site,location.zone) })),
+      ...(!draft.storageOnly && branchWorkLocationCode(site,draft.workArea)
+        ? [{ code:branchWorkLocationCode(site,draft.workArea) }] : []),
+    ],
+  } : buildBranchCatalog(site).find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
   try {
@@ -1140,7 +1152,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
     if (sync) await syncInventoryNow(site, { reloadBranch: false });
     return { ok: true };
   } catch (error) {
-    dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
+    if (!draft) dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
     return { ok: false, fallback: false, error };
   }
 }
