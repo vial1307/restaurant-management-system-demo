@@ -1,7 +1,7 @@
 .idb-workspace { min-width:0; }
 .idb-toolbar { display:flex; flex-wrap:wrap; gap:16px; align-items:end; margin-bottom:20px; }
 .idb-toolbar label { display:grid; gap:6px; flex:1 1 260px; max-width:560px; }
-.idb-workspace select,.idb-workspace input:not([type=checkbox]) { min-height:44px; width:100%; max-width:100%; box-sizing:border-box; }
+.idb-workspace select,.idb-workspace input:not([type=checkbox]) { min-height:44px; min-width:0; width:100%; max-width:100%; box-sizing:border-box; }
 .idb-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
 .idb-tabs [aria-pressed=true] { background:#173f35; color:white; border-color:#173f35; }
 .idb-workspace .sa-btn { white-space:normal; overflow-wrap:anywhere; min-height:44px; line-height:1.4; }
@@ -11,7 +11,7 @@
 .idb-editor { background:#f1f7f4; border:1px solid #b8cfc5; border-radius:16px; padding:20px; margin:20px 0; scroll-margin-top:20px; }
 .idb-editor h3 { margin:0 0 20px; overflow-wrap:anywhere; }
 .idb-editor fieldset { border:0; padding:0; margin:0; min-width:0; }
-.idb-editor label { min-width:0; }
+.idb-editor label { min-width:0; grid-template-columns:minmax(0,1fr); }
 .idb-message { color:#19664c; }
 .idb-table { min-width:720px; }
 .idb-table td { vertical-align:top; max-width:300px; white-space:normal; overflow-wrap:anywhere; }

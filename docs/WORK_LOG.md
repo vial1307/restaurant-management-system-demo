@@ -1,6 +1,12 @@
 # Kitchen OS Work Log
 
 
+## 2026-09-22 — Cross-surface verification follow-up
+
+- Head 66f0080: independent browser sessions passed Central/Fuxing/Yongji round-trips at 320px, including renamed master labels, main ingredient saves, per-location minimums, reloads, stale draft retention and Fuxing creation.
+- WebKit then exposed intrinsic select overflow with the new long bilingual area names. Set explicit zero minimum widths and shrinkable label grid tracks; re-run the six-device gate.
+- Seed the per-document snapshot on a successful site switch to avoid treating the subsequent identical SSE refresh as an edit conflict.
+
 ## 2026-09-22 — Main website / Super Admin synchronization correction
 
 - Cross-surface CI additionally reproduced a branch editor bug: cloud-hydrated items were displayed from the authoritative mirror, but saves were rebuilt from the stale legacy store. Branch add/edit now sends the explicit form draft to the existing catalog API, preserves failed forms and closes only after confirmed operations. Site switching explicitly activates the target master snapshot after the site commit.

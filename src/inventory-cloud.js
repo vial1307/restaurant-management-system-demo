@@ -287,6 +287,7 @@ export async function switchActiveInventorySite(site) {
     syncUiMasterData(targetSite, inventoryMasterSnapshot(targetSite));
     if (isBranchInventorySite(targetSite)) applyBranch(rows, targetSite);
     else applyCentral(rows);
+    reconciledInventorySnapshots.set(targetSite, JSON.stringify({ master:inventoryMasterSnapshot(targetSite), rows }));
     dispatchStatus("synced", { site:targetSite, count:rows.length, switch:true });
 
     window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
