@@ -8,11 +8,11 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #828 / run `35573596640`.
-- Verified production SHA: `00949bec772bcc04441626903411020f2e3e7023`.
+- Verified production release: Deploy Kitchen OS to VPS #832 / run `35672333632`.
+- Verified production SHA: `5cc4f907387873367d78dfbdfb3183971846e968`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
-- GitHub Pages #933: PASS.
+- GitHub Pages #937: PASS (PR #138 source).
 - Deploy-integrated inventory site/data-integrity audit: PASS.
 - Inventory site integrity violations: 0.
 - Hidden inventory violations: 0.
@@ -31,12 +31,12 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 - Production #823 verified on schema 024.
 - Schedule Parity #105 / `35571899839` and Schedule Backfill verify #316 / `35571899835` both passed against exact release `30fd1dd`.
 
-## IN PROGRESS — branch-scoped Super Admin inventory database
+## DONE — branch-scoped Super Admin inventory database
 
 Branch:
 
-- `feat/super-admin-branch-inventory-database-20260921`;
-- baseline is verified production `00949bec772bcc04441626903411020f2e3e7023`.
+- PR #138 merged into `main` as `5cc4f907387873367d78dfbdfb3183971846e968`;
+- production deployment #832 passed on that exact release.
 
 Schema:
 
@@ -44,13 +44,13 @@ Schema:
 
 Five views: ingredients, locations/work areas, per-location quantities/minimums, movement history and integrity. All writes use existing business APIs; the UI preserves per-site layouts, metadata and archive guards. Optional revision/expected-value checks reject stale saves; append-only association saves cannot prune other locations. Master-data writes now publish inventory SSE invalidations. No migration or new database authority.
 
-Local static/performance/Super Admin contract tests pass. Full API/PostgreSQL and desktop/mobile UI checks are wired into CI, not yet certified for this candidate. Cloud Browser cannot reach the local development server (`ERR_BLOCKED_BY_CLIENT`); do not claim a local visual pass or a production deployment of this workspace.
+Local static/performance/Super Admin contracts, API/PostgreSQL round trips on all three sites, six-profile browser tests, peer-edit conflict/input retention, full-system regression and production UI smoke passed. Runs: Super Admin Browser `35671898006`, Master Data/Admin API `35671897948`, final production `35672333632`. Runtime health returned release `5cc4f90`, schema `024`, app/database `ok`; inventory isolation audit found zero violations. Cloud Browser local preview was blocked; automated CI screenshots provide device evidence.
 
 ## NEXT
 
-1. Require the exact candidate's API branch-roundtrip, stale-write, archive and restricted-account checks to pass.
-2. Require Super Admin desktop/mobile forms, persistence after reload, and generic-CRUD regression to pass.
-3. Only then merge/deploy the tested SHA and verify production smoke; update handoff evidence afterwards.
+1. Owner can configure each branch's work areas and storage independently through Super Admin → Database; no setup values were copied automatically.
+2. Preserve transactional relocation, expected-value conflict checks and PostgreSQL authority in follow-up work.
+3. Refresh the static development-status fallback wording during the next runtime change; live release/workflow evidence and CURRENT_HANDOFF already record completion.
 4. Preserve the existing schedule read flag and compatibility writes; this inventory UI stage does not alter that domain.
 
 ## BLOCKED

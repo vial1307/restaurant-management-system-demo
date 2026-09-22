@@ -1,5 +1,16 @@
 # Kitchen OS Work Log
 
+## 2026-09-22 — Super Admin inventory Database production verification
+
+- PR #138 final head `923f36a5320b4afb4a47caa11c3016940b9ce9c4`: all PR checks passed; production-only jobs were correctly skipped on the PR.
+- Super Admin Browser run `35671898006`: six desktop/mobile profiles, save/reload, peer-edit notifications, stale-submit rejection, input retention and retry PASS. Screenshots are in that workflow's artifacts.
+- Master Data/Admin API run `35671897948`, isolated load smoke `35671897952`, workforce diagnostic `35671897940`, full-system premerge workflow `35671898004`: PASS.
+- Merged as `5cc4f907387873367d78dfbdfb3183971846e968`.
+- Deploy #832 / run `35672333632`: preflight, complete API/PostgreSQL/browser/device regression, backup/deploy, health/release and production UI smoke PASS.
+- Production response: `app=ok`, `database=ok`, `schema=024`, `release=5cc4f90`. Deploy-integrated inventory audit PASS; stock/default site mismatch counts zero.
+- No schema migration, production business-data rewrite or automatic copying of branch configuration. Database workspace is available at `/.admindev.html#data`.
+- Handoff documents now supersede the predeployment static development-status wording; updating that fallback text can accompany the next runtime stage.
+
 ## 2026-09-21 — Branch-scoped Super Admin inventory database candidate
 
 CI follow-up (2026-09-22): initial PR #138 API round-trip passed for Central/Fuxing/Yongji. Browser CI caught a real foreground/background read race: an SSE ready event superseded a foreground request, leaving navigation disabled when the data was unchanged. Background refresh now queues behind foreground reads and cannot own their controls. Corrected handoff status to the existing `in_progress` enum, and locked existing catalog identities/storage-only transitions that could orphan receiving policy or hide work stock. Re-run exact-head CI before release.

@@ -1,24 +1,26 @@
 # Kitchen OS — Current Development Handoff
 
-Last updated: 2026-09-21 (Asia/Taipei)
+Last updated: 2026-09-22 (Asia/Taipei)
 
 This document is the current continuation point for any developer or future ChatGPT session working on Kitchen OS. It must be updated whenever a significant production fix, schema migration, deployment, or workstream handoff occurs.
 
 Do not store credentials, private keys, passwords, database secrets, or SSH secrets in this repository.
 
-## Current candidate — Super Admin branch inventory database
+## Completed release — Super Admin branch inventory database
 
-Branch `feat/super-admin-branch-inventory-database-20260921` adds a dedicated inventory Database workspace while retaining the other generic data tables. It supports independent site layouts, bilingual item/location/work-area editing, per-location stock/minimum actions, receiving defaults, relocation, history and local-site integrity checks. Existing work-stock must move through relocation; metadata saves do not replay quantities.
+PR #138 merged as `5cc4f907387873367d78dfbdfb3183971846e968` and deployed through #832 / run `35672333632`. The Database section now has a dedicated inventory workspace while retaining the other generic data tables. It supports independent site layouts, bilingual item/location/work-area editing, per-location stock/minimum actions, receiving defaults, relocation, history and local-site integrity checks. Existing work-stock must move through relocation; metadata saves do not replay quantities.
 
 Optional stale-write guards and append-only stock associations preserve concurrent changes. Master-data/catalog writes publish inventory invalidations; dirty forms retain input until explicitly closed. No schema migration or destructive data conversion.
 
-Local static/performance/Super Admin contracts pass. API/database round trips and browser/device tests are added to CI; candidate completion and production deployment remain unverified. Browser access to the local server is blocked by the cloud browser environment. Resume from CI for this branch and do not mark it deployed until exact-SHA deployment and production smoke pass. Older workforce candidate notes below are historical; PR #137 is already merged.
+Verification completed: exact PR head `923f36a` passed all checks; Super Admin Browser run `35671898006` passed all six profiles, save/reload, peer-edit notification, stale-submit rejection and dirty-input retention. Master Data/Admin API run `35671897948` passed. The merged release passed full-system regression, VPS backup/deploy, runtime health/release checks and production UI smoke in run `35672333632`. Runtime returned `release=5cc4f90`, `schema=024`, `app=ok`, `database=ok`; inventory site-isolation audit passed with zero violations. Local Cloud Browser preview was unavailable; device evidence comes from CI, not a physical-device certification.
+
+Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. This stage is complete; no branch setup data was automatically copied or rewritten. The production development-status fallback text was authored before deployment; this document and the live runtime/workflow evidence supersede its candidate wording. Older workforce candidate notes below are historical.
 
 ## 1. Repository / production authority
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `00949bec772bcc04441626903411020f2e3e7023`
+- Current verified production SHA: `5cc4f907387873367d78dfbdfb3183971846e968`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -30,9 +32,9 @@ Local static/performance/Super Admin contracts pass. API/database round trips an
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #828
-- Run ID: `35573596640`
-- Tested/deployed commit: `00949bec772bcc04441626903411020f2e3e7023`
+- Workflow: Deploy Kitchen OS to VPS #832
+- Run ID: `35672333632`
+- Tested/deployed commit: `5cc4f907387873367d78dfbdfb3183971846e968`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -45,8 +47,7 @@ The current verified production deployment is:
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
 - Deploy-integrated inventory site/data-integrity audit: PASS
-- Schedule Parity #105 / run `35571899839`: PASS on exact release `30fd1dd`
-- Schedule Backfill verify #316 / run `35571899835`: PASS on exact release `30fd1dd`
+- Historical schedule cutover prerequisite: Parity #105 / `35571899839` and Backfill verify #316 / `35571899835` passed on release `30fd1dd`; these are not verification runs for #832.
 
 Production audit after schema 022:
 
@@ -54,7 +55,7 @@ Production audit after schema 022:
 - `receive_default_site_mismatch = 0`
 - `unknown_item_site = 0`
 
-This release includes PR #133 inventory overview/editor PostgreSQL persistence and authenticated SSE convergence for Central, Fuxing and Yongji, plus PR #136 verification-queue isolation. The two required schedule verification workflows both completed on the exact deployed release.
+This release includes the earlier inventory persistence/SSE and schedule-read work, plus PR #138 branch-scoped Super Admin Database configuration. It changes no schema or schedule authority.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
