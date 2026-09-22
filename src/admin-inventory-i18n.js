@@ -40,6 +40,7 @@ export const INVENTORY_ADMIN_TEXT = {
   beforeAfter:["Trước → sau","變更前 → 後"], latest:["Tối đa 250 giao dịch gần nhất; nhật ký cấu hình nằm trong Logs & Reports.","最多顯示最近 250 筆異動；設定紀錄請見日誌報表。"],
   forbidden:["Bạn chưa có quyền thực hiện thao tác này.","您尚無權執行此操作。"],
   all:["Tất cả","全部"], previous:["Trước","上一頁"], next:["Sau","下一頁"],
+  more:["Thêm","更多"], unconfigured:["Chưa cấu hình nơi cất","尚未設定儲位"],
   masterHint:["Tạo khu làm việc trước, sau đó tạo vị trí đang dùng và liên kết vào khu đó. Mã được giữ cố định sau khi tạo.","先新增工作區，再建立使用位置並關聯該區。建立後代碼固定。"],
 };
 export const inventoryAdminText = (key) => INVENTORY_ADMIN_TEXT[key]?.join(" · ") || key;

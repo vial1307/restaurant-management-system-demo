@@ -1,5 +1,15 @@
 # Kitchen OS Work Log
 
+
+## 2026-09-22 — Main website / Super Admin synchronization correction
+
+- Specification updated before implementation with cross-surface, branch-isolation and compact-action acceptance criteria.
+- Removed Central's hard-coded master lists and translated labels; database UI keys remain stable identities. Central overview editor now opens outside the Manage tab.
+- Master-only changes repaint on fallback refresh; SSE ready reconciles missed updates; background destination reads no longer replace active-site choices.
+- Background reconciliation preserves open ingredient forms and requires reopening before a stale form can submit.
+- Super Admin ingredient table shows configured storage, compact status and Edit / expandable secondary actions. All actions retain existing authorized PostgreSQL paths.
+- Static/performance/admin validation PASS locally. Added isolated main ↔ Super Admin browser round-trip on Central/Fuxing/Yongji for small mobile and desktop. Exact-head CI/deployment pending.
+
 ## 2026-09-22 — Super Admin inventory Database production verification
 
 - PR #138 final head `923f36a5320b4afb4a47caa11c3016940b9ce9c4`: all PR checks passed; production-only jobs were correctly skipped on the PR.

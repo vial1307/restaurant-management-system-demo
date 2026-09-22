@@ -1,5 +1,6 @@
 import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
+import { preserveInventoryEditor } from "./inventory-editor-refresh.js";
 import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession, signedInAdmin } from "./account-permissions.js";
 import {
@@ -2334,7 +2335,10 @@ window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (route() !== "inventory" || document.querySelector(".central-heading")) return;
   const site = activeInventorySite();
-  if (!event.detail?.site || event.detail.site === site) renderWhenAuthorized();
+  if (!event.detail?.site || event.detail.site === site) {
+    if (preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
+    renderWhenAuthorized();
+  }
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;

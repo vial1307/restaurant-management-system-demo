@@ -23,6 +23,7 @@ import {
   inventoryLocationByCode,
   inventoryLocationByUiKey,
   inventoryLocationUiKey,
+  inventoryMasterSnapshot,
   inventorySiteForLocationCode,
   inventorySites,
   inventoryUiGroups,
@@ -139,6 +140,8 @@ async function ensureSiteRegistry({ force = false } = {}) {
 
 function syncUiMasterData(site, snapshot) {
   replaceInventoryMasterSnapshot(site, snapshot);
+  // Shipment reads fetch multiple sites; only the active site owns the UI.
+  if (site !== currentSite()) return;
   const groups = inventoryUiGroups(site);
   ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
     id:entry.id,
@@ -818,7 +821,9 @@ async function runInventorySync(site, { reloadBranch = false, force = false } = 
     return false;
   }
   try {
+    const previousMaster = JSON.stringify(inventoryMasterSnapshot(site));
     const rows = await fetchSite(site, { force });
+    const masterChanged = previousMaster !== JSON.stringify(inventoryMasterSnapshot(site));
     clearAuthSyncRetry();
     const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
     // localStorage is shared by tabs on the same origin. The writer tab can
@@ -826,7 +831,7 @@ async function runInventorySync(site, { reloadBranch = false, force = false } = 
     // data comparison look unchanged even though its DOM is stale. A forced
     // reconciliation is an explicit remote invalidation, so always notify the
     // current document to repaint from the authoritative snapshot.
-    if (force && !changed) {
+    if ((force || masterChanged) && !changed) {
       window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{ site } }));
     }
     void reloadBranch;
@@ -1281,6 +1286,11 @@ async function subscribeRealtime(site) {
   const clientId = vpsInventoryClientId();
   const source = new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
   realtimeSource = source;
+  // A reconnect has no replay log. Fetch anything missed while disconnected.
+  source.addEventListener("ready", () => {
+    const activeSite = currentSite();
+    if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+  });
   source.addEventListener("inventory", (event) => {
     let payload = null;
     try { payload = JSON.parse(event.data || "null"); } catch {}

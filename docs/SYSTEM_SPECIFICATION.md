@@ -996,6 +996,10 @@ Database backup is required before deployment/migration when the deployment pipe
 ## 22. Synchronization rules
 
 - VPS/PostgreSQL is source of truth.
+- Central and branch inventory labels/options must come from the active site's master-data snapshot, including new/renamed work areas and storage locations. Stable codes/UI keys are identities, never display names. Fetching another site's shipping destinations must not replace the active site's options.
+- Master-data-only changes must invalidate the visible inventory even when stock quantities and item metadata are unchanged, through SSE and fallback refresh. SSE reconnection must reconcile changes missed while disconnected.
+- Acceptance: on Central, Fuxing and Yongji, edit names, areas, storage and minimums in Super Admin and observe the main inventory and ingredient editor without F5; edit an ingredient/minimum on the main website and observe Super Admin. Reload both pages and switch sites to confirm persistence and isolation. Preserve pending/unsaved forms during background refresh.
+- Super Admin ingredient rows expose a compact primary edit action and an accessible expandable group for stock, receiving and archive actions; mobile users retain all actions and bilingual labels.
 - Inventory must refresh from VPS after relevant account/site/date/navigation changes.
 - Non-inventory business state syncs by site and account permission.
 - Authenticated Server-Sent Events provide the primary real-time invalidation signal for inventory mutations across tabs and devices. The signal contains no inventory payload; every recipient reloads the authoritative snapshot for its active permitted site.

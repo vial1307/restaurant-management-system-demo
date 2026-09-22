@@ -34,9 +34,19 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     return { rows:filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE).map(renderRow), footer:`<div class="sa-pagination"><span>${filtered.length} · ${page}/${pages}</span><div>${button("previous","previous",page<=1?"disabled":"")}${button("next","next",page>=pages?"disabled":"")}</div></div>` };
   }
   function itemsView() {
-    const list = paginate(snapshot.items, (row) => `<tr><td>${titleCell(row)}<small>${esc(row.catalog_key)}</small></td><td>${esc(row.unit)}</td><td>${esc(label(master.workAreas.find((a) => a.code === row.work_area)))}</td><td>${esc(t(row.active?"active":"inactive"))}</td><td><div class="sa-row-actions">${canEdit()?button("item","edit",`data-id="${esc(row.id)}"`):""}${canEdit()&&row.active?button("receive","receive",`data-id="${esc(row.id)}"`):""}${canEdit()&&row.active?button("item-stock","stock",`data-id="${esc(row.id)}"`):""}${me.role==="admin"&&row.active?button("archive-item","archive",`data-id="${esc(row.id)}"`):""}</div></td></tr>`);
-    return `<p>${esc(t("identityHint"))}</p>${canEdit()?button("item","add"):""}${rowsTable(["items","unit","area","status","action"],list.rows)}${list.footer}`;
+    const list = paginate(snapshot.items, (row) => {
+      const id = `data-id="${esc(row.id)}"`;
+      const locations = stockFor(row.id).map((entry) => locationById(entry.location_id)).filter((entry) => entry?.kind === "storage");
+      const extra = [
+        canEdit() && row.active ? button("item-stock","stock",id) : "",
+        canEdit() && row.active ? button("receive","receive",id) : "",
+        me.role === "admin" && row.active ? button("archive-item","archive",id) : "",
+      ].join("");
+      return `<tr data-idb-item="${esc(row.id)}"><td>${titleCell(row)}<small class="idb-code">${esc(row.catalog_key)}</small></td><td>${esc(row.unit)}</td><td>${esc(label(master.workAreas.find((a) => a.code === row.work_area)))}</td><td>${locations.length?locations.map((location)=>`<small>${esc(label(location))}</small>`).join(""):`<span class="idb-unconfigured">${esc(t("unconfigured"))}</span>`}</td><td><span class="idb-status ${row.active?"is-active":""}">${esc(t(row.active?"active":"inactive"))}</span></td><td><div class="idb-item-actions">${canEdit()?button("item","edit",id):""}${extra?`<details class="idb-more"><summary aria-label="${esc(t("more"))}: ${esc(row.name_vi)}">${esc(t("more"))}</summary><div class="idb-more-actions">${extra}</div></details>`:""}</div></td></tr>`;
+    });
+    return `<div class="idb-list-heading"><p>${esc(t("identityHint"))}</p>${canEdit()?button("item","add"):""}</div>${rowsTable(["items","unit","area","storage","status","action"],list.rows)}${list.footer}`;
   }
+
   function locationsView() {
     const areas = locationKind === "areas";
     const rows = areas ? master.workAreas : master.locations.filter((row) => row.kind === locationKind);

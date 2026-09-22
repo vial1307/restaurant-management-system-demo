@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, webkit } from "playwright";
+import { verifyInventoryCrossSurface } from "./inventory-cross-surface-browser-regression.mjs";
 
 let BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 if (BASE === "http://localhost:3000") BASE = "http://127.0.0.1:3000";
@@ -221,6 +222,9 @@ async function runSuperAdminProfile(profile) {
     }
     await workspace.locator('[data-idb-action="tab-items"]').click();
     await page.waitForFunction(()=>!document.querySelector('[data-idb-action="refresh"]')?.disabled);
+    if(["superadmin-mobile-small","superadmin-laptop"].includes(profile.name)) {
+      await verifyInventoryCrossSurface({browser,adminPage:page,adminContext:context,login,base:BASE,profile});
+    }
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:path.join(OUTPUT,`${profile.name}-inventory-database.png`),fullPage:false});
     // Preserve the other data tables rather than replacing generic CRUD.
