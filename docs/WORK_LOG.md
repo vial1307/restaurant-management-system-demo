@@ -8,6 +8,7 @@
 - Master-only changes repaint on fallback refresh; SSE ready reconciles missed updates; background destination reads no longer replace active-site choices.
 - Background reconciliation preserves open ingredient forms and requires reopening before a stale form can submit.
 - Super Admin ingredient table shows configured storage, compact status and Edit / expandable secondary actions. All actions retain existing authorized PostgreSQL paths.
+- First cross-surface CI verified Central master labels, item edits in both directions and main minimum API success; corrected the test to compare PostgreSQL NUMERIC values numerically (9.000 equals 9), scoped to the storage row.
 - Static/performance/admin validation PASS locally. Added isolated main ↔ Super Admin browser round-trip on Central/Fuxing/Yongji for small mobile and desktop. Exact-head CI/deployment pending.
 
 ## 2026-09-22 — Super Admin inventory Database production verification

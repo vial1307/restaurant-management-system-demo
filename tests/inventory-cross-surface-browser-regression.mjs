@@ -88,7 +88,7 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const change=main.waitForResponse(r=>r.url().endsWith('/api/inventory/set-minimum')&&r.request().method()==="POST");
       await main.locator(minSelector).fill('9');await main.locator(minSelector).dispatchEvent('change');
       assert.equal((await change).status(),200,`${site}: main minimum save failed`);
-      await adminPage.waitForFunction(({id})=>[...document.querySelectorAll('[data-inventory-database] tbody tr')].some(tr=>tr.querySelector(`[data-id="${id}"]`)&&tr.children[3]?.textContent.trim()==='9'),{id:item.id},{timeout:12000});
+      await adminPage.waitForFunction(({id,locationId})=>[...document.querySelectorAll('[data-inventory-database] tbody tr')].some(tr=>tr.querySelector(`[data-id="${id}"][data-location="${locationId}"]`)&&Number(tr.children[3]?.textContent.trim())===9),{id:item.id,locationId:location.id},{timeout:12000});
       const persisted=await api(`/api/inventory/${site}`);
       assert.equal(persisted.items.find(i=>i.id===item.id).name_vi,mainName);
       assert.equal(Number(persisted.stock.find(s=>s.item_id===item.id&&s.location_id===location.id).minimum_quantity),9);
