@@ -8,7 +8,7 @@ function github(path = "") {
 export const DEVELOPMENT_STATUS = Object.freeze({
   updated_at:"2026-09-21",
   phase:"branch-inventory-database",
-  status:"in-progress",
+  status:"in_progress",
   headline:"Production #828 đã verified trên schema 024. Candidate mới bổ sung Database kho theo chi nhánh trong Super Admin; đang chờ kiểm thử API và giao diện đầy đủ.",
   repository:{
     name:"vial1307/restaurant-management-system-demo",

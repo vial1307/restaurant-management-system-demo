@@ -485,8 +485,11 @@ export async function registerInventoryExtraRoutes(app) {
             String(current?.revision || "0") !== String(request.body.expectedRevision)) {
           throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
         }
+        if (request.body?.expectedRevision !== undefined && current && current.catalog_key !== String(item.catalog_key || "")) {
+          throw Object.assign(new Error("CATALOG_KEY_IMMUTABLE"), { statusCode:409 });
+        }
         // The detail editor must relocate existing work stock, not merely relabel it.
-        if (request.body?.guardWorkArea && current && String(item.work_area || "") !== String(current.work_area || "")) {
+        if (request.body?.guardWorkArea && current && (String(item.work_area || "") !== String(current.work_area || "") || (item.storage_only && !current.storage_only))) {
           const workStock = await client.query(
             `select 1 from public.inventory_stock s join public.inventory_locations l on l.id=s.location_id
              where s.item_id=$1 and l.kind='work' limit 1`, [current.id]

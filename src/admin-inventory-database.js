@@ -14,7 +14,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   let host, sites = [], me, source, poll, timer, generation = 0;
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
   let snapshot = null, master = null, history = [], editor = null, pending = false, loading = false, dirty = false;
-  let message = "", failed = false, remote = false, connected = false;
+  let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
   const canEdit = () => Boolean(me?.permissions?.inventory?.edit);
   const canMaster = (kind) => Boolean(master?.permissions?.[kind === "areas" ? "manageWorkAreas" : "manageLocations"]);
   const activeItems = () => (snapshot?.items || []).filter((row) => row.active);
@@ -102,6 +102,9 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   async function load({quiet=false}={}) {
     if(!host||!site)return false;
     if(quiet&&(editor||pending)){markRemote();return false;}
+    // A background event cannot supersede the foreground request that owns
+    // disabled controls. Reconcile again after that request releases the UI.
+    if(quiet&&loading){refreshQueued=true;return false;}
     const seq=++generation, targetSite=site, targetTab=tab;
     if(!quiet){loading=true;render();}
     try {
@@ -114,7 +117,8 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       if(quiet&&(editor||pending)){markRemote();return false;}
       const changed=JSON.stringify([master,snapshot,history])!==JSON.stringify([nextMaster,nextSnapshot,nextHistory?.transactions||history]);
       master=nextMaster;snapshot=nextSnapshot;if(nextHistory)history=nextHistory.transactions||[];
-      remote=false;loading=false;if(changed||!quiet)render();return true;
+      remote=false;loading=false;if(changed||!quiet)render();
+      if(refreshQueued){refreshQueued=false;sync();}return true;
     } catch(error) { if(seq===generation){loading=false;message=errorCode(error);failed=true;render();}return false; }
   }
   async function action(data) {
@@ -166,6 +170,8 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     container.innerHTML=`<section class="idb-editor"><h3>${esc(t(title))} — ${esc(label(sites.find((s)=>s.code===site)))}</h3><form data-idb-form><fieldset class="sa-form-grid">${html}<div class="wide sa-row-actions"><button type="submit" class="sa-btn primary">${esc(t(type==="item"&&row?.active===false?"restore":"save"))}</button>${button("close","cancel")}</div><p class="wide sa-form-error" data-idb-form-error role="alert"></p></fieldset></form></section>`;
     container.querySelectorAll('[name="work_area"],[name="destinationLocationId"],[name="itemId"],[name="locationId"]').forEach((node)=>{node.required=true;});
     if(type==="item"&&row&&hasWork(row.id))container.querySelector('[name="work_area"]').disabled=true;
+    if(type==="item"&&row)container.querySelector('[name="catalog_key"]').readOnly=true;
+    if(type==="item"&&row&&hasWork(row.id))container.querySelector('[name="storage_only"]').disabled=true;
     // A work location's association is an identity, not a safe metadata rename.
     if(type==="master"&&locationKind==="work"&&initial.id)container.querySelector('[name="work_area"]').disabled=true;
     const form=container.querySelector("form");
@@ -194,7 +200,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
         if(type==="item") {
           if(!value("item_key").startsWith(`${site}:`)||value("item_key")===`${site}:`)throw new Error("ITEM_SITE_MISMATCH");
           path="/api/inventory/catalog/sync";
-          body={expectedRevision:revision(row),guardWorkArea:true,item:{key:value("item_key"),catalog_key:value("catalog_key"),vi:value("name_vi"),zh:value("name_zh_tw"),unit:value("unit"),work_area:row&&hasWork(row.id)?row.work_area:value("work_area"),storage_only:fd.has("storage_only")}};
+          body={expectedRevision:revision(row),guardWorkArea:true,item:{key:value("item_key"),catalog_key:row?.catalog_key||value("catalog_key"),vi:value("name_vi"),zh:value("name_zh_tw"),unit:value("unit"),work_area:row&&hasWork(row.id)?row.work_area:value("work_area"),storage_only:row&&hasWork(row.id)?row.storage_only:fd.has("storage_only")}};
         } else if(type==="attach") {
           const item=itemById(value("itemId")),loc=locationById(value("locationId"));
           if(!item?.active||!loc?.active)throw new Error("ITEM_LOCATION_NOT_FOUND");
@@ -235,7 +241,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     generation++;source?.close();source=null;clearInterval(poll);clearTimeout(timer);
     document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);
     document.removeEventListener("click",guard,true);window.removeEventListener("beforeunload",unload);
-    host=null;editor=null;dirty=false;connected=false;
+    host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;
   }
   function mount(target,context) {
     detach();host=target;sites=context.sites;me=context.me;

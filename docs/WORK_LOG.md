@@ -2,6 +2,8 @@
 
 ## 2026-09-21 — Branch-scoped Super Admin inventory database candidate
 
+CI follow-up (2026-09-22): initial PR #138 API round-trip passed for Central/Fuxing/Yongji. Browser CI caught a real foreground/background read race: an SSE ready event superseded a foreground request, leaving navigation disabled when the data was unchanged. Background refresh now queues behind foreground reads and cannot own their controls. Corrected handoff status to the existing `in_progress` enum, and locked existing catalog identities/storage-only transitions that could orphan receiving policy or hide work stock. Re-run exact-head CI before release.
+
 - Updated the specification first with acceptance criteria for independent branch layouts, real database saves, stale-write rejection and archive protection.
 - Added five database views and bilingual catalog: ingredients, locations/work areas, stock/minimum, history and integrity. Preserved generic CRUD for other datasets and existing Stores transfer/audit tools.
 - Used existing inventory/master APIs, optional optimistic concurrency checks and append-only association changes. No migration; no localStorage business authority.

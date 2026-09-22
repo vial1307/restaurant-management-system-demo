@@ -24,6 +24,11 @@ for(const site of ["central","fuxing","yongji"]) {
   const item={key:`${site}:${suffix}`,catalog_key:suffix,vi:`Nguyên liệu ${site}`,zh:`${site}食材`,unit:"kg",work_area:area.code,storage_only:false,locations:[{code:location.code}]};
   let savedItem=(await post("/api/inventory/catalog/sync",{item,expectedRevision:"0",guardWorkArea:true})).item;
   assert.equal((await post("/api/inventory/catalog/sync",{item,expectedRevision:"0"},409)).error,"INVENTORY_STALE");
+  const firstRevision=String(savedItem.revision);
+  savedItem=(await post("/api/inventory/catalog/sync",{item:{...item,vi:`Đã sửa ${site}`},expectedRevision:firstRevision,guardWorkArea:true})).item;
+  assert.equal((await post("/api/inventory/catalog/sync",{item,expectedRevision:firstRevision},409)).error,"INVENTORY_STALE");
+  assert.equal((await post("/api/inventory/catalog/sync",{item:{...item,catalog_key:"different-key"},expectedRevision:String(savedItem.revision)},409)).error,"CATALOG_KEY_IMMUTABLE");
+  item.vi=savedItem.name_vi;
   const pair={itemId:savedItem.id,locationId:savedLocation.id,note:suffix};
   await post("/api/inventory/set-quantity",{...pair,quantity:3.125,expectedQuantity:0});
   assert.equal((await post("/api/inventory/set-quantity",{...pair,quantity:99,expectedQuantity:0},409)).error,"INVENTORY_STALE");
