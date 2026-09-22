@@ -812,6 +812,8 @@ function applyBranch(rows, site) {
   return true;
 }
 
+const reconciledInventorySnapshots = new Map();
+
 async function runInventorySync(site, { reloadBranch = false, force = false } = {}) {
   if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
   await ensureSiteRegistry();
@@ -821,17 +823,16 @@ async function runInventorySync(site, { reloadBranch = false, force = false } = 
     return false;
   }
   try {
-    const previousMaster = JSON.stringify(inventoryMasterSnapshot(site));
     const rows = await fetchSite(site, { force });
-    const masterChanged = previousMaster !== JSON.stringify(inventoryMasterSnapshot(site));
+    const incomingSnapshot = JSON.stringify({ master:inventoryMasterSnapshot(site), rows });
+    const viewChanged = reconciledInventorySnapshots.get(site) !== incomingSnapshot;
     clearAuthSyncRetry();
     const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
-    // localStorage is shared by tabs on the same origin. The writer tab can
-    // update it before a peer handles the SSE invalidation, making the peer's
-    // data comparison look unchanged even though its DOM is stale. A forced
-    // reconciliation is an explicit remote invalidation, so always notify the
-    // current document to repaint from the authoritative snapshot.
-    if ((force || masterChanged) && !changed) {
+    // Compare per-document snapshots, not shared localStorage: a peer tab may
+    // have written that cache already. Include master-only changes, but do not
+    // disturb editors for unchanged reconnects or another site's mutations.
+    reconciledInventorySnapshots.set(site, incomingSnapshot);
+    if (viewChanged && !changed) {
       window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{ site } }));
     }
     void reloadBranch;

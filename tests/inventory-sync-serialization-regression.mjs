@@ -166,6 +166,9 @@ try {
   await syncInventoryNow("fuxing");
   assert.equal(WORK_AREAS[0].vi,"fuxing: Khu đã đổi tên");
   assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,1,"master-only fallback refresh must repaint once without a stock mutation");
+  notifications.length=0;
+  await syncInventoryNow("fuxing",{force:true});
+  assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,0,"unchanged remote invalidation must not interrupt an editor");
 
   console.log("INVENTORY_SYNC_SERIALIZATION_OK");
 } finally {

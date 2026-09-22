@@ -6,6 +6,7 @@
 - Specification updated before implementation with cross-surface, branch-isolation and compact-action acceptance criteria.
 - Removed Central's hard-coded master lists and translated labels; database UI keys remain stable identities. Central overview editor now opens outside the Manage tab.
 - Master-only changes repaint on fallback refresh; SSE ready reconciles missed updates; background destination reads no longer replace active-site choices.
+- Per-document snapshot comparison includes master data and handles same-origin shared-cache peers, but does not repaint unchanged forced refreshes from other-site writes. Runtime checks cover this no-op behavior.
 - Background reconciliation preserves open ingredient forms and requires reopening before a stale form can submit.
 - Super Admin ingredient table shows configured storage, compact status and Edit / expandable secondary actions. All actions retain existing authorized PostgreSQL paths.
 - First cross-surface CI verified Central master labels, item edits in both directions and main minimum API success; corrected the test to compare PostgreSQL NUMERIC values numerically (9.000 equals 9), scoped to the storage row.

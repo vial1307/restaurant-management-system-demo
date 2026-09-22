@@ -103,6 +103,18 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const adminRow=workspace.locator(`[data-idb-item="${item.id}"]`);
       assert.equal(await adminRow.locator('details[open]').count(),0);
       assert.equal(await adminRow.locator('[data-idb-action="archive-item"]').count(),1);
+      await row.locator(site==="central"?'[data-central-editor-open]':'[data-action="open-edit-item"]').click();
+      const draftInput=form.locator(site==="central"?'[name="central-label-vi"]':'[name="labelVi"]');
+      await draftInput.fill(`Unsaved ${key}`);
+      await adminRow.locator('[data-idb-action="item"]').click();
+      await workspace.locator('[name="name_vi"]').fill(`Remote ${key}`);await save();
+      await main.locator('[data-inventory-remote-edit]').waitFor({state:"visible",timeout:12000});
+      assert.equal(await draftInput.inputValue(),`Unsaved ${key}`,`${site}: remote edit erased the draft`);
+      await form.locator('button[type="submit"]').click();
+      assert.equal(await draftInput.inputValue(),`Unsaved ${key}`,`${site}: stale editor must stay open for review`);
+      const latest=await api(`/api/inventory/${site}`);
+      assert.equal(latest.items.find(i=>i.id===item.id).name_vi,`Remote ${key}`,`${site}: stale editor overwrote peer metadata`);
+      await main.locator(site==="central"?'button[data-central-editor-close]':'.ingredient-modal .icon-button[data-action="close-modal"]').click();
       console.log('INVENTORY_CROSS_SURFACE_SITE_OK',profile.name,site);
     }
     assert.deepEqual(errors,[]);
