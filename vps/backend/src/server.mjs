@@ -151,6 +151,7 @@ app.get("/api/inventory/:site", async (request, reply) => {
     return reply.code(403).send({ error: "INVENTORY_VIEW_NOT_ALLOWED" });
   }
 
+  const includeInactive = request.query?.includeInactive === "true" && hasCapability(user, "system.super_admin");
   const [locations, items, stock, defaults] = await Promise.all([
     pool.query(
       `select id,code,name_zh_tw,name_vi,site,kind,sort_order,active,metadata
@@ -161,11 +162,11 @@ app.get("/api/inventory/:site", async (request, reply) => {
     ),
     pool.query(
       `select id,item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,
-              storage_only,active,created_at,updated_at
+              storage_only,active,created_at,updated_at,revision::text as revision
        from public.inventory_items
-       where active=true and item_key like $1
+       where (active=true or $2::boolean) and item_key like $1
        order by name_zh_tw,item_key`,
-      [site + ":%"]
+      [site + ":%",includeInactive]
     ),
     pool.query(
       `select s.item_id,s.location_id,s.quantity,s.minimum_quantity,s.updated_at

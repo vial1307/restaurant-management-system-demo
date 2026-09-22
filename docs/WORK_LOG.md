@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-09-21 — Branch-scoped Super Admin inventory database candidate
+
+CI follow-up (2026-09-22): initial PR #138 API round-trip passed for Central/Fuxing/Yongji. Browser CI caught a real foreground/background read race: an SSE ready event superseded a foreground request, leaving navigation disabled when the data was unchanged. Background refresh now queues behind foreground reads and cannot own their controls. Corrected handoff status to the existing `in_progress` enum, and locked existing catalog identities/storage-only transitions that could orphan receiving policy or hide work stock. Re-run exact-head CI before release.
+
+The first correction (`b21bb384`) passed Super Admin Browser Regression run 35671696281 on all six device profiles and Master Data/Admin API run 35671696278. Final follow-up also preserves dirty forms on background-read failure and verifies peer-edit notification, stale-submit rejection, retained input and retry. Inventory screenshots are included in CI artifacts. Full final-head CI and deployment must still be verified.
+
+- Updated the specification first with acceptance criteria for independent branch layouts, real database saves, stale-write rejection and archive protection.
+- Added five database views and bilingual catalog: ingredients, locations/work areas, stock/minimum, history and integrity. Preserved generic CRUD for other datasets and existing Stores transfer/audit tools.
+- Used existing inventory/master APIs, optional optimistic concurrency checks and append-only association changes. No migration; no localStorage business authority.
+- Extended successful-write SSE invalidations to master data and Super Admin catalog edits; protected dirty forms, duplicate submissions, stale site loads and background-refresh focus.
+- Local checks: static-regression, performance-regression, admin-panel-static-regression, admin-panel-ui-v2-static-regression and new admin-inventory-database-contract-regression PASS. New API round-trip script and device/reload checks are committed for CI.
+- Cloud Browser cannot access the local development server (`ERR_BLOCKED_BY_CLIENT`); no local visual or live-production verification claimed.
+- Baseline GitHub production deploy #828 / run 35573596640 was rechecked: completed/success at SHA 00949bec772bcc04441626903411020f2e3e7023. This candidate is not that production release.
+
 This file is the canonical continuation log for implementation, CI, merge and deployment work. Do not record credentials, secret values or private keys here.
 
 ## 2026-09-18 — Inventory site authority + PostgreSQL storage relocation

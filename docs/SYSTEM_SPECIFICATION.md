@@ -195,6 +195,20 @@ Inventory only by default.
 
 ## 5. Site and storage model
 
+### Super Admin branch inventory workspace (2026-09-21)
+
+The Database section includes a dedicated, site-scoped inventory workspace alongside the existing whitelisted data tables. Five views cover ingredients, locations (storage and work areas), stock/minimum by location, transaction history, and integrity checks. Branch layouts are independent; no area, location, unit or minimum is copied to another branch implicitly.
+
+Acceptance criteria:
+- Select one active site before editing. All options and reads belong to that site, including newly created sites.
+- Add/edit bilingual ingredients, work areas and storage/work locations using existing authorized lifecycle APIs; preserve immutable codes and existing metadata. Inactive master records remain visible and can be reactivated.
+- Set quantity and minimum as separate audited actions on the exact item/location pair; manage receiving defaults separately. Moving existing stock uses relocation APIs, never a metadata-only location rename.
+- Saving metadata must not replay quantities or minimums. Existing work-stock is moved with its work area by the relocation action, not silently reassigned by the ingredient metadata editor.
+- Pending forms prevent duplicate submissions; failures retain input; only confirmed writes show saved status. Revision/expected-value checks reject stale edits rather than overwrite them.
+- Successful master-data and catalog mutations invalidate connected inventory clients. The workspace refreshes on events/focus and reconnect, without full-page reloads or replacing dirty forms; remote changes are announced until the form is closed/refreshed.
+- Archive protections for nonzero stock/minimum, referenced areas and receiving defaults remain enforced. History is read-only. Integrity differences in legitimate branch layouts are not auto-corrected.
+- Verify persisted rereads, site isolation, restricted-account denial, stale-edit rejection, mobile/desktop fit and the pre-existing generic data-table controls before marking the workspace complete.
+
 ### 5.1 Central kitchen — 央廚
 
 Current inventory locations:

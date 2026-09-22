@@ -234,6 +234,9 @@ jobs:
       - name: Workforce schedule publication API regression
         run: node vps/backend/scripts/workforce-schedule-publication-regression-client.mjs
 
+      - name: Super Admin branch inventory database round-trip
+        run: node vps/backend/scripts/admin-inventory-database-regression.mjs
+
       - name: Multi-user PostgreSQL concurrency regression
         run: |
           node --import ./vps/backend/scripts/business-state-regression-client.mjs vps/backend/scripts/concurrency-regression.mjs

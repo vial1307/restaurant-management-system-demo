@@ -180,6 +180,14 @@ function validateDisplayNames(nameVi, nameZhTw) {
   }
 }
 
+function assertFreshMaster(current, body) {
+  if (body?.createOnly && current) throw Object.assign(new Error("MASTER_DATA_ALREADY_EXISTS"), { statusCode:409 });
+  if (body?.expectedUpdatedAt !== undefined &&
+      (!current || new Date(current.updated_at).toISOString() !== body.expectedUpdatedAt)) {
+    throw Object.assign(new Error("MASTER_DATA_STALE"), { statusCode:409 });
+  }
+}
+
 export async function registerMasterDataRoutes(app) {
   app.get("/api/master-data/:site", async (request, reply) => {
     const user = await requireUser(request, reply);
@@ -223,6 +231,7 @@ export async function registerMasterDataRoutes(app) {
           const current = currentResult.rows[0];
           if (!current) throw Object.assign(new Error("LOCATION_NOT_FOUND"), { statusCode: 404 });
           if (current.site !== site) throw Object.assign(new Error("LOCATION_SITE_MISMATCH"), { statusCode: 409 });
+          assertFreshMaster(current, request.body);
           await assertLocationCanArchive(client, id);
           const result = await client.query(
             `update public.inventory_locations
@@ -286,6 +295,7 @@ export async function registerMasterDataRoutes(app) {
         const current = currentResult.rows[0];
         if (!current) throw Object.assign(new Error("LOCATION_NOT_FOUND"), { statusCode: 404 });
         if (current.site !== site) throw Object.assign(new Error("LOCATION_SITE_MISMATCH"), { statusCode: 409 });
+        assertFreshMaster(current, request.body);
         if (code && code !== current.code) {
           throw Object.assign(new Error("LOCATION_CODE_IMMUTABLE"), { statusCode: 409 });
         }
@@ -338,6 +348,8 @@ export async function registerMasterDataRoutes(app) {
           [site, code]
         );
         const current = currentResult.rows[0] || null;
+
+        assertFreshMaster(current, request.body);
 
         if (action === "archive") {
           if (!current) throw Object.assign(new Error("WORK_AREA_NOT_FOUND"), { statusCode: 404 });

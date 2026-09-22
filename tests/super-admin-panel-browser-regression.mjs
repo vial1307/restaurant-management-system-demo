@@ -162,6 +162,72 @@ async function runSuperAdminProfile(profile) {
     await page.locator(".sa-table-wrap").first().waitFor({ state:"visible", timeout:15000 });
     await assertFit(page, `${profile.name} data tables`);
 
+    const workspace=page.locator("[data-inventory-database]");
+    await workspace.locator('[data-idb-action="item"]:not([data-id])').waitFor({state:"visible",timeout:15000});
+    for(const tab of ["locations","stock","history","integrity","items"]) {
+      await workspace.locator(`[data-idb-action="tab-${tab}"]`).click();
+      await page.waitForTimeout(150);
+      await assertFit(page,`${profile.name} inventory database ${tab}`);
+    }
+    await workspace.locator('[data-idb-action="item"]:not([data-id])').click();
+    await workspace.locator("[data-idb-form]").waitFor({state:"visible"});
+    await assertFit(page,`${profile.name} ingredient editor`);
+    await workspace.locator('[data-idb-action="close"]').click();
+    await workspace.locator('[data-idb-action="tab-locations"]').click();
+    for(const kind of ["storage","work","areas"]) {
+      await workspace.locator(`[data-idb-action="kind-${kind}"]`).click();
+      await workspace.locator('[data-idb-action="master"]:not([data-id])').click();
+      await assertFit(page,`${profile.name} ${kind} editor`);
+      await workspace.locator('[data-idb-action="close"]').click();
+    }
+    // Persist a branch-specific work area through the actual UI, then reread it
+    // after navigation and a browser reload (never test against production).
+    if(["superadmin-mobile-small","superadmin-laptop"].includes(profile.name)) {
+      const code=`ui-${Date.now().toString(36)}`;
+      await workspace.locator('[name="site"]').selectOption("fuxing");
+      await workspace.locator('[data-idb-action="master"]:not([data-id])').waitFor({state:"visible"});
+      await workspace.locator('[data-idb-action="master"]:not([data-id])').click();
+      await workspace.locator('[data-idb-form] [name="code"]').fill(code);
+      await workspace.locator('[data-idb-form] [name="name_vi"]').fill(`Khu kiểm thử ${code}`);
+      await workspace.locator('[data-idb-form] [name="name_zh_tw"]').fill(`測試區 ${code}`);
+      await workspace.locator('[data-idb-form] button[type="submit"]').click();
+      await page.waitForFunction(()=>document.querySelector("[data-idb-message]")?.textContent.includes("Đã lưu vào PostgreSQL"));
+      await workspace.locator('[data-idb-search] [name="q"]').fill(code);
+      await workspace.locator('[data-idb-search] button').click();
+      await workspace.locator(`[data-idb-action="master"][data-id="${code}"]`).click();
+      await workspace.locator('[data-idb-form] [name="name_vi"]').fill(`Đã sửa ${code}`);
+      const remoteSave=await context.request.post(`${BASE}/api/master-data/work-areas`,{data:{action:"save",site:"fuxing",code,name_vi:`Thiết bị khác ${code}`,name_zh_tw:`測試區 ${code}`,active:true}});
+      assert.equal(remoteSave.status(),200,"peer work-area edit failed");
+      await page.waitForFunction(()=>document.querySelector("[data-idb-remote]")?.textContent.includes("Có thay đổi"));
+      assert.equal(await workspace.locator('[data-idb-form] [name="name_vi"]').inputValue(),`Đã sửa ${code}`,"peer refresh must retain the dirty form");
+      await workspace.locator('[data-idb-form] button[type="submit"]').click();
+      await page.waitForFunction(()=>document.querySelector("[data-idb-form-error]")?.textContent.includes("MASTER_DATA_STALE"));
+      assert.equal(await workspace.locator('[data-idb-form] [name="name_vi"]').inputValue(),`Đã sửa ${code}`,"stale write must retain input");
+      page.once("dialog",(dialog)=>dialog.accept());
+      await workspace.locator('[data-idb-action="close"]').click();
+      await workspace.locator(`[data-idb-action="master"][data-id="${code}"]`).click();
+      await workspace.locator('[data-idb-form] [name="name_vi"]').fill(`Đã sửa ${code}`);
+      await workspace.locator('[data-idb-form] button[type="submit"]').click();
+      await page.waitForFunction(()=>!document.querySelector("[data-idb-form]"));
+      await page.reload({waitUntil:"domcontentloaded"});
+      await workspace.locator('[data-idb-action="tab-locations"]').waitFor({state:"visible",timeout:15000});
+      await workspace.locator('[name="site"]').selectOption("fuxing");
+      await workspace.locator('[data-idb-action="tab-locations"]').click();
+      await workspace.locator('[data-idb-action="kind-areas"]').click();
+      await workspace.locator('[data-idb-search] [name="q"]').fill(code);
+      await workspace.locator('[data-idb-search] button').click();
+      assert.match(await workspace.textContent(),new RegExp(`Đã sửa ${code}`));
+      await assertFit(page,`${profile.name} persisted branch area`);
+    }
+    await workspace.locator('[data-idb-action="tab-items"]').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-idb-action="refresh"]')?.disabled);
+    await page.evaluate(()=>window.scrollTo(0,0));
+    await page.screenshot({path:path.join(OUTPUT,`${profile.name}-inventory-database.png`),fullPage:false});
+    // Preserve the other data tables rather than replacing generic CRUD.
+    await page.locator('[data-dataset="announcements"]').click();
+    await page.locator("[data-data-filter]").waitFor({state:"visible"});
+    await assertFit(page,`${profile.name} generic data tables`);
+
     await gotoSection(page, "stores");
     await page.locator("[data-super-transfer-form]").waitFor({ state:"visible", timeout:20000 });
     await assertFit(page, `${profile.name} stores`);

@@ -185,6 +185,9 @@ export async function registerInventoryExtraRoutes(app) {
         const current = currentResult.rows[0] || null;
 
         if (!locationCode) {
+          if (request.body?.expectedLocationCode !== undefined && request.body.expectedLocationCode !== (current?.location_code || "")) {
+            throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
+          }
           if (!current) return { ok:true,deleted:false,changed:false,audit:null };
 
           await client.query(
@@ -210,6 +213,9 @@ export async function registerInventoryExtraRoutes(app) {
           return { ok:true,deleted:true,changed:true,audit };
         }
 
+        if (request.body?.expectedLocationCode !== undefined && request.body.expectedLocationCode !== (current?.location_code || "")) {
+          throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
+        }
         const loc = await client.query(
           `select id,code
            from public.inventory_locations
@@ -323,6 +329,9 @@ export async function registerInventoryExtraRoutes(app) {
           [itemId,locationId]
         );
         const before = Number(locked.rows[0]?.quantity || 0);
+        if (request.body?.expectedQuantity !== undefined && Number(request.body.expectedQuantity) !== before) {
+          throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
+        }
 
         await client.query(
           "update public.inventory_stock set quantity=$3,updated_at=now() where item_id=$1 and location_id=$2",
@@ -400,6 +409,9 @@ export async function registerInventoryExtraRoutes(app) {
           [itemId,locationId]
         );
         const before = Number(locked.rows[0]?.minimum_quantity || 0);
+        if (request.body?.expectedMinimum !== undefined && Number(request.body.expectedMinimum) !== before) {
+          throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
+        }
 
         await client.query(
           "update public.inventory_stock set minimum_quantity=$3,updated_at=now() where item_id=$1 and location_id=$2",
@@ -468,6 +480,22 @@ export async function registerInventoryExtraRoutes(app) {
           [itemKey]
         );
         const current = currentResult.rows[0] || null;
+
+        if (request.body?.expectedRevision !== undefined &&
+            String(current?.revision || "0") !== String(request.body.expectedRevision)) {
+          throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
+        }
+        if (request.body?.expectedRevision !== undefined && current && current.catalog_key !== String(item.catalog_key || "")) {
+          throw Object.assign(new Error("CATALOG_KEY_IMMUTABLE"), { statusCode:409 });
+        }
+        // The detail editor must relocate existing work stock, not merely relabel it.
+        if (request.body?.guardWorkArea && current && (String(item.work_area || "") !== String(current.work_area || "") || (item.storage_only && !current.storage_only))) {
+          const workStock = await client.query(
+            `select 1 from public.inventory_stock s join public.inventory_locations l on l.id=s.location_id
+             where s.item_id=$1 and l.kind='work' limit 1`, [current.id]
+          );
+          if (workStock.rowCount) throw Object.assign(new Error("WORK_AREA_RELOCATION_REQUIRED"), { statusCode:409 });
+        }
 
         const locationSnapshot = async (itemId) => {
           if (!itemId) return [];
@@ -586,7 +614,7 @@ export async function registerInventoryExtraRoutes(app) {
           );
         }
 
-        if (wantedLocationIds.length) {
+        if (wantedLocationIds.length && !request.body?.appendLocations) {
           const protectedOmitted = await client.query(
             `select s.location_id,l.code as location_code,s.quantity,s.minimum_quantity
              from public.inventory_stock s
@@ -680,7 +708,7 @@ export async function registerInventoryExtraRoutes(app) {
     try {
       const result = await withTransaction(async (client) => {
         const itemResult = await client.query(
-          `select id,item_key,catalog_key,active
+          `select id,item_key,catalog_key,active,revision
            from public.inventory_items
            where item_key=$1
            for update`,
@@ -688,6 +716,9 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const item = itemResult.rows[0];
         if (!item) return { archived:false };
+        if (request.body?.expectedRevision !== undefined && String(item.revision) !== String(request.body.expectedRevision)) {
+          throw Object.assign(new Error("INVENTORY_STALE"), { statusCode:409 });
+        }
         if (!item.active) return { archived:false, alreadyArchived:true };
 
         const site = String(item.item_key || "").split(":")[0];

@@ -16,6 +16,7 @@ import "./system-port-regression.mjs";
 import "./inventory-master-data-regression.mjs";
 import "./inventory-site-isolation-contract-regression.mjs";
 import "./super-admin-inventory-lifecycle-contract-regression.mjs";
+import "./admin-inventory-database-contract-regression.mjs";
 import "./live-handoff-contract-regression.mjs";
 import "./inventory-minimum-history-contract-regression.mjs";
 import "./inventory-receive-default-audit-contract-regression.mjs";

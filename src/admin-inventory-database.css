@@ -1,0 +1,33 @@
+.idb-workspace { min-width:0; }
+.idb-toolbar { display:flex; flex-wrap:wrap; gap:16px; align-items:end; margin-bottom:20px; }
+.idb-toolbar label { display:grid; gap:6px; flex:1 1 260px; max-width:560px; }
+.idb-workspace select,.idb-workspace input:not([type=checkbox]) { min-height:44px; width:100%; max-width:100%; box-sizing:border-box; }
+.idb-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.idb-tabs [aria-pressed=true] { background:#173f35; color:white; border-color:#173f35; }
+.idb-workspace .sa-btn { white-space:normal; overflow-wrap:anywhere; min-height:44px; line-height:1.4; }
+.idb-workspace p,.idb-workspace label,.idb-workspace small,.idb-workspace code { overflow-wrap:anywhere; }
+.idb-search { display:flex; align-items:end; gap:10px; margin:16px 0; }
+.idb-search label { display:grid; gap:6px; flex:1; min-width:0; }
+.idb-editor { background:#f1f7f4; border:1px solid #b8cfc5; border-radius:16px; padding:20px; margin:20px 0; scroll-margin-top:20px; }
+.idb-editor h3 { margin:0 0 20px; overflow-wrap:anywhere; }
+.idb-editor fieldset { border:0; padding:0; margin:0; min-width:0; }
+.idb-editor label { min-width:0; }
+.idb-message { color:#19664c; }
+.idb-table { min-width:720px; }
+.idb-table td { vertical-align:top; max-width:300px; white-space:normal; overflow-wrap:anywhere; }
+.idb-table td small { display:block; margin-top:4px; }
+.idb-table .sa-row-actions { flex-wrap:wrap; }
+.idb-checks { display:grid; gap:16px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.idb-checks section { border:1px solid #dce5df; border-radius:12px; padding:16px; min-width:0; }
+.idb-checks li { margin:8px 0; overflow-wrap:anywhere; }
+@media(max-width:760px) {
+  .idb-editor { padding:12px; }
+  .idb-editor .sa-form-grid { grid-template-columns:minmax(0,1fr); }
+  .idb-editor .wide { grid-column:1; }
+  .idb-checks { grid-template-columns:minmax(0,1fr); }
+  .idb-tabs .sa-btn { flex:1 1 140px; }
+  .idb-toolbar { align-items:stretch; }
+  .idb-search { flex-wrap:wrap; }
+  .idb-search label { flex-basis:100%; }
+  .idb-editor .sa-row-actions { display:grid; grid-template-columns:minmax(0,1fr); }
+}
