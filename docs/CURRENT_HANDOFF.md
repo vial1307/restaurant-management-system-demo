@@ -1,5 +1,9 @@
 # Kitchen OS — Current Development Handoff
 
+## Active correction — Central missing in assigned Role workplace choices
+
+The user observed that a manager account editor listed only Fuxing and Yongji; Central was missing. PR #140 restricted assigned Roles to sites marked `inventory_mode=branch` in the Super Admin selector and API. This did not match the product requirement: Central is also a physical workplace, while `all` is a logical global scope. The correction lets assigned Roles select any active site, including Central, while the central-only Role remains fixed to Central. The main website's account editor uses the same site eligibility. A manager assigned to Central must retain manager rights at Central and be denied other sites. Run isolated UI/API/PostgreSQL tests, then merge, deploy and verify exact release/production smoke. No account data or schema migration is needed.
+
 ## Completed correction — Super Admin Role and workplace, 2026-09-25
 
 - PR #140 merged as `b4d9cbe11caac5352226fde228cf88e07c7e4a57`. The user-reported `INVALID_LOCATION` came from retaining `all` when changing an administrator to an assigned branch Role. The editor now offers only `all` for all-scope Roles, `central` for the central Role, or active branch sites for assigned Roles. It retains a selected branch across Role changes and preserves custom module permissions. The form validates before submitting and reports a readable error if the API rejects the workplace. Six-device Super Admin regression and PostgreSQL account create/reload passed.
