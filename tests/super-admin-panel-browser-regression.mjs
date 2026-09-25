@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium, webkit } from "playwright";
+import { verifyInventoryCrossSurface } from "./inventory-cross-surface-browser-regression.mjs";
 
 let BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 if (BASE === "http://localhost:3000") BASE = "http://127.0.0.1:3000";
@@ -54,6 +55,20 @@ async function assertFit(page, label) {
     const viewportWidth = innerWidth;
     const viewportHeight = innerHeight;
     const pageOverflow = Math.max(0, document.documentElement.scrollWidth - viewportWidth);
+    const overflowNodes = [...document.querySelectorAll('body *')]
+      .filter((node) => {
+        if (node.closest('.sa-table-wrap') && !node.matches('.sa-table-wrap')) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.right > viewportWidth + 3 && getComputedStyle(node).display !== 'none';
+      })
+      .slice(0,14)
+      .map((node) => ({ tag:node.tagName.toLowerCase(), className:String(node.className).slice(0,90), right:Math.round(node.getBoundingClientRect().right), width:Math.round(node.getBoundingClientRect().width) }));
+    const scrollNodes = ['html','body','.sa-app','.sa-main','.sa-content','.sa-card','.sa-tabs','.idb-workspace','.idb-editor'].map((selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { selector, client:node.clientWidth, scroll:node.scrollWidth, left:Math.round(rect.left), right:Math.round(rect.right), overflow:getComputedStyle(node).overflowX, scrollLeft:node.scrollLeft };
+    }).filter(Boolean);
     const modal = document.querySelector(".sa-modal");
     let modalRect = null;
     if (modal) {
@@ -74,10 +89,10 @@ async function assertFit(page, label) {
         const rect = node.getBoundingClientRect();
         return { tag:node.tagName.toLowerCase(), text:(node.textContent || node.value || "").trim().slice(0,60), width:Math.round(rect.width), height:Math.round(rect.height) };
       });
-    return { viewportWidth, viewportHeight, pageOverflow, modalRect, smallTargets };
+    return { viewportWidth, viewportHeight, pageOverflow, overflowNodes, scrollNodes, modalRect, smallTargets };
   });
 
-  assert(result.pageOverflow <= 3, `${label}: page overflow ${result.pageOverflow}px`);
+  assert(result.pageOverflow <= 3, `${label}: page overflow ${result.pageOverflow}px ${JSON.stringify({overflowNodes:result.overflowNodes,scrollNodes:result.scrollNodes})}`);
   assert.deepEqual(result.smallTargets, [], `${label}: undersized controls ${JSON.stringify(result.smallTargets)}`);
   if (result.modalRect) {
     assert(result.modalRect.left >= -1, `${label}: modal exceeds left edge`);
@@ -221,6 +236,9 @@ async function runSuperAdminProfile(profile) {
     }
     await workspace.locator('[data-idb-action="tab-items"]').click();
     await page.waitForFunction(()=>!document.querySelector('[data-idb-action="refresh"]')?.disabled);
+    if(["superadmin-mobile-small","superadmin-laptop"].includes(profile.name)) {
+      await verifyInventoryCrossSurface({browser,adminPage:page,adminContext:context,login,base:BASE,profile});
+    }
     await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:path.join(OUTPUT,`${profile.name}-inventory-database.png`),fullPage:false});
     // Preserve the other data tables rather than replacing generic CRUD.

@@ -56,7 +56,7 @@ assert.match(server,/registerInventoryRealtime\(app\)[\s\S]*?registerInventoryEx
 assert.match(api,/X-Kitchen-Client-Id["']?: vpsInventoryClientId\(\)/,"inventory writes must identify their originating browser tab");
 assert.match(cloud,/new EventSource\(`\/api\/inventory\/events\?clientId=/,"inventory client must subscribe to the authenticated SSE stream");
 assert.match(cloud,/payload\?\.sourceClientId && payload\.sourceClientId === clientId[\s\S]{0,320}setTimeout[\s\S]{0,260}syncInventoryNow\(activeSite, \{ reloadBranch:false, force:true \}\)/,"remote invalidations must ignore self, coalesce, and force authoritative reconciliation");
-assert.match(cloud,/if \(force && !changed\)[\s\S]{0,220}shitu:inventory-cloud-updated/,"forced remote reconciliation must repaint a peer tab even when shared localStorage already contains the new snapshot");
+assert.match(cloud,/if \(viewChanged && !changed\)[\s\S]{0,220}shitu:inventory-cloud-updated/,"per-document reconciliation must repaint a peer tab even when shared localStorage already contains the new snapshot");
 
 assert.match(spec,/Authenticated Server-Sent Events provide the primary real-time invalidation signal/,"canonical synchronization specification is missing SSE authority");
 assert.match(spec,/role name must not re-deny quantity or minimum editing/,"canonical permission specification is missing edit-grant authority");

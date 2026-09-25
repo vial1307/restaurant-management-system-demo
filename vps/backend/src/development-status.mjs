@@ -6,10 +6,10 @@ function github(path = "") {
 }
 
 export const DEVELOPMENT_STATUS = Object.freeze({
-  updated_at:"2026-09-21",
-  phase:"branch-inventory-database",
+  updated_at:"2026-09-22",
+  phase:"inventory-cross-surface-sync",
   status:"in_progress",
-  headline:"Production #828 đã verified trên schema 024. Candidate mới bổ sung Database kho theo chi nhánh trong Super Admin; đang chờ kiểm thử API và giao diện đầy đủ.",
+  headline:"Production #832 đã verified trên schema 024. Đang sửa đồng bộ Super Admin ↔ website chính và làm gọn danh sách nguyên liệu; chờ kiểm thử hai phiên trình duyệt.",
   repository:{
     name:"vial1307/restaurant-management-system-demo",
     url:REPOSITORY_URL,
@@ -21,13 +21,13 @@ export const DEVELOPMENT_STATUS = Object.freeze({
     purpose:"Một link duy nhất để dev/chat mới đọc PR hiện tại, branch/head SHA, CI và tài liệu tiếp quản.",
   },
   current_work:{
-    branch:"feat/super-admin-branch-inventory-database-20260921",
-    url:github("/tree/feat/super-admin-branch-inventory-database-20260921"),
+    branch:"fix/inventory-admin-main-sync-20260922",
+    url:github("/tree/fix/inventory-admin-main-sync-20260922"),
     pull_request:null,
-    baseline_main_sha:"00949bec772bcc04441626903411020f2e3e7023",
-    baseline_main_url:github("/commit/00949bec772bcc04441626903411020f2e3e7023"),
+    baseline_main_sha:"5cc4f907387873367d78dfbdfb3183971846e968",
+    baseline_main_url:github("/commit/5cc4f907387873367d78dfbdfb3183971846e968"),
     candidate_schema:"024",
-    stopping_point:"Inventory Database mới có 5 mục và dùng API PostgreSQL hiện có. Static/performance contracts PASS; API/device CI và deploy production của candidate chưa được xác nhận.",
+    stopping_point:"Inventory cross-surface sync: bỏ danh sách vị trí cố định ở kho trung tâm, làm mới thay đổi master-data, giữ phạm vi chi nhánh và gom thao tác nguyên liệu. Chờ exact-head CI/deploy.",
     resolved_incident:null,
     code_focus:[
       "src/admin-inventory-database.js",
@@ -37,13 +37,13 @@ export const DEVELOPMENT_STATUS = Object.freeze({
     ],
   },
   release_evidence:{
-    milestone_sha:"00949bec772bcc04441626903411020f2e3e7023",
-    workflow_run_id:"35573596640",
-    url:github("/actions/runs/35573596640"),
+    milestone_sha:"5cc4f907387873367d78dfbdfb3183971846e968",
+    workflow_run_id:"35672333632",
+    url:github("/actions/runs/35672333632"),
     schema:"024",
-    inventory_audit_run_id:"35573596640",
-    inventory_audit_url:github("/actions/runs/35573596640"),
-    note:"Deploy #828 completed successfully for exact release 00949bec. This is the pre-workspace production baseline, not verification of the new inventory Database candidate.",
+    inventory_audit_run_id:"35672333632",
+    inventory_audit_url:github("/actions/runs/35672333632"),
+    note:"Deploy #832 verified release 5cc4f90 and schema 024. This is the baseline, not production verification of the current cross-surface synchronization fix.",
   },
   documents:[
     { label:"CURRENT_HANDOFF.md", purpose:"Trạng thái chuẩn và invariant để dev tiếp quản", url:github("/blob/main/docs/CURRENT_HANDOFF.md") },

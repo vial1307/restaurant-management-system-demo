@@ -1,5 +1,16 @@
 # Kitchen OS — Current Development Handoff
 
+
+## Active correction — 2026-09-22 (not deployed)
+
+- Cross-surface CI additionally reproduced a branch editor bug: cloud-hydrated items were displayed from the authoritative mirror, but saves were rebuilt from the stale legacy store. Branch add/edit now sends the explicit form draft to the existing catalog API, preserves failed forms and closes only after confirmed operations. Site switching explicitly activates the target master snapshot after the site commit.
+
+- User reported Super Admin location/ingredient changes not reflected on the main website.
+- Root causes found: Central rendered hard-coded work-area/storage labels; stock-only equality skipped master-only fallback refresh; cross-site shipping reads could replace active branch choices. Central overview edit also set editor state without rendering its modal.
+- Candidate branch: `fix/inventory-admin-main-sync-20260922`, based on verified production #832 (`5cc4f90`) and docs main `eb9e38d`.
+- Changes: site-scoped database labels/options, master-only and SSE reconnect reconciliation, open-editor protection, compact ingredient actions with storage context.
+- Verification: local static/performance/admin contracts PASS. New CI test uses two independent browser sessions for main ↔ Super Admin edits, master labels, minimums and reload persistence on all three sites, at 320px and 1366px. CI and deployment pending; do not treat the existing #832 evidence as verification of this correction.
+
 Last updated: 2026-09-22 (Asia/Taipei)
 
 This document is the current continuation point for any developer or future ChatGPT session working on Kitchen OS. It must be updated whenever a significant production fix, schema migration, deployment, or workstream handoff occurs.

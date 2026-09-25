@@ -1,5 +1,6 @@
 import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
+import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession, signedInAdmin } from "./account-permissions.js";
 import {
@@ -1588,6 +1589,7 @@ function render() {
   } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
+  watchInventoryEditor(root.querySelector('#ingredient-product-form'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
   const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");
   if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);
@@ -2160,6 +2162,7 @@ root.addEventListener("submit", async (event) => {
       workArea: String(data.get("workArea")),
       unit: String(data.get("unit")),
       workMinimum: Number(data.get("workMinimum")),
+      storageOnly: Boolean(existingItem?.storageOnly),
       locations,
     };
     const existingRows = stockKey
@@ -2193,7 +2196,14 @@ root.addEventListener("submit", async (event) => {
       window.alert("Để tránh lưu dở dang, hãy đổi khu cất và khu làm việc thành hai lần lưu riêng. · 為避免部分儲存，請分兩次變更儲位與工作區。");
       return;
     }
+    if (form.dataset.saving === "true") return;
+    form.dataset.saving = "true";
     const saveButtons = form.closest(".ingredient-modal")?.querySelectorAll("[data-save-item]") || [];
+    const saveButtonLabels = new Map([...saveButtons].map((button) => [button,button.textContent]));
+    const restoreSaveButtons = () => {
+      form.dataset.saving = "false";
+      for (const button of saveButtons) { button.disabled=false; button.textContent=saveButtonLabels.get(button); }
+    };
     for (const button of saveButtons) {
       button.disabled = true;
       button.textContent = "Đang lưu vào database… · 正在儲存…";
@@ -2208,7 +2218,7 @@ root.addEventListener("submit", async (event) => {
           sync:false,
         });
         if (!relocation.ok) {
-          for (const button of saveButtons) button.disabled = false;
+          restoreSaveButtons();
           window.alert("Không thể chuyển vị trí cất trong database; biểu mẫu vẫn được giữ để kiểm tra. · 儲位無法在資料庫中移動，表單已保留供檢查。");
           await syncInventoryNow(site,{reloadBranch:false,force:true});
           return;
@@ -2223,16 +2233,13 @@ root.addEventListener("submit", async (event) => {
           sync:false,
         });
         if (!relocation.ok) {
-          for (const button of saveButtons) button.disabled = false;
+          restoreSaveButtons();
           window.alert("Không thể lưu khu làm việc vào database; biểu mẫu vẫn được giữ để kiểm tra. · 工作區無法寫入資料庫，表單已保留供檢查。");
           await syncInventoryNow(site,{reloadBranch:false,force:true});
           return;
         }
       }
-      view.modal = null;
-      view.editingStockKey = null;
-      store.updateIngredient(stockKey, item);
-      const result = await cloudSyncBranchCatalogItem(stockKey, site, { sync:false });
+      const result = await cloudSyncBranchCatalogItem(stockKey, site, { sync:false, draft:item });
       if (result.ok) {
         const stockResult=await persistCatalogStocktakeFields({
           site,
@@ -2248,6 +2255,8 @@ root.addEventListener("submit", async (event) => {
               locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
             })
           : {ok:stockResult.ok,skipped:true};
+        view.modal = null;
+        view.editingStockKey = null;
         await syncInventoryNow(site, { reloadBranch: false, force:true });
         if (!stockResult.ok) {
           window.alert("Thông tin sản phẩm đã lưu, nhưng tồn kho/định mức chưa lưu hoàn tất. Dữ liệu thật từ database đã được tải lại; hãy kiểm tra và thử lại phần tồn kho. · 品項資料已儲存，但庫存／標準量尚未完整寫入；系統已重新載入資料庫實際資料，請確認後再試。");
@@ -2258,16 +2267,12 @@ root.addEventListener("submit", async (event) => {
         const message = result.error?.message === "LOCATION_HAS_STOCK"
           ? "Không thể bỏ vị trí còn tồn kho hoặc định mức. Hãy chuyển/điều chỉnh tồn và định mức về 0 trước. · 儲位仍有庫存或標準量，請先轉撥／盤點並將標準量設為 0。"
           : "Không thể lưu chỉnh sửa vào database. · 品項修改無法儲存至資料庫。";
+        restoreSaveButtons();
         window.alert(message);
-        await syncInventoryNow(site, { reloadBranch: true });
       }
     } else {
-      view.modal = null;
-      view.editingStockKey = null;
-      const createdStockKey=store.addItem(item);
-      const result=createdStockKey
-        ? await cloudSyncBranchCatalogItem(createdStockKey,site,{sync:false})
-        : {ok:false,fallback:false};
+      const createdStockKey=`custom-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`;
+      const result=await cloudSyncBranchCatalogItem(createdStockKey,site,{sync:false,draft:item});
       if(result.ok){
         const stockResult=await persistCatalogStocktakeFields({
           site,
@@ -2283,6 +2288,8 @@ root.addEventListener("submit", async (event) => {
               locationCode:receiveZone ? branchLocationCode(site,receiveZone) : "",
             })
           : {ok:stockResult.ok,skipped:true};
+        view.modal = null;
+        view.editingStockKey = null;
         await syncInventoryNow(site, { reloadBranch: false, force:true });
         if (!stockResult.ok) {
           window.alert("Sản phẩm đã được tạo, nhưng tồn kho/định mức chưa lưu hoàn tất. Dữ liệu thật từ database đã được tải lại; hãy mở sản phẩm và thử lại phần tồn kho. · 品項已建立，但庫存／標準量尚未完整寫入；系統已重新載入資料庫實際資料，請重新開啟品項再試。");
@@ -2290,10 +2297,9 @@ root.addEventListener("submit", async (event) => {
           window.alert("Sản phẩm đã lưu, nhưng cấu hình vị trí nhận hàng chưa lưu được vào database. Hãy mở lại sản phẩm và thử lưu vị trí nhận. · 品項已儲存，但固定收貨儲位尚未寫入資料庫，請重新開啟品項後再儲存收貨儲位。");
         }
       }else{
-        if(createdStockKey) store.removeIngredient(createdStockKey);
-        window.alert("Không thể lưu sản phẩm vào database; dữ liệu tạm đã được hoàn tác. · 無法儲存品項至資料庫，暫存資料已還原。");
+        restoreSaveButtons();
+        window.alert("Không thể lưu sản phẩm vào database. · 無法儲存品項至資料庫。");
       }
-      await syncInventoryNow(site,{reloadBranch:false,force:true});
     }
   }
 });
@@ -2334,7 +2340,10 @@ window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (route() !== "inventory" || document.querySelector(".central-heading")) return;
   const site = activeInventorySite();
-  if (!event.detail?.site || event.detail.site === site) renderWhenAuthorized();
+  if (!event.detail?.site || event.detail.site === site) {
+    if (view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
+    renderWhenAuthorized();
+  }
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;

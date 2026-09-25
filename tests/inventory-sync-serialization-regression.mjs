@@ -4,6 +4,8 @@ const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CLOUD_FLAG_KEY = "shitu-inventory-cloud-v2";
 const CLOUD_SCHEMA_VERSION_KEY = "shitu-inventory-cloud-schema-version";
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
+const notifications = [];
+let workLabel = "Khu mì";
 
 const storage = new Map([
   [AUTH_KEY, JSON.stringify({
@@ -36,7 +38,7 @@ Object.defineProperty(globalThis, "window", {
   value: {
     location: { hostname: "82.47.180.185", protocol: "http:" },
     addEventListener() {},
-    dispatchEvent() { return true; },
+    dispatchEvent(event) { notifications.push(event); return true; },
     setTimeout: globalThis.setTimeout,
     clearTimeout: globalThis.clearTimeout,
     setInterval() { return 0; },
@@ -80,7 +82,7 @@ function masterData(site) {
       { code: `${site}-work-noodles`, site, kind: "work", sort_order: 100, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles" } },
     ],
     workAreas: [
-      { code: "noodles", site_code: site, name_zh_tw: "麵區", name_vi: "Khu mì", sort_order: 10, active: true, metadata: {} },
+      { code: "noodles", site_code: site, name_zh_tw: "麵區", name_vi: `${site}: ${workLabel}`, sort_order: 10, active: true, metadata: {} },
     ],
   };
 }
@@ -152,6 +154,21 @@ try {
   releaseFuxing();
   await Promise.all([first, second]);
   assert.deepEqual(inventoryRequests, ["fuxing", "yongji"], "queued cross-site sync did not run after the active sync completed");
+
+  const { WORK_AREAS } = await import("../src/store.js");
+  const { invalidateVpsMasterDataCache } = await import("../src/vps-api.js");
+  assert.equal(WORK_AREAS[0].vi,"fuxing: Khu mì","destination read must not replace active site's options");
+  notifications.length=0;
+  await syncInventoryNow("fuxing");
+  assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,0,"unchanged fallback poll must not repaint");
+  workLabel="Khu đã đổi tên";
+  invalidateVpsMasterDataCache("fuxing");
+  await syncInventoryNow("fuxing");
+  assert.equal(WORK_AREAS[0].vi,"fuxing: Khu đã đổi tên");
+  assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,1,"master-only fallback refresh must repaint once without a stock mutation");
+  notifications.length=0;
+  await syncInventoryNow("fuxing",{force:true});
+  assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,0,"unchanged remote invalidation must not interrupt an editor");
 
   console.log("INVENTORY_SYNC_SERIALIZATION_OK");
 } finally {

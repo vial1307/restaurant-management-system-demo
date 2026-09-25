@@ -23,6 +23,7 @@ import {
   inventoryLocationByCode,
   inventoryLocationByUiKey,
   inventoryLocationUiKey,
+  inventoryMasterSnapshot,
   inventorySiteForLocationCode,
   inventorySites,
   inventoryUiGroups,
@@ -139,6 +140,8 @@ async function ensureSiteRegistry({ force = false } = {}) {
 
 function syncUiMasterData(site, snapshot) {
   replaceInventoryMasterSnapshot(site, snapshot);
+  // Shipment reads fetch multiple sites; only the active site owns the UI.
+  if (site !== currentSite()) return;
   const groups = inventoryUiGroups(site);
   ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
     id:entry.id,
@@ -281,8 +284,10 @@ export async function switchActiveInventorySite(site) {
     if (serial !== activeSiteSwitchSerial) return false;
 
     localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
+    syncUiMasterData(targetSite, inventoryMasterSnapshot(targetSite));
     if (isBranchInventorySite(targetSite)) applyBranch(rows, targetSite);
     else applyCentral(rows);
+    reconciledInventorySnapshots.set(targetSite, JSON.stringify({ master:inventoryMasterSnapshot(targetSite), rows }));
     dispatchStatus("synced", { site:targetSite, count:rows.length, switch:true });
 
     window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
@@ -809,6 +814,8 @@ function applyBranch(rows, site) {
   return true;
 }
 
+const reconciledInventorySnapshots = new Map();
+
 async function runInventorySync(site, { reloadBranch = false, force = false } = {}) {
   if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
   await ensureSiteRegistry();
@@ -819,14 +826,15 @@ async function runInventorySync(site, { reloadBranch = false, force = false } = 
   }
   try {
     const rows = await fetchSite(site, { force });
+    const incomingSnapshot = JSON.stringify({ master:inventoryMasterSnapshot(site), rows });
+    const viewChanged = reconciledInventorySnapshots.get(site) !== incomingSnapshot;
     clearAuthSyncRetry();
     const changed = isBranchInventorySite(site) ? applyBranch(rows, site) : applyCentral(rows);
-    // localStorage is shared by tabs on the same origin. The writer tab can
-    // update it before a peer handles the SSE invalidation, making the peer's
-    // data comparison look unchanged even though its DOM is stale. A forced
-    // reconciliation is an explicit remote invalidation, so always notify the
-    // current document to repaint from the authoritative snapshot.
-    if (force && !changed) {
+    // Compare per-document snapshots, not shared localStorage: a peer tab may
+    // have written that cache already. Include master-only changes, but do not
+    // disturb editors for unchanged reconnects or another site's mutations.
+    reconciledInventorySnapshots.set(site, incomingSnapshot);
+    if (viewChanged && !changed) {
       window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated", { detail:{ site } }));
     }
     void reloadBranch;
@@ -1120,13 +1128,24 @@ export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng b�
   return { ok: true, changed: changes.length };
 }
 
-export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true } = {}) {
+export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true, draft = null } = {}) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
   if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
-  const catalog = buildBranchCatalog(site);
-  const item = catalog.find((entry) => entry.key === branchItemKey(site,stockKey));
+  // An editor may display an item received from another device which the
+  // legacy store has never seen. Send its explicit draft, never reconstruct
+  // that save from the store's older cache. Stock still uses dedicated APIs.
+  const item = draft ? {
+    key:branchItemKey(site,stockKey), catalog_key:draft.catalogKey,
+    zh:draft.label, vi:draft.labelVi, unit:draft.unit,
+    work_area:draft.workArea, storage_only:Boolean(draft.storageOnly),
+    locations:[
+      ...draft.locations.map((location) => ({ code:branchLocationCode(site,location.zone) })),
+      ...(!draft.storageOnly && branchWorkLocationCode(site,draft.workArea)
+        ? [{ code:branchWorkLocationCode(site,draft.workArea) }] : []),
+    ],
+  } : buildBranchCatalog(site).find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
   try {
@@ -1134,7 +1153,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
     if (sync) await syncInventoryNow(site, { reloadBranch: false });
     return { ok: true };
   } catch (error) {
-    dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
+    if (!draft) dispatchStatus("error", { error: error.message, stage: "catalog-sync" });
     return { ok: false, fallback: false, error };
   }
 }
@@ -1281,6 +1300,11 @@ async function subscribeRealtime(site) {
   const clientId = vpsInventoryClientId();
   const source = new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
   realtimeSource = source;
+  // A reconnect has no replay log. Fetch anything missed while disconnected.
+  source.addEventListener("ready", () => {
+    const activeSite = currentSite();
+    if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+  });
   source.addEventListener("inventory", (event) => {
     let payload = null;
     try { payload = JSON.parse(event.data || "null"); } catch {}

@@ -1,5 +1,6 @@
 export const TEXT = {
   vi: {
+    inventoryRemoteEdit: "Dữ liệu kho đã thay đổi. Nội dung đang nhập được giữ lại; hãy đóng và mở lại biểu mẫu để dùng bản mới trước khi lưu.",
     brand: "Điều hành bếp",
     brandSub: "食徒 · Kitchen OS",
     dashboard: "Tổng quan",
@@ -242,6 +243,7 @@ export const TEXT = {
     oneStepPerLine: "Mỗi dòng là một bước",
   },
   zh: {
+    inventoryRemoteEdit: "庫存資料已變更。輸入內容已保留；儲存前請關閉並重新開啟表單以使用新版資料。",
     brand: "廚房營運管理",
     brandSub: "食徒 · Kitchen OS",
     dashboard: "總覽",
