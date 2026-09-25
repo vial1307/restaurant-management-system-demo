@@ -79,7 +79,8 @@ const adminRoutes = fs.readFileSync(new URL("../vps/backend/src/admin-routes.mjs
 assert.equal(adminRoutes.includes("VALID_LOCATIONS"), false, "account site validation must not use a closed JS enum");
 assert.equal(adminRoutes.includes('["fuxing","yongji"].includes(location)'), false, "assigned account roles must not hard-code branch names");
 assert.match(adminRoutes, /activeSite\(effectiveLocation, client\)/, "account site validation must resolve through PostgreSQL sites");
-assert.match(adminRoutes, /metadata\?\.inventory_mode/, "assigned account roles must use DB site classification");
+assert.equal(adminRoutes.includes('inventory_mode || "") !== "branch"'), false,
+  "assigned account roles must allow Central as an active site");
 
 const accessControl = fs.readFileSync(new URL("../vps/backend/src/access-control.mjs", import.meta.url), "utf8");
 assert.equal(accessControl.includes('scope_policy === "central" ? "central"'), false, "access model must not choose a hard-coded sample site");
