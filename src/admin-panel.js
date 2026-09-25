@@ -355,7 +355,7 @@ function modal(title,body) {
 function accountLocationChoices(role) {
   if (role?.scope_policy === "all") return [{code:"all",label:"Tất cả · 全部"}];
   if (role?.scope_policy === "central") return [{code:"central",label:siteName("central")}];
-  return state.sites.filter((site)=>site.active && site.metadata?.inventory_mode === "branch")
+  return state.sites.filter((site)=>site.active && site.code!=="all")
     .map((site)=>({code:site.code,label:siteName(site.code)}));
 }
 
@@ -376,25 +376,25 @@ function openUserEditor(user=null) {
   const form=host.querySelector("[data-user-form]");
   const roleSelect=form.querySelector('[name="role"]');
   const locationSelect=form.querySelector('[name="location"]');
-  let lastBranchLocation=state.sites.some((site)=>site.code===user?.location && site.active && site.metadata?.inventory_mode==="branch") ? user.location : "";
+  let lastAssignedLocation=accountLocationChoices({scope_policy:"assigned"}).some((site)=>site.code===user?.location) ? user.location : "";
   const syncLocationChoices=()=>{
     const role=roleByCode(roleSelect.value);
     const choices=accountLocationChoices(role);
     const selected=choices.find((choice)=>choice.code===locationSelect.value)?.code
-      || choices.find((choice)=>choice.code===lastBranchLocation)?.code || choices[0]?.code || "";
+      || choices.find((choice)=>choice.code===lastAssignedLocation)?.code || choices[0]?.code || "";
     locationSelect.innerHTML=choices.map((choice)=>`<option value="${esc(choice.code)}">${esc(choice.label)}</option>`).join("");
     locationSelect.value=selected;
     locationSelect.disabled=role?.scope_policy!=="assigned" || choices.length===0;
     // Disabled controls are omitted by FormData; fixed scopes are submitted explicitly below.
-    form.querySelector('[data-form-error]').textContent=choices.length ? "" : "Không có chi nhánh đang hoạt động cho Role này.";
+    form.querySelector('[data-form-error]').textContent=choices.length ? "" : "Không có địa điểm đang hoạt động cho Role này.";
   };
-  locationSelect.addEventListener("change",()=>{if(roleByCode(roleSelect.value)?.scope_policy==="assigned")lastBranchLocation=locationSelect.value;});
+  locationSelect.addEventListener("change",()=>{if(roleByCode(roleSelect.value)?.scope_policy==="assigned")lastAssignedLocation=locationSelect.value;});
   const applyRoleDefaults=()=>{const role=roleByCode(roleSelect.value);form.querySelectorAll("[data-module]").forEach((row)=>{const p=role?.permissions?.[row.dataset.module]||{};row.querySelector('[data-perm="view"]').checked=Boolean(p.view);row.querySelector('[data-perm="edit"]').checked=Boolean(p.edit);});form.dataset.permissionMode="default";};
   host.querySelector("[data-role-defaults]").addEventListener("click",applyRoleDefaults);
-  roleSelect.addEventListener("change",()=>{if(roleByCode(roleSelect.value)?.scope_policy==="assigned" && accountLocationChoices(roleByCode(roleSelect.value)).some((choice)=>choice.code===locationSelect.value))lastBranchLocation=locationSelect.value;syncLocationChoices();if(form.dataset.permissionMode==="default")applyRoleDefaults();});
+  roleSelect.addEventListener("change",()=>{if(roleByCode(roleSelect.value)?.scope_policy==="assigned" && accountLocationChoices(roleByCode(roleSelect.value)).some((choice)=>choice.code===locationSelect.value))lastAssignedLocation=locationSelect.value;syncLocationChoices();if(form.dataset.permissionMode==="default")applyRoleDefaults();});
   syncLocationChoices();
   form.querySelectorAll("[data-perm]").forEach((box)=>box.addEventListener("change",()=>{form.dataset.permissionMode="custom";const row=box.closest("[data-module]");const view=row.querySelector('[data-perm="view"]');const edit=row.querySelector('[data-perm="edit"]');if(box.dataset.perm==="edit"&&edit.checked)view.checked=true;if(box.dataset.perm==="view"&&!view.checked)edit.checked=false;}));
-  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const permissions={};if(form.dataset.permissionMode!=="default")form.querySelectorAll("[data-module]").forEach((row)=>{permissions[row.dataset.module]={view:row.querySelector('[data-perm="view"]').checked,edit:row.querySelector('[data-perm="edit"]').checked};});const submit=form.querySelector('button[type="submit"]');const role=roleByCode(roleSelect.value);const locationCode=locationSelect.value;if(!accountLocationChoices(role).some((choice)=>choice.code===locationCode)){form.querySelector('[data-form-error]').textContent="Hãy chọn chi nhánh hợp lệ cho Role này trước khi lưu.";return;}submit.disabled=true;try{await api("/api/admin/users",{method:"POST",body:{action:user?"update":"create",id:user?.id,username:String(fd.get("username")||""),display_name:String(fd.get("display_name")||""),role:String(fd.get("role")||"employee"),location:locationCode,preferred_language:String(fd.get("preferred_language")||"vi"),password:String(fd.get("password")||""),active:fd.has("active"),permissions}});host.remove();state.success="Đã lưu user và quyền vào PostgreSQL.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error)==="INVALID_LOCATION"?"Chi nhánh không hợp lệ hoặc đã ngừng hoạt động. Chọn lại chi nhánh rồi lưu.":errorText(error)==="INVALID_LOCATION_FOR_ROLE"?"Role này chỉ được chọn chi nhánh, không chọn kho trung tâm.":errorText(error);submit.disabled=false;}});
+  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const permissions={};if(form.dataset.permissionMode!=="default")form.querySelectorAll("[data-module]").forEach((row)=>{permissions[row.dataset.module]={view:row.querySelector('[data-perm="view"]').checked,edit:row.querySelector('[data-perm="edit"]').checked};});const submit=form.querySelector('button[type="submit"]');const role=roleByCode(roleSelect.value);const locationCode=locationSelect.value;if(!accountLocationChoices(role).some((choice)=>choice.code===locationCode)){form.querySelector('[data-form-error]').textContent="Hãy chọn địa điểm hợp lệ cho Role này trước khi lưu.";return;}submit.disabled=true;try{await api("/api/admin/users",{method:"POST",body:{action:user?"update":"create",id:user?.id,username:String(fd.get("username")||""),display_name:String(fd.get("display_name")||""),role:String(fd.get("role")||"employee"),location:locationCode,preferred_language:String(fd.get("preferred_language")||"vi"),password:String(fd.get("password")||""),active:fd.has("active"),permissions}});host.remove();state.success="Đã lưu user và quyền vào PostgreSQL.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error)==="INVALID_LOCATION"?"Địa điểm không hợp lệ hoặc đã ngừng hoạt động. Chọn lại rồi lưu.":errorText(error);submit.disabled=false;}});
 }
 
 function fieldControl(name,label,type,value,locked=false) {

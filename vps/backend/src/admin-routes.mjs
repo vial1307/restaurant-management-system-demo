@@ -54,10 +54,6 @@ async function resolveRequestedRole(role, location, client = pool) {
     throw Object.assign(new Error("INVALID_LOCATION"), { statusCode:400 });
   }
 
-  if (profile.scopePolicy === "assigned" && String(site.metadata?.inventory_mode || "") !== "branch") {
-    throw Object.assign(new Error("INVALID_LOCATION_FOR_ROLE"), { statusCode:400 });
-  }
-
   return profile;
 }
 

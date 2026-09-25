@@ -180,8 +180,15 @@ async function runSuperAdminProfile(profile) {
     assert.deepEqual(await locationSelect.locator("option").evaluateAll((nodes)=>nodes.map((node)=>node.value)),["central"]);
     await roleSelect.selectOption("employee");
     assert.equal(await locationSelect.locator('option[value="all"]').count(),0);
-    assert.equal(await locationSelect.locator('option[value="central"]').count(),0);
-    assert((await locationSelect.locator("option").count())>0,`${profile.name}: no active branch workplaces`);
+    assert.equal(await locationSelect.locator('option[value="central"]').count(),1,`${profile.name}: Central missing from assigned Role`);
+    assert.equal(await locationSelect.locator('option[value="fuxing"]').count(),1);
+    assert.equal(await locationSelect.locator('option[value="yongji"]').count(),1);
+    await roleSelect.selectOption("manager");
+    await locationSelect.selectOption("central");
+    await roleSelect.selectOption("admin");
+    await roleSelect.selectOption("manager");
+    assert.equal(await locationSelect.inputValue(),"central",`${profile.name}: preserve Central on Role switch`);
+    await roleSelect.selectOption("employee");
     await locationSelect.selectOption("yongji");
     await roleSelect.selectOption("admin");
     await roleSelect.selectOption("employee");
@@ -205,8 +212,8 @@ async function runSuperAdminProfile(profile) {
         await edit.locator('[name="display_name"]').fill("RBAC scope regression");
         await edit.locator('[name="password"]').fill(PASSWORD);
         await edit.locator('[name="role"]').selectOption("admin");
-        await edit.locator('[name="role"]').selectOption("employee");
-        await edit.locator('[name="location"]').selectOption("yongji");
+        await edit.locator('[name="role"]').selectOption("manager");
+        await edit.locator('[name="location"]').selectOption("central");
         await edit.locator('[data-module="inventory"] [data-perm="edit"]').setChecked(true);
         await edit.locator('button[type="submit"]').click();
         await page.locator(`[data-user-edit]`).first().waitFor({state:"visible"});
@@ -216,13 +223,13 @@ async function runSuperAdminProfile(profile) {
         const saved=(await lookup.json()).users.find((entry)=>entry.username===username);
         assert(saved,"saved account missing from PostgreSQL API");
         id=saved.id;
-        assert.equal(saved.role,"employee");
-        assert.equal(saved.location,"yongji");
+        assert.equal(saved.role,"manager");
+        assert.equal(saved.location,"central");
         assert.equal(saved.permissions.inventory.edit,true);
         await page.reload({waitUntil:"domcontentloaded"});
         await gotoSection(page,"users");
         await page.locator(`[data-user-edit="${id}"]`).click();
-        assert.equal(await page.locator('[data-user-form] [name="location"]').inputValue(),"yongji");
+        assert.equal(await page.locator('[data-user-form] [name="location"]').inputValue(),"central");
         assert.equal(await page.locator('[data-user-form] [data-module="inventory"] [data-perm="edit"]').isChecked(),true);
         await page.locator("[data-modal-close]").first().click();
       } finally {

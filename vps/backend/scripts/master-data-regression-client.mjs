@@ -204,21 +204,33 @@ try {
   assert.equal(dynamicAccount.response.status, 200, JSON.stringify(dynamicAccount.data));
   assert.equal(dynamicAccount.data.user.location, "branch-regression");
 
-  const assignedCentralDenied = await request("/api/admin/users", {
+  const assignedCentral = await request("/api/admin/users", {
     method:"POST",
     cookie:admin.cookie,
     body:{
       action:"create",
-      username:"assignedcentraldenied",
-      display_name:"Assigned Central Denied",
+      username:"managercentralreg",
+      display_name:"Central Manager Regression",
       password:"KitchenTest!123",
-      role:"employee",
+      role:"manager",
       location:"central",
       active:true,
     },
   });
-  assert.equal(assignedCentralDenied.response.status, 400, JSON.stringify(assignedCentralDenied.data));
-  assert.equal(assignedCentralDenied.data.error, "INVALID_LOCATION_FOR_ROLE");
+  assert.equal(assignedCentral.response.status, 200, JSON.stringify(assignedCentral.data));
+  assert.equal(assignedCentral.data.user.role, "manager");
+  assert.equal(assignedCentral.data.user.location, "central");
+  const centralManager = await login("managercentralreg");
+  assert.equal(centralManager.user.location, "central");
+  assert.equal(centralManager.user.roleCode, "manager");
+  assert.equal((await request("/api/inventory/central",{cookie:centralManager.cookie})).response.status,200);
+  assert.equal((await request("/api/inventory/fuxing",{cookie:centralManager.cookie})).response.status,403);
+  const unknownAssigned = await request("/api/admin/users", {
+    method:"POST",cookie:admin.cookie,
+    body:{action:"create",username:"unknownsitereg",display_name:"Unknown Site",password:"KitchenTest!123",role:"manager",location:"missing-site",active:true},
+  });
+  assert.equal(unknownAssigned.response.status,400);
+  assert.equal(unknownAssigned.data.error,"INVALID_LOCATION");
 
   const dynamicLocation = await request("/api/master-data/locations", {
     method:"POST",

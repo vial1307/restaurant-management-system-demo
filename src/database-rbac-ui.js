@@ -174,7 +174,9 @@ function applyScopePolicy(modal, role) {
   let nextLocation = locationSelect.value;
   if (role.scope_policy === "all") nextLocation = "all";
   else if (role.scope_policy === "central") nextLocation = "central";
-  else if (!["fuxing","yongji"].includes(nextLocation)) nextLocation = "fuxing";
+  else if (role.scope_policy === "assigned" && !Array.from(locationSelect.options).some((option) => option.value === nextLocation && option.value !== "all")) {
+    nextLocation = Array.from(locationSelect.options).find((option) => option.value && option.value !== "all")?.value || "";
+  }
   if (locationSelect.value !== nextLocation) locationSelect.value = nextLocation;
 
   const locked = role.scope_policy !== "assigned";
