@@ -170,8 +170,69 @@ async function runSuperAdminProfile(profile) {
     await page.locator("[data-user-new]").click();
     await page.locator(".sa-modal").waitFor({ state:"visible", timeout:10000 });
     assert((await page.locator(".sa-permission-row").count()) > 0, `${profile.name}: permission matrix did not render`);
+    const userForm=page.locator("[data-user-form]");
+    const roleSelect=userForm.locator('[name="role"]');
+    const locationSelect=userForm.locator('[name="location"]');
+    await roleSelect.selectOption("admin");
+    assert.deepEqual(await locationSelect.locator("option").evaluateAll((nodes)=>nodes.map((node)=>node.value)),["all"]);
+    assert.equal(await locationSelect.inputValue(),"all");
+    await roleSelect.selectOption("central");
+    assert.deepEqual(await locationSelect.locator("option").evaluateAll((nodes)=>nodes.map((node)=>node.value)),["central"]);
+    await roleSelect.selectOption("employee");
+    assert.equal(await locationSelect.locator('option[value="all"]').count(),0);
+    assert.equal(await locationSelect.locator('option[value="central"]').count(),0);
+    assert((await locationSelect.locator("option").count())>0,`${profile.name}: no active branch workplaces`);
+    await locationSelect.selectOption("yongji");
+    await roleSelect.selectOption("admin");
+    await roleSelect.selectOption("employee");
+    assert.equal(await locationSelect.inputValue(),"yongji",`${profile.name}: preserve chosen branch on role switch`);
+    const customBox=userForm.locator('[data-module="inventory"] [data-perm="view"]');
+    const changedPermission=!(await customBox.isChecked());
+    await customBox.setChecked(changedPermission);
+    await roleSelect.selectOption("admin");
+    await roleSelect.selectOption("employee");
+    assert.equal(await customBox.isChecked(),changedPermission,`${profile.name}: role switch erased custom permissions`);
     await assertFit(page, `${profile.name} user modal`);
     await page.locator("[data-modal-close]").first().click();
+
+    if(profile.name==="superadmin-laptop") {
+      const username=`rbscope${Date.now().toString(36)}`;
+      let id="";
+      try {
+        await page.locator("[data-user-new]").click();
+        const edit=page.locator("[data-user-form]");
+        await edit.locator('[name="username"]').fill(username);
+        await edit.locator('[name="display_name"]').fill("RBAC scope regression");
+        await edit.locator('[name="password"]').fill(PASSWORD);
+        await edit.locator('[name="role"]').selectOption("admin");
+        await edit.locator('[name="role"]').selectOption("employee");
+        await edit.locator('[name="location"]').selectOption("yongji");
+        await edit.locator('[data-module="inventory"] [data-perm="edit"]').setChecked(true);
+        await edit.locator('button[type="submit"]').click();
+        await page.locator(`[data-user-edit]`).first().waitFor({state:"visible"});
+        await page.waitForFunction((name)=>document.querySelector(".sa-content")?.textContent.includes(`@${name}`) && !document.querySelector("[data-user-form]"),username);
+        const lookup=await context.request.get(`${BASE}/api/admin/users`);
+        assert.equal(lookup.status(),200);
+        const saved=(await lookup.json()).users.find((entry)=>entry.username===username);
+        assert(saved,"saved account missing from PostgreSQL API");
+        id=saved.id;
+        assert.equal(saved.role,"employee");
+        assert.equal(saved.location,"yongji");
+        assert.equal(saved.permissions.inventory.edit,true);
+        await page.reload({waitUntil:"domcontentloaded"});
+        await gotoSection(page,"users");
+        await page.locator(`[data-user-edit="${id}"]`).click();
+        assert.equal(await page.locator('[data-user-form] [name="location"]').inputValue(),"yongji");
+        assert.equal(await page.locator('[data-user-form] [data-module="inventory"] [data-perm="edit"]').isChecked(),true);
+        await page.locator("[data-modal-close]").first().click();
+      } finally {
+        if(id) {
+          const cleanup=await context.request.delete(`${BASE}/api/admin/users/${encodeURIComponent(id)}`);
+          assert.equal(cleanup.status(),200,"RBAC regression account cleanup failed");
+          await page.reload({waitUntil:"domcontentloaded"});
+        }
+      }
+    }
 
     await gotoSection(page, "data");
     await page.locator(".sa-table-wrap").first().waitFor({ state:"visible", timeout:15000 });
