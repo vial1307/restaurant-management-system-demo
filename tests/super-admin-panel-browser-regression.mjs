@@ -55,6 +55,14 @@ async function assertFit(page, label) {
     const viewportWidth = innerWidth;
     const viewportHeight = innerHeight;
     const pageOverflow = Math.max(0, document.documentElement.scrollWidth - viewportWidth);
+    const overflowNodes = [...document.querySelectorAll('body *')]
+      .filter((node) => {
+        if (node.closest('.sa-table-wrap') && !node.matches('.sa-table-wrap')) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.right > viewportWidth + 3 && getComputedStyle(node).display !== 'none';
+      })
+      .slice(0,14)
+      .map((node) => ({ tag:node.tagName.toLowerCase(), className:String(node.className).slice(0,90), right:Math.round(node.getBoundingClientRect().right), width:Math.round(node.getBoundingClientRect().width) }));
     const modal = document.querySelector(".sa-modal");
     let modalRect = null;
     if (modal) {
@@ -75,10 +83,10 @@ async function assertFit(page, label) {
         const rect = node.getBoundingClientRect();
         return { tag:node.tagName.toLowerCase(), text:(node.textContent || node.value || "").trim().slice(0,60), width:Math.round(rect.width), height:Math.round(rect.height) };
       });
-    return { viewportWidth, viewportHeight, pageOverflow, modalRect, smallTargets };
+    return { viewportWidth, viewportHeight, pageOverflow, overflowNodes, modalRect, smallTargets };
   });
 
-  assert(result.pageOverflow <= 3, `${label}: page overflow ${result.pageOverflow}px`);
+  assert(result.pageOverflow <= 3, `${label}: page overflow ${result.pageOverflow}px ${JSON.stringify(result.overflowNodes)}`);
   assert.deepEqual(result.smallTargets, [], `${label}: undersized controls ${JSON.stringify(result.smallTargets)}`);
   if (result.modalRect) {
     assert(result.modalRect.left >= -1, `${label}: modal exceeds left edge`);

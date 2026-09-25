@@ -1,6 +1,6 @@
 import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
-import { preserveInventoryEditor } from "./inventory-editor-refresh.js";
+import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession, signedInAdmin } from "./account-permissions.js";
 import {
@@ -1589,6 +1589,7 @@ function render() {
   } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;
   applyAccountEditState();
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
+  watchInventoryEditor(root.querySelector('#ingredient-product-form'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
   const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");
   if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);

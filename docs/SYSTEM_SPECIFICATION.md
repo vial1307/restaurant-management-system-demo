@@ -205,7 +205,7 @@ Acceptance criteria:
 - Set quantity and minimum as separate audited actions on the exact item/location pair; manage receiving defaults separately. Moving existing stock uses relocation APIs, never a metadata-only location rename.
 - Saving metadata must not replay quantities or minimums. Existing work-stock is moved with its work area by the relocation action, not silently reassigned by the ingredient metadata editor.
 - Pending forms prevent duplicate submissions; failures retain input; only confirmed writes show saved status. Revision/expected-value checks reject stale edits rather than overwrite them.
-- Successful master-data and catalog mutations invalidate connected inventory clients. The workspace refreshes on events/focus and reconnect, without full-page reloads or replacing dirty forms; remote changes are announced until the form is closed/refreshed.
+- Successful master-data and catalog mutations invalidate connected inventory clients. The workspace refreshes on events/focus and reconnect, without full-page reloads. An open editor with no user changes refreshes from the confirmed snapshot so stock/minimums stay live; an editor with unsaved user changes retains the draft, announces the remote update and blocks stale submission until reopened.
 - Archive protections for nonzero stock/minimum, referenced areas and receiving defaults remain enforced. History is read-only. Integrity differences in legitimate branch layouts are not auto-corrected.
 - Verify persisted rereads, site isolation, restricted-account denial, stale-edit rejection, mobile/desktop fit and the pre-existing generic data-table controls before marking the workspace complete.
 

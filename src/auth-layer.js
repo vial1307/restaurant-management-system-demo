@@ -21,7 +21,7 @@ import {
   syncInventoryNow,
 } from "./inventory-cloud.js";
 import { inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
-import { preserveInventoryEditor } from "./inventory-editor-refresh.js";
+import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { searchMatches } from "./search-utils.js";
 import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
 
@@ -1040,6 +1040,7 @@ function bindCentral(user) {
     };
   });
   const editorForm = content.querySelector("[data-central-editor-form]");
+  watchInventoryEditor(editorForm);
   if (editorForm) editorForm.onsubmit = async (event) => {
     event.preventDefault();
     if (!canManageCentralCatalog()) return;
