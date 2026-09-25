@@ -243,7 +243,10 @@ async function adminDesktop(browser) {
   await accountModal.locator('select[name="role"]').selectOption("central");
   assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"central","central role did not select central kitchen");
   await accountModal.locator('select[name="role"]').selectOption("manager");
-  assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"fuxing","branch role did not return to a branch location");
+  assert.equal(await accountModal.locator('select[name="location"]').inputValue(),"central","manager Role should permit Central workplace");
+  const assignedSites=await accountModal.locator('select[name="location"] option').evaluateAll((nodes)=>nodes.map((node)=>node.value));
+  for(const site of ["central","fuxing","yongji"])assert(assignedSites.includes(site),`main website missing ${site} for manager Role`);
+  assert.equal(assignedSites.includes("all"),false,"assigned Role must not offer global scope");
   await accountModal.locator("[data-account-close]").first().click();
   await accountModal.waitFor({state:"detached"});
 
