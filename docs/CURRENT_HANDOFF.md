@@ -6,6 +6,8 @@ The user reported `INVALID_LOCATION` when saving a Role/permission change in Sup
 
 Pending verification: six-device Super Admin browser regression, creation and reread of an assigned account through PostgreSQL API, full regression, and production deploy/smoke. The verified production SHA below remains authoritative until deploy succeeds.
 
+PR #140 merged as `b4d9cbe11caac5352226fde228cf88e07c7e4a57`. Its exact-head premerge regression passed after retry. Production deploy #847 / run `36151553155` passed full regression but STOPPED at `verify-vps-data.sh` before replacing the frontend: the verifier still reads legacy `app_users.permissions` JSON for admin, while effective RBAC reads `account_roles` and `permission_overrides`. One admin account had incomplete legacy JSON, yielding 13 false integrity errors. Follow-up fix checks effective DB role/overrides instead and includes an isolated PostgreSQL regression. No production account rows are rewritten. Production status must stay at #843 until a full deploy and smoke pass.
+
 PR #140 initial head `4fd87da`: Super Admin Browser #122 passed six profiles and the account round-trip. Master Data/Admin API #221 exposed an unrelated stale hard-coded expected workflow run (`35573596640`) while the runtime fallback still reported earlier #832. The follow-up synchronizes the fallback with verified production #843 and asserts internally consistent run IDs/URLs; rerun exact-head CI on the amended PR before merging.
 
 

@@ -217,7 +217,17 @@ check_zero "stored business modules missing revision tokens" "
 FULL_ADMIN_KEYS="dashboard inventory procurement reservations preparation menu sop skills attendance schedule reports remote settings"
 missing_admin=0
 for key in ${FULL_ADMIN_KEYS}; do
-  value="$(scalar "select count(*) from public.app_users where role='admin' and (coalesce((permissions->'${key}'->>'view')::boolean,false)=false or coalesce((permissions->'${key}'->>'edit')::boolean,false)=false)")"
+  value="$(scalar "
+    select count(*)
+    from public.app_users u
+    left join lateral public.resolve_role_module_permissions(u.role) p
+      on p.module_key='${key}'
+    where u.role in ('admin','superadmin')
+      and (
+        not coalesce((u.permission_overrides->'${key}'->>'view')::boolean,p.can_view,false)
+        or not coalesce((u.permission_overrides->'${key}'->>'edit')::boolean,p.can_edit,false)
+      )
+  ")"
   if [[ "${value}" != "0" ]]; then
     echo "ERROR: admin permission '${key}' incomplete on ${value} account(s)"
     missing_admin=$((missing_admin+1))

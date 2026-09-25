@@ -115,6 +115,29 @@ try {
   });
   assert.equal(ordinaryAdminCreate.response.status, 200, JSON.stringify(ordinaryAdminCreate.data));
   const ordinaryAdminId = ordinaryAdminCreate.data.user.id;
+  const adminDatabaseAccess = (await DB.query(`
+    select u.permissions as legacy_permissions,
+           coalesce((u.permission_overrides->'inventory'->>'view')::boolean,p.can_view,false) as can_view,
+           coalesce((u.permission_overrides->'inventory'->>'edit')::boolean,p.can_edit,false) as can_edit
+    from public.app_users u
+    left join lateral public.resolve_role_module_permissions(u.role) p on p.module_key='inventory'
+    where u.id=$1
+  `,[ordinaryAdminId])).rows[0];
+  assert.notEqual(adminDatabaseAccess.legacy_permissions?.inventory?.view,true,
+    "regression must cover an administrator with incomplete legacy permission JSON");
+  assert.equal(adminDatabaseAccess.can_view,true,"role policy must grant inventory view despite legacy JSON");
+  assert.equal(adminDatabaseAccess.can_edit,true,"role policy must grant inventory edit despite legacy JSON");
+  const incompleteEffectiveAdminModules = await DB.query(`
+    select count(*)::integer as count
+    from public.app_users u
+    left join lateral public.resolve_role_module_permissions(u.role) p on true
+    where u.id=$1 and (
+      not coalesce((u.permission_overrides->p.module_key->>'view')::boolean,p.can_view,false)
+      or not coalesce((u.permission_overrides->p.module_key->>'edit')::boolean,p.can_edit,false)
+    )
+  `,[ordinaryAdminId]);
+  assert.equal(incompleteEffectiveAdminModules.rows[0].count,0,
+    "production audit must accept a full RBAC admin despite incomplete legacy JSON");
   const ordinary = await login("ordinaryadmin");
   assert.equal(ordinary.user.capabilities["system.super_admin"], false);
   const ordinaryDenied = await request("/api/admin/super/overview", { cookie:ordinary.cookie });
