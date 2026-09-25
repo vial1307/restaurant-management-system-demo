@@ -1,5 +1,13 @@
 # Kitchen OS — Current Development Handoff
 
+## Active fix — Super Admin account workplace validation (not deployed)
+
+The user reported `INVALID_LOCATION` when saving a Role/permission change in Super Admin. The editor previously showed `all` alongside physical sites for every role; switching from an all-scope administrator to an assigned branch role retained `all`, and the VPS correctly rejected the request. The pending fix derives workplace choices from the selected role: all-scope → `all`, central → `central`, assigned → active branch sites only. It preserves a chosen branch across role switches and preserves custom permission edits. Submit validates the pair and sends the selected workplace explicitly even when the fixed-scope control is disabled. The API remains the authority and no schema migration or production data change is needed.
+
+Pending verification: six-device Super Admin browser regression, creation and reread of an assigned account through PostgreSQL API, full regression, and production deploy/smoke. The verified production SHA below remains authoritative until deploy succeeds.
+
+PR #140 initial head `4fd87da`: Super Admin Browser #122 passed six profiles and the account round-trip. Master Data/Admin API #221 exposed an unrelated stale hard-coded expected workflow run (`35573596640`) while the runtime fallback still reported earlier #832. The follow-up synchronizes the fallback with verified production #843 and asserts internally consistent run IDs/URLs; rerun exact-head CI on the amended PR before merging.
+
 
 ## Completed correction — 2026-09-25
 

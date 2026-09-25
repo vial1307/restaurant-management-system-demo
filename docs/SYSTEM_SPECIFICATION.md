@@ -117,9 +117,13 @@ Rules:
 - Admin location is normalized to `all`.
 - Central role location is normalized to `central`.
 - Non-admin users must remain site-scoped unless a future explicit policy expands this.
+- Account editor workplace choices follow the selected role's scope policy: `all` selects only `all`, `central` selects only `central`, and `assigned` selects active branch sites only. Switching roles must keep a valid prior branch choice when possible and must never submit `all` as an assigned workplace. Custom module overrides must survive a role switch unless the operator explicitly resets them.
+- An invalid workplace/role pair must return a readable validation error without claiming a database save. Role and workplace must persist through the VPS API and be confirmed by reloading the account from PostgreSQL.
 - Disabled accounts cannot continue protected operations.
 - Updating another account invalidates that account's active sessions where applicable.
 - An administrator cannot remove their own admin access through the normal update flow.
+
+Acceptance: edit an `all`-scope account, change to an assigned branch role, choose an active branch and save; reload to see the assigned workplace and permissions. Switch to the central role to see only `central`; switch back to the admin role to see only `all`. Changing a permission while the form is open must not hide an invalid workplace or erase the custom permission choice.
 
 ### 3.3 Account management
 

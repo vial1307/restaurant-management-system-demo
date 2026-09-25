@@ -352,27 +352,49 @@ function modal(title,body) {
   const host=document.createElement("div"); host.className="sa-modal-backdrop"; host.innerHTML=`<section class="sa-modal" role="dialog" aria-modal="true"><div class="sa-modal-head"><h2>${esc(title)}</h2><button type="button" class="sa-icon" data-modal-close>×</button></div>${body}</section>`; document.body.append(host);
   host.addEventListener("click",(event)=>{if(event.target===host||event.target.closest?.("[data-modal-close]"))host.remove();}); return host;
 }
-function siteOptions(value="",allowAll=true) {
-  return `${allowAll?`<option value="all" ${value==="all"?"selected":""}>Tất cả · 全部</option>`:""}${state.sites.map((s)=>`<option value="${esc(s.code)}" ${value===s.code?"selected":""}>${esc(siteName(s.code))}</option>`).join("")}`;
+function accountLocationChoices(role) {
+  if (role?.scope_policy === "all") return [{code:"all",label:"Tất cả · 全部"}];
+  if (role?.scope_policy === "central") return [{code:"central",label:siteName("central")}];
+  return state.sites.filter((site)=>site.active && site.metadata?.inventory_mode === "branch")
+    .map((site)=>({code:site.code,label:siteName(site.code)}));
 }
 
 function openUserEditor(user=null) {
   const defaultRole=roleByCode(user?.role||"employee")||state.accessModel.roles[0]; const overrides=user?.permission_overrides||{}; const effective=user?.permissions||defaultRole?.permissions||{}; const custom=Object.keys(overrides).length>0;
+  const initialChoices=accountLocationChoices(defaultRole);
+  const initialLocation=initialChoices.some((choice)=>choice.code===user?.location) ? user.location : initialChoices[0]?.code;
   const host=modal(user?"Sửa user · 編輯使用者":"Thêm user · 新增使用者",`<form data-user-form data-permission-mode="${custom?"custom":"default"}"><div class="sa-form-grid">
     <label><span>Username</span><input required name="username" pattern="[a-z0-9._-]{2,40}" value="${esc(user?.username||"")}"></label><label><span>Tên hiển thị · 顯示名稱</span><input required name="display_name" value="${esc(user?.display_name||"")}"></label>
     <label><span>Role</span><select name="role">${state.accessModel.roles.map((r)=>`<option value="${esc(r.code)}" ${(user?.role||defaultRole?.code)===r.code?"selected":""}>${esc(r.name_vi)} · ${esc(r.name_zh_tw)}</option>`).join("")}</select></label>
-    <label><span>Chi nhánh · 據點</span><select name="location">${siteOptions(user?.location||defaultRole?.effective_location||"fuxing",true)}</select></label>
+    <label><span>Chi nhánh · 據點</span><select name="location" required>${initialChoices.map((choice)=>`<option value="${esc(choice.code)}" ${initialLocation===choice.code?"selected":""}>${esc(choice.label)}</option>`).join("")}</select></label>
     <label><span>Ngôn ngữ · 語言</span><select name="preferred_language"><option value="vi" ${user?.preferred_language==="vi"?"selected":""}>Tiếng Việt</option><option value="zh-TW" ${user?.preferred_language==="zh-TW"?"selected":""}>繁體中文</option></select></label>
     <label><span>${user?"Mật khẩu mới (để trống nếu giữ nguyên)":"Mật khẩu"}</span><input name="password" type="password" ${user?"":"required"} minlength="10"></label>
     <label class="sa-check wide"><input type="checkbox" name="active" ${user?.active!==false?"checked":""}><span>Active</span></label>
   </div><div class="sa-permission-head"><div><h3>Quyền module · 模組權限</h3><p>View/Edit hiệu lực theo từng user.</p></div><button class="sa-btn small" type="button" data-role-defaults>Dùng mặc định Role</button></div>
   <div class="sa-permission-grid">${state.accessModel.modules.map((m)=>{const p=effective[m.module_key]||{};return `<div class="sa-permission-row" data-module="${esc(m.module_key)}"><div><strong>${esc(m.name_vi)}</strong><small>${esc(m.name_zh_tw)} · ${esc(m.module_key)}</small></div><label><input type="checkbox" data-perm="view" ${p.view?"checked":""}> View</label><label><input type="checkbox" data-perm="edit" ${p.edit?"checked":""}> Edit</label></div>`;}).join("")}</div>
-  <p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu vào Database</button></div></form>`);
+  <p class="sa-form-error" data-form-error role="alert"></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu vào Database</button></div></form>`);
   const form=host.querySelector("[data-user-form]");
-  const applyRoleDefaults=()=>{const role=roleByCode(form.role.value);form.querySelectorAll("[data-module]").forEach((row)=>{const p=role?.permissions?.[row.dataset.module]||{};row.querySelector('[data-perm="view"]').checked=Boolean(p.view);row.querySelector('[data-perm="edit"]').checked=Boolean(p.edit);});form.dataset.permissionMode="default"; if(role?.scope_policy==="all")form.location.value="all"; else if(role?.scope_policy==="central")form.location.value="central";};
-  host.querySelector("[data-role-defaults]").addEventListener("click",applyRoleDefaults); form.role.addEventListener("change",()=>{if(form.dataset.permissionMode==="default")applyRoleDefaults();});
+  const roleSelect=form.querySelector('[name="role"]');
+  const locationSelect=form.querySelector('[name="location"]');
+  let lastBranchLocation=state.sites.some((site)=>site.code===user?.location && site.active && site.metadata?.inventory_mode==="branch") ? user.location : "";
+  const syncLocationChoices=()=>{
+    const role=roleByCode(roleSelect.value);
+    const choices=accountLocationChoices(role);
+    const selected=choices.find((choice)=>choice.code===locationSelect.value)?.code
+      || choices.find((choice)=>choice.code===lastBranchLocation)?.code || choices[0]?.code || "";
+    locationSelect.innerHTML=choices.map((choice)=>`<option value="${esc(choice.code)}">${esc(choice.label)}</option>`).join("");
+    locationSelect.value=selected;
+    locationSelect.disabled=role?.scope_policy!=="assigned" || choices.length===0;
+    // Disabled controls are omitted by FormData; fixed scopes are submitted explicitly below.
+    form.querySelector('[data-form-error]').textContent=choices.length ? "" : "Không có chi nhánh đang hoạt động cho Role này.";
+  };
+  locationSelect.addEventListener("change",()=>{if(roleByCode(roleSelect.value)?.scope_policy==="assigned")lastBranchLocation=locationSelect.value;});
+  const applyRoleDefaults=()=>{const role=roleByCode(roleSelect.value);form.querySelectorAll("[data-module]").forEach((row)=>{const p=role?.permissions?.[row.dataset.module]||{};row.querySelector('[data-perm="view"]').checked=Boolean(p.view);row.querySelector('[data-perm="edit"]').checked=Boolean(p.edit);});form.dataset.permissionMode="default";};
+  host.querySelector("[data-role-defaults]").addEventListener("click",applyRoleDefaults);
+  roleSelect.addEventListener("change",()=>{if(roleByCode(roleSelect.value)?.scope_policy==="assigned" && accountLocationChoices(roleByCode(roleSelect.value)).some((choice)=>choice.code===locationSelect.value))lastBranchLocation=locationSelect.value;syncLocationChoices();if(form.dataset.permissionMode==="default")applyRoleDefaults();});
+  syncLocationChoices();
   form.querySelectorAll("[data-perm]").forEach((box)=>box.addEventListener("change",()=>{form.dataset.permissionMode="custom";const row=box.closest("[data-module]");const view=row.querySelector('[data-perm="view"]');const edit=row.querySelector('[data-perm="edit"]');if(box.dataset.perm==="edit"&&edit.checked)view.checked=true;if(box.dataset.perm==="view"&&!view.checked)edit.checked=false;}));
-  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const permissions={};if(form.dataset.permissionMode!=="default")form.querySelectorAll("[data-module]").forEach((row)=>{permissions[row.dataset.module]={view:row.querySelector('[data-perm="view"]').checked,edit:row.querySelector('[data-perm="edit"]').checked};});const submit=form.querySelector('button[type="submit"]');submit.disabled=true;try{await api("/api/admin/users",{method:"POST",body:{action:user?"update":"create",id:user?.id,username:String(fd.get("username")||""),display_name:String(fd.get("display_name")||""),role:String(fd.get("role")||"employee"),location:String(fd.get("location")||""),preferred_language:String(fd.get("preferred_language")||"vi"),password:String(fd.get("password")||""),active:fd.has("active"),permissions}});host.remove();state.success="Đã lưu user và quyền vào PostgreSQL.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);submit.disabled=false;}});
+  form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);const permissions={};if(form.dataset.permissionMode!=="default")form.querySelectorAll("[data-module]").forEach((row)=>{permissions[row.dataset.module]={view:row.querySelector('[data-perm="view"]').checked,edit:row.querySelector('[data-perm="edit"]').checked};});const submit=form.querySelector('button[type="submit"]');const role=roleByCode(roleSelect.value);const locationCode=locationSelect.value;if(!accountLocationChoices(role).some((choice)=>choice.code===locationCode)){form.querySelector('[data-form-error]').textContent="Hãy chọn chi nhánh hợp lệ cho Role này trước khi lưu.";return;}submit.disabled=true;try{await api("/api/admin/users",{method:"POST",body:{action:user?"update":"create",id:user?.id,username:String(fd.get("username")||""),display_name:String(fd.get("display_name")||""),role:String(fd.get("role")||"employee"),location:locationCode,preferred_language:String(fd.get("preferred_language")||"vi"),password:String(fd.get("password")||""),active:fd.has("active"),permissions}});host.remove();state.success="Đã lưu user và quyền vào PostgreSQL.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error)==="INVALID_LOCATION"?"Chi nhánh không hợp lệ hoặc đã ngừng hoạt động. Chọn lại chi nhánh rồi lưu.":errorText(error)==="INVALID_LOCATION_FOR_ROLE"?"Role này chỉ được chọn chi nhánh, không chọn kho trung tâm.":errorText(error);submit.disabled=false;}});
 }
 
 function fieldControl(name,label,type,value,locked=false) {
