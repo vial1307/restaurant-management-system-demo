@@ -119,6 +119,7 @@ Rules:
 - Non-admin users must remain site-scoped unless a future explicit policy expands this.
 - Account editor workplace choices follow the selected role's scope policy: `all` selects only `all`, `central` selects only `central`, and `assigned` selects active branch sites only. Switching roles must keep a valid prior branch choice when possible and must never submit `all` as an assigned workplace. Custom module overrides must survive a role switch unless the operator explicitly resets them.
 - An invalid workplace/role pair must return a readable validation error without claiming a database save. Role and workplace must persist through the VPS API and be confirmed by reloading the account from PostgreSQL.
+- Production account integrity checks must evaluate effective module permissions from the database role policy plus `permission_overrides`. The legacy `app_users.permissions` JSON column is not a source of access authority and must not block a deploy when a new administrator has valid role grants. A genuinely incomplete effective admin permission remains a deploy-blocking error.
 - Disabled accounts cannot continue protected operations.
 - Updating another account invalidates that account's active sessions where applicable.
 - An administrator cannot remove their own admin access through the normal update flow.
