@@ -1,14 +1,12 @@
 # Kitchen OS — Current Development Handoff
 
-## Active fix — Super Admin account workplace validation (not deployed)
+## Completed correction — Super Admin Role and workplace, 2026-09-25
 
-The user reported `INVALID_LOCATION` when saving a Role/permission change in Super Admin. The editor previously showed `all` alongside physical sites for every role; switching from an all-scope administrator to an assigned branch role retained `all`, and the VPS correctly rejected the request. The pending fix derives workplace choices from the selected role: all-scope → `all`, central → `central`, assigned → active branch sites only. It preserves a chosen branch across role switches and preserves custom permission edits. Submit validates the pair and sends the selected workplace explicitly even when the fixed-scope control is disabled. The API remains the authority and no schema migration or production data change is needed.
+- PR #140 merged as `b4d9cbe11caac5352226fde228cf88e07c7e4a57`. The user-reported `INVALID_LOCATION` came from retaining `all` when changing an administrator to an assigned branch Role. The editor now offers only `all` for all-scope Roles, `central` for the central Role, or active branch sites for assigned Roles. It retains a selected branch across Role changes and preserves custom module permissions. The form validates before submitting and reports a readable error if the API rejects the workplace. Six-device Super Admin regression and PostgreSQL account create/reload passed.
+- Deploy #847 / run `36151553155` passed full regression but stopped before activating its frontend because the production integrity script read stale legacy `app_users.permissions` JSON for a new administrator. PR #141 fixed that audit to check effective role policy plus permission overrides, retaining a hard failure for actual missing admin rights; no production account data was rewritten.
+- **Verified production release:** PR #141 merged as `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`. Deploy #849 / run `36153187681` passed preflight, API/PostgreSQL/browser/device regression, backup, corrected `DATA_INTEGRITY_OK` with all admin module permissions OK, deploy, health and `PRODUCTION_UI_SMOKE_OK` including the permission modal. Runtime returned `release=f2ea2b3`, `schema=024`, app/database `ok`. Backup: `kitchen_os_20260925T152227Z.dump`.
 
-Pending verification: six-device Super Admin browser regression, creation and reread of an assigned account through PostgreSQL API, full regression, and production deploy/smoke. The verified production SHA below remains authoritative until deploy succeeds.
-
-PR #140 merged as `b4d9cbe11caac5352226fde228cf88e07c7e4a57`. Its exact-head premerge regression passed after retry. Production deploy #847 / run `36151553155` passed full regression but STOPPED at `verify-vps-data.sh` before replacing the frontend: the verifier still reads legacy `app_users.permissions` JSON for admin, while effective RBAC reads `account_roles` and `permission_overrides`. One admin account had incomplete legacy JSON, yielding 13 false integrity errors. Follow-up fix checks effective DB role/overrides instead and includes an isolated PostgreSQL regression. No production account rows are rewritten. Production status must stay at #843 until a full deploy and smoke pass.
-
-PR #140 initial head `4fd87da`: Super Admin Browser #122 passed six profiles and the account round-trip. Master Data/Admin API #221 exposed an unrelated stale hard-coded expected workflow run (`35573596640`) while the runtime fallback still reported earlier #832. The follow-up synchronizes the fallback with verified production #843 and asserts internally consistent run IDs/URLs; rerun exact-head CI on the amended PR before merging.
+The current runtime release, rather than the older static `development-status.mjs` release-evidence milestone, is authoritative for production SHA. A future status-metadata update can refresh that fallback without changing account/business data.
 
 
 ## Completed correction — 2026-09-25
@@ -38,7 +36,7 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`
+- Current verified production SHA: `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -50,9 +48,9 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #843
-- Run ID: `36142844487`
-- Tested/deployed commit: `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`
+- Workflow: Deploy Kitchen OS to VPS #849
+- Run ID: `36153187681`
+- Tested/deployed commit: `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -65,7 +63,7 @@ The current verified production deployment is:
 - Database schema: `024`
 - Inventory site-isolation triggers: 3
 - Deploy-integrated inventory site/data-integrity audit: PASS
-- Historical schedule cutover prerequisite: Parity #105 / `35571899839` and Backfill verify #316 / `35571899835` passed on release `30fd1dd`; these are not verification runs for #843.
+- Historical schedule cutover prerequisite: Parity #105 / `35571899839` and Backfill verify #316 / `35571899835` passed on release `30fd1dd`; these are not verification runs for #849.
 
 Production audit after schema 022:
 
@@ -73,7 +71,7 @@ Production audit after schema 022:
 - `receive_default_site_mismatch = 0`
 - `unknown_item_site = 0`
 
-This release includes the earlier inventory persistence/SSE and schedule-read work, PR #138 branch-scoped Super Admin Database configuration and PR #139 main ↔ admin convergence. It changes no schema or schedule authority.
+This release includes earlier inventory persistence/SSE and schedule-read work, PR #138 branch-scoped Super Admin Database configuration, PR #139 main ↔ admin convergence, PR #140 account workplace validation and PR #141 effective-RBAC production audit. It changes no schema or schedule authority.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
