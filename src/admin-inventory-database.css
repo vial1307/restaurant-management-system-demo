@@ -36,6 +36,8 @@
 .idb-checks section { border:1px solid #dce5df; border-radius:12px; padding:16px; min-width:0; }
 .idb-checks li { margin:8px 0; overflow-wrap:anywhere; }
 @media(max-width:760px) {
+  .sa-content .sa-tabs { flex-wrap:wrap; overflow:visible; max-width:100%; }
+  .sa-content .sa-tab { flex:1 1 auto; min-width:0; min-height:44px; white-space:normal; overflow-wrap:anywhere; }
   .idb-list-heading { align-items:start; flex-direction:column; }
   .idb-editor { padding:12px; }
   .idb-editor .sa-form-grid { grid-template-columns:minmax(0,1fr); }
