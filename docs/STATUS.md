@@ -1,15 +1,11 @@
 # Kitchen OS Engineering Status
 
 
-## Active correction — 2026-09-22 (not deployed)
+## Production correction — 2026-09-25
 
-- Cross-surface CI additionally reproduced a branch editor bug: cloud-hydrated items were displayed from the authoritative mirror, but saves were rebuilt from the stale legacy store. Branch add/edit now sends the explicit form draft to the existing catalog API, preserves failed forms and closes only after confirmed operations. Site switching explicitly activates the target master snapshot after the site commit.
-
-- User reported Super Admin location/ingredient changes not reflected on the main website.
-- Root causes found: Central rendered hard-coded work-area/storage labels; stock-only equality skipped master-only fallback refresh; cross-site shipping reads could replace active branch choices. Central overview edit also set editor state without rendering its modal.
-- Candidate branch: `fix/inventory-admin-main-sync-20260922`, based on verified production #832 (`5cc4f90`) and docs main `eb9e38d`.
-- Changes: site-scoped database labels/options, master-only and SSE reconnect reconciliation, open-editor protection, compact ingredient actions with storage context.
-- Verification: local static/performance/admin contracts PASS. New CI test uses two independent browser sessions for main ↔ Super Admin edits, master labels, minimums and reload persistence on all three sites, at 320px and 1366px. CI and deployment pending; do not treat the existing #832 evidence as verification of this correction.
+- PR #139 merged as `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`; VPS deploy #843 / run `36142844487` passed complete regression, backup/deploy and production UI smoke. Runtime: `release=ee5316b`, PostgreSQL schema `024`, app/database `ok`.
+- Main inventory and Super Admin now reconcile site-specific work areas, storage and ingredient/stock metadata for Central, Fuxing and Yongji through PostgreSQL. Clean editors accept remote changes; dirty drafts retain input and block stale submission. The branch editor sends its actual form values, and Central overview Edit opens correctly.
+- Six-device Super Admin browser regression `36142056162` and full API/PostgreSQL/browser regression `36142055831` passed; the merged release passed regression and production smoke in `36142844487`. No schema migration or production data rewrite.
 
 > Canonical continuation entry: https://vial1307.github.io/restaurant-management-system-demo/handoff.html
 
@@ -19,8 +15,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #832 / run `35672333632`.
-- Verified production SHA: `5cc4f907387873367d78dfbdfb3183971846e968`.
+- Verified production release: Deploy Kitchen OS to VPS #843 / run `36142844487`.
+- Verified production SHA: `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).

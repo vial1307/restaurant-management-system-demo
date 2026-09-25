@@ -1,5 +1,12 @@
 # Kitchen OS Work Log
 
+## 2026-09-25 — Inventory main website ↔ Super Admin correction deployed
+
+- PR #139 merged as `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`. Final head `19ff741` passed Super Admin Browser `36142056162` (all six device profiles and two independent sessions for Central/Fuxing/Yongji at 320px and 1366px), full-system/API/PostgreSQL regression `36142055831`, API load `36142055866` and workforce diagnostic `36142055825`.
+- A clean open ingredient editor now reconciles per-location minimums and metadata on remote inventory updates; an unsaved editor preserves its draft and blocks stale submission until reopened. Branch add/edit saves the explicit cloud-backed form draft. Central uses site master labels and exposes overview Edit. Super Admin ingredient rows show storage/work area and compact secondary actions.
+- WebKit mobile testing isolated native select option text contributing to page `scrollWidth`; the editor contains that internal overflow and dataset tabs wrap on narrow screens. All six Super Admin profiles subsequently passed.
+- Production deploy #843 / run `36142844487` passed exact-release full regression, database backup `kitchen_os_20260925T134859Z.dump`, integrity checks, deployment and `PRODUCTION_UI_SMOKE_OK`. Runtime health: `release=ee5316b`, `schema=024`, `app=ok`, `database=ok`. No migration or production data rewrite.
+
 
 ## 2026-09-22 — Cross-surface verification follow-up
 
