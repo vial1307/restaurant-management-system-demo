@@ -76,8 +76,11 @@ try {
   assert.equal(development.data.runtime.schema.version, "024");
   assert.equal(development.data.live_production.schema, "024");
   assert.equal(development.data.release_evidence.schema, "024");
-  assert.equal(development.data.release_evidence.workflow_run_id, "35573596640");
-  assert.equal(development.data.release_evidence.inventory_audit_run_id, "35573596640");
+  const evidence = development.data.release_evidence;
+  assert.match(evidence.workflow_run_id, /^\d+$/, "last verified deploy must reference a workflow run");
+  assert.equal(evidence.inventory_audit_run_id, evidence.workflow_run_id);
+  assert.equal(evidence.url, `https://github.com/vial1307/restaurant-management-system-demo/actions/runs/${evidence.workflow_run_id}`);
+  assert.equal(evidence.inventory_audit_url, evidence.url);
   assert.match(development.data.canonical_handoff.url, /vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html/);
   assert.equal(development.data.live_github.source, "github-api-live");
   assert.equal(typeof development.data.live_github.available, "boolean");
