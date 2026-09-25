@@ -1,5 +1,11 @@
 # Kitchen OS Engineering Status
 
+## Role/location correction — production 2026-09-25
+
+- PR #140 fixed `INVALID_LOCATION` when changing an all-scope user to an assigned branch Role. The workplace choices now follow Role scope; custom permissions and the selected branch survive switching. The isolated six-device UI and PostgreSQL account round-trip passed.
+- Deploy #847 was blocked before frontend activation by an obsolete audit of legacy permission JSON. PR #141 updated the verifier to check effective database Role plus overrides without changing production accounts.
+- **Verified production:** `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`, Deploy #849 / run `36153187681`. Full regression, corrected `DATA_INTEGRITY_OK`, backup, health (`release=f2ea2b3`, `schema=024`, app/database `ok`) and `PRODUCTION_UI_SMOKE_OK` all passed. Backup: `kitchen_os_20260925T152227Z.dump`.
+
 
 ## Production correction — 2026-09-25
 
@@ -15,8 +21,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #843 / run `36142844487`.
-- Verified production SHA: `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`.
+- Verified production release: Deploy Kitchen OS to VPS #849 / run `36153187681`.
+- Verified production SHA: `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
