@@ -285,9 +285,10 @@ function bindModal(host){
   });
   const roleSelect=host.querySelector('select[name="role"]');
   roleSelect?.addEventListener('change',()=>{
+    const selectedSite=host.querySelector('select[name="location"]')?.value || '';
     const fake={role:roleSelect.value,permissions:rolePermissions(roleSelect.value)};
     host.querySelector('.permission-grid').outerHTML=permissionGrid(fake);
-    replaceLocationOptions(host,roleSelect.value,'');
+    replaceLocationOptions(host,roleSelect.value,selectedSite);
   });
   host.querySelector('[data-account-delete]')?.addEventListener('click',e=>{
     if(isVpsApiConfigured()) return;
