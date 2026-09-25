@@ -63,6 +63,12 @@ async function assertFit(page, label) {
       })
       .slice(0,14)
       .map((node) => ({ tag:node.tagName.toLowerCase(), className:String(node.className).slice(0,90), right:Math.round(node.getBoundingClientRect().right), width:Math.round(node.getBoundingClientRect().width) }));
+    const scrollNodes = ['html','body','.sa-app','.sa-main','.sa-content','.sa-card','.sa-tabs','.idb-workspace','.idb-editor'].map((selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { selector, client:node.clientWidth, scroll:node.scrollWidth, left:Math.round(rect.left), right:Math.round(rect.right), overflow:getComputedStyle(node).overflowX, scrollLeft:node.scrollLeft };
+    }).filter(Boolean);
     const modal = document.querySelector(".sa-modal");
     let modalRect = null;
     if (modal) {
@@ -83,10 +89,10 @@ async function assertFit(page, label) {
         const rect = node.getBoundingClientRect();
         return { tag:node.tagName.toLowerCase(), text:(node.textContent || node.value || "").trim().slice(0,60), width:Math.round(rect.width), height:Math.round(rect.height) };
       });
-    return { viewportWidth, viewportHeight, pageOverflow, overflowNodes, modalRect, smallTargets };
+    return { viewportWidth, viewportHeight, pageOverflow, overflowNodes, scrollNodes, modalRect, smallTargets };
   });
 
-  assert(result.pageOverflow <= 3, `${label}: page overflow ${result.pageOverflow}px ${JSON.stringify(result.overflowNodes)}`);
+  assert(result.pageOverflow <= 3, `${label}: page overflow ${result.pageOverflow}px ${JSON.stringify({overflowNodes:result.overflowNodes,scrollNodes:result.scrollNodes})}`);
   assert.deepEqual(result.smallTargets, [], `${label}: undersized controls ${JSON.stringify(result.smallTargets)}`);
   if (result.modalRect) {
     assert(result.modalRect.left >= -1, `${label}: modal exceeds left edge`);
