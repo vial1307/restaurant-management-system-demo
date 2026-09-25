@@ -108,7 +108,7 @@ function siteChoicesForRole(role, current=''){
     rows = scope==='central'
       ? accountMaster.sites.filter((row)=>siteMode(row)==='central')
       : scope==='assigned'
-        ? accountMaster.sites.filter((row)=>siteMode(row)==='branch')
+        ? accountMaster.sites.filter((row)=>row.active!==false && row.code!=='all')
         : [...accountMaster.sites];
   } else {
     const localCodes=[...new Set(loadAccounts().map((row)=>row.location).filter((code)=>code && code!=='all'))];
