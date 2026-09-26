@@ -1,22 +1,27 @@
 # Kitchen OS — Current Development Handoff
 
-## Active workstream — Super Admin as Database control plane, PR #144
+## Completed release — Super Admin Database control plane / inventory master-data hardening, 2026-09-27
 
-User direction: Super Admin + Database should function as one business-control surface. PostgreSQL remains the source of truth, but normal business/master-data maintenance should not require SSH/manual VPS database work. Database-declared structure should drive Super Admin in real time and the operational Website; mutable restaurant master data should move out of frontend/backend hard-code incrementally.
+PR #144 merged into `main` as `15ba0013f15daa9dcdc04152c95f12bd9f7fc793` and was deployed by Deploy Kitchen OS to VPS #856 / run `36259731875`.
 
-PR #144 (branch: refactor/inventory-db-control-plane-20260927) is the first inventory hardening stage:
-- canonical specification now defines Super Admin as the Database control plane;
-- legacy inventory helper paths derive site/location/work-area data from loaded PostgreSQL master data instead of closed Central/Fuxing/Yongji lists;
-- Central storage names in that legacy path come from master data rather than fixed source labels;
-- Super Admin Database copy now presents PostgreSQL authority explicitly;
-- regression contracts prevent those removed site/location hard-codes from returning.
+This release formalizes the product direction that Super Admin is the normal business Database control plane while PostgreSQL remains authoritative behind the VPS API. Routine inventory/master-data maintenance should not require SSH or manual PostgreSQL editing.
 
-This stage intentionally does not rewrite the already-working inventory synchronization or database schema and does not modify production stock. PR #144 is **not production** until required CI, merge, deploy and production smoke are green.
+Inventory hardening in this release:
+- legacy helper paths derive site, storage-location and work-location structure from PostgreSQL-loaded inventory master data instead of closed Central/Fuxing/Yongji lists;
+- Central storage labels in those helper paths come from database master data instead of fixed source-code mappings;
+- Super Admin Database explicitly presents PostgreSQL as the business-data authority while all edits still pass through API authorization, validation and audit;
+- regression contracts prevent the removed site/location hard-codes from returning.
 
+Verification:
+- PR head `1a3302fc39ab3f01ac7f208c50958ec24af0882a`: Master Data/Admin Panel #232 / `36259541053`, Super Admin Browser #129 / `36259541041`, and Workforce Approval Diagnostic #254 / `36259541059` all PASS;
+- merge release `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`: deploy #856 / `36259731875` preflight, API/inventory regression, Super Admin branch inventory database round-trip, PostgreSQL concurrency, desktop/mobile Chromium, full-device cross-browser, exact-SHA deploy with server-side backup/rollback, production health/release check and production UI smoke all PASS;
+- schema remains `024`; no schema migration and no production stock rewrite were performed.
 
-## Active correction — Central missing in assigned Role workplace choices
+Next inventory work: propagate site-registry changes in real time across already-open Super Admin/Website sessions, continue retiring obsolete local draft/master-data compatibility code, then redesign the Central Kitchen UI on top of database-declared structure.
 
-The user observed that a manager account editor listed only Fuxing and Yongji; Central was missing. PR #140 restricted assigned Roles to sites marked `inventory_mode=branch` in the Super Admin selector and API. This did not match the product requirement: Central is also a physical workplace, while `all` is a logical global scope. The correction lets assigned Roles select any active site, including Central, while the central-only Role remains fixed to Central. The main website's account editor uses the same site eligibility. A manager assigned to Central must retain manager rights at Central and be denied other sites. Run isolated UI/API/PostgreSQL tests, then merge, deploy and verify exact release/production smoke. No account data or schema migration is needed.
+## Completed correction — Central workplace choices
+
+The manager Role workplace correction is now included in verified production through release `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`. Assigned Roles can select any active physical site, including Central, while `all` remains logical global scope and the central-only Role remains fixed to Central. The main Website and Super Admin account editors use database-declared active sites rather than a closed branch list. No account-data rewrite or schema migration was required.
 
 ## Completed correction — Super Admin Role and workplace, 2026-09-25
 
@@ -34,7 +39,7 @@ The current runtime release, rather than the older static `development-status.mj
 - Super Admin ingredient rows show work area and storage with compact Edit and expandable stock, receiving and archive actions. There was no schema migration or production data rewrite.
 - Exact-head CI passed Super Admin Browser `36142056162` on six device profiles, with independent two-session edits/reloads on all three sites at 320px and 1366px; complete API/PostgreSQL/browser/device regression `36142055831`, API load `36142055866`, workforce diagnostic `36142055825`. The merged release passed its own full regression and production smoke (`PRODUCTION_UI_SMOKE_OK`).
 
-Last updated: 2026-09-25 (Asia/Taipei)
+Last updated: 2026-09-27 (Asia/Taipei)
 
 This document is the current continuation point for any developer or future ChatGPT session working on Kitchen OS. It must be updated whenever a significant production fix, schema migration, deployment, or workstream handoff occurs.
 
@@ -54,7 +59,7 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`
+- Current verified production SHA: `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -66,22 +71,23 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #849
-- Run ID: `36153187681`
-- Tested/deployed commit: `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`
+- Workflow: Deploy Kitchen OS to VPS #856
+- Run ID: `36259731875`
+- Tested/deployed commit: `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
+- Super Admin branch inventory database round-trip: PASS
 - PostgreSQL concurrency regression: PASS
 - Desktop/mobile Chromium regression: PASS
 - Full-device cross-browser regression: PASS
-- SSH deploy with backup/rollback path: PASS
+- SSH deploy with server-side backup/rollback path: PASS
 - Production health/release check: PASS
 - Production UI smoke: PASS
 - Database schema: `024`
-- Inventory site-isolation triggers: 3
-- Deploy-integrated inventory site/data-integrity audit: PASS
-- Historical schedule cutover prerequisite: Parity #105 / `35571899839` and Backfill verify #316 / `35571899835` passed on release `30fd1dd`; these are not verification runs for #849.
+- Schema migration / production stock rewrite: NONE
+- Previous verified inventory site-integrity baseline remains zero violations; this release did not change schema or stock data.
+- Historical schedule cutover prerequisite: Parity #105 / `35571899839` and Backfill verify #316 / `35571899835` passed on release `30fd1dd`; these are historical schedule verification runs, not #856 verification.
 
 Production audit after schema 022:
 
@@ -89,7 +95,7 @@ Production audit after schema 022:
 - `receive_default_site_mismatch = 0`
 - `unknown_item_site = 0`
 
-This release includes earlier inventory persistence/SSE and schedule-read work, PR #138 branch-scoped Super Admin Database configuration, PR #139 main ↔ admin convergence, PR #140 account workplace validation and PR #141 effective-RBAC production audit. It changes no schema or schedule authority.
+This release includes the earlier inventory persistence/SSE work, PR #138 branch-scoped Super Admin Database configuration, PR #139 main ↔ admin convergence, PR #140/#141 account/RBAC corrections, the Central assigned-workplace correction, and PR #144 Database-control-plane inventory master-data hardening. It changes no database schema, stock quantities or schedule authority.
 
 Never claim a newer production SHA until its deploy + production smoke jobs are green.
 
