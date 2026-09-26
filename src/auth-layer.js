@@ -19,7 +19,7 @@ import {
   switchActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
+import { inventorySites, inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { searchMatches } from "./search-utils.js";
 import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
@@ -196,9 +196,17 @@ function addLogout(user) {
   top.prepend(chip);
 }
 
-function branchSwitcher(user, active = activeInventorySite() || "fuxing") {
+function branchSwitcher(user, active = activeInventorySite()) {
   if (user.location !== "all" && user.role !== "admin") return "";
-  return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="yongji" class="${active === "yongji" ? "active" : ""}">永吉店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
+  const language = document.documentElement.lang === "vi" ? "vi" : "zh";
+  const sites = inventorySites().filter((site) => site.active !== false);
+  if (!sites.length) return "";
+  return `<div class="warehouse-switch">${sites.map((site) => {
+    const zh = site.name_zh_tw || site.name_zh || site.code;
+    const vi = site.name_vi || zh;
+    const label = language === "vi" && vi !== zh ? `${vi} · ${zh}` : zh;
+    return `<button data-warehouse="${esc(site.code)}" class="${active === site.code ? "active" : ""}">${esc(label)}</button>`;
+  }).join("")}</div>`;
 }
 
 let warehouseSwitchToken = 0;
