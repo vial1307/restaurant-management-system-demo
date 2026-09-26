@@ -18,13 +18,21 @@ function writeEvent(client, event, payload) {
   }
 }
 
-function publishInventoryInvalidation(sourceClientId = "") {
+function publishInvalidation(eventName, sourceClientId = "") {
   revision = Math.max(revision + 1, Date.now());
   const payload = {
     revision,
     sourceClientId: String(sourceClientId || "").slice(0, 120),
   };
-  for (const client of clients) writeEvent(client, "inventory", payload);
+  for (const client of clients) writeEvent(client, eventName, payload);
+}
+
+function publishInventoryInvalidation(sourceClientId = "") {
+  publishInvalidation("inventory", sourceClientId);
+}
+
+function publishSiteRegistryInvalidation(sourceClientId = "") {
+  publishInvalidation("site-registry", sourceClientId);
 }
 
 export async function registerInventoryRealtime(app) {
@@ -76,10 +84,16 @@ export async function registerInventoryRealtime(app) {
   app.addHook("onResponse", async (request, reply) => {
     if (request.method === "GET" || reply.statusCode < 200 || reply.statusCode >= 300) return;
     const route = String(request.routeOptions?.url || request.url || "");
+    const sourceClientId = request.headers["x-kitchen-client-id"];
+    if (route === "/api/admin/super/sites") {
+      publishSiteRegistryInvalidation(sourceClientId);
+      return;
+    }
+
     const masterMutation = ["/api/master-data/locations", "/api/master-data/work-areas"].includes(route);
     const adminCatalogMutation = route === "/api/admin/super/inventory-catalog-identity"
       || (route.startsWith("/api/admin/super/data/") && request.params?.dataset === "inventory-products");
     if (!route.startsWith("/api/inventory/") && !masterMutation && !adminCatalogMutation) return;
-    publishInventoryInvalidation(request.headers["x-kitchen-client-id"]);
+    publishInventoryInvalidation(sourceClientId);
   });
 }
