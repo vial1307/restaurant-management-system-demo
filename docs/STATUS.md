@@ -1,15 +1,16 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — browser-local inventory mutation retirement, 2026-09-27
+## DONE — PostgreSQL-only inventory runtime authority, 2026-09-27
 
-Branch: `refactor/inventory-local-fallback-retirement-20260927`.
-
-Inventory writes are being narrowed to PostgreSQL/VPS API only. Branch and Central browser draft databases, local operation history, Central hard-coded seed catalog, fallback-success branches, `canInventoryDraftCount`, and the draft operation controller have been removed. Existing server-projection localStorage caches remain read-only recovery/UI caches.
-
-The warehouse switcher also reads the active site registry from PostgreSQL rather than a fixed Central/Fuxing/Yongji list.
-
-No schema migration or stock rewrite. Status remains candidate until exact-head regression + merge + production deploy/smoke pass.
-
+- PR #148 merged as `d88a90d9487d8edbb5f7e8020397893a5a5e9849`; Deploy #872 / run `36265842924` is verified in production.
+- Removed branch/Central browser-local writable inventory drafts, local operation history, Central hard-coded product seed, fallback-success paths, `canInventoryDraftCount`, and the draft operation controller.
+- Browser inventory caches now remain read-only server projections only; failed writes reconcile from PostgreSQL.
+- Empty PostgreSQL snapshots remain authoritative and cannot trigger a hard-coded catalog reseed.
+- Warehouse/site switching is driven by the PostgreSQL-backed site registry.
+- Exact PR head `95d9ce407f27a96240fcc261b15671a8f1a77e43` passed preflight/full regression #871 and Workforce #268; merge production #872 passed backup/deploy, `DATA_INTEGRITY_OK`, health `release=d88a90d` / schema `024`, and `PRODUCTION_UI_SMOKE_OK`.
+- Backup: `kitchen_os_20260926T192740Z.dump`.
+- No schema migration and no production stock rewrite.
+- NEXT: retire remaining mutable inventory master/rule hard-codes, then redesign Central Kitchen UI.
 
 ## DONE — realtime Database site registry, 2026-09-27
 
@@ -55,8 +56,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #867 / run `36262880282`.
-- Verified production SHA: `95a39088a33f61c218412c1dd2e2d253306a0471`.
+- Verified production release: Deploy Kitchen OS to VPS #872 / run `36265842924`.
+- Verified production SHA: `d88a90d9487d8edbb5f7e8020397893a5a5e9849`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
