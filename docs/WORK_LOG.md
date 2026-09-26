@@ -1217,3 +1217,15 @@ The separate read-cutover candidate:
 - keeps compatibility JSON writes and module revision concurrency active;
 - retains immediate rollback by setting `WORKFORCE_SCHEDULE_RELATIONAL_READ=false` in VPS `.env` and recreating the app container;
 - does not change schema or retire compatibility data.
+
+
+## 2026-09-27 — Super Admin / Database control-plane direction
+
+- Product direction confirmed: Super Admin should be the normal business-database administration surface; operators should not need VPS/SSH for routine master-data changes.
+- PostgreSQL remains authoritative behind VPS APIs; Super Admin must not expose unrestricted raw SQL/credentials.
+- Opened PR #144 on branch refactor/inventory-db-control-plane-20260927.
+- Updated canonical spec with Database-control-plane rules and acceptance criteria.
+- Refactored legacy inventory helper functions to read storage/work locations and site registry from inventory master data instead of hard-coded Central/Fuxing/Yongji lists and Central storage labels.
+- Updated Super Admin Database wording to make the control-plane role explicit.
+- Added static regression guards for reintroduction of removed site/location hard-codes.
+- No schema migration or production stock mutation. Production remains at the previously verified release until PR #144 passes CI, merges, deploys and production smoke passes.

@@ -92,6 +92,33 @@ Selected service-date cache semantics:
 - if no UI/cache state exists on first load, the selected service date defaults to the current local service date
 - permission helpers must derive that fallback and must not force synchronous shared-state `localStorage` persistence merely to initialize the default date
 
+### 2.4 Super Admin as the Database control plane
+
+Super Admin is the primary business-data control plane for Kitchen OS. PostgreSQL remains the authoritative database, but normal restaurant administration must be performed through Super Admin rather than by manually editing PostgreSQL or SSHing into the VPS.
+
+Required architecture:
+
+`Super Admin / Website -> VPS API -> PostgreSQL`
+
+Rules:
+
+- Database structure and active master data drive Super Admin and operational Website behavior.
+- Super Admin may present a friendlier business UI than the physical table layout, but every editable value must map to an authorized VPS API/database operation.
+- Changes to sites, inventory locations, work areas, catalog items, quantities, minimums, receiving configuration and other mutable restaurant master data must be visible from Super Admin and persist to PostgreSQL.
+- Successful Super Admin inventory/master-data writes must invalidate/reconcile connected Website inventory clients through the shared inventory event path; reload/focus/polling remain fallback convergence paths.
+- Website code must interpret database-declared sites, locations and work areas instead of requiring a source-code edit for every new branch/storage/work-area record.
+- Mutable restaurant master data must be removed from frontend/backend hard-code incrementally. Source code may retain generic algorithms, validation/security invariants and stable protocol enums.
+- VPS shell access remains an infrastructure/recovery tool for deployment, migration, backup/restore and incident handling; it is not the normal interface for business-data maintenance.
+- Super Admin must not expose unrestricted raw SQL or database credentials. Structural schema changes still use reviewed versioned migrations.
+
+Acceptance criteria for inventory/master data:
+
+1. An authorized Super Admin can add or edit a site-specific location/work area through Super Admin.
+2. PostgreSQL confirms the saved value and audit/history where applicable.
+3. A connected Website client reconciles the change without requiring source-code changes.
+4. A fresh session/reload reads the same structure from PostgreSQL.
+5. Adding a future active branch/location must not require adding its code/name to a closed frontend list.
+
 ---
 
 ## 3. Authentication, account roles and workplaces

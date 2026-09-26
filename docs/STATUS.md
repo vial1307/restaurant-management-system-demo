@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Database control plane / inventory hard-code retirement
+
+- PR #144: Super Admin is being formalized as the business Database control plane.
+- First stage removes closed Central/Fuxing/Yongji and Central-location mappings from legacy inventory helper paths and derives them from PostgreSQL-loaded master data.
+- Super Admin Database wording now reflects PostgreSQL authority and shared API/event synchronization.
+- No schema migration, no stock rewrite and no claim that PR #144 is production yet.
+- Next inventory stages: continue removing obsolete local draft authority/mappings, then redesign Central Kitchen UI on top of database-declared site/location/work-area structure.
+
+
 ## Role/location correction — production 2026-09-25
 
 - PR #140 fixed `INVALID_LOCATION` when changing an all-scope user to an assigned branch Role. The workplace choices now follow Role scope; custom permissions and the selected branch survive switching. The isolated six-device UI and PostgreSQL account round-trip passed.

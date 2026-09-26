@@ -15,6 +15,8 @@ assert.match(ui,/inventory\/events/);
 for(const [key,pair] of Object.entries(INVENTORY_ADMIN_TEXT))assert(pair.length===2&&pair.every(Boolean),key);
 assert.match(read(".admindev.html"),/admin-inventory-database\.css/);
 assert.match(read("src/admin-panel.js"),/inventoryDatabase\.mount/);
+assert.match(read("src/admin-panel.js"),/Database Control Plane/);
+assert.match(read("src/admin-panel.js"),/Database kho · 庫存資料庫/);
 assert.match(read("src/admin-inventory-database.css"),/@media\(max-width:760px\)/);
 const routes=read("vps/backend/src/inventory-extra-routes.mjs");
 assert.match(routes,/expectedQuantity/);assert.match(routes,/expectedMinimum/);assert.match(routes,/expectedLocationCode/);
