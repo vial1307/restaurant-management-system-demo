@@ -36,6 +36,9 @@ const LABELS = {
 };
 
 let sectionLoadSeq = 0;
+let siteRegistrySource = null;
+let siteRegistryRefreshTimer = 0;
+let siteRegistryRenderTimer = 0;
 
 const state = {
   me:null, loading:true, error:"", success:"", section:"overview",
@@ -116,6 +119,51 @@ async function refreshCurrent() {
   state.error=""; state.success="";
   try { await loadCore(); if(currentSection()==="data")await loadDataset(); if(currentSection()==="logs")await loadAudit(); }
   catch(error){state.error=errorText(error);} render();
+}
+
+function siteRegistrySignature(rows = state.sites) {
+  return JSON.stringify((rows || []).map((row) => ({
+    code:row.code,
+    name_vi:row.name_vi || "",
+    name_zh_tw:row.name_zh_tw || "",
+    active:row.active !== false,
+    sort_order:Number(row.sort_order || 0),
+    metadata:row.metadata || {},
+  })));
+}
+
+function renderSiteRegistryWhenSafe() {
+  clearTimeout(siteRegistryRenderTimer);
+  if (state.section === "data" && state.data.name === "inventory-products") {
+    inventoryDatabase.updateSites(state.sites);
+    return;
+  }
+  if (document.querySelector(".sa-modal-backdrop")) {
+    siteRegistryRenderTimer=setTimeout(renderSiteRegistryWhenSafe,250);
+    return;
+  }
+  render();
+}
+
+async function refreshSiteRegistryFromRealtime() {
+  try {
+    const response=await api("/api/admin/super/sites");
+    const nextSites=response?.sites||[];
+    if(siteRegistrySignature(nextSites)===siteRegistrySignature())return;
+    state.sites=nextSites;
+    renderSiteRegistryWhenSafe();
+  } catch(error) {
+    state.error=errorText(error);
+  }
+}
+
+function subscribeSiteRegistryRealtime() {
+  if(siteRegistrySource || typeof EventSource==="undefined")return;
+  siteRegistrySource=new EventSource("/api/inventory/events");
+  siteRegistrySource.addEventListener("site-registry",()=>{
+    clearTimeout(siteRegistryRefreshTimer);
+    siteRegistryRefreshTimer=setTimeout(()=>void refreshSiteRegistryFromRealtime(),120);
+  });
 }
 
 function nav() {
@@ -473,6 +521,7 @@ async function boot() {
   state.loading=false; if(!isSuperAdmin()){render();return;}
   try { await loadCore(); if(state.section==="data")await loadDataset(); if(state.section==="logs")await loadAudit(); }
   catch(error){state.error=errorText(error);} render();
+  subscribeSiteRegistryRealtime();
 }
 window.addEventListener("hashchange",()=>{const section=currentSection();if(section!==state.section)void switchSection(section);});
 void boot();
