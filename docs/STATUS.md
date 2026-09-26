@@ -1,13 +1,16 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — inventory UI master-data cutover, 2026-09-27
+## DONE — inventory UI master-data cutover, 2026-09-27
 
-Branch: `refactor/inventory-masterdata-ui-cutover-20260927`.
-
-Branch/Central inventory UI is being cut over from remaining source-code master-data assumptions to PostgreSQL-loaded site structure. Storage/work-area groups, primary-storage grouping, location labels and item units are now data-driven; branch runtime inventory cannot fall back to source-seeded stock.
-
-No schema migration or production stock rewrite. Status remains candidate until exact-head regression + merge + production deploy/smoke pass.
-
+- PR #150 merged as `b1447b727e310b7a3095f5782c0a933916ef6234`; Deploy #885 / run `36270568342` is verified in production.
+- Branch/Central inventory storage groups, work areas, primary/service grouping, location labels, site labels and item-unit entry are driven by PostgreSQL-loaded master data.
+- Branch runtime inventory cannot fall back to source-seeded stock.
+- Fixed Central unit/work-area/location defaults and remaining branch/site label fallbacks were removed from inventory UI paths.
+- Mobile Settings accepts long database-provided site names without clipping.
+- Exact PR head `b588b6673af3b0ec9dacc012dc59f06e77fc6ec0` passed Deploy #884, Super Admin Browser #155 and Workforce #280.
+- Production #885 passed backup/deploy, `DATA_INTEGRITY_OK`, health `release=b1447b7` / schema `024`, and production UI smoke. Backup: `kitchen_os_20260926T204907Z.dump`.
+- No schema migration and no production stock rewrite.
+- NEXT: redesign Central Kitchen (央廚) inventory UI on the database-declared model.
 
 ## DONE — PostgreSQL-only inventory runtime authority, 2026-09-27
 
@@ -65,8 +68,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #872 / run `36265842924`.
-- Verified production SHA: `d88a90d9487d8edbb5f7e8020397893a5a5e9849`.
+- Verified production release: Deploy Kitchen OS to VPS #885 / run `36270568342`.
+- Verified production SHA: `b1447b727e310b7a3095f5782c0a933916ef6234`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
