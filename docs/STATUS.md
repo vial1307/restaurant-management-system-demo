@@ -1,13 +1,13 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Database control plane / inventory hard-code retirement
+## DONE — Database control plane / inventory hard-code retirement stage 1
 
-- PR #144: Super Admin is being formalized as the business Database control plane.
-- First stage removes closed Central/Fuxing/Yongji and Central-location mappings from legacy inventory helper paths and derives them from PostgreSQL-loaded master data.
-- Super Admin Database wording now reflects PostgreSQL authority and shared API/event synchronization.
-- No schema migration, no stock rewrite and no claim that PR #144 is production yet.
-- Next inventory stages: continue removing obsolete local draft authority/mappings, then redesign Central Kitchen UI on top of database-declared site/location/work-area structure.
-
+- PR #144 merged as `15ba0013f15daa9dcdc04152c95f12bd9f7fc793` and is verified in production through Deploy #856 / run `36259731875`.
+- Super Admin is now formally defined as the normal business Database control plane; PostgreSQL remains authoritative behind VPS APIs.
+- Legacy inventory helper paths derive site/storage/work structure from PostgreSQL-loaded master data instead of closed Central/Fuxing/Yongji and fixed Central-location mappings.
+- Pre-merge Master Data/Admin Panel, six-profile Super Admin Browser and workforce diagnostics passed; merge release passed preflight, database/API round-trip, PostgreSQL concurrency, desktop/mobile + full-device browser regression, backup/rollback deploy, production health/release and production UI smoke.
+- Schema remains `024`; no production stock rewrite or schema migration.
+- Next inventory stage: real-time site-registry propagation, retire more obsolete local draft/master-data compatibility paths, then redesign Central Kitchen UI on database-declared structure.
 
 ## Role/location correction — production 2026-09-25
 
@@ -30,8 +30,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #849 / run `36153187681`.
-- Verified production SHA: `f2ea2b3713e610c98e9ec90cd2178f5a2d5e682f`.
+- Verified production release: Deploy Kitchen OS to VPS #856 / run `36259731875`.
+- Verified production SHA: `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
