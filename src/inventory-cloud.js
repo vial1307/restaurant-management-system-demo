@@ -267,10 +267,11 @@ export async function refreshInventorySiteRegistry({ reason = "refresh", hydrate
   const previousSite = activeInventorySite();
   const sites = await ensureSiteRegistry({ force:true });
   const site = activeInventorySite();
-  const changed = beforeSignature !== siteRegistrySignature(sites) || previousSite !== site;
+  const activeChanged = previousSite !== site;
+  const changed = beforeSignature !== siteRegistrySignature(sites) || activeChanged;
 
   let hydrated = false;
-  if (hydrateActive && site && changed) {
+  if (hydrateActive && site && activeChanged) {
     await runInventorySync(site, { reloadBranch:false, force:true });
     hydrated = true;
   }
