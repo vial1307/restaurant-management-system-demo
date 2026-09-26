@@ -1338,3 +1338,16 @@ The separate read-cutover candidate:
 - Candidate commits include `e09d1c6`, `b36f968`, `769db82`, `22c9ce3`, `9daacfa`, `5c6756c`, `899e2ed`, `8e71364`.
 - Next: exact-head CI/PR review/deploy. If production passes, proceed to remove dead source inventory seed definitions or redesign Central Kitchen UI depending on remaining consumer audit.
 
+## 2026-09-27 — Inventory UI master-data cutover production verification
+
+- PR #150 merged to `main` as `b1447b727e310b7a3095f5782c0a933916ef6234`.
+- Exact PR head `b588b6673af3b0ec9dacc012dc59f06e77fc6ec0` passed Deploy preflight/full regression #884 / run `36270023775`, Super Admin Browser #155 / run `36270023766`, and Workforce Approval Diagnostic #280 / run `36270023752`.
+- Merge Deploy #885 / run `36270568342` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy, production health and UI smoke.
+- Backup: `kitchen_os_20260926T204907Z.dump`.
+- Production: `DATA_INTEGRITY_OK`; `release=b1447b7`; schema `024`; app/database `ok`; production UI smoke PASS.
+- Inventory UI now consumes database-declared site/storage/work-area structure and free-form database inventory units; fixed site/storage/unit fallbacks were retired from inventory paths.
+- A 320px Settings regression exposed the old `96px !important` mobile input override; the last-loaded mobile compatibility layer was corrected so long database site names fit.
+- A WebKit-only localhost test-proxy false positive for successful master-data requests was constrained in the test policy; backend logs confirmed HTTP 200 and the exception does not apply to production hosts or Chromium.
+- No schema migration or production stock rewrite.
+- Next stage: redesign Central Kitchen (央廚) inventory UI on the database-declared model.
+

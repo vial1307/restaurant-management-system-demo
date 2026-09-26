@@ -1,24 +1,29 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — inventory UI master-data cutover, 2026-09-27
+## Completed release — inventory UI master-data cutover, 2026-09-27
 
-Branch: `refactor/inventory-masterdata-ui-cutover-20260927`.
+PR #150 merged into `main` as `b1447b727e310b7a3095f5782c0a933916ef6234` and is verified in production through Deploy Kitchen OS to VPS #885 / run `36270568342`.
 
-Goal: editing branch/Central storage locations, work areas, site inventory mode and item units must not require frontend code changes.
-
-Implemented:
-- branch inventory overview/manage/editor now reads storage/work-area groups directly from `inventoryUiGroups(activeSite)` rather than relying on globally mutated `ZONES/WORK_AREAS/PRIMARY_ZONES`;
+This stage finishes the inventory UI cutover from mutable frontend assumptions to PostgreSQL-loaded master data:
+- branch inventory overview/manage/editor reads storage and work-area groups from `inventoryUiGroups(activeSite)`;
 - primary/service storage grouping follows PostgreSQL `metadata.storage_group`;
-- branch work-stock source summary uses database-declared primary storage locations;
-- branch authority uses database-declared `inventory_mode`, removing the remaining Fuxing/Yongji closed-list check;
-- branch and Central item units are free-form required inputs with suggestions derived from existing database items, so new units do not require a source-code enum update;
-- Central default work area and default new-item storage location come from PostgreSQL master data; `central-work-use`, fixed `noodles` and `CENTRAL_UNITS` fallbacks are removed;
-- Central management tabs render current database location labels rather than raw/stale UI keys;
-- branch dashboard/current-context inventory uses the last site-scoped PostgreSQL snapshot or an empty inventory when no snapshot exists, never source-seeded stock;
-- regression contracts prevent the retired fixed branch/unit/work-area/location assumptions from returning.
+- work-stock source summaries use database-declared primary locations;
+- branch authority follows database-declared `inventory_mode`, not Fuxing/Yongji closed lists;
+- branch and Central item units are free-form required values with suggestions derived from database inventory, so a new unit does not require frontend code;
+- Central default work area and new-item storage location come from PostgreSQL master data; fixed `central-work-use`, `noodles`, `CENTRAL_UNITS` and source storage-label fallbacks are retired from inventory UI;
+- Central management tabs and Settings site labels use current PostgreSQL names rather than fixed Central/Fuxing/Yongji labels;
+- branch dashboard/runtime uses only the site-scoped PostgreSQL snapshot or an empty inventory and cannot expose source-seeded stock;
+- mobile Settings now supports long database-provided site names without clipping;
+- WebKit regression policy only ignores the known localhost/127.0.0.1 test-proxy access-control false positive for master-data requests; real hosts and non-WebKit engines remain actionable.
 
-No schema migration, no stock rewrite, and no change to inventory transaction semantics. Candidate remains unverified until exact-head CI, merge, VPS deploy, health and production UI smoke pass.
+Verification:
+- exact PR head `b588b6673af3b0ec9dacc012dc59f06e77fc6ec0`: Deploy preflight/full regression #884 / run `36270023775`, Super Admin Browser #155 / run `36270023766`, and Workforce Approval Diagnostic #280 / run `36270023752` all PASS;
+- merge release `b1447b727e310b7a3095f5782c0a933916ef6234`: Deploy #885 / run `36270568342` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260926T204907Z.dump`;
+- production audit: `DATA_INTEGRITY_OK`; runtime returned `release=b1447b7`, `schema=024`, app/database `ok`; production UI smoke passed;
+- no schema migration and no production stock rewrite.
 
+Next work: redesign the Central Kitchen (央廚) inventory UI on the database-declared site/location/work-area model without reintroducing hard-coded business master data.
 
 ## Completed release — PostgreSQL-only inventory runtime authority, 2026-09-27
 
@@ -124,7 +129,7 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `d88a90d9487d8edbb5f7e8020397893a5a5e9849`
+- Current verified production SHA: `b1447b727e310b7a3095f5782c0a933916ef6234`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
