@@ -32,7 +32,7 @@ const DATASET_META = {
 };
 const LABELS = {
   overview:"Tổng quan VPS · VPS 總覽",development:"GitHub & Handoff · 開發交接",users:"Quản lý người dùng · 使用者管理",content:"Nội dung & duyệt · 內容審核",
-  data:"Data Tables & CRUD · 資料管理",stores:"Chuỗi & chi nhánh · 多店管理",settings:"Settings · 系統設定",logs:"Logs & Reports · 日誌報表",
+  data:"Database · 資料庫管理",stores:"Chuỗi & chi nhánh · 多店管理",settings:"Settings · 系統設定",logs:"Logs & Reports · 日誌報表",
 };
 
 let sectionLoadSeq = 0;
@@ -124,7 +124,7 @@ function nav() {
   <div class="sa-sidebar-foot"><a href="./">← Kitchen OS</a></div></aside>`;
 }
 function topbar() {
-  return `<header class="sa-topbar"><div><button class="sa-menu-button" type="button" data-toggle-nav>☰</button><h1>${esc(LABELS[state.section])}</h1><p>Super Admin · PostgreSQL / VPS</p></div><div class="sa-top-actions"><button class="sa-btn" type="button" data-refresh>↻ Làm mới</button></div></header>`;
+  return `<header class="sa-topbar"><div><button class="sa-menu-button" type="button" data-toggle-nav>☰</button><h1>${esc(LABELS[state.section])}</h1><p>Super Admin · Database Control Plane</p></div><div class="sa-top-actions"><button class="sa-btn" type="button" data-refresh>↻ Làm mới</button></div></header>`;
 }
 function notices() { return `${state.error?`<div class="sa-alert error">${esc(state.error)}</div>`:""}${state.success?`<div class="sa-alert success">${esc(state.success)}</div>`:""}`; }
 function stat(label,value,note="") { return `<article class="sa-stat"><small>${esc(label)}</small><strong>${esc(value)}</strong>${note?`<span>${esc(note)}</span>`:""}</article>`; }
@@ -295,7 +295,7 @@ function renderDataFilters() {
   return `<form class="sa-filterbar" data-data-filter><input name="q" value="${esc(state.data.q)}" placeholder="Tìm kiếm…"><select name="site"><option value="">Tất cả site</option>${state.sites.map((site)=>`<option value="${esc(site.code)}" ${state.data.site===site.code?"selected":""}>${esc(siteName(site.code))}</option>`).join("")}</select><select name="status">${statusOptions.replace(`value="${esc(state.data.status)}"`,`value="${esc(state.data.status)}" selected`)}</select><button class="sa-btn" type="submit">Lọc</button></form>`;
 }
 function renderData() {
-  if(state.data.name==="inventory-products")return `<article class="sa-card" data-module-v2="data"><div class="sa-tabs">${Object.entries(DATASET_META).map(([key,meta])=>`<button type="button" class="sa-tab ${state.data.name===key?"active":""}" data-dataset="${esc(key)}">${esc(meta.label)}</button>`).join("")}</div><div class="idb-workspace" data-inventory-database></div></article>`;
+  if(state.data.name==="inventory-products")return `<article class="sa-card" data-module-v2="data"><div class="sa-card-head"><div><h2>Database kho · 庫存資料庫</h2><p>PostgreSQL là nguồn dữ liệu gốc. Thay đổi cấu trúc kho tại đây được đồng bộ tới Website qua API + inventory events; không cần thao tác SQL/SSH cho dữ liệu vận hành.</p></div><span class="sa-pill ok">DB AUTHORITY</span></div><div class="sa-tabs">${Object.entries(DATASET_META).map(([key,meta])=>`<button type="button" class="sa-tab ${state.data.name===key?"active":""}" data-dataset="${esc(key)}">${esc(meta.label)}</button>`).join("")}</div><div class="idb-workspace" data-inventory-database></div></article>`;
   const result=state.data.result; const rows=result?.rows||[]; const columns=result?.columns||[]; const p=result?.pagination||{page:1,pages:1,total:0};
   const allowCreate=result ? result.allowCreate!==false : state.data.name!=="inventory-products";
   const allowArchive=result ? result.allowArchive!==false : state.data.name!=="inventory-products";
@@ -303,7 +303,7 @@ function renderData() {
   const lifecycleNote=lifecycleManaged
     ? `<div class="sa-empty"><strong>Inventory lifecycle được quản lý tại module Kho · 庫存模組管理生命週期</strong><br><small>Data Tables chỉ sửa metadata. Thêm mới / kích hoạt / ngừng dùng phải thực hiện trong Inventory để giữ stock, location, receive-default và audit nhất quán.</small></div>`
     : "";
-  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Data Tables & CRUD</h2><p>Chỉ các bảng/column nằm trong whitelist backend mới được truy cập.</p></div>${allowCreate?`<button class="sa-btn primary" type="button" data-data-new>＋ Thêm dữ liệu</button>`:""}</div>
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Database & CRUD · 資料庫管理</h2><p>Chỉ dữ liệu/column nằm trong whitelist backend mới được chỉnh sửa; mọi thay đổi vẫn đi qua API, quyền và audit.</p></div>${allowCreate?`<button class="sa-btn primary" type="button" data-data-new>＋ Thêm dữ liệu</button>`:""}</div>
   <div class="sa-tabs">${Object.entries(DATASET_META).map(([key,meta])=>`<button type="button" class="sa-tab ${state.data.name===key?"active":""}" data-dataset="${esc(key)}">${esc(meta.label)}</button>`).join("")}</div>
   ${lifecycleNote}
   ${renderDataFilters()}
