@@ -1309,3 +1309,12 @@ The separate read-cutover candidate:
 - Candidate commits include `37d8a35`, `2206bba`, `5f98bb8`, `10a2ac5`, `81360b7`, `b6055ba`, `01e5258` plus documentation commits.
 - Next step: open PR, run exact-head static/API/PostgreSQL/browser/device regression, fix any integration regression, then deploy and verify production before Central Kitchen UI redesign.
 
+## 2026-09-27 — Inventory authority stage 3 production verification
+
+- PR #148 merged to `main` as `d88a90d9487d8edbb5f7e8020397893a5a5e9849`.
+- Deploy #872 / run `36265842924` passed merge-commit preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy, production health and UI smoke.
+- Backup: `kitchen_os_20260926T192740Z.dump`.
+- Production: `DATA_INTEGRITY_OK`; `release=d88a90d`; schema `024`; app/database `ok`; `PRODUCTION_UI_SMOKE_OK`.
+- Stage 3 is complete. Browser localStorage is not an inventory mutation authority; retained inventory caches are read-only server projections.
+- Next stage: audit and retire remaining mutable inventory business master/rule hard-codes before Central Kitchen UI redesign.
+
