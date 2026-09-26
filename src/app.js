@@ -2334,6 +2334,7 @@ window.addEventListener("shitu:auth-synced", renderWhenAuthorized);
 window.addEventListener("shitu:auth-expired", renderWhenAuthorized);
 window.addEventListener("shitu:vps-auth-ready", renderWhenAuthorized);
 window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
+window.addEventListener("shitu:inventory-sites-changed", renderWhenAuthorized);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (route() !== "inventory" || document.querySelector(".central-heading")) return;
   const site = activeInventorySite();
