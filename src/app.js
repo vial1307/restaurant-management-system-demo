@@ -19,8 +19,9 @@ import {
   shiftMonth,
   summarizeReserveInventory,
 } from "./rules.js";
-import { createStore, WORK_AREAS, ZONES } from "./store.js";
+import { createStore, WORK_AREAS } from "./store.js";
 import {
+  inventorySite,
   inventoryUiGroups,
   isBranchInventorySite,
 } from "./inventory-master-data.js";
@@ -419,8 +420,7 @@ function inventoryUnitSuggestions(record, current = "") {
 }
 
 function zoneLabel(id, language, site = activeInventorySite()) {
-  const zone = inventoryStorageGroups(site).find((item) => item.id === id)
-    || ZONES.find((item) => item.id === id);
+  const zone = inventoryStorageGroups(site).find((item) => item.id === id);
   return zone ? zone[language] : id;
 }
 
@@ -1102,7 +1102,10 @@ function settingsPage(context) {
   const history = Object.keys(state.records).sort().reverse();
   const canManage = accountCan("settings", "edit");
   const site = activeInventorySite();
-  const defaultBranchName = { central: "央廚", fuxing: "復興店", yongji: "永吉店" }[site] || "";
+  const siteRow = inventorySite(site);
+  const defaultBranchName = language === "vi"
+    ? (siteRow?.name_vi || siteRow?.name_zh_tw || siteRow?.code || "")
+    : (siteRow?.name_zh_tw || siteRow?.name_vi || siteRow?.code || "");
   const branchName = state.settings.branchName || defaultBranchName;
   const general = canManage
     ? `<form data-form="save-general-settings">${settingsField(text.organizationName, state.settings.organizationName || "食徒", "organizationName", "", "text")}${settingsField(text.branchName, branchName, "branchName", "", "text")}${settingsField(text.employee, state.settings.employeeName, "employeeName", "", "text")}${settingsField(text.workstation, state.settings.workstation, "workstation", "", "text")}<div class="setting-row"><span>${escapeHtml(text.language)}</span><div class="language-switch"><button type="button" class="${language === "vi" ? "active" : ""}" data-action="set-language" data-language="vi">Tiếng Việt</button><button type="button" class="${language === "zh" ? "active" : ""}" data-action="set-language" data-language="zh">繁體中文</button></div></div><div class="settings-section-title">${escapeHtml(text.operationalRules)}</div>${settingsField(text.reservationBuffer, state.settings.reservationBuffer, "reservationBuffer", text.tables)}${settingsField(text.weekdaysRice, state.settings.riceWeekday, "riceWeekday", "g")}${settingsField(text.weekendRice, state.settings.riceWeekend, "riceWeekend", "g")}${settingsField(text.skipRiceAbove, state.settings.riceSkipAbove, "riceSkipAbove", "g")}<p class="helper-text">${escapeHtml(text.riceRule)}</p><div class="settings-save-row"><button class="primary-button" type="submit" data-settings-save>${icon("check")}${escapeHtml(text.saveChanges)}</button>${settingsPersistenceStatus(text)}</div></form>`
