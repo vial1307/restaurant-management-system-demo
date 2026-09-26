@@ -464,6 +464,7 @@ function centralEditorModal(items, editorKey, language, stocktakeEditable = fals
   const defaultZone = zones[0] || "";
   const defaultWorkArea = centralDefaultWorkArea();
   const units = centralUnitSuggestions(items, item.unit);
+  const selectedUnit = item.unit || units[0] || "";
   const title = editing
     ? (language === "zh" ? "編輯食材" : "Chỉnh sửa nguyên liệu · 編輯食材")
     : (language === "zh" ? "新增食材" : "Thêm nguyên liệu · 新增食材");
@@ -484,7 +485,7 @@ function centralEditorModal(items, editorKey, language, stocktakeEditable = fals
         <label>Tiếng Việt<input required name="central-label-vi" value="${esc(item.vi || "")}" placeholder="Thịt bò"/></label>
         <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${centralWorkAreas().map((area) => `<option value="${area.id}" ${(item.workArea || defaultWorkArea) === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "設定此原物料主要提供給哪個工作區使用。" : "Chọn khu làm việc chính sử dụng nguyên vật liệu này."}</small></label>
         <fieldset class="modal-locations"><legend>${language === "zh" ? "選擇食材存放位置" : "Chọn nơi cất nguyên liệu · 選擇食材存放位置"}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的位置；「現有」為目前實際庫存，「標準量」為補貨／低庫存判斷基準。" : "Chọn vị trí thực tế có cất hàng; 現有 là tồn thực tế, 標準量 là mức chuẩn để cảnh báo/bổ hàng."}</p>${locationRows}</fieldset>
-        <div class="modal-grid modal-meta-grid"><label>${language === "zh" ? "數量單位" : "Đơn vị · 數量"}<input name="central-unit" list="central-unit-suggestions" required value="${esc(item.unit || "")}" placeholder="包 / 盒 / kg"/><datalist id="central-unit-suggestions">${units.map((unit) => `<option value="${esc(unit)}"></option>`).join("")}</datalist></label></div>
+        <div class="modal-grid modal-meta-grid"><label>${language === "zh" ? "數量單位" : "Đơn vị · 數量"}<input name="central-unit" list="central-unit-suggestions" required value="${esc(selectedUnit)}" placeholder="包 / 盒 / kg"/><datalist id="central-unit-suggestions">${units.map((unit) => `<option value="${esc(unit)}"></option>`).join("")}</datalist></label></div>
         <div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-central-save-item>✓ ${esc(editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項")}</button></div>
       </form>
     </section>
