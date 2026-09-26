@@ -59,6 +59,8 @@ let bootedUserId = "";
 let inventorySyncTail = Promise.resolve();
 let lastSite = "";
 let siteRegistryInFlight = null;
+let siteRegistryLoaded = false;
+let siteRegistryUserId = "";
 let activeSiteSwitchSerial = 0;
 let realtimeSource = null;
 let realtimeUserId = "";
@@ -128,15 +130,25 @@ function todayKey() {
 }
 
 async function ensureSiteRegistry({ force = false } = {}) {
-  if (!force && inventorySites().length) return inventorySites();
-  if (siteRegistryInFlight) return siteRegistryInFlight;
+  const userId = String(session()?.id || "");
+  if (!force && siteRegistryLoaded && siteRegistryUserId === userId) return inventorySites();
+  if (siteRegistryInFlight?.userId === userId) return siteRegistryInFlight.promise;
+
   let pending;
   pending = vpsInventorySites()
-    .then((result) => replaceInventorySites(result?.sites || []))
+    .then((result) => {
+      // A response started under a previous login must never replace the
+      // registry visible to the newly authenticated account.
+      if (String(session()?.id || "") !== userId) return inventorySites();
+      const next = replaceInventorySites(result?.sites || []);
+      siteRegistryLoaded = true;
+      siteRegistryUserId = userId;
+      return next;
+    })
     .finally(() => {
-      if (siteRegistryInFlight === pending) siteRegistryInFlight = null;
+      if (siteRegistryInFlight?.promise === pending) siteRegistryInFlight = null;
     });
-  siteRegistryInFlight = pending;
+  siteRegistryInFlight = { userId, promise:pending };
   return pending;
 }
 
@@ -233,7 +245,7 @@ export function activeInventorySite() {
   if (!s) return "";
   if (s.location !== "all") {
     const assignedSite = String(s.location || "");
-    return !inventorySites().length || isKnownInventorySite(assignedSite) ? assignedSite : "";
+    return !siteRegistryLoaded || isKnownInventorySite(assignedSite) ? assignedSite : "";
   }
   const saved = localStorage.getItem(ACTIVE_SITE_KEY) || "";
   if (isKnownInventorySite(saved)) return saved;
