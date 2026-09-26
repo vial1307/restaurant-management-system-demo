@@ -47,6 +47,18 @@ for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTR
 }
 assert.equal(/\bDEFAULT_ITEMS\b/.test(cloudSource), false, "production inventory cloud path must not use DEFAULT_ITEMS fallback");
 
+const appSource = fs.readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
+assert.match(appSource, /inventoryLocations\(site,"storage"\)/,
+  "legacy inventory helpers must derive storage locations from PostgreSQL master data");
+assert.match(appSource, /inventorySites\(\)\.flatMap\(\(entry\)=>appStagingLocations\(entry\.code\)\)/,
+  "cross-site helper locations must derive the site registry dynamically");
+assert.equal(appSource.includes('["central","fuxing","yongji"].flatMap'), false,
+  "inventory helper paths must not hard-code the physical site registry");
+assert.equal(appSource.includes('["fuxing","yongji"].includes(targetSite)'), false,
+  "branch helper paths must accept database-declared branch sites");
+assert.equal(appSource.includes('"central-freezer":"央廚冷凍"'), false,
+  "Central storage labels must come from database master data");
+
 const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta.url), "utf8");
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");
 assert.equal(/SITE_LABELS/.test(adminSource), false, "Admin Panel site labels must come from PostgreSQL");
