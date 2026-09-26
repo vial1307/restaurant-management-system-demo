@@ -453,25 +453,33 @@ input,textarea{
     min-height:42px;
   }
 
-  /* Settings: reduce scrolling and make values easier to hit. */
+  /* Settings: database-provided labels/values may be longer than legacy fixed names. */
   .settings-layout{gap:8px !important}
   .setting-row{
     min-height:48px !important;
-    padding-block:3px;
+    align-items:stretch !important;
+    flex-direction:column !important;
+    gap:6px !important;
+    padding-block:6px;
   }
   .setting-row>span:first-child{
-    flex:1;
     min-width:0;
-    padding-right:8px;
+    padding-right:0;
+    overflow-wrap:anywhere;
     font-size:13px !important;
     line-height:1.3;
   }
   .setting-control{
-    flex:0 0 auto;
+    flex:1 1 auto;
+    width:100%;
+    min-width:0;
   }
   .setting-control>input{
-    width:96px !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
     min-height:40px !important;
+    text-align:left;
   }
   .history-item{
     min-height:44px !important;
