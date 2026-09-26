@@ -19,13 +19,8 @@ import {
   shiftMonth,
   summarizeReserveInventory,
 } from "./rules.js";
-import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
+import { createStore, WORK_AREAS, ZONES } from "./store.js";
 import {
-  inventoryLocationByCode,
-  inventoryLocationUiKey,
-  inventoryLocationWorkArea,
-  inventoryLocations,
-  inventorySites,
   inventoryUiGroups,
   isBranchInventorySite,
 } from "./inventory-master-data.js";
