@@ -19,13 +19,10 @@ import {
   shiftMonth,
   summarizeReserveInventory,
 } from "./rules.js";
-import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
+import { createStore, WORK_AREAS } from "./store.js";
 import {
-  inventoryLocationByCode,
-  inventoryLocationUiKey,
-  inventoryLocationWorkArea,
-  inventoryLocations,
-  inventorySites,
+  inventorySite,
+  inventoryUiGroups,
   isBranchInventorySite,
 } from "./inventory-master-data.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
@@ -400,13 +397,36 @@ function compactNumber(value, language = "vi") {
   return new Intl.NumberFormat(localeFor(language)).format(value);
 }
 
-function zoneLabel(id, language) {
-  const zone = ZONES.find((item) => item.id === id);
+function inventoryStorageGroups(site = activeInventorySite()) {
+  return inventoryUiGroups(site).storage;
+}
+
+function inventoryWorkAreaGroups(site = activeInventorySite()) {
+  return inventoryUiGroups(site).workAreas;
+}
+
+function inventoryPrimaryStorageIds(site = activeInventorySite()) {
+  return inventoryStorageGroups(site)
+    .filter((group) => group.storageGroup === "primary")
+    .map((group) => group.id);
+}
+
+function inventoryUnitSuggestions(record, current = "") {
+  return [...new Set([
+    current,
+    ...(record?.inventory || []).map((item) => item.unit),
+    ...(record?.workInventory || []).map((item) => item.unit),
+  ].map((unit) => String(unit || "").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b,"zh-Hant"));
+}
+
+function zoneLabel(id, language, site = activeInventorySite()) {
+  const zone = inventoryStorageGroups(site).find((item) => item.id === id);
   return zone ? zone[language] : id;
 }
 
-function workAreaLabel(id, language) {
-  const area = WORK_AREAS.find((item) => item.id === id);
+function workAreaLabel(id, language, site = activeInventorySite()) {
+  const area = inventoryWorkAreaGroups(site).find((item) => item.id === id)
+    || WORK_AREAS.find((item) => item.id === id);
   return area ? area[language] : id;
 }
 
@@ -441,11 +461,12 @@ function statCard({ label, value, unit, note, tone, iconName }) {
 function authoritativeBranchRecord(state, site = activeInventorySite()) {
   const record = state?.records?.[state.selectedDate];
   if (!record) return record;
-  if (inventoryCloudState() !== "ready" || !["fuxing", "yongji"].includes(site) || state.selectedDate !== formatDateKey()) {
-    return record;
-  }
+  if (!isBranchInventorySite(site) || state.selectedDate !== formatDateKey()) return record;
+
   const snapshot = inventoryBranchSnapshot(site);
-  if (!snapshot) return record;
+  if (!snapshot) {
+    return { ...record, inventory:[], workInventory:[], inventorySite:site };
+  }
   return {
     ...record,
     inventory:snapshot.inventory,
@@ -699,12 +720,14 @@ function storageInventoryRow(item, context) {
   const catalogManage = context.catalogManageWritable ?? canManageBranchCatalog(activeInventorySite());
   const catalogManageVisible = context.catalogManageVisible ?? catalogManage;
   const status = inventoryStatus(item);
+  const workAreas = inventoryWorkAreaGroups(activeInventorySite());
+  const storageGroups = inventoryStorageGroups(activeInventorySite());
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
-  const source = item.zone === "large-freezer" ? null : storageSources(item, record, item.zone)[0];
+  const source = storageSources(item, record, item.zone)[0];
   const canRestock = inventoryRestock(item) > 0 && source;
   return `<article class="inventory-row storage-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
-    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${WORK_AREAS.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(WORK_AREAS.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
-    <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${ZONES.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
+    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
+    <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${storageGroups.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
     <div class="inventory-storage">${quantityControl(item, "item", Boolean(context.manageQuantityEdit))}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-zone="${escapeHtml(item.zone)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}<div class="inventory-item-tools">${editable && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManageVisible ? `<button class="inventory-action-button ${catalogManage ? "" : "sql-pending-action"}" data-action="${catalogManage ? "open-edit-item" : "inventory-edit-sql-pending"}" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${catalogManage && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></div></article>`;
 }
 
@@ -717,16 +740,17 @@ function workInventoryRow(item, context) {
   const source = sources[0];
   const available = sources.reduce((total, entry) => total + entry.quantity, 0);
   const needed = inventoryRestock(item);
-  const mainSources = PRIMARY_ZONES.map((zone) => ({
+  const workAreas = inventoryWorkAreaGroups(activeInventorySite());
+  const mainSources = inventoryPrimaryStorageIds(activeInventorySite()).map((zone) => ({
     zone,
     quantity: record.inventory
       .filter((entry) => entry.stockKey === item.stockKey && entry.zone === zone)
       .reduce((total, entry) => total + entry.quantity, 0),
   }));
   return `<article class="inventory-row work-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
-    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${WORK_AREAS.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(WORK_AREAS.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
+    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-work-area="${escapeHtml(item.workArea)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
-    <div class="inventory-source"><div class="source-quantities">${mainSources.map((entry) => `<span class="source-quantity ${entry.quantity === 0 ? "source-empty" : ""}" data-source-zone="${entry.zone}">${escapeHtml(entry.zone === "large-freezer" ? text.freezerShort : text.fridgeShort)} <strong>${entry.quantity}</strong></span>`).join("")}</div><small>${escapeHtml(source ? `${text.takeFrom} ${zoneLabel(source.zone, language)}` : text.noSource)}</small></div>
+    <div class="inventory-source"><div class="source-quantities">${mainSources.map((entry) => `<span class="source-quantity ${entry.quantity === 0 ? "source-empty" : ""}" data-source-zone="${entry.zone}">${escapeHtml(zoneLabel(entry.zone, language))} <strong>${entry.quantity}</strong></span>`).join("")}</div><small>${escapeHtml(source ? `${text.takeFrom} ${zoneLabel(source.zone, language)}` : text.noSource)}</small></div>
     <div class="inventory-transfer">${needed > 0 && editable ? `<button class="restock-button" data-action="restock-work-item" data-id="${escapeHtml(item.id)}" ${available <= 0 ? "disabled" : ""}>${icon("plus")}${Math.min(needed, available) || needed}</button>` : needed > 0 ? `<span class="tag tag-low">${escapeHtml(text.restock)}</span>` : `<span class="tag tag-ok">${escapeHtml(text.ready)}</span>`}</div></article>`;
 }
 
@@ -746,8 +770,8 @@ function inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, all
 
   if (groupKey !== "zone") return `<div class="zone-tabs work-area-tabs">${all}${groups.map(tab).join("")}</div>`;
 
-  const primary = groups.filter((group) => PRIMARY_ZONES.includes(group.id));
-  const service = groups.filter((group) => !PRIMARY_ZONES.includes(group.id));
+  const primary = groups.filter((group) => group.storageGroup === "primary");
+  const service = groups.filter((group) => group.storageGroup !== "primary");
   return `<div class="storage-tab-groups"><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.primaryStorage)}</span><div class="zone-tabs">${all}${primary.map(tab).join("")}</div></div><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.serviceStorage)}</span><div class="zone-tabs">${service.map(tab).join("")}</div></div></div>`;
 }
 
@@ -812,7 +836,8 @@ function inventory(context) {
     ? view.zone === "all" || item.zone === view.zone
     : view.workArea === "all" || item.workArea === view.workArea
   );
-  const groups = storageView ? ZONES : WORK_AREAS;
+  const uiGroups = inventoryUiGroups(site);
+  const groups = storageView ? uiGroups.storage : uiGroups.workAreas;
   const groupKey = storageView ? "zone" : "workArea";
   const activeGroup = storageView ? view.zone : view.workArea;
   const selectAction = storageView ? "select-zone" : "select-work-area";
@@ -887,7 +912,7 @@ function inventory(context) {
     const manageEntries = effectiveRecord.inventory;
     const manageFiltered = manageEntries.filter((item) => view.zone === "all" || item.zone === view.zone);
     const manageRowContext = { ...rowContext, catalogManageVisible, catalogManageWritable: catalogManage, manageQuantityEdit:canDirectInventoryAdjust() };
-    const manageRows = inventoryGroups(manageFiltered, ZONES, "zone", manageRowContext, storageInventoryRow);
+    const manageRows = inventoryGroups(manageFiltered, uiGroups.storage, "zone", manageRowContext, storageInventoryRow);
     const manageColumns = [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock];
     const manageSubtitle = language === "zh"
       ? "新增、編輯或刪除食材，並設定工作區、存放位置、現有量與標準量。"
@@ -911,7 +936,7 @@ function inventory(context) {
         : `<div class="inventory-readonly-notice"><strong>${language==="zh"?"目前帳號無法編輯此據點":"Tài khoản hiện tại không được chỉnh sửa cơ sở này"}</strong><small>${language==="zh"?"資料庫已連線；請檢查帳號據點與庫存編輯權限。":"Database đã kết nối; hãy kiểm tra cơ sở và quyền chỉnh sửa kho của tài khoản."}</small></div>`;
     return `${heading(text.inventory, manageSubtitle, manageAction)}${cloudNotice}${opsTabs}${opsGuide}${manageDbNotice}
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
-      ${inventoryTabs(manageEntries, ZONES, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
+      ${inventoryTabs(manageEntries, uiGroups.storage, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
       <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
         <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label></div>
       <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
@@ -1077,7 +1102,10 @@ function settingsPage(context) {
   const history = Object.keys(state.records).sort().reverse();
   const canManage = accountCan("settings", "edit");
   const site = activeInventorySite();
-  const defaultBranchName = { central: "央廚", fuxing: "復興店", yongji: "永吉店" }[site] || "";
+  const siteRow = inventorySite(site);
+  const defaultBranchName = language === "vi"
+    ? (siteRow?.name_vi || siteRow?.name_zh_tw || siteRow?.code || "")
+    : (siteRow?.name_zh_tw || siteRow?.name_vi || siteRow?.code || "");
   const branchName = state.settings.branchName || defaultBranchName;
   const general = canManage
     ? `<form data-form="save-general-settings">${settingsField(text.organizationName, state.settings.organizationName || "食徒", "organizationName", "", "text")}${settingsField(text.branchName, branchName, "branchName", "", "text")}${settingsField(text.employee, state.settings.employeeName, "employeeName", "", "text")}${settingsField(text.workstation, state.settings.workstation, "workstation", "", "text")}<div class="setting-row"><span>${escapeHtml(text.language)}</span><div class="language-switch"><button type="button" class="${language === "vi" ? "active" : ""}" data-action="set-language" data-language="vi">Tiếng Việt</button><button type="button" class="${language === "zh" ? "active" : ""}" data-action="set-language" data-language="zh">繁體中文</button></div></div><div class="settings-section-title">${escapeHtml(text.operationalRules)}</div>${settingsField(text.reservationBuffer, state.settings.reservationBuffer, "reservationBuffer", text.tables)}${settingsField(text.weekdaysRice, state.settings.riceWeekday, "riceWeekday", "g")}${settingsField(text.weekendRice, state.settings.riceWeekend, "riceWeekend", "g")}${settingsField(text.skipRiceAbove, state.settings.riceSkipAbove, "riceSkipAbove", "g")}<p class="helper-text">${escapeHtml(text.riceRule)}</p><div class="settings-save-row"><button class="primary-button" type="submit" data-settings-save>${icon("check")}${escapeHtml(text.saveChanges)}</button>${settingsPersistenceStatus(text)}</div></form>`
@@ -1093,22 +1121,28 @@ function addItemModal(context) {
   const existing = editing ? record.inventory.filter((item) => item.stockKey === view.editingStockKey) : [];
   const item = existing[0] ?? {};
   const working = editing ? record.workInventory.find((entry) => entry.stockKey === view.editingStockKey) : null;
-  const activeZone = view.zone !== "all" ? view.zone : "large-freezer";
-  const units = ["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"];
+  const site = activeInventorySite();
+  const uiGroups = inventoryUiGroups(site);
+  const storageGroups = uiGroups.storage;
+  const workAreas = uiGroups.workAreas;
+  const activeZone = view.zone !== "all" && storageGroups.some((zone) => zone.id === view.zone) ? view.zone : storageGroups[0]?.id || "";
+  const units = inventoryUnitSuggestions(record, item.unit);
+  const selectedUnit = item.unit || units[0] || "";
+  const selectedWorkArea = item.workArea || (view.workArea !== "all" && workAreas.some((area) => area.id === view.workArea) ? view.workArea : workAreas[0]?.id || "");
   const stocktakeEditable = canDirectInventoryAdjust();
-  const receiveDefaultEditable = canManageReceiveDefault(activeInventorySite());
-  const locations = ZONES.map((zone) => {
+  const receiveDefaultEditable = canManageReceiveDefault(site);
+  const locations = storageGroups.map((zone) => {
     const stored = existing.find((entry) => entry.zone === zone.id);
     const checked = editing ? Boolean(stored) : zone.id === activeZone;
     return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label></div>`;
   }).join("");
   const receiveZone=item.receiveZone||"";
   const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／尚未指定":"Tự động nếu chỉ có 1 vị trí · 尚未指定"}</option>`]
-    .concat(ZONES.map((zone)=>`<option value="${zone.id}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
+    .concat(storageGroups.map((zone)=>`<option value="${zone.id}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
     .join("");
 
   const saveLabel = editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項";
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div><form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(item.workArea ?? view.workArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<select name="unit">${units.map((unit) => `<option ${item.unit === unit ? "selected" : ""}>${unit}</option>`).join("")}</select></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div><form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea" required>${workAreas.map((area) => `<option value="${area.id}" ${selectedWorkArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<input name="unit" list="inventory-unit-suggestions" required value="${escapeHtml(selectedUnit)}" placeholder="包 / 盒 / kg" /><datalist id="inventory-unit-suggestions">${units.map((unit) => `<option value="${escapeHtml(unit)}"></option>`).join("")}</datalist></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
 }
 
 function syncReceiveZoneOptions(form) {

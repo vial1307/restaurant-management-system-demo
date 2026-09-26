@@ -1,5 +1,25 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — inventory UI master-data cutover, 2026-09-27
+
+Branch: `refactor/inventory-masterdata-ui-cutover-20260927`.
+
+Goal: editing branch/Central storage locations, work areas, site inventory mode and item units must not require frontend code changes.
+
+Implemented:
+- branch inventory overview/manage/editor now reads storage/work-area groups directly from `inventoryUiGroups(activeSite)` rather than relying on globally mutated `ZONES/WORK_AREAS/PRIMARY_ZONES`;
+- primary/service storage grouping follows PostgreSQL `metadata.storage_group`;
+- branch work-stock source summary uses database-declared primary storage locations;
+- branch authority uses database-declared `inventory_mode`, removing the remaining Fuxing/Yongji closed-list check;
+- branch and Central item units are free-form required inputs with suggestions derived from existing database items, so new units do not require a source-code enum update;
+- Central default work area and default new-item storage location come from PostgreSQL master data; `central-work-use`, fixed `noodles` and `CENTRAL_UNITS` fallbacks are removed;
+- Central management tabs render current database location labels rather than raw/stale UI keys;
+- branch dashboard/current-context inventory uses the last site-scoped PostgreSQL snapshot or an empty inventory when no snapshot exists, never source-seeded stock;
+- regression contracts prevent the retired fixed branch/unit/work-area/location assumptions from returning.
+
+No schema migration, no stock rewrite, and no change to inventory transaction semantics. Candidate remains unverified until exact-head CI, merge, VPS deploy, health and production UI smoke pass.
+
+
 ## Completed release — PostgreSQL-only inventory runtime authority, 2026-09-27
 
 PR #148 merged into `main` as `d88a90d9487d8edbb5f7e8020397893a5a5e9849` and is verified in production through Deploy Kitchen OS to VPS #872 / run `36265842924`.

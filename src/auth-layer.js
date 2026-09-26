@@ -19,7 +19,7 @@ import {
   switchActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { inventorySites, inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
+import { inventorySites, inventoryUiGroups } from "./inventory-master-data.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { searchMatches } from "./search-utils.js";
 import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
@@ -33,7 +33,14 @@ const CENTRAL_WORK_KEY = "shitu-central-kitchen-work-v1";
 // UI keys stay stable when the user renames a location.
 const centralZones = () => inventoryUiGroups("central").storage.map((zone) => zone.id);
 const centralWorkAreas = () => inventoryUiGroups("central").workAreas;
-const CENTRAL_UNITS = ["包","盒","箱","斤","片","個","隻","塊","條","顆","手","kg"];
+const centralDefaultWorkArea = () => centralWorkAreas()[0]?.id || "";
+
+function centralUnitSuggestions(items, current = "") {
+  return [...new Set([
+    current,
+    ...(items || []).map((item) => item.unit),
+  ].map((unit) => String(unit || "").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b,"zh-Hant"));
+}
 const CENTRAL_QUICK_ADJUST_DEBOUNCE_MS = 120;
 const centralQuickAdjustments = new Map();
 
@@ -162,9 +169,9 @@ function readCentralWork(){
 function centralWorkEntry(workMap,key){
   const value=workMap?.[key];
   if(value && typeof value==="object"){
-    return {quantity:Math.max(0,Number(value.quantity)||0),minimum:Math.max(0,Number(value.minimum)||0),locationCode:value.locationCode||"central-work-use"};
+    return {quantity:Math.max(0,Number(value.quantity)||0),minimum:Math.max(0,Number(value.minimum)||0),locationCode:value.locationCode||""};
   }
-  return {quantity:Math.max(0,Number(value)||0),minimum:0,locationCode:"central-work-use"};
+  return {quantity:Math.max(0,Number(value)||0),minimum:0,locationCode:""};
 }
 function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
 
@@ -414,8 +421,8 @@ function centralWorkAreaLabel(area, language) {
 }
 
 function centralOverviewWorkAreaControl(item, key, language, writable) {
-  if (!writable) return `<span class="inventory-readonly-field">${esc(centralWorkAreaLabel(item.workArea||"noodles",language))}</span>`;
-  return `<select class="inventory-select" data-central-inline-work-area data-central-product-key="${esc(key)}" data-central-item-key="${esc(item.itemKey||key)}" aria-label="${language==="zh"?"工作區":"Khu làm việc"}">${centralWorkAreas().map((area)=>`<option value="${esc(area.id)}" ${(item.workArea||"noodles")===area.id?"selected":""}>${esc(centralWorkAreaLabel(area.id,language))}</option>`).join("")}</select>`;
+  if (!writable) return `<span class="inventory-readonly-field">${esc(centralWorkAreaLabel(item.workArea||centralDefaultWorkArea(),language))}</span>`;
+  return `<select class="inventory-select" data-central-inline-work-area data-central-product-key="${esc(key)}" data-central-item-key="${esc(item.itemKey||key)}" aria-label="${language==="zh"?"工作區":"Khu làm việc"}">${centralWorkAreas().map((area)=>`<option value="${esc(area.id)}" ${(item.workArea||centralDefaultWorkArea())===area.id?"selected":""}>${esc(centralWorkAreaLabel(area.id,language))}</option>`).join("")}</select>`;
 }
 
 function centralOverviewZoneControl(items, item, key, language, writable) {
@@ -433,14 +440,14 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
   const deleteLabel = language === "zh" ? "刪除" : "Xóa · 刪除";
   return `<section class="central-card central-manage-card">
     <div class="central-toolbar central-manage-toolbar">
-      <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${centralZones().map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(zone)}</button>`).join("")}</div>
+      <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${centralZones().map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(centralZoneLabel(zone, language))}</button>`).join("")}</div>
       ${writable ? `<button class="primary-button" type="button" data-central-editor-open="new">＋ ${esc(addLabel)}</button>` : ""}
       ${centralSearchField(query, language)}
     </div>
     <div class="central-manage-list">${groups.map(({ key, item, rows }) => {
       const locations = rows.map((row) => `<div class="central-manage-location"><span class="op-location-pill"><small>${esc(centralZoneLabel(row.zone, language))}</small><small>${language === "zh" ? "標準量" : "Định mức"} ${Number(row.minimum || 0)}</small></span>${centralQuantityControl({id:`manage-${row.id}`,itemKey:row.itemKey||key,locationCode:centralLocationCode(row.zone),quantity:row.qty,unit:row.unit||item.unit||"",direct:stocktakeWritable,manageAdjust:stocktakeWritable})}</div>`).join("");
       return `<article class="central-manage-row" data-central-product="${esc(key)}">
-        <div class="central-manage-product"><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small><span>${esc(centralWorkAreaLabel(item.workArea || "noodles", language))} · ${esc(item.unit || "")}</span></div>
+        <div class="central-manage-product"><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small><span>${esc(centralWorkAreaLabel(item.workArea || centralDefaultWorkArea(), language))} · ${esc(item.unit || "")}</span></div>
         <div class="op-location-list">${locations}</div>
         <div class="central-manage-actions">${writable ? `<button type="button" class="inventory-action-button" data-central-editor-open="${esc(key)}" aria-label="${esc(editLabel)}">✎</button>${allowDelete ? `<button type="button" class="inventory-action-button delete-action" data-central-product-delete="${esc(key)}" aria-label="${esc(deleteLabel)}">🗑</button>` : ""}` : ""}</div>
       </article>`;
@@ -453,12 +460,17 @@ function centralEditorModal(items, editorKey, language, stocktakeEditable = fals
   const editing = editorKey !== "new";
   const rows = editing ? items.filter((item) => centralProductKey(item) === editorKey) : [];
   const item = rows[0] || {};
+  const zones = centralZones();
+  const defaultZone = zones[0] || "";
+  const defaultWorkArea = centralDefaultWorkArea();
+  const units = centralUnitSuggestions(items, item.unit);
+  const selectedUnit = item.unit || units[0] || "";
   const title = editing
     ? (language === "zh" ? "編輯食材" : "Chỉnh sửa nguyên liệu · 編輯食材")
     : (language === "zh" ? "新增食材" : "Thêm nguyên liệu · 新增食材");
-  const locationRows = centralZones().map((zone) => {
+  const locationRows = zones.map((zone) => {
     const stored = rows.find((row) => row.zone === zone);
-    const checked = editing ? Boolean(stored) : zone === "央廚冷凍";
+    const checked = editing ? Boolean(stored) : zone === defaultZone;
     return `<div class="modal-location-row">
       <label class="modal-location-choice"><input type="checkbox" name="central-zones" value="${esc(zone)}" ${checked ? "checked" : ""}/><span>${esc(centralZoneLabel(zone, language))}</span></label>
       <label><span>${language === "zh" ? "現有" : "Hiện có"}</span><input type="number" min="0" name="central-quantity:${esc(zone)}" value="${Number(stored?.qty || 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'}/></label>
@@ -471,9 +483,9 @@ function centralEditorModal(items, editorKey, language, stocktakeEditable = fals
       <form id="central-product-form" data-central-editor-form data-editor-key="${esc(editorKey)}">
         <label>中文<input required name="central-label" value="${esc(item.zh || "")}" placeholder="牛肉"/></label>
         <label>Tiếng Việt<input required name="central-label-vi" value="${esc(item.vi || "")}" placeholder="Thịt bò"/></label>
-        <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${centralWorkAreas().map((area) => `<option value="${area.id}" ${(item.workArea || "noodles") === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "設定此原物料主要提供給哪個工作區使用。" : "Chọn khu làm việc chính sử dụng nguyên vật liệu này."}</small></label>
+        <label>${language === "zh" ? "工作區" : "Khu làm việc · 工作區"}<select name="central-work-area">${centralWorkAreas().map((area) => `<option value="${area.id}" ${(item.workArea || defaultWorkArea) === area.id ? "selected" : ""}>${esc(language === "zh" ? area.zh : `${area.vi} · ${area.zh}`)}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "設定此原物料主要提供給哪個工作區使用。" : "Chọn khu làm việc chính sử dụng nguyên vật liệu này."}</small></label>
         <fieldset class="modal-locations"><legend>${language === "zh" ? "選擇食材存放位置" : "Chọn nơi cất nguyên liệu · 選擇食材存放位置"}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的位置；「現有」為目前實際庫存，「標準量」為補貨／低庫存判斷基準。" : "Chọn vị trí thực tế có cất hàng; 現有 là tồn thực tế, 標準量 là mức chuẩn để cảnh báo/bổ hàng."}</p>${locationRows}</fieldset>
-        <div class="modal-grid modal-meta-grid"><label>${language === "zh" ? "數量單位" : "Đơn vị · 數量"}<select name="central-unit">${CENTRAL_UNITS.map((unit) => `<option value="${esc(unit)}" ${item.unit === unit ? "selected" : ""}>${esc(unit)}</option>`).join("")}</select></label></div>
+        <div class="modal-grid modal-meta-grid"><label>${language === "zh" ? "數量單位" : "Đơn vị · 數量"}<input name="central-unit" list="central-unit-suggestions" required value="${esc(selectedUnit)}" placeholder="包 / 盒 / kg"/><datalist id="central-unit-suggestions">${units.map((unit) => `<option value="${esc(unit)}"></option>`).join("")}</datalist></label></div>
         <div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-central-save-item>✓ ${esc(editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項")}</button></div>
       </form>
     </section>
@@ -630,9 +642,9 @@ function bindCentral(user) {
     }
     const zh = String(data.get("central-label") || "").trim();
     const vi = String(data.get("central-label-vi") || "").trim();
-    const unit = String(data.get("central-unit") || "個");
-    const workArea = String(data.get("central-work-area") || "noodles");
-    if (!zh || !vi) return;
+    const unit = String(data.get("central-unit") || "").trim();
+    const workArea = String(data.get("central-work-area") || "").trim();
+    if (!zh || !vi || !unit || !workArea) return;
     const oldItems = loadStock();
     const editorKey = String(editorForm.dataset.editorKey || "new");
     const editing = editorKey !== "new";

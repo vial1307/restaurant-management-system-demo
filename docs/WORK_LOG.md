@@ -1318,3 +1318,23 @@ The separate read-cutover candidate:
 - Stage 3 is complete. Browser localStorage is not an inventory mutation authority; retained inventory caches are read-only server projections.
 - Next stage: audit and retire remaining mutable inventory business master/rule hard-codes before Central Kitchen UI redesign.
 
+## 2026-09-27 — Inventory stage 4: UI master-data cutover candidate
+
+- Started from verified production release `d88a90d9487d8edbb5f7e8020397893a5a5e9849` / Deploy #872.
+- Branch: `refactor/inventory-masterdata-ui-cutover-20260927`.
+- Branch inventory:
+  - site/work/storage groups render directly from `inventoryUiGroups(site)`;
+  - primary storage is determined by DB `storage_group`;
+  - remaining Fuxing/Yongji branch closed-list check removed;
+  - unit editor changed from fixed source list to free-form required value with data-derived suggestions;
+  - dashboard/current context uses a site-scoped PostgreSQL snapshot or empty inventory, never source-seeded stock.
+- Central:
+  - unit list is no longer a source enum;
+  - default work area and new-item default storage come from DB ordering;
+  - `central-work-use` and fixed `noodles` fallbacks removed;
+  - management tabs use current DB location labels.
+- Added master-data regression guards for all above invariants.
+- No schema migration, no stock rewrite, no inventory transaction-semantic change.
+- Candidate commits include `e09d1c6`, `b36f968`, `769db82`, `22c9ce3`, `9daacfa`, `5c6756c`, `899e2ed`, `8e71364`.
+- Next: exact-head CI/PR review/deploy. If production passes, proceed to remove dead source inventory seed definitions or redesign Central Kitchen UI depending on remaining consumer audit.
+

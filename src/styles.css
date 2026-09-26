@@ -831,6 +831,11 @@ a { color: inherit; text-decoration: none; }
   .mobile-menu-grid .nav-item.active { border-color: #b9dece; background: var(--green-soft); color: var(--green); }
   .settings-save-row > .primary-button { flex: 0 0 auto; }
   .settings-save-status { flex: 1 1 180px; }
+  .setting-row { align-items: stretch; flex-direction: column; gap: 6px; padding: 8px 0; }
+  .setting-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .setting-control { width: 100%; min-width: 0; justify-content: flex-start; }
+  .setting-control > input,
+  .setting-control > input[type="text"] { width: 100%; min-width: 0; max-width: 100%; text-align: left; }
   .modal-card { padding: 17px; }
   .modal-header-save { min-height: 34px; max-width: 190px; padding: 0 9px; font-size: 10px; }
   .modal-header-save > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
