@@ -19,7 +19,7 @@ import {
   switchActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { inventorySites, inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
+import { inventorySites, inventoryUiGroups } from "./inventory-master-data.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { searchMatches } from "./search-utils.js";
 import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
