@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — inventory UI master-data cutover, 2026-09-27
+
+Branch: `refactor/inventory-masterdata-ui-cutover-20260927`.
+
+Branch/Central inventory UI is being cut over from remaining source-code master-data assumptions to PostgreSQL-loaded site structure. Storage/work-area groups, primary-storage grouping, location labels and item units are now data-driven; branch runtime inventory cannot fall back to source-seeded stock.
+
+No schema migration or production stock rewrite. Status remains candidate until exact-head regression + merge + production deploy/smoke pass.
+
+
 ## DONE — PostgreSQL-only inventory runtime authority, 2026-09-27
 
 - PR #148 merged as `d88a90d9487d8edbb5f7e8020397893a5a5e9849`; Deploy #872 / run `36265842924` is verified in production.
