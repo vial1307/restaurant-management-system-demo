@@ -192,13 +192,6 @@ export function canInventoryEdit() {
   return !isBranchInventorySite(site) || isCurrentBranchInventoryDate();
 }
 
-export function canInventoryDraftCount() {
-  // PostgreSQL on the VPS is the only shared source of truth. Never accept
-  // inventory writes into localStorage, otherwise devices can diverge.
-  if (isInventoryBackendConfigured()) return false;
-  return hasInventoryPermission("edit") && inventoryCloudState() !== "ready";
-}
-
 export function canManageCentralCatalog() {
   const s=session();
   return canInventoryEdit()
