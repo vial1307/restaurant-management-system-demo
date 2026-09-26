@@ -1252,3 +1252,15 @@ The separate read-cutover candidate:
   - production UI smoke.
 - PostgreSQL schema remains `024`. This stage performed no schema migration and no production stock rewrite.
 - Database-control-plane stage 1 is complete. Next inventory work is real-time site-registry propagation plus further retirement of legacy browser-local draft/master-data compatibility code before the Central Kitchen UI redesign.
+
+## 2026-09-27 — Database control plane stage 2: realtime site registry
+
+- Continued from verified production release `15ba0013f15daa9dcdc04152c95f12bd9f7fc793` / Deploy #856.
+- Backend inventory SSE now emits a dedicated `site-registry` event after a successful Super Admin site create/update.
+- Website inventory runtime force-refreshes the allowed PostgreSQL site registry on that event and on focus/visibility fallback, re-evaluates the active site, hydrates a replacement active site when necessary, and emits `shitu:inventory-sites-changed` for UI reconciliation.
+- Inventory page branch detection now uses database-declared inventory mode rather than `["fuxing","yongji"]`.
+- Super Admin receives the same site-registry invalidation. The inventory Database workspace can replace its site list without throwing away dirty/pending editors; other Super Admin surfaces defer rerender while a modal is open.
+- Added static guards plus an executed realtime-hook contract proving successful site writes emit `event: site-registry`, while GET/failed writes do not.
+- Commits on `refactor/inventory-db-control-plane-20260927`: `b89d7cf`, `27a206d`, `175377d`, `952ac00`, `8b21bf9`, `40b7860`, `6c83f83` plus documentation commits.
+- No schema migration and no production data mutation. Next step is exact-head CI/PR review/deploy; only after production smoke passes should stage 3 retire additional local draft/fallback compatibility code.
+
