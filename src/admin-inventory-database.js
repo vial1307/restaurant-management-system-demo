@@ -15,6 +15,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
   let snapshot = null, master = null, history = [], editor = null, pending = false, loading = false, dirty = false;
   let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
+  let deferredSite = null;
   const canEdit = () => Boolean(me?.permissions?.inventory?.edit);
   const canMaster = (kind) => Boolean(master?.permissions?.[kind === "areas" ? "manageWorkAreas" : "manageLocations"]);
   const activeItems = () => (snapshot?.items || []).filter((row) => row.active);
@@ -138,10 +139,22 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       return false;
     }
   }
+  function applyDeferredSite() {
+    if (deferredSite === null) return false;
+    const previousSite = site;
+    site = deferredSite;
+    deferredSite = null;
+    if (site !== previousSite) {
+      snapshot=master=null;history=[];q="";page=1;editor=null;message="";
+      return true;
+    }
+    return false;
+  }
   async function action(data) {
     const name=data.idbAction;
     if(!canLeave())return;
     editor=null;
+    applyDeferredSite();
     if(name==="refresh"){await load();return;}
     if(name.startsWith("tab-")){tab=name.slice(4);page=1;q="";await load();return;}
     if(name.startsWith("kind-")){locationKind=name.slice(5);page=1;q="";render();return;}
@@ -194,7 +207,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     const form=container.querySelector("form");
     form.addEventListener("input",()=>{dirty=true;});form.addEventListener("change",()=>{dirty=true;});
     form.addEventListener("submit",(event)=>{event.preventDefault();void submit(form);});
-    container.querySelector('[data-idb-action="close"]').onclick=()=>{if(!canLeave())return;editor=null;container.innerHTML="";if(remote)void load();};
+    container.querySelector('[data-idb-action="close"]').onclick=()=>{if(!canLeave())return;editor=null;container.innerHTML="";applyDeferredSite();if(remote)void load();};
     container.querySelector("input:not([readonly]),select")?.focus({preventScroll:true});
     container.scrollIntoView({block:"nearest"});
   }
@@ -244,6 +257,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     try {
       await request(path,{method:"POST",body});
       dirty=false;editor=null;pending=false;notify(t("saved"));
+      applyDeferredSite();
       if(!await load())notify(t("saveReadFailed"),true);
     } catch(error) {
       pending=false;const code=errorCode(error);const text=`${t(code.includes("STALE")?"stale":"failed")} ${code}`;
@@ -265,16 +279,21 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
 
     const previousSite = site;
     sites = next;
-    if (!sites.some((row) => row.code === site && row.active !== false)) {
-      site = sites.find((row) => row.active !== false)?.code || "";
-    }
+    const nextSite = sites.some((row) => row.code === site && row.active !== false)
+      ? site
+      : sites.find((row) => row.active !== false)?.code || "";
 
-    if (!host) return true;
+    if (!host) {
+      site = nextSite;
+      return true;
+    }
     if (editor || pending || dirty) {
+      deferredSite = nextSite;
       markRemote();
       return true;
     }
 
+    site = nextSite;
     if (site !== previousSite) {
       snapshot=master=null;history=[];q="";page=1;editor=null;message="";
       render();
@@ -290,7 +309,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     generation++;source?.close();source=null;clearInterval(poll);clearTimeout(timer);
     document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);
     document.removeEventListener("click",guard,true);window.removeEventListener("beforeunload",unload);
-    host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;
+    host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;deferredSite=null;
   }
   function mount(target,context) {
     detach();host=target;sites=context.sites;me=context.me;
