@@ -52,10 +52,15 @@ assert.match(cloud,/cloudSetMinimum\(\{[\s\S]{0,220}itemId = ""[\s\S]{0,220}loca
 
 assert.match(realtime,/app\.get\("\/api\/inventory\/events"[\s\S]*?requireUser[\s\S]*?hasPermission\(user, "inventory", "view"\)/,"SSE stream must be authenticated and inventory-view authorized");
 assert.match(realtime,/app\.addHook\("onResponse"[\s\S]*?route\.startsWith\("\/api\/inventory\/"\)[\s\S]*?publishInventoryInvalidation/,"successful inventory mutations must publish realtime invalidation");
+assert.match(realtime,/siteRegistryMutation = route === "\/api\/admin\/super\/sites"/,"site master mutations must publish realtime invalidation");
+assert.match(realtime,/siteRegistryChanged: siteRegistryMutation/,"site registry events must identify registry changes");
 assert.match(server,/registerInventoryRealtime\(app\)[\s\S]*?registerInventoryExtraRoutes\(app\)/,"realtime hook must be registered before inventory mutation routes");
 assert.match(api,/X-Kitchen-Client-Id["']?: vpsInventoryClientId\(\)/,"inventory writes must identify their originating browser tab");
 assert.match(cloud,/new EventSource\(`\/api\/inventory\/events\?clientId=/,"inventory client must subscribe to the authenticated SSE stream");
 assert.match(cloud,/payload\?\.sourceClientId && payload\.sourceClientId === clientId[\s\S]{0,320}setTimeout[\s\S]{0,260}syncInventoryNow\(activeSite, \{ reloadBranch:false, force:true \}\)/,"remote invalidations must ignore self, coalesce, and force authoritative reconciliation");
+assert.match(cloud,/runInventorySync\(site,[\s\S]{0,260}ensureSiteRegistry\(\{ force \}\)/,"forced inventory reconciliation must refresh the PostgreSQL site registry before validating the active site");
+assert.match(cloud,/fallback=s\?\.location==="all" \? firstInventorySite\(\) : ""[\s\S]{0,520}shitu:active-site-changed/,"all-scope users must fall back to a valid active site when their selected site is removed from the registry");
+assert.match(cloud,/payload\?\.siteRegistryChanged[\s\S]{0,520}registry:true/,"site-registry invalidations must repaint the operational Website after registry reconciliation");
 assert.match(cloud,/if \(viewChanged && !changed\)[\s\S]{0,220}shitu:inventory-cloud-updated/,"per-document reconciliation must repaint a peer tab even when shared localStorage already contains the new snapshot");
 
 assert.match(spec,/Authenticated Server-Sent Events provide the primary real-time invalidation signal/,"canonical synchronization specification is missing SSE authority");

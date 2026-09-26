@@ -63,6 +63,7 @@ let activeSiteSwitchSerial = 0;
 let realtimeSource = null;
 let realtimeUserId = "";
 let realtimeRefreshTimer = 0;
+let realtimeRegistryRefreshPending = false;
 const cache = {
   itemsByKey: new Map(),
   locationsByCode: new Map(),
@@ -818,8 +819,22 @@ const reconciledInventorySnapshots = new Map();
 
 async function runInventorySync(site, { reloadBranch = false, force = false } = {}) {
   if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
-  await ensureSiteRegistry();
-  if (!isKnownInventorySite(site)) return false;
+  await ensureSiteRegistry({ force });
+  if (!isKnownInventorySite(site)) {
+    const s=session();
+    const fallback=s?.location==="all" ? firstInventorySite() : "";
+    if(force&&fallback&&fallback!==site){
+      const previousSite=site;
+      window.dispatchEvent(new CustomEvent("shitu:active-site-changing",{detail:{site:fallback,previousSite,registry:true}}));
+      localStorage.setItem(ACTIVE_SITE_KEY,fallback);
+      const changed=await runInventorySync(fallback,{reloadBranch,force:true});
+      window.dispatchEvent(new CustomEvent("shitu:active-site-changed",{detail:{site:fallback,previousSite,hydrated:true,registry:true}}));
+      return changed;
+    }
+    dispatchStatus("site-unavailable",{site,registry:true});
+    window.dispatchEvent(new CustomEvent("shitu:inventory-site-unavailable",{detail:{site}}));
+    return false;
+  }
   if (isBranchInventorySite(site) && !isCurrentBranchInventoryDate()) {
     dispatchStatus("historical-readonly", { site });
     return false;
@@ -1309,10 +1324,16 @@ async function subscribeRealtime(site) {
     let payload = null;
     try { payload = JSON.parse(event.data || "null"); } catch {}
     if (payload?.sourceClientId && payload.sourceClientId === clientId) return;
+    if(payload?.siteRegistryChanged)realtimeRegistryRefreshPending=true;
     clearTimeout(realtimeRefreshTimer);
-    realtimeRefreshTimer = window.setTimeout(() => {
+    realtimeRefreshTimer = window.setTimeout(async () => {
+      const registryChanged=realtimeRegistryRefreshPending;
+      realtimeRegistryRefreshPending=false;
       const activeSite = currentSite();
-      if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+      if (activeSite) await syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+      if(registryChanged){
+        window.dispatchEvent(new CustomEvent("shitu:inventory-cloud-updated",{detail:{site:currentSite(),registry:true}}));
+      }
     }, 120);
   });
 }
@@ -1322,6 +1343,7 @@ function closeRealtime() {
   realtimeSource = null;
   realtimeUserId = "";
   clearTimeout(realtimeRefreshTimer);
+  realtimeRegistryRefreshPending=false;
 }
 
 async function boot() {

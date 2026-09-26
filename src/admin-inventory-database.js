@@ -14,7 +14,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   let host, sites = [], me, source, poll, timer, generation = 0;
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
   let snapshot = null, master = null, history = [], editor = null, pending = false, loading = false, dirty = false;
-  let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
+  let message = "", failed = false, remote = false, connected = false, refreshQueued = false, registryRefreshNeeded = false;
   const canEdit = () => Boolean(me?.permissions?.inventory?.edit);
   const canMaster = (kind) => Boolean(master?.permissions?.[kind === "areas" ? "manageWorkAreas" : "manageLocations"]);
   const activeItems = () => (snapshot?.items || []).filter((row) => row.active);
@@ -109,12 +109,36 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(node)node.textContent=t("remote");
   }
   function canLeave() { if(pending)return false; if(dirty&&!window.confirm(t("discard")))return false;dirty=false;return true; }
+  async function refreshSiteRegistry() {
+    const result=await request("/api/admin/super/sites");
+    const next=Array.isArray(result?.sites)?result.sites:[];
+    const changed=JSON.stringify(sites)!==JSON.stringify(next);
+    sites=next;registryRefreshNeeded=false;
+    if(!sites.some((row)=>row.active&&row.code===site)){
+      const previousSite=site;
+      site=sites.find((row)=>row.active)?.code||"";
+      snapshot=master=null;history=[];q="";page=1;editor=null;
+      if(previousSite&&previousSite!==site){
+        window.dispatchEvent(new CustomEvent("shitu:super-admin-site-registry-changed",{detail:{previousSite,site}}));
+      }
+    }
+    return changed;
+  }
   async function load({quiet=false}={}) {
-    if(!host||!site)return false;
+    if(!host)return false;
     if(quiet&&(editor||pending)){markRemote();return false;}
     // A background event cannot supersede the foreground request that owns
     // disabled controls. Reconcile again after that request releases the UI.
     if(quiet&&loading){refreshQueued=true;return false;}
+    let registryChanged=false;
+    try {
+      if(registryRefreshNeeded)registryChanged=await refreshSiteRegistry();
+    } catch(error) {
+      message=errorCode(error);failed=true;
+      if(quiet)notify(message,true);else render();
+      return false;
+    }
+    if(!site){loading=false;if(registryChanged||!quiet)render();return true;}
     const seq=++generation, targetSite=site, targetTab=tab;
     if(!quiet){loading=true;render();}
     try {
@@ -125,7 +149,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       ]);
       if(seq!==generation||!host)return false;
       if(quiet&&(editor||pending)){markRemote();return false;}
-      const changed=JSON.stringify([master,snapshot,history])!==JSON.stringify([nextMaster,nextSnapshot,nextHistory?.transactions||history]);
+      const changed=registryChanged||JSON.stringify([master,snapshot,history])!==JSON.stringify([nextMaster,nextSnapshot,nextHistory?.transactions||history]);
       master=nextMaster;snapshot=nextSnapshot;if(nextHistory)history=nextHistory.transactions||[];
       remote=false;loading=false;if(changed||!quiet)render();
       if(refreshQueued){refreshQueued=false;sync();}return true;
@@ -251,17 +275,25 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       host.querySelectorAll('[data-idb-action], [name="site"]').forEach((node)=>{node.disabled=false;});
     }
   }
-  const sync=()=>{if(!document.hidden&&!pending){clearTimeout(timer);timer=setTimeout(()=>void load({quiet:true}),150);}};
+  const sync=(event)=>{
+    if(event?.type==="inventory"){
+      try{
+        const payload=JSON.parse(event.data||"null");
+        if(payload?.siteRegistryChanged)registryRefreshNeeded=true;
+      }catch{}
+    }
+    if(!document.hidden&&!pending){clearTimeout(timer);timer=setTimeout(()=>void load({quiet:true}),150);}
+  };
   const guard=(event)=>{if(event.target.closest("[data-section],[data-refresh],[data-db-mode],[data-dataset]")){if(!canLeave()){event.preventDefault();event.stopImmediatePropagation();}}};
   const unload=(event)=>{if(dirty||pending){event.preventDefault();event.returnValue="";}};
   function detach() {
     generation++;source?.close();source=null;clearInterval(poll);clearTimeout(timer);
     document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);
     document.removeEventListener("click",guard,true);window.removeEventListener("beforeunload",unload);
-    host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;
+    host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;registryRefreshNeeded=false;
   }
   function mount(target,context) {
-    detach();host=target;sites=context.sites;me=context.me;
+    detach();host=target;sites=context.sites;me=context.me;registryRefreshNeeded=false;
     if(!host||!me?.capabilities?.["system.super_admin"])return;
     if(!sites.some((s)=>s.code===site&&s.active))site=sites.find((s)=>s.active)?.code||"";
     render();void load();
@@ -270,7 +302,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(typeof EventSource!=="undefined") {
       source=new EventSource("/api/inventory/events");
       source.addEventListener("inventory",sync);
-      source.addEventListener("ready",()=>{connected=true;const node=host?.querySelector("[data-idb-connection]");if(node)node.textContent=t("connected");sync();});
+      source.addEventListener("ready",()=>{connected=true;registryRefreshNeeded=true;const node=host?.querySelector("[data-idb-connection]");if(node)node.textContent=t("connected");sync();});
       source.onerror=()=>{connected=false;const node=host?.querySelector("[data-idb-connection]");if(node)node.textContent=t("disconnected");};
     }
     poll=setInterval(sync,30000);
