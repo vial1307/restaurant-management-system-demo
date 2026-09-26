@@ -167,6 +167,10 @@ assert.match(inventoryCloud, /refreshInventorySiteRegistry[\s\S]{0,1100}shitu:in
 assert.match(inventoryCloud, /const activeChanged = previousSite !== site;[\s\S]{0,280}hydrateActive && site && activeChanged/, "unrelated site-registry edits must not force a full active-site inventory reload");
 assert.match(inventoryCloud, /siteRegistryUserId[\s\S]{0,1400}String\(session\(\)\?\.id \|\| ""\) !== userId/, "site registry cache must be scoped to the authenticated user and reject stale login responses");
 assert.match(app, /shitu:inventory-sites-changed/, "website UI must rerender when the database site registry changes");
+assert.doesNotMatch(app, /mountDraftInventoryOperations|canInventoryDraftCount|shitu-branch-inventory-draft-v1|shitu-inventory-operation-log-v1|result\.fallback/, "branch inventory must not write to browser-local draft/fallback stores");
+assert.match(app, /const branchSnapshot = branchSite \? inventoryBranchSnapshot\(site\) : null;[\s\S]{0,500}const effectiveRecord = isolatedCloudRecord;/, "offline branch rendering may use only the last PostgreSQL snapshot as a read-only cache");
+assert.match(app, /if \(opsHost && inventoryCloudState\(\)===\"ready\"\)[\s\S]{0,320}mountInventoryOperations/, "branch operation UI must mount only the PostgreSQL-backed operation controller");
+assert.match(app, /async function runCloudTransferPlan\(steps, note\)[\s\S]{0,500}if \(!result\.ok\)[\s\S]{0,260}syncInventoryNow/, "failed branch transfers must reconcile from VPS instead of falling back to local mutation");
 assert.doesNotMatch(app, /\["fuxing","yongji"\]\.includes\(site\)/, "website branch detection must remain data-driven");
 assert.match(superAdminPanel, /addEventListener\("site-registry"[\s\S]{0,300}refreshSiteRegistryFromRealtime/, "Super Admin must listen for realtime site-registry invalidation");
 assert.match(superAdminPanel, /inventoryDatabase\.updateSites\(state\.sites\)/, "Super Admin Database must receive live site registry changes without remounting dirty editors");
