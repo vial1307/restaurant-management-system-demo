@@ -58,12 +58,32 @@ assert.equal(appSource.includes('["fuxing","yongji"].includes(targetSite)'), fal
   "branch helper paths must accept database-declared branch sites");
 assert.equal(appSource.includes('"central-freezer":"央廚冷凍"'), false,
   "Central storage labels must come from database master data");
+assert.match(appSource, /const uiGroups = inventoryUiGroups\(site\);[\s\S]{0,180}uiGroups\.storage[\s\S]{0,100}uiGroups\.workAreas/,
+  "branch inventory groups must render from the active site's PostgreSQL master-data snapshot");
+assert.match(appSource, /group\.storageGroup === "primary"/,
+  "storage grouping must follow PostgreSQL metadata.storage_group instead of a fixed PRIMARY_ZONES list");
+assert.match(appSource, /inventoryPrimaryStorageIds\(activeInventorySite\(\)\)/,
+  "work inventory source summary must use database-declared primary storage locations");
+assert.match(appSource, /name="unit" list="inventory-unit-suggestions" required/,
+  "branch item unit must accept database-defined/free-form values instead of a closed source-code enum");
+assert.doesNotMatch(appSource, /const units = \["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"\]/,
+  "branch inventory must not restore a fixed unit list");
+assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
+  "branch inventory authority must use database-declared inventory_mode");
 
 const authLayer = fs.readFileSync(new URL("../src/auth-layer.js", import.meta.url), "utf8");
 assert.match(authLayer, /function branchSwitcher[\s\S]{0,700}inventorySites\(\)\.filter/,
   "warehouse switcher must derive active physical sites from PostgreSQL master data");
 assert.doesNotMatch(authLayer, /data-warehouse="fuxing"[\s\S]{0,240}data-warehouse="yongji"/,
   "warehouse switcher must not hard-code branch buttons");
+assert.match(authLayer, /const centralDefaultWorkArea = \(\) => centralWorkAreas\(\)\[0\]\?\.id \|\| "";/,
+  "Central work-area defaults must come from PostgreSQL master data");
+assert.match(authLayer, /name="central-unit" list="central-unit-suggestions" required/,
+  "Central item unit must accept database-defined/free-form values");
+assert.doesNotMatch(authLayer, /CENTRAL_UNITS|central-work-use|\|\| "noodles"/,
+  "Central inventory must not restore fixed unit/work-area/location fallbacks");
+assert.match(authLayer, /const defaultZone = zones\[0\] \|\| "";/,
+  "new Central items must default to the first database-declared storage location");
 
 const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta.url), "utf8");
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");
