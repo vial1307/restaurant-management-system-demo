@@ -34,7 +34,10 @@ const emit=async(route,status=200,method="POST",params={})=>hooks.onResponse({me
 const start=events.length;
 await emit("/api/master-data/locations");await emit("/api/master-data/work-areas");await emit("/api/admin/super/data/:dataset",200,"POST",{dataset:"inventory-products"});await emit("/api/admin/super/inventory-catalog-identity");
 assert.equal(events.length,start+4);
-await emit("/api/master-data/locations",409);await emit("/api/master-data/locations",200,"GET");await emit("/api/admin/super/settings");
-assert.equal(events.length,start+4);
+await emit("/api/admin/super/sites");
+assert.equal(events.length,start+5);
+assert.match(events.at(-1),/event: site-registry/);
+await emit("/api/master-data/locations",409);await emit("/api/master-data/locations",200,"GET");await emit("/api/admin/super/sites",409);await emit("/api/admin/super/settings");
+assert.equal(events.length,start+5);
 await hooks.onClose();
 console.log("ADMIN_INVENTORY_DATABASE_CONTRACT_OK");
