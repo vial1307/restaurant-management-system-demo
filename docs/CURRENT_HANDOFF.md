@@ -1,23 +1,27 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — retire browser-local inventory mutation fallbacks, 2026-09-27
+## Completed release — PostgreSQL-only inventory runtime authority, 2026-09-27
 
-Branch: `refactor/inventory-local-fallback-retirement-20260927`.
+PR #148 merged into `main` as `d88a90d9487d8edbb5f7e8020397893a5a5e9849` and is verified in production through Deploy Kitchen OS to VPS #872 / run `36265842924`.
 
-Goal: PostgreSQL/VPS API remains the only inventory mutation authority. Browser localStorage may retain the last server projection for read-only recovery/UI continuity, but it must not create, edit, transfer, ship, count, archive or log inventory business events when the database is unavailable.
+This release retires the remaining browser-local inventory mutation authority:
+- branch Website no longer maintains a writable draft inventory database or local operation log;
+- Central Kitchen no longer seeds a hard-coded product catalog, merges local draft stock, writes local Central/branch drafts, or records a separate local inventory history;
+- failed quantity/catalog/archive/transfer writes reconcile from VPS/PostgreSQL and are never treated as local success;
+- `canInventoryDraftCount` and the draft inventory operation controller were removed;
+- branch/Central localStorage inventory data is now limited to read-only last-server-projection caches for recovery/UI continuity;
+- empty PostgreSQL projections such as `[]` remain authoritative and cannot trigger a hard-coded reseed;
+- the warehouse switcher renders active sites from the PostgreSQL-backed site registry instead of fixed Central/Fuxing/Yongji buttons;
+- site isolation remains enforced on the read-only branch snapshot cache.
 
-Implemented in this candidate:
-- branch Website no longer mounts the draft inventory operation controller or writes branch draft/local operation-log keys;
-- failed branch quantity/catalog/transfer/archive writes reconcile from VPS instead of treating a local fallback as success;
-- branch inventory can display only the last PostgreSQL branch snapshot while reconnecting; all write controls remain locked until VPS is ready;
-- Central Kitchen no longer seeds a hard-coded product catalog, merges a local draft database, writes local Central/branch drafts, or records a separate local inventory history;
-- Central catalog/delete/quantity operations require the VPS path; failed writes reload authoritative PostgreSQL state;
-- dead compatibility APIs `canInventoryDraftCount` and `mountDraftInventoryOperations` were removed;
-- the warehouse switcher now renders active sites from the PostgreSQL-backed site registry instead of fixed Fuxing/Yongji/Central buttons;
-- static regression guards prevent the removed draft keys/controllers/seed/fallback branches from returning.
+Verification:
+- exact PR head `95d9ce407f27a96240fcc261b15671a8f1a77e43`: Deploy preflight/full regression #871 / run `36265521181` and Workforce Approval Diagnostic #268 / run `36265521167` PASS; the prior exact-head Super Admin Browser #142 also passed after the same runtime changes;
+- merge release `d88a90d9487d8edbb5f7e8020397893a5a5e9849`: Deploy #872 / run `36265842924` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260926T192740Z.dump`;
+- production audit: `DATA_INTEGRITY_OK`; runtime returned `release=d88a90d`, `schema=024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK` passed;
+- no schema migration and no production stock rewrite.
 
-No schema migration, no production stock rewrite, and no deletion of the safe read-only PostgreSQL projection caches (`shitu-central-kitchen-stock-v1`, branch snapshot cache, Central work snapshot cache). Candidate is not production-complete until exact-head CI, merge, VPS deploy, health and production UI smoke pass.
-
+Next inventory work: remove remaining mutable inventory master/rule hard-codes that can still force frontend changes when Database structure changes, then redesign the Central Kitchen UI on the database-declared model.
 
 ## Completed release — realtime Database site registry, 2026-09-27
 
@@ -100,7 +104,7 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `95a39088a33f61c218412c1dd2e2d253306a0471`
+- Current verified production SHA: `d88a90d9487d8edbb5f7e8020397893a5a5e9849`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -112,9 +116,9 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #867
-- Run ID: `36262880282`
-- Tested/deployed commit: `95a39088a33f61c218412c1dd2e2d253306a0471`
+- Workflow: Deploy Kitchen OS to VPS #872
+- Run ID: `36265842924`
+- Tested/deployed commit: `d88a90d9487d8edbb5f7e8020397893a5a5e9849`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
