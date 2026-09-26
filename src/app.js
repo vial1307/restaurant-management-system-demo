@@ -1192,10 +1192,10 @@ function branchInventoryHistoryView(rows, language="vi", cloud=false) {
 
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language, state } = context;
-  const site = activeInventorySite() || "fuxing";
+  const site = activeInventorySite();
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  const branchSite = ["fuxing","yongji"].includes(site);
+  const branchSite = isBranchInventorySite(site);
   const branchSnapshot = cloudReady && branchSite ? inventoryBranchSnapshot(site) : null;
   const isolatedCloudRecord = branchSite && cloudReady
     ? branchSnapshot
@@ -1240,10 +1240,10 @@ function inventory(context) {
         ? `<div class="inventory-cloud-notice"><strong>Đang kết nối VPS database · 正在連線 VPS 資料庫</strong><small>Hệ thống đang tự kiểm tra API và PostgreSQL. · 系統正在自動檢查 API 與 PostgreSQL。</small></div>`
         : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Không kết nối được VPS database · VPS 資料庫連線失敗</strong><small>Thao tác ghi kho tạm khóa để tránh sai lệch dữ liệu. · 為避免資料分歧，暫時鎖定庫存寫入。</small></div>`)
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Chỉ hỗ trợ VPS database · 僅支援 VPS 資料庫</strong><small>Vui lòng mở website từ máy chủ VPS. · 請從 VPS 伺服器開啟網站。</small></div>`;
-  const opsAvailable = catalogManageVisible && cloudReady && globalThis.navigator?.onLine !== false && ["fuxing","yongji"].includes(site);
+  const opsAvailable = catalogManageVisible && cloudReady && globalThis.navigator?.onLine !== false && isBranchInventorySite(site);
   const opsEnabled = opsAvailable && !historical;
   const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
-  const tabsEnabled = (opsAvailable || canViewHistory || catalogManageVisible) && ["fuxing","yongji"].includes(site);
+  const tabsEnabled = (opsAvailable || canViewHistory || catalogManageVisible) && isBranchInventorySite(site);
   if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
   if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
   if (view.inventoryOpsMode === "history" && !canViewHistory) view.inventoryOpsMode = "overview";
@@ -2334,6 +2334,7 @@ window.addEventListener("shitu:auth-synced", renderWhenAuthorized);
 window.addEventListener("shitu:auth-expired", renderWhenAuthorized);
 window.addEventListener("shitu:vps-auth-ready", renderWhenAuthorized);
 window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
+window.addEventListener("shitu:inventory-sites-changed", renderWhenAuthorized);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (route() !== "inventory" || document.querySelector(".central-heading")) return;
   const site = activeInventorySite();

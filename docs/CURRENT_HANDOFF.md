@@ -1,5 +1,20 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — realtime Database site registry, 2026-09-27
+
+Goal: a site/branch change saved through Super Admin must propagate to already-open Super Admin and Kitchen OS inventory sessions without requiring a manual page reload. PostgreSQL remains authoritative; this stage adds invalidation/reload behavior only and does not create a second site registry.
+
+Implemented on branch `refactor/inventory-db-control-plane-20260927`:
+- successful `POST /api/admin/super/sites` publishes a dedicated authenticated SSE `site-registry` invalidation;
+- Website inventory sessions force-refresh `/api/inventory/sites`, re-evaluate the active site, optionally hydrate the replacement active site from PostgreSQL, and emit `shitu:inventory-sites-changed`;
+- branch detection in the inventory page uses database-declared `inventory_mode` instead of a Fuxing/Yongji closed list;
+- Super Admin listens to the same site-registry event and refreshes its site controls; the dedicated inventory Database workspace accepts registry replacement without destroying a dirty editor;
+- focus/visibility remain fallback convergence paths if an SSE event was missed;
+- regression contracts execute the realtime hook and guard the frontend listeners/data-driven branch selection.
+
+No schema migration, no stock rewrite, and no change to inventory transaction semantics. Do not mark this stage production-complete until exact-head CI, merge, VPS deploy, health and production UI smoke pass.
+
+
 ## Completed release — Super Admin Database control plane / inventory master-data hardening, 2026-09-27
 
 PR #144 merged into `main` as `15ba0013f15daa9dcdc04152c95f12bd9f7fc793` and was deployed by Deploy Kitchen OS to VPS #856 / run `36259731875`.
