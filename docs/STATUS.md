@@ -1,5 +1,16 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — realtime Database site registry, 2026-09-27
+
+Branch: `refactor/inventory-db-control-plane-20260927`.
+
+This stage makes site/branch master-data changes propagate to already-open Kitchen OS and Super Admin sessions through the existing authenticated inventory SSE channel. A successful Super Admin site save publishes `site-registry`; clients then re-read the PostgreSQL-backed site registry instead of keeping a browser-defined branch list. The inventory Database workspace updates its site choices without discarding dirty edits.
+
+Regression coverage includes the executed backend SSE hook plus static guards for Website/Super Admin listeners and removal of the Fuxing/Yongji closed-list branch check.
+
+No schema migration, no stock mutation, no change to inventory transaction authority. Status remains candidate until exact-head CI + merge + production deploy/smoke pass.
+
+
 ## DONE — Database control plane / inventory hard-code retirement stage 1
 
 - PR #144 merged as `15ba0013f15daa9dcdc04152c95f12bd9f7fc793` and is verified in production through Deploy #856 / run `36259731875`.
