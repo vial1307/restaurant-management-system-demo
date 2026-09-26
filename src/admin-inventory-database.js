@@ -252,6 +252,38 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     }
   }
   const sync=()=>{if(!document.hidden&&!pending){clearTimeout(timer);timer=setTimeout(()=>void load({quiet:true}),150);}};
+  function updateSites(nextSites = []) {
+    const next = Array.isArray(nextSites) ? nextSites : [];
+    const signature = (rows) => JSON.stringify(rows.map((row) => ({
+      code:row.code,
+      name_vi:row.name_vi || "",
+      name_zh_tw:row.name_zh_tw || "",
+      active:row.active !== false,
+      sort_order:Number(row.sort_order || 0),
+    })));
+    if (signature(sites) === signature(next)) return false;
+
+    const previousSite = site;
+    sites = next;
+    if (!sites.some((row) => row.code === site && row.active !== false)) {
+      site = sites.find((row) => row.active !== false)?.code || "";
+    }
+
+    if (!host) return true;
+    if (editor || pending || dirty) {
+      markRemote();
+      return true;
+    }
+
+    if (site !== previousSite) {
+      snapshot=master=null;history=[];q="";page=1;editor=null;message="";
+      render();
+      void load();
+    } else {
+      render();
+    }
+    return true;
+  }
   const guard=(event)=>{if(event.target.closest("[data-section],[data-refresh],[data-db-mode],[data-dataset]")){if(!canLeave()){event.preventDefault();event.stopImmediatePropagation();}}};
   const unload=(event)=>{if(dirty||pending){event.preventDefault();event.returnValue="";}};
   function detach() {
@@ -275,5 +307,5 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     }
     poll=setInterval(sync,30000);
   }
-  return {mount,detach};
+  return {mount,detach,updateSites};
 }
