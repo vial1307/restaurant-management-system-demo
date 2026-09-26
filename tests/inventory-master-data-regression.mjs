@@ -70,6 +70,8 @@ assert.doesNotMatch(appSource, /const units = \["盒", "包", "箱", "斤", "片
   "branch inventory must not restore a fixed unit list");
 assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
   "branch inventory authority must use database-declared inventory_mode");
+assert.match(appSource, /function authoritativeBranchRecord[\s\S]{0,700}inventoryBranchSnapshot\(site\)[\s\S]{0,320}inventory:\[\], workInventory:\[\]/,
+  "branch dashboard/runtime must use a site-scoped PostgreSQL snapshot or empty inventory, never source-seeded stock");
 
 const authLayer = fs.readFileSync(new URL("../src/auth-layer.js", import.meta.url), "utf8");
 assert.match(authLayer, /function branchSwitcher[\s\S]{0,700}inventorySites\(\)\.filter/,
@@ -84,6 +86,8 @@ assert.doesNotMatch(authLayer, /CENTRAL_UNITS|central-work-use|\|\| "noodles"/,
   "Central inventory must not restore fixed unit/work-area/location fallbacks");
 assert.match(authLayer, /const defaultZone = zones\[0\] \|\| "";/,
   "new Central items must default to the first database-declared storage location");
+assert.match(authLayer, /centralZones\(\)\.map\(\(zone\) => `<button data-central-zone=[\s\S]{0,240}centralZoneLabel\(zone, language\)/,
+  "Central management tabs must render current PostgreSQL location labels rather than raw UI keys");
 
 const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta.url), "utf8");
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");
