@@ -1192,10 +1192,10 @@ function branchInventoryHistoryView(rows, language="vi", cloud=false) {
 
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language, state } = context;
-  const site = activeInventorySite() || "fuxing";
+  const site = activeInventorySite();
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  const branchSite = ["fuxing","yongji"].includes(site);
+  const branchSite = isBranchInventorySite(site);
   const branchSnapshot = cloudReady && branchSite ? inventoryBranchSnapshot(site) : null;
   const isolatedCloudRecord = branchSite && cloudReady
     ? branchSnapshot
