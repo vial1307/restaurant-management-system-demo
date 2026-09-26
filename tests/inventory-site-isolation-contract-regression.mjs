@@ -24,8 +24,9 @@ const fetchIndex=cloud.indexOf("const rows = await fetchSite(targetSite, { force
 const commitIndex=cloud.indexOf("localStorage.setItem(ACTIVE_SITE_KEY, targetSite);",fetchIndex);
 assert(fetchIndex>=0 && commitIndex>fetchIndex,"site switch must fetch target snapshot before committing active site");
 
-assert.match(app,/saved\?\.site===site/,"offline branch drafts must carry a site marker");
-assert.match(app,/baseRecord\?\.inventorySite===site/,"offline branch drafts must never seed from another site's shared record");
+assert.doesNotMatch(app,/shitu-branch-inventory-draft-v1|loadBranchDraftRecord|saveBranchDraftRecord/,"offline branch drafts must remain retired");
+assert.match(cloud,/localStorage\.setItem\(branchSnapshotKey\(site\)[\s\S]{0,180}\bsite,/,"read-only branch snapshot cache must persist an explicit site marker");
+assert.match(app,/inventoryBranchSnapshot\(site\)[\s\S]{0,360}record\?\.inventorySite === site/,"branch recovery render must use only the matching site-scoped PostgreSQL mirror/shared record");
 assert.match(app,/inventoryBranchSnapshot\(site\)/,"branch render must use site-scoped inventory mirror");
 assert.match(authLayer,/entry\.disabled = true[\s\S]{0,180}aria-busy[\s\S]{0,220}button\.dataset\.switching = "true"/,"warehouse switch UI must disable all site buttons and mark the target busy");
 assert.match(authLayer,/entry\.disabled = false/,"warehouse switch UI must restore button enabled state after hydration");
