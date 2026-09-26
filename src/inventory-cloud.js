@@ -63,6 +63,8 @@ let activeSiteSwitchSerial = 0;
 let realtimeSource = null;
 let realtimeUserId = "";
 let realtimeRefreshTimer = 0;
+let siteRegistryRefreshTimer = 0;
+let siteRegistryRefreshTail = Promise.resolve();
 const cache = {
   itemsByKey: new Map(),
   locationsByCode: new Map(),
@@ -229,10 +231,44 @@ export function canDirectInventoryAdjust() {
 export function activeInventorySite() {
   const s = session();
   if (!s) return "";
-  if (s.location !== "all") return String(s.location || "");
+  if (s.location !== "all") {
+    const assignedSite = String(s.location || "");
+    return !inventorySites().length || isKnownInventorySite(assignedSite) ? assignedSite : "";
+  }
   const saved = localStorage.getItem(ACTIVE_SITE_KEY) || "";
   if (isKnownInventorySite(saved)) return saved;
   return firstInventorySite();
+}
+
+function siteRegistrySignature(rows = inventorySites()) {
+  return JSON.stringify(rows.map((row) => ({
+    code:row.code,
+    name_vi:row.name_vi || "",
+    name_zh_tw:row.name_zh_tw || "",
+    sort_order:Number(row.sort_order || 0),
+    metadata:row.metadata || {},
+  })));
+}
+
+export async function refreshInventorySiteRegistry({ reason = "refresh", hydrateActive = false } = {}) {
+  const beforeSignature = siteRegistrySignature();
+  const previousSite = activeInventorySite();
+  const sites = await ensureSiteRegistry({ force:true });
+  const site = activeInventorySite();
+  const changed = beforeSignature !== siteRegistrySignature(sites) || previousSite !== site;
+
+  let hydrated = false;
+  if (hydrateActive && site && changed) {
+    await runInventorySync(site, { reloadBranch:false, force:true });
+    hydrated = true;
+  }
+
+  if (changed) {
+    window.dispatchEvent(new CustomEvent("shitu:inventory-sites-changed", {
+      detail:{ sites, site, previousSite, reason, hydrated },
+    }));
+  }
+  return { sites, site, previousSite, changed, hydrated };
 }
 
 export function setActiveInventorySite(site) {
@@ -1302,8 +1338,12 @@ async function subscribeRealtime(site) {
   realtimeSource = source;
   // A reconnect has no replay log. Fetch anything missed while disconnected.
   source.addEventListener("ready", () => {
-    const activeSite = currentSite();
-    if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+    void refreshInventorySiteRegistry({ reason:"reconnect" })
+      .catch(() => null)
+      .finally(() => {
+        const activeSite = currentSite();
+        if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
+      });
   });
   source.addEventListener("inventory", (event) => {
     let payload = null;
@@ -1315,6 +1355,19 @@ async function subscribeRealtime(site) {
       if (activeSite) void syncInventoryNow(activeSite, { reloadBranch:false, force:true });
     }, 120);
   });
+  source.addEventListener("site-registry", (event) => {
+    let payload = null;
+    try { payload = JSON.parse(event.data || "null"); } catch {}
+    if (payload?.sourceClientId && payload.sourceClientId === clientId) return;
+    clearTimeout(siteRegistryRefreshTimer);
+    siteRegistryRefreshTimer = window.setTimeout(() => {
+      siteRegistryRefreshTail = siteRegistryRefreshTail
+        .then(() => refreshInventorySiteRegistry({ reason:"realtime", hydrateActive:true }))
+        .catch((error) => {
+          dispatchStatus("error", { error:error?.message || String(error), stage:"site-registry" });
+        });
+    }, 120);
+  });
 }
 
 function closeRealtime() {
@@ -1322,6 +1375,7 @@ function closeRealtime() {
   realtimeSource = null;
   realtimeUserId = "";
   clearTimeout(realtimeRefreshTimer);
+  clearTimeout(siteRegistryRefreshTimer);
 }
 
 async function boot() {
@@ -1362,12 +1416,22 @@ window.addEventListener("shitu:auth-expired", () => {
   closeRealtime();
 });
 window.addEventListener("focus", () => {
-  if (document.documentElement.dataset.vpsAuthReady === "true") void syncInventoryNow(currentSite());
+  if (document.documentElement.dataset.vpsAuthReady !== "true") return;
+  void refreshInventorySiteRegistry({ reason:"focus" })
+    .catch(() => null)
+    .finally(() => {
+      const site = currentSite();
+      if (site) void syncInventoryNow(site);
+    });
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && document.documentElement.dataset.vpsAuthReady === "true") {
-    void syncInventoryNow(currentSite());
-  }
+  if (document.visibilityState !== "visible" || document.documentElement.dataset.vpsAuthReady !== "true") return;
+  void refreshInventorySiteRegistry({ reason:"visibility" })
+    .catch(() => null)
+    .finally(() => {
+      const site = currentSite();
+      if (site) void syncInventoryNow(site);
+    });
 });
 window.addEventListener("hashchange", () => {
   const site = currentSite();
