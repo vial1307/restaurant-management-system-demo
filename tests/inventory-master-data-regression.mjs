@@ -76,10 +76,15 @@ assert.match(appSource, /const siteRow = inventorySite\(site\)[\s\S]{0,320}siteR
   "settings branch label must derive from the PostgreSQL-backed site registry");
 
 const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const mobileCompat = fs.readFileSync(new URL("../src/mobile-browser-compat.css", import.meta.url), "utf8");
 assert.match(styles, /\.setting-row \{[^}]*align-items: stretch;[^}]*flex-direction: column;[^}]*\}/,
-  "mobile settings rows must stack so database-provided site labels have enough width");
-assert.match(styles, /\.setting-control > input,[\s\S]{0,120}\.setting-control > input\[type="text"\] \{[^}]*width: 100%;[^}]*max-width: 100%;[^}]*\}/,
-  "mobile settings inputs must expand to the available card width");
+  "base mobile settings rows must stack so database-provided site labels have enough width");
+assert.match(mobileCompat, /\.setting-row\{[^}]*align-items:stretch !important;[^}]*flex-direction:column !important;[^}]*\}/,
+  "last-loaded mobile compatibility layer must preserve stacked settings rows");
+assert.match(mobileCompat, /\.setting-control>input\{[^}]*width:100% !important;[^}]*max-width:100% !important;[^}]*\}/,
+  "last-loaded mobile compatibility layer must not restore a fixed settings input width");
+assert.doesNotMatch(mobileCompat, /\.setting-control>input\{[^}]*width:96px !important/,
+  "mobile compatibility layer must not clip database-provided site names to the legacy 96px input");
 assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
   "branch inventory authority must use database-declared inventory_mode");
 assert.match(appSource, /function authoritativeBranchRecord[\s\S]{0,700}inventoryBranchSnapshot\(site\)[\s\S]{0,320}inventory:\[\], workInventory:\[\]/,
