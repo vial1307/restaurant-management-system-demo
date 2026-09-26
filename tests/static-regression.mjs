@@ -168,6 +168,15 @@ assert.match(inventoryCloud, /const activeChanged = previousSite !== site;[\s\S]
 assert.match(inventoryCloud, /siteRegistryUserId[\s\S]{0,1400}String\(session\(\)\?\.id \|\| ""\) !== userId/, "site registry cache must be scoped to the authenticated user and reject stale login responses");
 assert.match(app, /shitu:inventory-sites-changed/, "website UI must rerender when the database site registry changes");
 assert.doesNotMatch(app, /mountDraftInventoryOperations|canInventoryDraftCount|shitu-branch-inventory-draft-v1|shitu-inventory-operation-log-v1|result\.fallback/, "branch inventory must not write to browser-local draft/fallback stores");
+assert.doesNotMatch(authLayer, /DEFAULT_PRODUCTS|mountDraftInventoryOperations|canInventoryDraftCount|shitu-central-kitchen-draft-stock-v1|shitu-branch-inventory-draft-v1|shitu-inventory-operation-log-v1|shitu-central-kitchen-history-v1|result\.fallback|saveStock\(|pushHistory\(/, "Central inventory must not contain browser-local mutation, seed, or history fallbacks");
+assert.match(authLayer, /function loadStock\(\)[\s\S]{0,260}localStorage\.getItem\(CENTRAL_KEY\)[\s\S]{0,260}return items;/, "Central may read the last PostgreSQL projection as a recovery cache");
+assert.doesNotMatch(authLayer, /localStorage\.setItem\(CENTRAL_KEY/, "Central UI must not write its own authoritative stock cache");
+assert.match(authLayer, /if \(\["in","pick","transfer","ship"\]\.includes\(mode\) && cloudReady\)[\s\S]{0,260}mountInventoryOperations/, "Central operation controller must mount only while PostgreSQL is ready");
+assert.match(authLayer, /function branchSwitcher[\s\S]{0,700}inventorySites\(\)\.filter/, "warehouse switcher must render from the PostgreSQL-backed site registry");
+assert.doesNotMatch(authLayer, /data-warehouse="fuxing"[\s\S]{0,240}data-warehouse="yongji"/, "warehouse switcher must not reintroduce a fixed Fuxing/Yongji/Central button list");
+assert.doesNotMatch(inventoryCloud, /export function canInventoryDraftCount/, "inventory cloud must not expose a browser-local draft edit capability");
+const inventoryOperations = read("src/inventory-operations.js");
+assert.doesNotMatch(inventoryOperations, /mountDraftInventoryOperations|renderDraft\(|bindDraft\(|draft-operations-shell/, "inventory operations must expose only the PostgreSQL-backed controller");
 assert.match(app, /const branchSnapshot = branchSite \? inventoryBranchSnapshot\(site\) : null;[\s\S]{0,500}const effectiveRecord = isolatedCloudRecord;/, "offline branch rendering may use only the last PostgreSQL snapshot as a read-only cache");
 assert.match(app, /if \(opsHost && inventoryCloudState\(\)===\"ready\"\)[\s\S]{0,320}mountInventoryOperations/, "branch operation UI must mount only the PostgreSQL-backed operation controller");
 assert.match(app, /async function runCloudTransferPlan\(steps, note\)[\s\S]{0,500}if \(!result\.ok\)[\s\S]{0,260}syncInventoryNow/, "failed branch transfers must reconcile from VPS instead of falling back to local mutation");
