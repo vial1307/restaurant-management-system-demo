@@ -68,6 +68,12 @@ assert.match(appSource, /name="unit" list="inventory-unit-suggestions" required/
   "branch item unit must accept database-defined/free-form values instead of a closed source-code enum");
 assert.doesNotMatch(appSource, /const units = \["盒", "包", "箱", "斤", "片", "個", "隻", "塊", "條", "kg"\]/,
   "branch inventory must not restore a fixed unit list");
+assert.doesNotMatch(appSource, /\bZONES\b|ZONES\.find/,
+  "branch inventory labels must not fall back to source-coded storage zones");
+assert.doesNotMatch(appSource, /\{ central: "央廚", fuxing: "復興店", yongji: "永吉店" \}/,
+  "settings branch label must not use a fixed Central/Fuxing/Yongji map");
+assert.match(appSource, /const siteRow = inventorySite\(site\)[\s\S]{0,320}siteRow\?\.name_zh_tw/,
+  "settings branch label must derive from the PostgreSQL-backed site registry");
 assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
   "branch inventory authority must use database-declared inventory_mode");
 assert.match(appSource, /function authoritativeBranchRecord[\s\S]{0,700}inventoryBranchSnapshot\(site\)[\s\S]{0,320}inventory:\[\], workInventory:\[\]/,
