@@ -20,6 +20,14 @@ import {
   summarizeReserveInventory,
 } from "./rules.js";
 import { createStore, PRIMARY_ZONES, WORK_AREAS, ZONES } from "./store.js";
+import {
+  inventoryLocationByCode,
+  inventoryLocationUiKey,
+  inventoryLocationWorkArea,
+  inventoryLocations,
+  inventorySites,
+  isBranchInventorySite,
+} from "./inventory-master-data.js";
 import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
@@ -766,38 +774,29 @@ function appendBranchOperationLog(entry){
   localStorage.setItem(OPERATION_LOG_KEY,JSON.stringify(rows.slice(0,1000)));
 }
 function appStagingLocations(site){
-  if(site==="central"){
-    return [
-      ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm"],
-      ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm"],
-      ["central-four-door","央廚4門","Tủ 4 cánh bếp trung tâm"],
-      ["central-chest","央廚臥櫃","Tủ đông nằm bếp trung tâm"],
-    ].map(([id,zh,vi])=>({id,code:id,name_zh_tw:zh,name_vi:vi,site,kind:"storage"}));
-  }
-  return ZONES.map((zone)=>({id:branchLocationCode(site,zone.id),code:branchLocationCode(site,zone.id),name_zh_tw:zone.zh,name_vi:zone.vi,site,kind:"storage"}));
+  return inventoryLocations(site,"storage").map((location)=>({
+    id:location.code,
+    code:location.code,
+    name_zh_tw:location.name_zh_tw || inventoryLocationUiKey(location),
+    name_vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
+    site:location.site,
+    kind:"storage",
+  }));
 }
 function appWorkLocations(site){
-  if(site==="central"){
-    return [{id:"central-work-use",code:"central-work-use",name_zh_tw:"使用中",name_vi:"Đang sử dụng",site,kind:"work"}];
-  }
-  return WORK_AREAS.map((area)=>({
-    id:branchWorkLocationCode(site,area.id),
-    code:branchWorkLocationCode(site,area.id),
-    name_zh_tw:`${area.zh}使用中`,
-    name_vi:`${area.vi} đang sử dụng`,
-    site,
+  return inventoryLocations(site,"work").map((location)=>({
+    id:location.code,
+    code:location.code,
+    name_zh_tw:location.name_zh_tw || inventoryLocationUiKey(location),
+    name_vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
+    site:location.site,
     kind:"work",
   }));
 }
 function addToCentralDraftFromBranch(itemMeta,destinationLocationId,amount){
-  const zoneMap={
-    "central-freezer":"央廚冷凍",
-    "central-fridge":"央廚冷藏",
-    "central-four-door":"央廚4門",
-    "central-chest":"央廚臥櫃",
-  };
-  const zone=zoneMap[destinationLocationId];
-  if(!zone)return false;
+  const location=inventoryLocationByCode(destinationLocationId);
+  if(!location || location.site!=="central" || location.kind!=="storage")return false;
+  const zone=location.name_zh_tw || inventoryLocationUiKey(location);
   let rows=[];
   try{
     const draft=JSON.parse(localStorage.getItem(CENTRAL_DRAFT_KEY)||"null");
@@ -867,7 +866,12 @@ function saveBranchDraftRecord(site,record){
 }
 
 function branchZoneByLocationCode(site,code){
-  return ZONES.find((zone)=>branchLocationCode(site,zone.id)===code)?.id||"";
+  const location=inventoryLocationByCode(code);
+  return location?.site===site && location.kind==="storage" ? inventoryLocationUiKey(location) : "";
+}
+function branchWorkAreaByLocationCode(site,code){
+  const location=inventoryLocationByCode(code);
+  return location?.site===site && location.kind==="work" ? inventoryLocationWorkArea(location) : "";
 }
 
 function loadBranchDraftBySite(site){
@@ -886,7 +890,7 @@ function loadBranchDraftBySite(site){
 }
 
 function addToBranchDraftFromBranch(targetSite,itemMeta,destinationLocationId,amount){
-  if(!["fuxing","yongji"].includes(targetSite))return false;
+  if(!isBranchInventorySite(targetSite))return false;
   const zone=branchZoneByLocationCode(targetSite,destinationLocationId);
   if(!zone)return false;
   const draft=loadBranchDraftBySite(targetSite);
@@ -929,14 +933,7 @@ function addToBranchDraftFromBranch(targetSite,itemMeta,destinationLocationId,am
 
 function branchDraftOperationData(site,baseRecord){
   const draft=loadBranchDraftRecord(site,baseRecord);
-  const locations=ZONES.map((zone)=>({
-    id:branchLocationCode(site,zone.id),
-    code:branchLocationCode(site,zone.id),
-    name_zh_tw:zone.zh,
-    name_vi:zone.vi,
-    site,
-    kind:"storage",
-  }));
+  const locations=appStagingLocations(site);
   const workLocations=appWorkLocations(site);
   const grouped=new Map();
   for(const row of draft.inventory){
@@ -993,7 +990,7 @@ function branchDraftOperationData(site,baseRecord){
     items:[...grouped.values()],
     locations,
     workLocations,
-    allLocations:["central","fuxing","yongji"].flatMap((entry)=>appStagingLocations(entry)),
+    allLocations:inventorySites().flatMap((entry)=>appStagingLocations(entry.code)),
   };
 }
 function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceLocationId,destinationLocationId,amount,targetSite,sourceSite}){
@@ -1001,8 +998,8 @@ function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceL
   const value=Math.max(1,Number(amount)||1);
   const sourceZone=branchZoneByLocationCode(site,sourceLocationId);
   const destinationZone=branchZoneByLocationCode(site,destinationLocationId);
-  const sourceWorkArea=WORK_AREAS.find((area)=>branchWorkLocationCode(site,area.id)===sourceLocationId)?.id||"";
-  const destinationWorkArea=WORK_AREAS.find((area)=>branchWorkLocationCode(site,area.id)===destinationLocationId)?.id||"";
+  const sourceWorkArea=branchWorkAreaByLocationCode(site,sourceLocationId);
+  const destinationWorkArea=branchWorkAreaByLocationCode(site,destinationLocationId);
   let rows=draft.inventory.filter((row)=>(row.stockKey||String(row.id||""))===itemId);
   let template=rows[0];
   if(!template&&itemMeta?.zh){
