@@ -1229,3 +1229,26 @@ The separate read-cutover candidate:
 - Updated Super Admin Database wording to make the control-plane role explicit.
 - Added static regression guards for reintroduction of removed site/location hard-codes.
 - No schema migration or production stock mutation. Production remains at the previously verified release until PR #144 passes CI, merges, deploys and production smoke passes.
+
+
+### PR #144 completion and production verification
+
+- Exact PR head `1a3302fc39ab3f01ac7f208c50958ec24af0882a` passed:
+  - Master Data and Admin Panel Regression #232 / run `36259541053`;
+  - Super Admin Browser Regression #129 / run `36259541041`;
+  - Workforce Approval Regression Diagnostic #254 / run `36259541059`.
+- PR #144 merged into `main` as `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`.
+- Deploy Kitchen OS to VPS #856 / run `36259731875` passed:
+  - preflight/static/runtime synchronization;
+  - inventory archive/location-integrity regression;
+  - API role/inventory regression;
+  - Super Admin branch inventory database round-trip;
+  - multi-user PostgreSQL concurrency;
+  - desktop/mobile Chromium;
+  - workforce/browser regression;
+  - full-device cross-browser;
+  - exact tested-SHA deploy with server-side backup/rollback;
+  - production health/release check;
+  - production UI smoke.
+- PostgreSQL schema remains `024`. This stage performed no schema migration and no production stock rewrite.
+- Database-control-plane stage 1 is complete. Next inventory work is real-time site-registry propagation plus further retirement of legacy browser-local draft/master-data compatibility code before the Central Kitchen UI redesign.
