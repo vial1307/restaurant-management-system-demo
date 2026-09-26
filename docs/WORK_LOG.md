@@ -1264,3 +1264,27 @@ The separate read-cutover candidate:
 - Commits on `refactor/inventory-db-control-plane-20260927`: `b89d7cf`, `27a206d`, `175377d`, `952ac00`, `8b21bf9`, `40b7860`, `6c83f83` plus documentation commits.
 - No schema migration and no production data mutation. Next step is exact-head CI/PR review/deploy; only after production smoke passes should stage 3 retire additional local draft/fallback compatibility code.
 
+### Stage 2 completion — PR #146 / production #867
+
+- Exact PR head `eedaaca8244e880152d5273bccb71bd1e231b4f9` passed:
+  - Master Data and Admin Panel Regression #242 / `36262376642`;
+  - Isolated CI API Load Smoke #461 / `36262376637`;
+  - Workforce Approval Regression Diagnostic #264 / `36262376644`;
+  - Super Admin Browser Regression #139 / `36262376652`;
+  - Deploy workflow PR preflight/full regression #866 / `36262376632`.
+- Preflight testing caught two real integration omissions before merge: the Website rerender listener for `shitu:inventory-sites-changed`, and two remaining Fuxing/Yongji closed-list checks in branch operation availability. Both were fixed rather than weakening the guards.
+- PR #146 merged into `main` as `95a39088a33f61c218412c1dd2e2d253306a0471`.
+- Deploy Kitchen OS to VPS #867 / run `36262880282` passed:
+  - preflight/static/runtime synchronization;
+  - inventory/API/PostgreSQL/concurrency regression;
+  - Super Admin Database round-trip;
+  - desktop/mobile Chromium and full-device cross-browser;
+  - server-side backup/rollback deployment;
+  - production database integrity audit;
+  - production health/release check;
+  - production UI smoke.
+- Backup: `/opt/kitchen-os/backups/kitchen_os_20260926T183652Z.dump`.
+- Production evidence: `DATA_INTEGRITY_OK`; health returned `{"app":"ok","database":"ok","schema":"024","release":"95a3908"}`; `PRODUCTION_UI_SMOKE_OK`.
+- No schema migration and no production stock rewrite.
+- Stage 2 is complete. Stage 3 should remove dead/local inventory mutation fallbacks and narrow browser-local drafts to explicitly read-only recovery/cache behavior before the Central Kitchen UI redesign.
+
