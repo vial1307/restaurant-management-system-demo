@@ -16,7 +16,7 @@ assert(!cloud.includes('["fuxing","yongji"].includes(site)'), "frontend receivin
 assert(cloud.includes('if(!canManageReceiveDefault(site)) return {ok:false,fallback:false,error:new Error("RECEIVE_DEFAULT_MANAGER_REQUIRED")}'), "cloud receive-default write is not guarded by explicit inventory edit authority");
 
 assert(app.includes("canManageReceiveDefault,"), "branch editor does not import receiving-default permission boundary");
-assert(app.includes("const receiveDefaultEditable = canManageReceiveDefault(activeInventorySite());"), "branch editor does not derive receiving-default editability from the dedicated boundary");
+assert.match(app,/const site = activeInventorySite\(\);[\s\S]{0,700}const receiveDefaultEditable = canManageReceiveDefault\(site\);/, "branch editor must derive receiving-default editability from the active database-scoped site");
 assert(app.includes('disabled aria-disabled="true"'), "view-only receiving-default selector is not disabled");
 assert(app.includes('type="hidden" name="receiveZone"'), "read-only receiving-default UI must preserve the existing value on product save");
 assert.equal(
