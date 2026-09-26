@@ -272,7 +272,7 @@ function centralModeNavigation({ mode, language, operationsEnabled, catalogManag
     ...(catalogManageVisible ? [{ id:"manage", icon:"⚙", zh:"庫存管理", vi:"Quản trị kho", group:"admin" }] : []),
     ...(canViewHistory ? [{ id:"history", icon:"≡", zh:"操作紀錄", vi:"Lịch sử", group:"admin" }] : []),
   ];
-  return `<nav class="central-kitchen-modebar central-tabs branch-ops-tabs" aria-label="${language === "zh" ? "央廚功能" : "Chức năng Bếp trung tâm"}">
+  return `<nav class="central-tabs branch-ops-tabs central-kitchen-modebar" aria-label="${language === "zh" ? "央廚功能" : "Chức năng Bếp trung tâm"}">
     ${definitions.map((entry) => `<button type="button" data-central-mode="${entry.id}" data-mode-group="${entry.group}" class="central-kitchen-mode ${mode === entry.id ? "active" : ""}">
       <span class="central-kitchen-mode-icon" aria-hidden="true">${entry.icon}</span>
       <span><strong>${esc(language === "zh" ? entry.zh : entry.vi)}</strong><small>${esc(entry.zh)}</small></span>
