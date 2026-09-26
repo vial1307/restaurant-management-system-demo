@@ -1,14 +1,17 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — realtime Database site registry, 2026-09-27
+## DONE — realtime Database site registry, 2026-09-27
 
-Branch: `refactor/inventory-db-control-plane-20260927`.
-
-This stage makes site/branch master-data changes propagate to already-open Kitchen OS and Super Admin sessions through the existing authenticated inventory SSE channel. A successful Super Admin site save publishes `site-registry`; clients then re-read the PostgreSQL-backed site registry instead of keeping a browser-defined branch list. The inventory Database workspace updates its site choices without discarding dirty edits.
-
-Regression coverage includes the executed backend SSE hook plus static guards for Website/Super Admin listeners and removal of the Fuxing/Yongji closed-list branch check.
-
-No schema migration, no stock mutation, no change to inventory transaction authority. Status remains candidate until exact-head CI + merge + production deploy/smoke pass.
+- PR #146 merged as `95a39088a33f61c218412c1dd2e2d253306a0471`; Deploy #867 / run `36262880282` is verified in production.
+- Super Admin site create/update emits authenticated `site-registry` SSE invalidation; already-open Website and Super Admin sessions re-read the PostgreSQL registry without manual reload.
+- Site registry cache is scoped to the authenticated user and ignores stale responses from a previous login.
+- Inventory branch logic uses database-declared `inventory_mode`; the remaining Fuxing/Yongji closed lists in the inventory page were removed.
+- Dirty/pending Super Admin Database editors defer active-site replacement, preventing old-site snapshots from being shown under a new site.
+- Unrelated site-registry edits do not force an unnecessary active-stock reload.
+- Exact PR head `eedaaca8244e880152d5273bccb71bd1e231b4f9` passed Master Data/Admin #242, Load #461, Workforce #264, Super Admin Browser #139 and Deploy preflight/full regression #866.
+- Production #867 passed backup/deploy, `DATA_INTEGRITY_OK`, health `release=95a3908` / schema `024`, and `PRODUCTION_UI_SMOKE_OK`. Backup: `kitchen_os_20260926T183652Z.dump`.
+- No schema migration and no production stock rewrite.
+- NEXT: retire obsolete local inventory mutation/draft compatibility paths while preserving safe read-only cache/recovery behavior, then redesign Central Kitchen UI.
 
 
 ## DONE — Database control plane / inventory hard-code retirement stage 1
@@ -41,8 +44,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #856 / run `36259731875`.
-- Verified production SHA: `15ba0013f15daa9dcdc04152c95f12bd9f7fc793`.
+- Verified production release: Deploy Kitchen OS to VPS #867 / run `36262880282`.
+- Verified production SHA: `95a39088a33f61c218412c1dd2e2d253306a0471`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
