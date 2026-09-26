@@ -164,6 +164,7 @@ assert.match(inventoryCloud, /cloudSyncBranchCatalogItem[\s\S]{0,300}canManageBr
 assert.match(inventoryRealtime, /route === "\/api\/admin\/super\/sites"[\s\S]{0,220}publishSiteRegistryInvalidation/, "site master-data writes must publish a dedicated site-registry realtime event");
 assert.match(inventoryCloud, /addEventListener\("site-registry"[\s\S]{0,700}refreshInventorySiteRegistry/, "website inventory sessions must refresh the database site registry in realtime");
 assert.match(inventoryCloud, /refreshInventorySiteRegistry[\s\S]{0,1100}shitu:inventory-sites-changed/, "site registry refresh must notify the website UI after PostgreSQL-backed changes");
+assert.match(inventoryCloud, /siteRegistryUserId[\s\S]{0,1400}String\(session\(\)\?\.id \|\| ""\) !== userId/, "site registry cache must be scoped to the authenticated user and reject stale login responses");
 assert.match(app, /shitu:inventory-sites-changed/, "website UI must rerender when the database site registry changes");
 assert.doesNotMatch(app, /\["fuxing","yongji"\]\.includes\(site\)/, "website branch detection must remain data-driven");
 assert.match(superAdminPanel, /addEventListener\("site-registry"[\s\S]{0,300}refreshSiteRegistryFromRealtime/, "Super Admin must listen for realtime site-registry invalidation");
