@@ -483,8 +483,7 @@ function stockView(items, selectedZone, query, directAdjust = false, { inventory
     <p class="inventory-view-description">${inventoryView==="storage"?(language==="zh"?"依 Database 設定的央廚儲位查看實際庫存。":"Xem tồn thực tế theo các vị trí được cấu hình trong Database."):(language==="zh"?"依工作區查看已領出使用中的原物料。":"Xem nguyên liệu đang sử dụng theo khu làm việc từ Database.")}</p>
     <section class="inventory-table ${inventoryView==="storage"?"storage-table":"work-table"}"><div class="inventory-table-head">${columns.map((column)=>`<span>${esc(column)}</span>`).join("")}</div>${inventoryView==="storage"?(storageRows||`<p class="central-empty">${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p>`):(workRows||`<p class="central-empty">${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p>`)}<p class="central-empty" data-central-search-empty hidden>${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p></section>
   </section>`;
-}}
-
+}
 
 function centralProductKey(item) {
   const key = centralBaseKey(item);
