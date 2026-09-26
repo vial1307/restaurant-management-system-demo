@@ -1,5 +1,19 @@
 # Kitchen OS — Current Development Handoff
 
+## Active workstream — Super Admin as Database control plane, PR #144
+
+User direction: Super Admin + Database should function as one business-control surface. PostgreSQL remains the source of truth, but normal business/master-data maintenance should not require SSH/manual VPS database work. Database-declared structure should drive Super Admin in real time and the operational Website; mutable restaurant master data should move out of frontend/backend hard-code incrementally.
+
+PR #144 (branch: refactor/inventory-db-control-plane-20260927) is the first inventory hardening stage:
+- canonical specification now defines Super Admin as the Database control plane;
+- legacy inventory helper paths derive site/location/work-area data from loaded PostgreSQL master data instead of closed Central/Fuxing/Yongji lists;
+- Central storage names in that legacy path come from master data rather than fixed source labels;
+- Super Admin Database copy now presents PostgreSQL authority explicitly;
+- regression contracts prevent those removed site/location hard-codes from returning.
+
+This stage intentionally does not rewrite the already-working inventory synchronization or database schema and does not modify production stock. PR #144 is **not production** until required CI, merge, deploy and production smoke are green.
+
+
 ## Active correction — Central missing in assigned Role workplace choices
 
 The user observed that a manager account editor listed only Fuxing and Yongji; Central was missing. PR #140 restricted assigned Roles to sites marked `inventory_mode=branch` in the Super Admin selector and API. This did not match the product requirement: Central is also a physical workplace, while `all` is a logical global scope. The correction lets assigned Roles select any active site, including Central, while the central-only Role remains fixed to Central. The main website's account editor uses the same site eligibility. A manager assigned to Central must retain manager rights at Central and be denied other sites. Run isolated UI/API/PostgreSQL tests, then merge, deploy and verify exact release/production smoke. No account data or schema migration is needed.
