@@ -440,7 +440,7 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
   const deleteLabel = language === "zh" ? "刪除" : "Xóa · 刪除";
   return `<section class="central-card central-manage-card">
     <div class="central-toolbar central-manage-toolbar">
-      <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${centralZones().map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(zone)}</button>`).join("")}</div>
+      <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${centralZones().map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(centralZoneLabel(zone, language))}</button>`).join("")}</div>
       ${writable ? `<button class="primary-button" type="button" data-central-editor-open="new">＋ ${esc(addLabel)}</button>` : ""}
       ${centralSearchField(query, language)}
     </div>
