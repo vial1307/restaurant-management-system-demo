@@ -76,8 +76,10 @@ assert.match(appSource, /const siteRow = inventorySite\(site\)[\s\S]{0,320}siteR
   "settings branch label must derive from the PostgreSQL-backed site registry");
 
 const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-assert.match(styles, /@media \(max-width: 760px\)[\s\S]{0,6000}\.setting-row \{[^}]*flex-direction: column;[^}]*\}[\s\S]{0,500}\.setting-control > input[\s\S]{0,180}width: 100%/,
-  "mobile settings must accommodate long database-provided site labels without clipping the input");
+assert.match(styles, /\.setting-row \{[^}]*align-items: stretch;[^}]*flex-direction: column;[^}]*\}/,
+  "mobile settings rows must stack so database-provided site labels have enough width");
+assert.match(styles, /\.setting-control > input,[\s\S]{0,120}\.setting-control > input\[type="text"\] \{[^}]*width: 100%;[^}]*max-width: 100%;[^}]*\}/,
+  "mobile settings inputs must expand to the available card width");
 assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
   "branch inventory authority must use database-declared inventory_mode");
 assert.match(appSource, /function authoritativeBranchRecord[\s\S]{0,700}inventoryBranchSnapshot\(site\)[\s\S]{0,320}inventory:\[\], workInventory:\[\]/,
