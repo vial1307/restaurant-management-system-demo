@@ -1,4 +1,4 @@
-import { mountDraftInventoryOperations, mountInventoryOperations } from "./inventory-operations.js";
+import { mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
@@ -44,7 +44,6 @@ import {
   canManageBranchCatalog,
   canManageReceiveDefault,
   canViewBranchCatalogManagement,
-  canInventoryDraftCount,
   canInventoryEdit,
   cloudAdjustQuantity,
   cloudArchiveBranchItem,
@@ -659,27 +658,23 @@ function storageRestockTransferPlan(item, record) {
   return steps.filter((step) => step.sourceLocationCode && step.destinationLocationCode);
 }
 
-async function runCloudTransferPlan(steps, note, legacyFallback) {
-  if (!steps.length) return;
+async function runCloudTransferPlan(steps, note) {
+  if (!steps.length) return true;
   for (const step of steps) {
     const result = await cloudTransferInventory({ ...step, note });
-    if (result.fallback) {
-      legacyFallback();
-      return;
-    }
     if (!result.ok) {
-      await syncInventoryNow(activeInventorySite(), { reloadBranch: true });
-      return;
+      await syncInventoryNow(activeInventorySite(), { reloadBranch: true, force:true });
+      return false;
     }
   }
-  await syncInventoryNow(activeInventorySite(), { reloadBranch: true });
+  await syncInventoryNow(activeInventorySite(), { reloadBranch: true, force:true });
+  return true;
 }
 
 function quantityControl(item, kind = "item", manageAdjust = false) {
   const action = kind === "workItem" ? "adjust-work-item" : "adjust-item";
-  const editable = canInventoryEdit() || canInventoryDraftCount();
-  const draftDirect = canInventoryDraftCount() && accountSession()?.role === "admin";
-  const direct = canDirectInventoryAdjust() || draftDirect || (manageAdjust && canInventoryEdit());
+  const editable = canInventoryEdit();
+  const direct = canDirectInventoryAdjust() || (manageAdjust && canInventoryEdit());
   const manageAttribute = manageAdjust ? ' data-manage-adjust="true"' : "";
   const identityAttributes = ` data-stock-key="${escapeHtml(item.stockKey)}" ${kind === "workItem"
     ? `data-work-area="${escapeHtml(item.workArea)}"`
@@ -700,7 +695,7 @@ function inventoryStatusBadge(item, text) {
 
 function storageInventoryRow(item, context) {
   const { language, text, record } = context;
-  const editable = canInventoryEdit() || canInventoryDraftCount();
+  const editable = canInventoryEdit();
   const catalogManage = context.catalogManageWritable ?? canManageBranchCatalog(activeInventorySite());
   const catalogManageVisible = context.catalogManageVisible ?? catalogManage;
   const status = inventoryStatus(item);
@@ -715,7 +710,7 @@ function storageInventoryRow(item, context) {
 
 function workInventoryRow(item, context) {
   const { language, text, record } = context;
-  const editable = canInventoryEdit() || canInventoryDraftCount();
+  const editable = canInventoryEdit();
   const catalogManage = canManageBranchCatalog(activeInventorySite());
   const status = inventoryStatus(item);
   const sources = storageSources(item, record);
@@ -754,405 +749,6 @@ function inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, all
   const primary = groups.filter((group) => PRIMARY_ZONES.includes(group.id));
   const service = groups.filter((group) => !PRIMARY_ZONES.includes(group.id));
   return `<div class="storage-tab-groups"><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.primaryStorage)}</span><div class="zone-tabs">${all}${primary.map(tab).join("")}</div></div><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.serviceStorage)}</span><div class="zone-tabs">${service.map(tab).join("")}</div></div></div>`;
-}
-
-const BRANCH_DRAFT_PREFIX = "shitu-branch-inventory-draft-v1:";
-const CENTRAL_DRAFT_KEY = "shitu-central-kitchen-draft-stock-v1";
-const CENTRAL_BASE_KEY = "shitu-central-kitchen-stock-v1";
-const OPERATION_LOG_KEY = "shitu-inventory-operation-log-v1";
-
-function branchDraftKey(site){ return `${BRANCH_DRAFT_PREFIX}${site}`; }
-function appendBranchOperationLog(entry){
-  let rows=[];
-  try{
-    const saved=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");
-    if(Array.isArray(saved))rows=saved;
-  }catch{}
-  let actor=null;
-  try{actor=JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null");}catch{}
-  rows.unshift({...entry,user:actor?.name||actor?.username||"",userId:actor?.id||null,createdAt:new Date().toISOString()});
-  localStorage.setItem(OPERATION_LOG_KEY,JSON.stringify(rows.slice(0,1000)));
-}
-function appStagingLocations(site){
-  return inventoryLocations(site,"storage").map((location)=>({
-    id:location.code,
-    code:location.code,
-    name_zh_tw:location.name_zh_tw || inventoryLocationUiKey(location),
-    name_vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
-    site:location.site,
-    kind:"storage",
-  }));
-}
-function appWorkLocations(site){
-  return inventoryLocations(site,"work").map((location)=>({
-    id:location.code,
-    code:location.code,
-    name_zh_tw:location.name_zh_tw || inventoryLocationUiKey(location),
-    name_vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
-    site:location.site,
-    kind:"work",
-  }));
-}
-function addToCentralDraftFromBranch(itemMeta,destinationLocationId,amount){
-  const location=inventoryLocationByCode(destinationLocationId);
-  if(!location || location.site!=="central" || location.kind!=="storage")return false;
-  const zone=location.name_zh_tw || inventoryLocationUiKey(location);
-  let rows=[];
-  try{
-    const draft=JSON.parse(localStorage.getItem(CENTRAL_DRAFT_KEY)||"null");
-    if(Array.isArray(draft)&&draft.length)rows=draft;
-  }catch{}
-  if(!rows.length){
-    try{
-      const base=JSON.parse(localStorage.getItem(CENTRAL_BASE_KEY)||"[]");
-      if(Array.isArray(base))rows=JSON.parse(JSON.stringify(base));
-    }catch{}
-  }
-  let row=rows.find((entry)=>(itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey)||entry.zh===itemMeta?.zh);
-  if(row){
-    const baseId=row.baseId||row.itemKey||String(row.id||"").split("@")[0];
-    let target=rows.find((entry)=>(entry.baseId||entry.itemKey||String(entry.id||"").split("@")[0])===baseId&&entry.zone===zone);
-    if(!target){
-      target={...row,id:`${baseId}@${destinationLocationId}`,baseId,itemKey:row.itemKey||baseId,zone,qty:0,minimum:0};
-      rows.push(target);
-    }
-    row=target;
-  }else{
-    const baseId=`central-received-${Date.now()}`;
-    row={id:`${baseId}@${destinationLocationId}`,baseId,itemKey:baseId,catalogKey:itemMeta?.catalogKey||"",zh:itemMeta?.zh||baseId,vi:itemMeta?.vi||itemMeta?.zh||baseId,unit:itemMeta?.unit||"個",zone,qty:0,minimum:0};
-    rows.push(row);
-  }
-  row.qty=Math.max(0,Number(row.qty)||0)+Math.max(1,Number(amount)||1);
-  row.locationFixed=true;
-  row.fixedAt=new Date().toISOString();
-  row.fixedReason="ship";
-  const now=new Date().toISOString();
-  rows=rows.map((entry)=>{
-    const baseId=entry.baseId||entry.itemKey||String(entry.id||"").split("@")[0];
-    const itemKey=entry.itemKey||baseId;
-    return {
-      ...entry,
-      key:`${itemKey}|${entry.zone||""}`,
-      baseId,
-      itemKey,
-      qty:Math.max(0,Number(entry.qty)||0),
-      minimum:Math.max(0,Number(entry.minimum)||0),
-      updatedAt:now,
-      status:"staging",
-    };
-  });
-  localStorage.setItem(CENTRAL_DRAFT_KEY,JSON.stringify(rows));
-  return true;
-}
-function cloneJson(value){ return JSON.parse(JSON.stringify(value)); }
-
-function loadBranchDraftRecord(site,baseRecord){
-  try{
-    const saved=JSON.parse(localStorage.getItem(branchDraftKey(site))||"null");
-    if(saved?.site===site&&saved?.inventory&&saved?.workInventory)return saved;
-  }catch{}
-
-  const mirror=inventoryBranchSnapshot(site);
-  const trustedBase=mirror || (baseRecord?.inventorySite===site ? baseRecord : null);
-  const inventory=cloneJson(trustedBase?.inventory||[]);
-  const workInventory=cloneJson(trustedBase?.workInventory||[]);
-  const seeded={site,inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};
-  localStorage.setItem(branchDraftKey(site),JSON.stringify(seeded));
-  return seeded;
-}
-
-function saveBranchDraftRecord(site,record){
-  localStorage.setItem(branchDraftKey(site),JSON.stringify({...record,site,updatedAt:new Date().toISOString(),status:"staging"}));
-}
-
-function branchZoneByLocationCode(site,code){
-  const location=inventoryLocationByCode(code);
-  return location?.site===site && location.kind==="storage" ? inventoryLocationUiKey(location) : "";
-}
-function branchWorkAreaByLocationCode(site,code){
-  const location=inventoryLocationByCode(code);
-  return location?.site===site && location.kind==="work" ? inventoryLocationWorkArea(location) : "";
-}
-
-function loadBranchDraftBySite(site){
-  const key=branchDraftKey(site);
-  try{
-    const saved=JSON.parse(localStorage.getItem(key)||"null");
-    if(saved?.site===site&&saved?.inventory&&saved?.workInventory)return saved;
-  }catch{}
-  let baseRecord={inventory:[],workInventory:[]};
-  try{
-    const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
-    const selected=state?.selectedDate;
-    baseRecord=state?.records?.[selected]||baseRecord;
-  }catch{}
-  return loadBranchDraftRecord(site,baseRecord);
-}
-
-function addToBranchDraftFromBranch(targetSite,itemMeta,destinationLocationId,amount){
-  if(!isBranchInventorySite(targetSite))return false;
-  const zone=branchZoneByLocationCode(targetSite,destinationLocationId);
-  if(!zone)return false;
-  const draft=loadBranchDraftBySite(targetSite);
-  let row=draft.inventory.find((entry)=>
-    (itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey) ||
-    entry.label===itemMeta?.zh
-  );
-  if(row){
-    const stockKey=row.stockKey||String(row.id||"").split("-")[0];
-    let target=draft.inventory.find((entry)=>entry.stockKey===stockKey&&entry.zone===zone);
-    if(!target){
-      target={...row,id:`${stockKey}-${zone}`,zone,quantity:0,minimum:0};
-      draft.inventory.push(target);
-    }
-    row=target;
-  }else{
-    const stockKey=`received-${String(itemMeta?.zh||"item").replace(/\s+/g,"-")}`;
-    row={
-      id:`${stockKey}-${zone}`,
-      stockKey,
-      catalogKey:itemMeta?.catalogKey||"",
-      label:itemMeta?.zh||stockKey,
-      labelVi:itemMeta?.vi||itemMeta?.zh||stockKey,
-      unit:itemMeta?.unit||"個",
-      workArea:itemMeta?.workArea||"noodles",
-      storageOnly:false,
-      zone,
-      quantity:0,
-      minimum:0,
-    };
-    draft.inventory.push(row);
-  }
-  row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);
-  row.locationFixed=true;
-  row.fixedAt=new Date().toISOString();
-  row.fixedReason="ship";
-  saveBranchDraftRecord(targetSite,draft);
-  return true;
-}
-
-function branchDraftOperationData(site,baseRecord){
-  const draft=loadBranchDraftRecord(site,baseRecord);
-  const locations=appStagingLocations(site);
-  const workLocations=appWorkLocations(site);
-  const grouped=new Map();
-  for(const row of draft.inventory){
-    const key=row.stockKey||String(row.id||"").split("-")[0];
-    if(!grouped.has(key)){
-      grouped.set(key,{
-        id:key,
-        itemKey:branchItemKey(site,key),
-        catalogKey:row.catalogKey||String(row.label||key).toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,""),
-        zh:row.label||key,
-        vi:row.labelVi||row.label||key,
-        unit:row.unit||"個",
-        workArea:row.workArea||"noodles",
-        locations:[],
-        workLocations:[],
-        total:0,
-        workTotal:0,
-      });
-    }
-    const item=grouped.get(key);
-    const location=locations.find((entry)=>entry.code===branchLocationCode(site,row.zone));
-    if(!location)continue;
-    const quantity=Math.max(0,Number(row.quantity)||0);
-    item.locations.push({
-      id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,
-      quantity,minimum:Math.max(0,Number(row.minimum)||0),
-    });
-    item.total+=quantity;
-  }
-  for(const row of draft.workInventory||[]){
-    const key=row.stockKey||String(row.id||"").replace(/^work-/,"");
-    const item=grouped.get(key);
-    if(!item)continue;
-    item.workArea=row.workArea||item.workArea||"noodles";
-    const location=workLocations.find((entry)=>entry.code===branchWorkLocationCode(site,item.workArea));
-    if(!location)continue;
-    const quantity=Math.max(0,Number(row.quantity)||0);
-    item.workLocations.push({id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,quantity,minimum:Math.max(0,Number(row.minimum)||0)});
-    item.workTotal+=quantity;
-  }
-  for(const item of grouped.values()){
-    for(const location of locations){
-      if(!item.locations.some((entry)=>entry.id===location.id)){
-        item.locations.push({id:location.id,code:location.code,zh:location.name_zh_tw,vi:location.name_vi,quantity:0,minimum:0});
-      }
-    }
-    const preferred=workLocations.find((entry)=>entry.code===branchWorkLocationCode(site,item.workArea))||workLocations[0];
-    if(preferred&&!item.workLocations.some((entry)=>entry.id===preferred.id)){
-      item.workLocations.push({id:preferred.id,code:preferred.code,zh:preferred.name_zh_tw,vi:preferred.name_vi,quantity:0,minimum:0});
-    }
-  }
-  return {
-    site,
-    items:[...grouped.values()],
-    locations,
-    workLocations,
-    allLocations:inventorySites().flatMap((entry)=>appStagingLocations(entry.code)),
-  };
-}
-function applyBranchDraftOperation(site,baseRecord,{type,itemId,itemMeta,sourceLocationId,destinationLocationId,amount,targetSite,sourceSite}){
-  const draft=loadBranchDraftRecord(site,baseRecord);
-  const value=Math.max(1,Number(amount)||1);
-  const sourceZone=branchZoneByLocationCode(site,sourceLocationId);
-  const destinationZone=branchZoneByLocationCode(site,destinationLocationId);
-  const sourceWorkArea=branchWorkAreaByLocationCode(site,sourceLocationId);
-  const destinationWorkArea=branchWorkAreaByLocationCode(site,destinationLocationId);
-  let rows=draft.inventory.filter((row)=>(row.stockKey||String(row.id||""))===itemId);
-  let template=rows[0];
-  if(!template&&itemMeta?.zh){
-    rows=draft.inventory.filter((row)=>row.label===itemMeta.zh);
-    template=rows[0];
-  }
-  if(!template)return {ok:false,error:new Error("ITEM_NOT_FOUND")};
-
-  function ensureStorage(zone){
-    let row=draft.inventory.find((entry)=>(entry.stockKey||String(entry.id||""))===(template.stockKey||itemId)&&entry.zone===zone);
-    if(!row){
-      row={...template,id:`${template.stockKey||itemId}-${zone}`,zone,quantity:0,minimum:0};
-      draft.inventory.push(row);
-    }
-    return row;
-  }
-  function ensureWork(area){
-    const stockKey=template.stockKey||itemId;
-    let row=(draft.workInventory||[]).find((entry)=>entry.stockKey===stockKey);
-    if(!row){
-      row={id:`work-${stockKey}`,stockKey,label:template.label,labelVi:template.labelVi,workArea:area||template.workArea||"noodles",quantity:0,minimum:0,unit:template.unit};
-      draft.workInventory.push(row);
-    }
-    if(area)row.workArea=area;
-    return row;
-  }
-
-  let sourceLabel=sourceZone||sourceWorkArea||sourceSite||"";
-  let destinationLabel=destinationZone||destinationWorkArea||targetSite||"";
-
-  if(type==="in"){
-    const target=ensureStorage(destinationZone);
-    target.quantity=Math.max(0,Number(target.quantity)||0)+value;
-  }else if(type==="pick"){
-    const source=ensureStorage(sourceZone);
-    const before=Math.max(0,Number(source.quantity)||0);
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    source.quantity=before-value;
-    const work=ensureWork(destinationWorkArea||template.workArea||"noodles");
-    work.quantity=Math.max(0,Number(work.quantity)||0)+value;
-  }else if(type==="use"){
-    const work=ensureWork(sourceWorkArea||template.workArea||"noodles");
-    const before=Math.max(0,Number(work.quantity)||0);
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    work.quantity=before-value;
-    sourceLabel=work.workArea;
-    destinationLabel="使用";
-  }else if(type==="return"){
-    const work=ensureWork(sourceWorkArea||template.workArea||"noodles");
-    const before=Math.max(0,Number(work.quantity)||0);
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    work.quantity=before-value;
-    const target=ensureStorage(destinationZone);
-    target.quantity=Math.max(0,Number(target.quantity)||0)+value;
-    sourceLabel=work.workArea;
-  }else if(type==="ship"){
-    const source=ensureStorage(sourceZone);
-    const before=Math.max(0,Number(source.quantity)||0);
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    source.quantity=before-value;
-    const meta=itemMeta||{zh:template.label,vi:template.labelVi,unit:template.unit,catalogKey:template.catalogKey||"",workArea:template.workArea||"noodles"};
-    const ok=targetSite==="central"
-      ? addToCentralDraftFromBranch(meta,destinationLocationId,value)
-      : addToBranchDraftFromBranch(targetSite,meta,destinationLocationId,value);
-    if(!ok){source.quantity=before;return {ok:false,error:new Error("INVALID_DESTINATION_LOCATION")};}
-    const targetLocation=appStagingLocations(targetSite).find((entry)=>entry.id===destinationLocationId);
-    destinationLabel=`${targetSite}:${targetLocation?.name_zh_tw||destinationLocationId}`;
-  }else if(type==="transfer"){
-    if(!sourceZone||!destinationZone||sourceZone===destinationZone)return {ok:false,error:new Error("SAME_LOCATION")};
-    const source=ensureStorage(sourceZone);
-    const before=Math.max(0,Number(source.quantity)||0);
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    source.quantity=before-value;
-    const target=ensureStorage(destinationZone);
-    target.quantity=Math.max(0,Number(target.quantity)||0)+value;
-  }else{
-    return {ok:false,error:new Error("INVALID_OPERATION")};
-  }
-
-  saveBranchDraftRecord(site,draft);
-  appendBranchOperationLog({
-    site,
-    action:type,
-    item:template.label||itemMeta?.zh||itemId,
-    amount:value,
-    unit:template.unit||itemMeta?.unit||"",
-    source:sourceLabel,
-    destination:destinationLabel,
-    locationFixed:type==="ship",
-  });
-  return {ok:true,targetSite,sourceSite};
-}
-
-function findBranchDraftItem(record,id,kind="item"){
-  const list=kind==="workItem"?record.workInventory:record.inventory;
-  return list.find((entry)=>entry.id===id);
-}
-function setBranchDraftQuantity(site,baseRecord,id,kind,next){
-  const draft=loadBranchDraftRecord(site,baseRecord);
-  const item=findBranchDraftItem(draft,id,kind);
-  if(!item)return false;
-  item.quantity=Math.max(0,Number(next)||0);
-  saveBranchDraftRecord(site,draft);
-  return true;
-}
-function adjustBranchDraftQuantity(site,baseRecord,id,kind,delta){
-  const draft=loadBranchDraftRecord(site,baseRecord);
-  const item=findBranchDraftItem(draft,id,kind);
-  if(!item)return false;
-  item.quantity=Math.max(0,Number(item.quantity||0)+Number(delta||0));
-  saveBranchDraftRecord(site,draft);
-  return true;
-}
-function restockBranchDraftWork(site,baseRecord,id){
-  const draft=loadBranchDraftRecord(site,baseRecord);
-  const item=draft.workInventory.find((entry)=>entry.id===id);
-  if(!item)return false;
-  let need=Math.max(0,Number(item.minimum||0)-Number(item.quantity||0));
-  if(need<=0)return true;
-  const sources=draft.inventory.filter((entry)=>entry.stockKey===item.stockKey&&Number(entry.quantity)>0);
-  for(const source of sources){
-    if(need<=0)break;
-    const moved=Math.min(need,Number(source.quantity)||0);
-    source.quantity-=moved;
-    item.quantity=Number(item.quantity||0)+moved;
-    need-=moved;
-  }
-  saveBranchDraftRecord(site,draft);
-  return true;
-}
-function restockBranchDraftStorage(site,baseRecord,id){
-  const draft=loadBranchDraftRecord(site,baseRecord);
-  const item=draft.inventory.find((entry)=>entry.id===id);
-  if(!item)return false;
-  let need=Math.max(0,Number(item.minimum||0)-Number(item.quantity||0));
-  if(need<=0)return true;
-  const sources=draft.inventory.filter((entry)=>entry.stockKey===item.stockKey&&entry.id!==item.id&&Number(entry.quantity)>0);
-  for(const source of sources){
-    if(need<=0)break;
-    const moved=Math.min(need,Number(source.quantity)||0);
-    source.quantity-=moved;
-    item.quantity=Number(item.quantity||0)+moved;
-    need-=moved;
-  }
-  saveBranchDraftRecord(site,draft);
-  return true;
-}
-
-function branchInventoryLocalHistory(site) {
-  try {
-    const rows=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");
-    return Array.isArray(rows) ? rows.filter((entry)=>entry.site===site).slice(0,300) : [];
-  } catch { return []; }
 }
 
 function branchInventoryHistoryView(rows, language="vi", cloud=false) {
@@ -1196,15 +792,15 @@ function inventory(context) {
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
   const branchSite = isBranchInventorySite(site);
-  const branchSnapshot = cloudReady && branchSite ? inventoryBranchSnapshot(site) : null;
-  const isolatedCloudRecord = branchSite && cloudReady
+  const branchSnapshot = branchSite ? inventoryBranchSnapshot(site) : null;
+  const isolatedCloudRecord = branchSite
     ? branchSnapshot
       ? { ...record, inventory:branchSnapshot.inventory, workInventory:branchSnapshot.workInventory, inventorySite:site }
       : record?.inventorySite === site
         ? record
         : { ...record, inventory:[], workInventory:[], inventorySite:site }
     : record;
-  const effectiveRecord = !cloudReady && branchSite ? loadBranchDraftRecord(site,record) : isolatedCloudRecord;
+  const effectiveRecord = isolatedCloudRecord;
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
@@ -1225,7 +821,7 @@ function inventory(context) {
   const columns = storageView
     ? [text.inventory, text.workstation, text.storageLocation, text.storageQuantity, text.workingQuantity, text.restock]
     : [text.inventory, text.workstation, text.current, text.standard, text.restockSource, text.transfer];
-  const editable = canInventoryEdit() || canInventoryDraftCount();
+  const editable = canInventoryEdit();
   const catalogManage = canManageBranchCatalog(site);
   const catalogManageVisible = canViewBranchCatalogManagement(site);
   // The rendered store state is authoritative for the selected service date.
@@ -1321,8 +917,7 @@ function inventory(context) {
       <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
   }
   if (opsMode === "history") {
-    const localRows=branchInventoryLocalHistory(site);
-    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section data-branch-inventory-history data-site="${escapeHtml(site)}">${branchInventoryHistoryView(localRows,language,false)}</section>`;
+    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section data-branch-inventory-history data-site="${escapeHtml(site)}">${branchInventoryHistoryView([],language,false)}</section>`;
   }
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
@@ -1599,24 +1194,14 @@ function render() {
       historyHost.innerHTML=branchInventoryHistoryView(rows,context.language,true);
     }).catch(()=>{});
   }
-  if (opsHost) {
+  if (opsHost && inventoryCloudState()==="ready") {
     const site=opsHost.dataset.site;
-    if(inventoryCloudState()==="ready"){
-      void mountInventoryOperations(opsHost,{
-        site,
-        mode:opsHost.dataset.mode,
-        language:context.language,
-        onUpdated:()=>{ void syncInventoryNow(site,{reloadBranch:false}); },
-      });
-    }else{
-      void mountDraftInventoryOperations(opsHost,{
-        site,
-        mode:opsHost.dataset.mode,
-        language:context.language,
-        reload:async()=>branchDraftOperationData(site,context.record),
-        onApply:async(operation)=>applyBranchDraftOperation(site,context.record,operation),
-      });
-    }
+    void mountInventoryOperations(opsHost,{
+      site,
+      mode:opsHost.dataset.mode,
+      language:context.language,
+      onUpdated:()=>{ void syncInventoryNow(site,{reloadBranch:false}); },
+    });
   }
 }
 
@@ -1705,11 +1290,6 @@ root.addEventListener("click", (event) => {
   if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
     const site=activeInventorySite();
-    if (canInventoryDraftCount()) {
-      if (accountSession()?.role !== "admin") return;
-      if(adjustBranchDraftQuantity(site,state.records[state.selectedDate],target.dataset.id,"item",Number(target.dataset.delta))) render();
-      return;
-    }
     const manageAdjust = target.dataset.manageAdjust === "true" && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !manageAdjust) return;
     const item = inventoryControlItem(target,authoritativeBranchRecord(state,site),"item");
@@ -1720,11 +1300,6 @@ root.addEventListener("click", (event) => {
   }
   if (action === "adjust-work-item") {
     const site=activeInventorySite();
-    if (canInventoryDraftCount()) {
-      if (accountSession()?.role !== "admin") return;
-      if(adjustBranchDraftQuantity(site,state.records[state.selectedDate],target.dataset.id,"workItem",Number(target.dataset.delta))) render();
-      return;
-    }
     if (!canDirectInventoryAdjust()) return;
     const item = inventoryControlItem(target,authoritativeBranchRecord(state,site),"workItem");
     if (item) {
@@ -1733,29 +1308,21 @@ root.addEventListener("click", (event) => {
     }
   }
   if (action === "restock-work-item" && !target.disabled) {
-    if (canInventoryDraftCount()) {
-      if(restockBranchDraftWork(activeInventorySite(),state.records[state.selectedDate],target.dataset.id)) render();
-      return;
-    }
     if (!canInventoryEdit()) return;
     const record = authoritativeBranchRecord(state);
     const item = record?.workInventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const steps = workRestockTransferPlan(item, record);
-      void runCloudTransferPlan(steps, "補工作區 / Bổ sung khu làm việc", () => store.restockWorkItem(target.dataset.id));
+      void runCloudTransferPlan(steps, "補工作區 / Bổ sung khu làm việc");
     }
   }
   if (action === "restock-storage-item" && !target.disabled) {
-    if (canInventoryDraftCount()) {
-      if(restockBranchDraftStorage(activeInventorySite(),state.records[state.selectedDate],target.dataset.id)) render();
-      return;
-    }
     if (!canInventoryEdit()) return;
     const record = authoritativeBranchRecord(state);
     const item = record?.inventory.find((entry) => entry.id === target.dataset.id);
     if (item) {
       const steps = storageRestockTransferPlan(item, record);
-      void runCloudTransferPlan(steps, "儲位補貨 / Bổ sung vị trí kho", () => store.restockStorageItem(target.dataset.id));
+      void runCloudTransferPlan(steps, "儲位補貨 / Bổ sung vị trí kho");
     }
   }
   if (action === "inventory-edit-sql-pending") {
@@ -1786,7 +1353,7 @@ root.addEventListener("click", (event) => {
   if (action === "delete-item" && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") && window.confirm(translate(state.settings.language).deleteConfirm)) {
     const stockKey = target.dataset.stockKey;
     void cloudArchiveBranchItem(stockKey,activeInventorySite()).then((result) => {
-      if (result.ok || result.fallback) {
+      if (result.ok) {
         store.removeIngredient(stockKey);
         return;
       }
@@ -1829,12 +1396,6 @@ root.addEventListener("change", (event) => {
   if (field === "procurement") store.updateProcurementLine(id, key, element.value);
   if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
   if (field === "item") {
-    if (canInventoryDraftCount() && key === "quantity") {
-      if (accountSession()?.role !== "admin") { render(); return; }
-      setBranchDraftQuantity(activeInventorySite(),state.records[state.selectedDate],id,"item",element.value);
-      render();
-      return;
-    }
     const site = activeInventorySite();
     const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(site) && canDirectInventoryAdjust();
     const catalogMetadataEdit = ["zone","workArea"].includes(key) && canManageBranchCatalog(site);
@@ -1938,7 +1499,7 @@ root.addEventListener("change", (event) => {
     const previous = item[key];
     store.updateItem(id, key, element.value);
     void cloudSyncBranchCatalogItem(item.stockKey,activeInventorySite()).then((result) => {
-      if (!result.ok && !result.fallback) {
+      if (!result.ok) {
         store.updateItem(id, key, previous);
         void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
         return;
@@ -1947,12 +1508,6 @@ root.addEventListener("change", (event) => {
     });
   }
   if (field === "workItem") {
-    if (canInventoryDraftCount() && key === "quantity") {
-      if (accountSession()?.role !== "admin") { render(); return; }
-      setBranchDraftQuantity(activeInventorySite(),state.records[state.selectedDate],id,"workItem",element.value);
-      render();
-      return;
-    }
     const site = activeInventorySite();
     const catalogWorkAreaEdit = key === "workArea" && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !catalogWorkAreaEdit) { render(); return; }
@@ -2023,7 +1578,7 @@ root.addEventListener("change", (event) => {
     const previous = item[key];
     store.updateWorkItem(id, key, element.value);
     void cloudSyncBranchCatalogItem(item.stockKey,activeInventorySite()).then((result) => {
-      if (!result.ok && !result.fallback) {
+      if (!result.ok) {
         store.updateWorkItem(id, key, previous);
         void syncInventoryNow(activeInventorySite(), { reloadBranch: true });
         return;

@@ -1288,3 +1288,24 @@ The separate read-cutover candidate:
 - No schema migration and no production stock rewrite.
 - Stage 2 is complete. Stage 3 should remove dead/local inventory mutation fallbacks and narrow browser-local drafts to explicitly read-only recovery/cache behavior before the Central Kitchen UI redesign.
 
+## 2026-09-27 — Inventory authority stage 3: retire browser-local mutation fallbacks
+
+- Started from verified production release `95a39088a33f61c218412c1dd2e2d253306a0471` / Deploy #867.
+- Branch: `refactor/inventory-local-fallback-retirement-20260927`.
+- Branch Website:
+  - removed branch inventory draft database and local operation log;
+  - removed draft operation controller mount and draft-count edit permission;
+  - failed transfers/catalog/archive/quantity paths reconcile from VPS and are never treated as local success;
+  - reconnect/offline display may use only the last PostgreSQL branch snapshot as read-only cache.
+- Central Kitchen:
+  - removed hard-coded `DEFAULT_PRODUCTS` seed;
+  - removed Central/branch local draft persistence and local history;
+  - removed fallback quantity/catalog/delete mutations;
+  - Central inventory cache is now read-only from `shitu-central-kitchen-stock-v1`, populated by the PostgreSQL sync projection.
+- Removed dead runtime compatibility APIs `canInventoryDraftCount` and `mountDraftInventoryOperations`.
+- Warehouse switcher now renders active database sites dynamically.
+- Added regression guards preventing draft keys/controllers/seeds/fallback branches and fixed warehouse lists from returning.
+- No schema migration and no production stock rewrite.
+- Candidate commits include `37d8a35`, `2206bba`, `5f98bb8`, `10a2ac5`, `81360b7`, `b6055ba`, `01e5258` plus documentation commits.
+- Next step: open PR, run exact-head static/API/PostgreSQL/browser/device regression, fix any integration regression, then deploy and verify production before Central Kitchen UI redesign.
+

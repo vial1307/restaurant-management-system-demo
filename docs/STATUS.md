@@ -1,5 +1,16 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — browser-local inventory mutation retirement, 2026-09-27
+
+Branch: `refactor/inventory-local-fallback-retirement-20260927`.
+
+Inventory writes are being narrowed to PostgreSQL/VPS API only. Branch and Central browser draft databases, local operation history, Central hard-coded seed catalog, fallback-success branches, `canInventoryDraftCount`, and the draft operation controller have been removed. Existing server-projection localStorage caches remain read-only recovery/UI caches.
+
+The warehouse switcher also reads the active site registry from PostgreSQL rather than a fixed Central/Fuxing/Yongji list.
+
+No schema migration or stock rewrite. Status remains candidate until exact-head regression + merge + production deploy/smoke pass.
+
+
 ## DONE — realtime Database site registry, 2026-09-27
 
 - PR #146 merged as `95a39088a33f61c218412c1dd2e2d253306a0471`; Deploy #867 / run `36262880282` is verified in production.

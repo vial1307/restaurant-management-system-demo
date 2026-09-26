@@ -1,9 +1,8 @@
-import { mountDraftInventoryOperations, mountInventoryOperations, operationTabLabels } from "./inventory-operations.js";
+import { mountInventoryOperations, operationTabLabels } from "./inventory-operations.js";
 import {
   activeInventorySite,
   bootstrapCentralInventory,
   canDirectInventoryAdjust,
-  canInventoryDraftCount,
   canInventoryEdit,
   canManageCentralCatalog,
   centralItemKey,
@@ -20,18 +19,14 @@ import {
   switchActiveInventorySite,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
+import { inventorySites, inventoryUiGroups, inventoryLocations } from "./inventory-master-data.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { searchMatches } from "./search-utils.js";
 import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
 const CENTRAL_KEY = "shitu-central-kitchen-stock-v1";
-const CENTRAL_DRAFT_KEY = "shitu-central-kitchen-draft-stock-v1";
 const CENTRAL_WORK_KEY = "shitu-central-kitchen-work-v1";
-const BRANCH_DRAFT_PREFIX = "shitu-branch-inventory-draft-v1:";
-const OPERATION_LOG_KEY = "shitu-inventory-operation-log-v1";
-const HISTORY_KEY = "shitu-central-kitchen-history-v1";
 
 
 // Resolve per-site configuration from the same PostgreSQL snapshot as stock.
@@ -41,51 +36,6 @@ const centralWorkAreas = () => inventoryUiGroups("central").workAreas;
 const CENTRAL_UNITS = ["包","盒","箱","斤","片","個","隻","塊","條","顆","手","kg"];
 const CENTRAL_QUICK_ADJUST_DEBOUNCE_MS = 120;
 const centralQuickAdjustments = new Map();
-
-const DEFAULT_PRODUCTS = [
-  ["麻辣湯(3000cc/包)", "Nước lẩu mala 3000cc", "包", "央廚冷凍"],
-  ["香辣湯(3000cc/包)", "Nước lẩu cay thơm 3000cc", "包", "央廚冷凍"],
-  ["昆布湯(3000cc/包)", "Nước dùng kombu 3000cc", "包", "央廚冷凍"],
-  ["炸芋頭(1.2K/包)", "Khoai môn chiên 1.2kg", "包", "央廚冷凍"],
-  ["炸魷魚(400g/包)", "Mực chiên 400g", "包", "央廚冷凍"],
-  ["排骨酥", "Sườn non chiên giòn", "包", "央廚冷凍"],
-  ["虎皮雞腳", "Chân gà da hổ", "包", "央廚冷凍"],
-  ["鮮肉芋丸", "Viên khoai môn nhân thịt", "顆", "央廚冷凍"],
-  ["腐皮(2斤)", "Tàu hũ ky 2 cân", "斤", "央廚冷凍"],
-  ["鴨肉丸", "Viên thịt vịt", "包", "央廚冷凍"],
-  ["三記魚餃", "Sủi cảo cá Sanji", "包", "央廚冷凍"],
-  ["魚餃", "Sủi cảo cá", "盒", "央廚冷凍"],
-  ["牛肉蛋餃", "Há cảo trứng nhân bò", "盒", "央廚冷凍"],
-  ["白腹豆腐", "Đậu phụ trắng", "條", "央廚冷藏"],
-  ["鴨血", "Huyết vịt", "手", "央廚冷藏"],
-  ["滷豆腐", "Đậu phụ kho", "手", "央廚冷藏"],
-  ["鴨翅", "Cánh vịt", "盒", "央廚冷藏"],
-  ["鴨舌", "Lưỡi vịt", "盒", "央廚冷藏"],
-  ["豆干", "Đậu khô", "盒", "央廚冷藏"],
-  ["雞腳", "Chân gà", "包", "央廚冷藏"],
-  ["牛尾油汁(2000g/包)", "Sốt dầu đuôi bò 2000g", "包", "央廚4門"],
-  ["辣椒油(1L/包)", "Dầu ớt 1L", "包", "央廚4門"],
-  ["泡蛋汁(3K/包)", "Sốt ngâm trứng 3kg", "包", "央廚4門"],
-  ["牛肉(原油)(1kg/包)", "Thịt bò 1kg", "包", "央廚臥櫃"],
-  ["大骨湯(5K/包)", "Nước xương 5kg", "包", "央廚臥櫃"],
-  ["牛肉燴飯", "Cơm sốt thịt bò", "包", "央廚臥櫃"],
-  ["燴飯醬包(小)180g", "Gói sốt cơm nhỏ 180g", "包", "央廚臥櫃"],
-  ["重麻湯包", "Gói nước dùng mala đậm", "包", "央廚冷凍"],
-  ["輕麻湯包", "Gói nước dùng mala nhẹ", "包", "央廚冷凍"],
-  ["川麻湯包", "Gói nước dùng mala Tứ Xuyên", "包", "央廚冷凍"],
-  ["牛尾肉袋(2K/包)", "Túi thịt đuôi bò 2kg", "包", "央廚冷凍"],
-  ["地獄牛肉燴飯", "Cơm sốt bò địa ngục", "包", "央廚冷凍"],
-  ["燴飯汁(180g)", "Sốt cơm 180g", "包", "央廚冷凍"],
-  ["地獄牛肚", "Dạ dày bò địa ngục", "包", "央廚冷凍"],
-  ["舒肥牛排", "Bít tết sous-vide", "包", "央廚冷凍"],
-  ["秘蒜醬", "Sốt tỏi bí truyền", "包", "央廚4門"],
-  ["微辣沾醬", "Sốt chấm cay nhẹ", "包", "央廚4門"],
-  ["牛尾追飯", "Cơm đuôi bò", "包", "央廚冷凍"],
-  ["滷膠豆干", "Đậu khô kho", "包", "央廚冷藏"],
-  ["滷膠鴨翅", "Cánh vịt kho", "包", "央廚冷藏"],
-  ["滷膠鴨舌", "Lưỡi vịt kho", "包", "央廚冷藏"],
-  ["滷膠鴨腸", "Lòng vịt kho", "包", "央廚冷藏"],
-].map((p, index) => ({ id: `central-${index + 1}`, zh: p[0], vi: p[1], unit: p[2], zone: p[3], qty: 0 }));
 
 function session() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
@@ -189,176 +139,19 @@ function announceCentralStock(items) {
     window.dispatchEvent(new CustomEvent("shitu:central-stock-ready", { detail: { items } }));
   });
 }
-function readCentralDrafts() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CENTRAL_DRAFT_KEY) || "[]");
-    return Array.isArray(saved) ? saved : [];
-  } catch { return []; }
-}
 function centralBaseKey(item) {
   return item.itemKey || item.baseId || String(item.id || "").split("@")[0];
 }
-function centralDraftKey(item) {
-  return `${centralBaseKey(item)}|${item.zone || ""}`;
-}
-function loadBaseStock() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(CENTRAL_KEY) || "null");
-    if (Array.isArray(saved)) return saved;
-  } catch {}
-  const seeded = structuredClone(DEFAULT_PRODUCTS);
-  localStorage.setItem(CENTRAL_KEY, JSON.stringify(seeded));
-  return seeded;
-}
 function loadStock() {
-  const base = loadBaseStock();
-  const cloudReady = inventoryCloudState() === "ready";
-  if (cloudReady) {
-    announceCentralStock(base);
-    return base;
+  try {
+    const saved = JSON.parse(localStorage.getItem(CENTRAL_KEY) || "[]");
+    const items = Array.isArray(saved) ? saved : [];
+    announceCentralStock(items);
+    return items;
+  } catch {
+    announceCentralStock([]);
+    return [];
   }
-
-  const draftRows = readCentralDrafts();
-  const exactDrafts = new Map(draftRows.map((entry) => [entry.key, entry]));
-  const legacyDrafts = new Map(draftRows.map((entry) => [String(entry.key || "").split("|")[0], entry]));
-  const represented = new Set();
-  const merged = base.map((item) => {
-    const exactKey = centralDraftKey(item);
-    const baseKey = centralBaseKey(item);
-    const draft = exactDrafts.get(exactKey) || legacyDrafts.get(baseKey);
-    represented.add(exactKey);
-    return draft ? {
-      ...item,
-      ...draft,
-      id: draft.id || item.id,
-      baseId: draft.baseId || item.baseId,
-      itemKey: draft.itemKey || item.itemKey,
-      zh: draft.zh || item.zh,
-      vi: draft.vi || item.vi,
-      unit: draft.unit || item.unit,
-      workArea: draft.workArea || item.workArea || "noodles",
-      zone: draft.zone || item.zone,
-      qty: Math.max(0, Number(draft.qty) || 0),
-      draft: true,
-    } : item;
-  });
-
-  for (const draft of draftRows) {
-    if (!draft?.key || represented.has(draft.key) || !draft.zone || !draft.zh) continue;
-    merged.push({
-      id: draft.id || `${centralBaseKey(draft)}@${centralLocationCode(draft.zone)}`,
-      baseId: draft.baseId || centralBaseKey(draft),
-      itemKey: draft.itemKey || centralBaseKey(draft),
-      catalogKey: draft.catalogKey || "",
-      zh: draft.zh,
-      vi: draft.vi || draft.zh,
-      unit: draft.unit || "個",
-      workArea: draft.workArea || "noodles",
-      zone: draft.zone,
-      qty: Math.max(0, Number(draft.qty) || 0),
-      minimum: Math.max(0, Number(draft.minimum) || 0),
-      draft: true,
-    });
-  }
-
-  announceCentralStock(merged);
-  return merged;
-}
-function saveStock(items) {
-  if (inventoryCloudState() !== "ready") {
-    const actor = session();
-    const now = new Date().toISOString();
-    const drafts = items.map((item) => ({
-      key: centralDraftKey(item),
-      id: item.id,
-      baseId: item.baseId || centralBaseKey(item),
-      itemKey: item.itemKey || centralBaseKey(item),
-      catalogKey: item.catalogKey || "",
-      zh: item.zh,
-      vi: item.vi,
-      unit: item.unit,
-      workArea: item.workArea || "noodles",
-      zone: item.zone,
-      qty: Math.max(0, Number(item.qty) || 0),
-      minimum: Math.max(0, Number(item.minimum) || 0),
-      locationFixed: Boolean(item.locationFixed),
-      fixedAt: item.fixedAt || null,
-      fixedReason: item.fixedReason || null,
-      updatedAt: now,
-      updatedBy: actor?.id || null,
-      updatedByName: actor?.name || "",
-      status: "staging",
-    }));
-    localStorage.setItem(CENTRAL_DRAFT_KEY, JSON.stringify(drafts));
-    return;
-  }
-  localStorage.setItem(CENTRAL_KEY, JSON.stringify(items));
-}
-function stagingLocationsForSite(site){
-  return inventoryLocations(site, "storage").map((location) => ({
-    ...location, id:location.code,
-  }));
-}
-function appendOperationLog(entry){
-  let rows=[];
-  try{
-    const saved=JSON.parse(localStorage.getItem(OPERATION_LOG_KEY)||"[]");
-    if(Array.isArray(saved))rows=saved;
-  }catch{}
-  rows.unshift({...entry,createdAt:new Date().toISOString()});
-  localStorage.setItem(OPERATION_LOG_KEY,JSON.stringify(rows.slice(0,1000)));
-}
-function loadBranchDraftForCentral(site){
-  const key=`${BRANCH_DRAFT_PREFIX}${site}`;
-  try{
-    const saved=JSON.parse(localStorage.getItem(key)||"null");
-    if(saved?.inventory&&saved?.workInventory)return saved;
-  }catch{}
-  let baseRecord={inventory:[],workInventory:[]};
-  try{
-    const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
-    const selected=state?.selectedDate;
-    baseRecord=state?.records?.[selected]||baseRecord;
-  }catch{}
-  const inventory=JSON.parse(JSON.stringify(baseRecord.inventory||[]));
-  const workInventory=JSON.parse(JSON.stringify(baseRecord.workInventory||[]));
-  if(site==="yongji"){
-    inventory.forEach((item)=>{item.quantity=0;});
-    workInventory.forEach((item)=>{item.quantity=0;});
-  }
-  const seeded={inventory,workInventory,updatedAt:new Date().toISOString(),status:"staging"};
-  localStorage.setItem(key,JSON.stringify(seeded));
-  return seeded;
-}
-function addToBranchDraftFromCentral(site,itemMeta,destinationLocationId,amount){
-  if(!["fuxing","yongji"].includes(site))return false;
-  const suffix=String(destinationLocationId||"").replace(`${site}-`,"");
-  if(!["large-freezer","large-fridge","four-door","kitchen"].includes(suffix))return false;
-  const draft=loadBranchDraftForCentral(site);
-  let row=draft.inventory.find((entry)=>
-    (itemMeta?.catalogKey&&entry.catalogKey===itemMeta.catalogKey) || entry.label===itemMeta?.zh
-  );
-  if(!row){
-    const stockKey=`received-${String(itemMeta?.zh||"item").replace(/\s+/g,"-")}`;
-    row={id:`${stockKey}-${suffix}`,stockKey,catalogKey:itemMeta?.catalogKey||"",label:itemMeta?.zh||stockKey,labelVi:itemMeta?.vi||itemMeta?.zh||stockKey,unit:itemMeta?.unit||"個",workArea:"noodles",storageOnly:true,zone:suffix,quantity:0,minimum:0};
-    draft.inventory.push(row);
-  }else{
-    const stockKey=row.stockKey||String(row.id||"").split("-")[0];
-    let target=draft.inventory.find((entry)=>entry.stockKey===stockKey&&entry.zone===suffix);
-    if(!target){
-      target={...row,id:`${stockKey}-${suffix}`,zone:suffix,quantity:0,minimum:0};
-      draft.inventory.push(target);
-    }
-    row=target;
-  }
-  row.quantity=Math.max(0,Number(row.quantity)||0)+Math.max(1,Number(amount)||1);
-  row.locationFixed=true;
-  row.fixedAt=new Date().toISOString();
-  row.fixedReason="ship";
-  draft.status="staging";
-  draft.updatedAt=new Date().toISOString();
-  localStorage.setItem(`${BRANCH_DRAFT_PREFIX}${site}`,JSON.stringify(draft));
-  return true;
 }
 function readCentralWork(){
   try{
@@ -366,216 +159,12 @@ function readCentralWork(){
     return saved && typeof saved==="object" && !Array.isArray(saved) ? saved : {};
   }catch{return {};}
 }
-function saveCentralWork(value){
-  localStorage.setItem(CENTRAL_WORK_KEY,JSON.stringify(value||{}));
-}
 function centralWorkEntry(workMap,key){
   const value=workMap?.[key];
   if(value && typeof value==="object"){
     return {quantity:Math.max(0,Number(value.quantity)||0),minimum:Math.max(0,Number(value.minimum)||0),locationCode:value.locationCode||"central-work-use"};
   }
   return {quantity:Math.max(0,Number(value)||0),minimum:0,locationCode:"central-work-use"};
-}
-function setCentralWorkQuantity(workMap,key,quantity){
-  const current=centralWorkEntry(workMap,key);
-  workMap[key]={...current,quantity:Math.max(0,Number(quantity)||0)};
-}
-function centralWorkLocation(){
-  return {id:"central-work-use",code:"central-work-use",name_zh_tw:"使用中",name_vi:"Đang sử dụng",site:"central",kind:"work"};
-}
-
-function centralDraftOperationData() {
-  const items = loadStock();
-  const workMap = readCentralWork();
-  const workLocation = centralWorkLocation();
-  const locations = stagingLocationsForSite("central");
-  const grouped = new Map();
-  for (const row of items) {
-    const baseKey = centralBaseKey(row);
-    if (!grouped.has(baseKey)) {
-      const workQty=centralWorkEntry(workMap,baseKey).quantity;
-      grouped.set(baseKey, {
-        id: baseKey,
-        itemKey: row.itemKey || baseKey,
-        catalogKey: row.catalogKey || "",
-        zh: row.zh,
-        vi: row.vi,
-        unit: row.unit,
-        workArea: "use",
-        locations: [],
-        workLocations: [{id:workLocation.id,code:workLocation.code,zh:workLocation.name_zh_tw,vi:workLocation.name_vi,quantity:workQty,minimum:0}],
-        total: 0,
-        workTotal: workQty,
-      });
-    }
-    const item = grouped.get(baseKey);
-    const location = locations.find((entry) => entry.code === centralLocationCode(row.zone));
-    if (!location) continue;
-    const quantity = Math.max(0, Number(row.qty) || 0);
-    item.locations.push({
-      id: location.id,
-      code: location.code,
-      zh: location.name_zh_tw,
-      vi: location.name_vi,
-      quantity,
-      minimum: Math.max(0, Number(row.minimum) || 0),
-    });
-    item.total += quantity;
-  }
-  for (const item of grouped.values()) {
-    for (const location of locations) {
-      if (!item.locations.some((entry) => entry.id === location.id)) {
-        item.locations.push({
-          id: location.id,
-          code: location.code,
-          zh: location.name_zh_tw,
-          vi: location.name_vi,
-          quantity: 0,
-          minimum: 0,
-        });
-      }
-    }
-  }
-  return {
-    site:"central",
-    items:[...grouped.values()],
-    locations,
-    workLocations:[workLocation],
-    allLocations:["central","fuxing","yongji"].flatMap((site)=>stagingLocationsForSite(site)),
-  };
-}
-
-function applyCentralDraftOperation(user,{ type, itemId, itemMeta, sourceLocationId, destinationLocationId, amount, targetSite, sourceSite }) {
-  const items = loadStock();
-  const workMap = readCentralWork();
-  let productRows = items.filter((row) => centralBaseKey(row) === itemId);
-  let template = productRows[0];
-  if (!template && itemMeta?.zh) {
-    productRows = items.filter((row) => row.zh === itemMeta.zh || (itemMeta.catalogKey && row.catalogKey === itemMeta.catalogKey));
-    template = productRows[0];
-  }
-  const codeToZone = Object.fromEntries(centralZones().map((zone) => [centralLocationCode(zone), zone]));
-  if (!template) return { ok:false, error:new Error("ITEM_NOT_FOUND") };
-
-  const baseKey=centralBaseKey(template);
-  const sourceZone = codeToZone[sourceLocationId] || "";
-  const destinationZone = codeToZone[destinationLocationId] || "";
-  const value = Math.max(1, Number(amount) || 1);
-
-  function ensureRow(zone) {
-    let row = items.find((entry) => centralBaseKey(entry) === baseKey && entry.zone === zone);
-    if (!row) {
-      row = {
-        ...template,
-        id: `${baseKey}@${centralLocationCode(zone)}`,
-        baseId: baseKey,
-        itemKey: template.itemKey || baseKey,
-        zone,
-        qty: 0,
-        minimum: 0,
-        draft: true,
-      };
-      items.push(row);
-    }
-    return row;
-  }
-
-  let before = 0;
-  let after = 0;
-  let sourceLabel=sourceZone||sourceSite||"";
-  let destinationLabel=destinationZone||targetSite||"";
-
-  if (type === "in") {
-    const target = ensureRow(destinationZone);
-    before = Number(target.qty || 0);
-    target.qty = before + value;
-    after = target.qty;
-  } else if (type === "pick") {
-    const source=ensureRow(sourceZone);
-    before=Number(source.qty||0);
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    source.qty=before-value;
-    setCentralWorkQuantity(workMap,baseKey,centralWorkEntry(workMap,baseKey).quantity+value);
-    after=source.qty;
-    destinationLabel="使用中";
-  } else if (type === "use") {
-    before=centralWorkEntry(workMap,baseKey).quantity;
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    setCentralWorkQuantity(workMap,baseKey,before-value);
-    after=centralWorkEntry(workMap,baseKey).quantity;
-    sourceLabel="使用中";
-    destinationLabel="使用";
-  } else if (type === "return") {
-    before=centralWorkEntry(workMap,baseKey).quantity;
-    if(before<value)return {ok:false,error:new Error("INSUFFICIENT_STOCK")};
-    setCentralWorkQuantity(workMap,baseKey,before-value);
-    const target=ensureRow(destinationZone);
-    target.qty=Number(target.qty||0)+value;
-    after=centralWorkEntry(workMap,baseKey).quantity;
-    sourceLabel="使用中";
-  } else if (type === "ship") {
-    const source = ensureRow(sourceZone);
-    before = Number(source.qty || 0);
-    if (before < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
-    source.qty = before - value;
-    after = source.qty;
-    const ok = addToBranchDraftFromCentral(targetSite,itemMeta || {
-      zh:template.zh,vi:template.vi,unit:template.unit,catalogKey:template.catalogKey || ""
-    },destinationLocationId,value);
-    if (!ok) { source.qty = before; return { ok:false, error:new Error("INVALID_DESTINATION_LOCATION") }; }
-    const targetLocation=stagingLocationsForSite(targetSite).find((entry)=>entry.id===destinationLocationId);
-    destinationLabel=`${targetSite}:${targetLocation?.name_zh_tw||destinationLocationId}`;
-    destinationLabel=`${targetSite}:${destinationLocationId}`;
-  } else if (type === "transfer") {
-    if (!sourceZone || !destinationZone || sourceZone === destinationZone) return { ok:false, error:new Error("SAME_LOCATION") };
-    const source = ensureRow(sourceZone);
-    const target = ensureRow(destinationZone);
-    const sourceBefore = Number(source.qty || 0);
-    if (sourceBefore < value) return { ok:false, error:new Error("INSUFFICIENT_STOCK") };
-    source.qty = sourceBefore - value;
-    target.qty = Number(target.qty || 0) + value;
-    before = sourceBefore;
-    after = source.qty;
-  } else {
-    return { ok:false, error:new Error("INVALID_OPERATION") };
-  }
-
-  saveStock(items);
-  saveCentralWork(workMap);
-  appendOperationLog({
-    site:"central",user:user.name,userId:user.id,action:type,item:template.zh,amount:value,unit:template.unit,
-    source:sourceLabel,destination:destinationLabel,
-    locationFixed:type==="ship"
-  });
-  pushHistory({
-    user:user.name,
-    userId:user.id,
-    direction:type,
-    status:"staging",
-    product:template.zh,
-    productId:baseKey,
-    zone:`${sourceLabel}${destinationLabel ? " → "+destinationLabel : ""}`,
-    unit:template.unit,
-    amount:value,
-    before,
-    after,
-    note:type === "in" ? "進貨入庫"
-      : type === "pick" ? "領貨"
-      : type === "use" ? "使用"
-      : type === "return" ? "歸位"
-      : type === "ship" ? `出貨 → ${targetSite || ""}`
-      : "庫存轉撥",
-  });
-  return { ok:true };
-}
-
-function history() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
-}
-function pushHistory(entry) {
-  const list = history();
-  list.unshift({ id: crypto.randomUUID?.() || String(Date.now()), at: new Date().toISOString(), ...entry });
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, 1000)));
 }
 function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
 
@@ -607,9 +196,17 @@ function addLogout(user) {
   top.prepend(chip);
 }
 
-function branchSwitcher(user, active = activeInventorySite() || "fuxing") {
+function branchSwitcher(user, active = activeInventorySite()) {
   if (user.location !== "all" && user.role !== "admin") return "";
-  return `<div class="warehouse-switch"><button data-warehouse="fuxing" class="${active === "fuxing" ? "active" : ""}">復興店</button><button data-warehouse="yongji" class="${active === "yongji" ? "active" : ""}">永吉店</button><button data-warehouse="central" class="${active === "central" ? "active" : ""}">央廚</button></div>`;
+  const language = document.documentElement.lang === "vi" ? "vi" : "zh";
+  const sites = inventorySites().filter((site) => site.active !== false);
+  if (!sites.length) return "";
+  return `<div class="warehouse-switch">${sites.map((site) => {
+    const zh = site.name_zh_tw || site.name_zh || site.code;
+    const vi = site.name_vi || zh;
+    const label = language === "vi" && vi !== zh ? `${vi} · ${zh}` : zh;
+    return `<button data-warehouse="${esc(site.code)}" class="${active === site.code ? "active" : ""}">${esc(label)}</button>`;
+  }).join("")}</div>`;
 }
 
 let warehouseSwitchToken = 0;
@@ -649,15 +246,13 @@ function centralPage(user) {
   if (!content) return;
   const items = loadStock();
   const editGranted = user.role === "admin" || user.accountRole === "admin" || Boolean(user.permissions?.inventory?.edit);
-  const draftCountAllowed = canInventoryDraftCount();
-  const draftDirectAdjust = draftCountAllowed && user.role === "admin";
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
   // Central stock is a live balance shared by all service dates. Only branch
   // snapshots are date-locked; changing the service date must never hide or
   // disable central inventory operations.
   const historical = false;
-  const directAdjust = canDirectInventoryAdjust() || draftDirectAdjust;
+  const directAdjust = canDirectInventoryAdjust();
   const operationsEnabled = editGranted && cloudReady;
   let mode = content.dataset.centralMode || "overview";
   if (mode === "receive") { mode = "overview"; content.dataset.centralMode = "overview"; }
@@ -679,7 +274,7 @@ function centralPage(user) {
   const canViewHistory = accountRole === "admin";
   if (mode === "manage" && !catalogManageVisible) { mode = "overview"; content.dataset.centralMode = mode; }
   if (mode === "history" && !canViewHistory) { mode = "overview"; content.dataset.centralMode = mode; }
-  const log = canViewHistory && mode === "history" ? history() : [];
+  const log = [];
   const language = document.documentElement.lang === "vi" ? "vi" : "zh";
   const label = {
     overview: language === "vi" ? "Tổng quan · 庫存總覽" : "庫存總覽",
@@ -738,26 +333,9 @@ function centralPage(user) {
   bindCentral(user);
   const centralSearchInput = content.querySelector("[data-central-search]");
   if (centralSearchInput) applyCentralSearchDom(content, centralSearchInput.value || "");
-  if (["in","pick","transfer","ship"].includes(mode)) {
+  if (["in","pick","transfer","ship"].includes(mode) && cloudReady) {
     const host=content.querySelector("[data-inventory-operations]");
-    if (cloudReady) {
-      void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
-    } else {
-      void mountDraftInventoryOperations(host,{
-        site:"central",
-        mode,
-        language,
-        reload:async()=>centralDraftOperationData(),
-        onApply:async(operation)=>{
-          const result=applyCentralDraftOperation(user,operation);
-          if(result.ok){
-            const stat=document.querySelector("[data-central-stat-total]");
-            if(stat) stat.textContent=String(loadStock().reduce((sum,item)=>sum+Number(item.qty||0),0));
-          }
-          return result;
-        },
-      });
-    }
+    void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
   }
   if (cloudReady) void bootstrapCentralInventory(items);
   if (cloudReady && mode === "history" && canViewHistory) {
@@ -1127,13 +705,11 @@ function bindCentral(user) {
         return;
       }
     }
-    saveStock(nextItems);
     const result = await cloudSyncCentralCatalogItem(itemKey,nextItems,{sync:false});
-    if (!result.ok || result.fallback) {
-      saveStock(oldItems);
+    if (!result.ok) {
       const message = result.error?.message === "LOCATION_HAS_STOCK"
         ? "儲位仍有庫存，請先轉撥或盤點為 0。"
-        : "Không lưu được sản phẩm vào VPS database; dữ liệu tạm đã được hoàn tác. · 無法儲存至 VPS 資料庫，暫存資料已還原。";
+        : "Không lưu được sản phẩm vào VPS database; biểu mẫu được giữ lại để kiểm tra. · 無法儲存至 VPS 資料庫，表單已保留供檢查。";
       alert(message);
       await syncInventoryNow("central", { reloadBranch: false });
       centralPage(user);
@@ -1175,16 +751,16 @@ function bindCentral(user) {
       }
       if (!confirm(`確定刪除「${rows[0].zh}」？`)) return;
       const itemKey = rows[0].itemKey || centralItemKey(rows[0].baseId || String(key).replace(/^central:/, ""));
-      if (inventoryCloudState() === "ready") {
-        const result = await cloudArchiveCentralItem(itemKey);
-        if (!result.ok) {
-          alert(result.error?.message === "ITEM_HAS_STOCK" ? "品項仍有庫存，無法刪除。" : "無法刪除品項。");
-          return;
-        }
+      if (inventoryCloudState() !== "ready") {
+        alert("VPS 資料庫尚未連線，無法刪除品項。");
+        return;
       }
-      const nextItems = oldItems.filter((row) => centralProductKey(row) !== key);
-      saveStock(nextItems);
-      announceCentralStock(nextItems);
+      const result = await cloudArchiveCentralItem(itemKey);
+      if (!result.ok) {
+        alert(result.error?.message === "ITEM_HAS_STOCK" ? "品項仍有庫存，無法刪除。" : "無法刪除品項。");
+        return;
+      }
+      await syncInventoryNow("central",{reloadBranch:false,force:true});
       centralPage(user);
     };
   });
@@ -1213,19 +789,13 @@ function bindCentral(user) {
       await syncInventoryNow("central", { reloadBranch: false, force:true });
       return;
     }
-    if (result.fallback) {
-      item.qty = direction === "in" ? before + amount : before - amount;
-      saveStock(items);
-      pushHistory({ user: user.name, userId: user.id, direction, product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount, before, after: item.qty });
-      centralPage(user);
-      return;
-    }
     b.disabled = false;
-    alert("雲端庫存更新失敗，請重新整理後再試。");
+    await syncInventoryNow("central",{reloadBranch:false,force:true});
+    alert("雲端庫存更新失敗，已重新載入資料庫實際數量。");
   });
 
   async function commitCentralQuantity(input) {
-    if (!input || (!canDirectInventoryAdjust() && !(canInventoryDraftCount() && user.role === "admin"))) return;
+    if (!input || !canDirectInventoryAdjust()) return;
     const itemKey=input.dataset.centralItemKey;
     const locationCode=input.dataset.centralLocationCode;
     const next=Math.max(0,Number(input.value)||0);
@@ -1236,23 +806,9 @@ function bindCentral(user) {
       await syncInventoryNow("central",{reloadBranch:false,force:true});
       return;
     }
-    if(result.fallback){
-      if(locationCode==="central-work-use"){
-        const workMap=readCentralWork();
-        setCentralWorkQuantity(workMap,itemKey,next);
-        saveCentralWork(workMap);
-      }else{
-        const items=loadStock();
-        const zone=centralZones().find((entry)=>centralLocationCode(entry)===locationCode);
-        const row=items.find((entry)=>centralBaseKey(entry)===itemKey && entry.zone===zone);
-        if(row)row.qty=next;
-        saveStock(items);
-      }
-      centralPage(user);
-      return;
-    }
     input.disabled=false;
-    alert("盤點調整失敗，請重新整理後再試。");
+    await syncInventoryNow("central",{reloadBranch:false,force:true});
+    alert("盤點調整失敗，已重新載入資料庫實際數量。");
   }
 
   content.querySelectorAll("[data-central-step]").forEach((button)=>{
@@ -1285,7 +841,7 @@ function bindCentral(user) {
   });
 
   content.querySelectorAll("[data-central-set]").forEach(b => b.onclick = async () => {
-    if (!canDirectInventoryAdjust() && !(canInventoryDraftCount() && user.role === "admin")) return;
+    if (!canDirectInventoryAdjust()) return;
     const items = loadStock();
     const item = items.find(i => i.id === b.dataset.centralSet);
     if (!item) return;
@@ -1307,15 +863,9 @@ function bindCentral(user) {
       await syncInventoryNow("central", { reloadBranch: false, force:true });
       return;
     }
-    if (result.fallback) {
-      item.qty = next;
-      saveStock(items);
-      pushHistory({ user: user.name, userId: user.id, direction: "adjust", status: inventoryCloudState() === "ready" ? "cloud" : "staging", product: item.zh, productId: item.id, zone: item.zone, unit: item.unit, amount: Math.abs(next - before), before, after: next });
-      centralPage(user);
-      return;
-    }
     b.disabled = false;
-    alert("盤點調整失敗，請重新整理後再試。");
+    await syncInventoryNow("central",{reloadBranch:false,force:true});
+    alert("盤點調整失敗，已重新載入資料庫實際數量。");
   });
   content.querySelectorAll("[data-warehouse]").forEach(b => b.onclick = () => {
     void switchWarehouse(b, { centralContent:content });

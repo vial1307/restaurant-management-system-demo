@@ -48,16 +48,22 @@ for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTR
 assert.equal(/\bDEFAULT_ITEMS\b/.test(cloudSource), false, "production inventory cloud path must not use DEFAULT_ITEMS fallback");
 
 const appSource = fs.readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
-assert.match(appSource, /inventoryLocations\(site,"storage"\)/,
-  "legacy inventory helpers must derive storage locations from PostgreSQL master data");
-assert.match(appSource, /inventorySites\(\)\.flatMap\(\(entry\)=>appStagingLocations\(entry\.code\)\)/,
-  "cross-site helper locations must derive the site registry dynamically");
+assert.doesNotMatch(appSource, /function appStagingLocations|function appWorkLocations|function branchDraftOperationData/,
+  "retired browser-draft inventory helpers must not return as a second master-data path");
+assert.doesNotMatch(appSource, /shitu-branch-inventory-draft-v1|shitu-inventory-operation-log-v1/,
+  "branch inventory must not persist a browser-local business database");
 assert.equal(appSource.includes('["central","fuxing","yongji"].flatMap'), false,
   "inventory helper paths must not hard-code the physical site registry");
 assert.equal(appSource.includes('["fuxing","yongji"].includes(targetSite)'), false,
   "branch helper paths must accept database-declared branch sites");
 assert.equal(appSource.includes('"central-freezer":"央廚冷凍"'), false,
   "Central storage labels must come from database master data");
+
+const authLayer = fs.readFileSync(new URL("../src/auth-layer.js", import.meta.url), "utf8");
+assert.match(authLayer, /function branchSwitcher[\s\S]{0,700}inventorySites\(\)\.filter/,
+  "warehouse switcher must derive active physical sites from PostgreSQL master data");
+assert.doesNotMatch(authLayer, /data-warehouse="fuxing"[\s\S]{0,240}data-warehouse="yongji"/,
+  "warehouse switcher must not hard-code branch buttons");
 
 const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta.url), "utf8");
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");

@@ -1,5 +1,24 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — retire browser-local inventory mutation fallbacks, 2026-09-27
+
+Branch: `refactor/inventory-local-fallback-retirement-20260927`.
+
+Goal: PostgreSQL/VPS API remains the only inventory mutation authority. Browser localStorage may retain the last server projection for read-only recovery/UI continuity, but it must not create, edit, transfer, ship, count, archive or log inventory business events when the database is unavailable.
+
+Implemented in this candidate:
+- branch Website no longer mounts the draft inventory operation controller or writes branch draft/local operation-log keys;
+- failed branch quantity/catalog/transfer/archive writes reconcile from VPS instead of treating a local fallback as success;
+- branch inventory can display only the last PostgreSQL branch snapshot while reconnecting; all write controls remain locked until VPS is ready;
+- Central Kitchen no longer seeds a hard-coded product catalog, merges a local draft database, writes local Central/branch drafts, or records a separate local inventory history;
+- Central catalog/delete/quantity operations require the VPS path; failed writes reload authoritative PostgreSQL state;
+- dead compatibility APIs `canInventoryDraftCount` and `mountDraftInventoryOperations` were removed;
+- the warehouse switcher now renders active sites from the PostgreSQL-backed site registry instead of fixed Fuxing/Yongji/Central buttons;
+- static regression guards prevent the removed draft keys/controllers/seed/fallback branches from returning.
+
+No schema migration, no production stock rewrite, and no deletion of the safe read-only PostgreSQL projection caches (`shitu-central-kitchen-stock-v1`, branch snapshot cache, Central work snapshot cache). Candidate is not production-complete until exact-head CI, merge, VPS deploy, health and production UI smoke pass.
+
+
 ## Completed release — realtime Database site registry, 2026-09-27
 
 PR #146 merged into `main` as `95a39088a33f61c218412c1dd2e2d253306a0471` and is verified in production through Deploy Kitchen OS to VPS #867 / run `36262880282`.
