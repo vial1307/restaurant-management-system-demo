@@ -461,11 +461,12 @@ function statCard({ label, value, unit, note, tone, iconName }) {
 function authoritativeBranchRecord(state, site = activeInventorySite()) {
   const record = state?.records?.[state.selectedDate];
   if (!record) return record;
-  if (inventoryCloudState() !== "ready" || !isBranchInventorySite(site) || state.selectedDate !== formatDateKey()) {
-    return record;
-  }
+  if (!isBranchInventorySite(site) || state.selectedDate !== formatDateKey()) return record;
+
   const snapshot = inventoryBranchSnapshot(site);
-  if (!snapshot) return record;
+  if (!snapshot) {
+    return { ...record, inventory:[], workInventory:[], inventorySite:site };
+  }
   return {
     ...record,
     inventory:snapshot.inventory,
