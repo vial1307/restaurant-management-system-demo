@@ -31,7 +31,7 @@ export const INVENTORY_ADMIN_TEXT = {
   relocateHint:["Chuyển toàn bộ tồn kho; định mức đích lấy mức lớn hơn giữa nguồn và đích. Không làm đổi tổng tồn.","移動全部庫存；目的安全量取來源與目的較大值，總庫存不變。"],
   workHint:["Nếu đang có vị trí sử dụng, đổi khu bằng nút Chuyển vị trí trong mục Tồn kho & định mức.","已有使用位置時，請在庫存與安全量中使用移動位置變更工作區。"],
   identityHint:["Tên và mã ở đây chỉ thay đổi tại chi nhánh đang chọn; không tự ghi đè các chi nhánh khác.","此處名稱與代碼僅影響目前據點，不會自動覆蓋其他店。"],
-  auditHint:["Tên và số lượng vị trí có thể khác giữa chi nhánh, nhưng phân loại Kho tổng/Kho khu vực/Khu làm việc phải theo cùng cấu trúc Database.","各店位置名稱與數量可不同，但總倉／區域庫／工作區分類必須遵循同一套資料庫結構。"],
+  auditHint:["Tên và số lượng vị trí có thể khác giữa chi nhánh, nhưng phân loại Kho tổng/Kho khu vực/Khu làm việc phải theo cùng cấu trúc Database; cùng mã nguyên liệu sẽ được đối chiếu với khu làm việc chuẩn của Central.","各店位置名稱與數量可不同，但總倉／區域庫／工作區分類必須遵循同一套資料庫結構；同一共用品項代碼會比對央廚工作區。"],
   missingStorage:["Nguyên liệu chưa có nơi cất","尚未設定儲位的食材"],
   missingDefault:["Nhiều nơi cất nhưng chưa chọn nơi nhận mặc định","多個儲位但未設定預設收貨位置"],
   invalidArea:["Nguyên liệu tham chiếu khu không hoạt động","食材參照未啟用工作區"],
