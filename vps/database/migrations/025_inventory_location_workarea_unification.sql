@@ -65,6 +65,7 @@ where l.site=w.site_code
     l.metadata->>'work_area'=w.code
     or l.code=w.site_code||'-work-'||w.code
   )
+  and (l.active=true or l.code=w.site_code||'-work-'||w.code)
   and not (l.site='central' and l.code='central-work-use');
 
 -- A canonical work-location code may not be occupied by a storage location.
@@ -139,7 +140,8 @@ with moved as (
    and target.kind='work'
    and target.active=true
    and target.metadata->>'work_area'=i.work_area
-  where source.kind='work'
+  where i.active=true
+    and source.kind='work'
     and source.site=split_part(i.item_key,':',1)
     and coalesce(source.metadata->>'work_area','')<>i.work_area
   group by s.item_id,target.id
@@ -158,9 +160,18 @@ delete from public.inventory_stock s
 using public.inventory_items i, public.inventory_locations source
 where i.id=s.item_id
   and source.id=s.location_id
+  and i.active=true
   and source.kind='work'
   and source.site=split_part(i.item_key,':',1)
-  and coalesce(source.metadata->>'work_area','')<>i.work_area;
+  and coalesce(source.metadata->>'work_area','')<>i.work_area
+  and exists (
+    select 1
+    from public.inventory_locations target
+    where target.site=source.site
+      and target.kind='work'
+      and target.active=true
+      and target.metadata->>'work_area'=i.work_area
+  );
 
 -- Retire legacy/generic work locations once no active work-area master row owns
 -- them. Central's old central-work-use is handled here after its stock is split.
