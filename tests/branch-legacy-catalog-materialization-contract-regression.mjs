@@ -7,6 +7,8 @@ const migration=read("vps/database/migrations/027_branch_legacy_catalog_material
 const admin=read("src/admin-inventory-database.js");
 const realtime=read("vps/backend/src/inventory-realtime.mjs");
 const superAdminRoutes=read("vps/backend/src/super-admin-routes.mjs");
+const routes=read("vps/backend/src/inventory-extra-routes.mjs");
+const cloud=read("src/inventory-cloud.js");
 
 function section(source,start,end) {
   const from=source.indexOf(start);
@@ -64,13 +66,22 @@ assert.match(migration,/'item_suffixes',[\s\S]{0,240}jsonb_agg\(item_suffix orde
   "migration audit must preserve the exact product manifest for production verification");
 assert.match(migration,/system_branch_legacy_catalog_materialize/,
   "materialization must be auditable");
+assert.match(migration,/Every active branch product with a configured work_area[\s\S]{0,1000}l\.metadata->>'work_area'=i\.work_area/,
+  "migration 027 must project every active branch item into its database work area");
+assert.doesNotMatch(
+  section(migration,"-- Every active branch product with a configured work_area","-- A branch item with a valid work_area"),
+  /storage_only\s*=\s*false/,
+  "storage_only legacy flags must not hide products from 工作區"
+);
+assert.match(migration,/sync_branch_inventory_item_work_projection/,
+  "PostgreSQL must preserve the branch item-to-work-area invariant after migration");
 
 assert.match(admin,/request\(\`\/api\/master-data\/\$\{encodeURIComponent\(targetSite\)\}\?includeInactive=true\`\)/,
   "Super Admin inventory database must read location/work-area master data from VPS");
 assert.match(admin,/request\(\`\/api\/inventory\/\$\{encodeURIComponent\(targetSite\)\}\?includeInactive=true\`\)/,
   "Super Admin inventory database must read catalog/stock directly from VPS");
-assert.match(admin,/path="\/api\/inventory\/catalog\/sync"|path="\/api\/inventory\/catalog\/sync"/);
-assert.match(admin,/path="\/api\/inventory\/catalog\/sync"|path = "\/api\/inventory\/catalog\/sync"|path="\/api\/inventory\/catalog\/sync"/);
+assert.match(admin,/path="\/api\/inventory\/catalog\/sync"/,
+  "Super Admin item writes must use the inventory catalog lifecycle API");
 assert.match(admin,/new EventSource\("\/api\/inventory\/events"\)/,
   "Super Admin must subscribe to realtime inventory invalidation");
 assert.match(admin,/source\.addEventListener\("inventory",sync\)/,
@@ -79,6 +90,16 @@ assert.match(admin,/await request\(path,\{method:"POST",body\}\)[\s\S]{0,260}awa
   "Super Admin mutations must reconcile from server after successful writes");
 assert.doesNotMatch(admin,/DEFAULT_ITEMS|LARGE_FREEZER_SHEET_ITEMS|localStorage/,
   "Super Admin database must never use browser legacy inventory as authority");
+
+assert.match(routes,/siteMode === "branch"[\s\S]{0,900}metadata->>'work_area'=\$2[\s\S]{0,700}attachLocation\(workLocation\.rows\[0\]\.id\)/,
+  "API must repair/create branch work-area associations on every catalog sync");
+assert.match(cloud,/\.\.\.\(branchWorkLocationCode\(site,draft\.workArea\)[\s\S]{0,180}\[\{ code:branchWorkLocationCode\(site,draft\.workArea\) \}\]/,
+  "branch editor must include work location regardless of legacy storageOnly flag");
+assert.doesNotMatch(
+  section(cloud,"const item = draft ? {","} : buildBranchCatalog"),
+  /!draft\.storageOnly\s*&&\s*branchWorkLocationCode/,
+  "legacy storageOnly must not suppress the work-area association"
+);
 
 assert.match(realtime,/route\.startsWith\("\/api\/inventory\/"\)/,
   "inventory API mutations must invalidate subscribed Super Admin sessions");
