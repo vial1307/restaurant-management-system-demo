@@ -1,32 +1,42 @@
 # Kitchen OS — Current Development Handoff
 
-## ACTIVE verification — Fuxing/Yongji Work Area count mismatch in UI, 2026-09-28
+## Completed release — branch catalog materialization + Work Area projection, 2026-09-28
 
-User-visible regression report after the schema-026 normalization releases:
-- Central Kitchen appears synchronized correctly.
-- Fuxing/Yongji still need production UI verification because the Work Area tab can show a much smaller count than the Database/audit catalog count.
-- Screenshot evidence shows one branch Work Area view with `16` total displayed items: noodles `14`, soup `0`, seafood `2`, meat `0`.
-- This does **not** match the latest verified PostgreSQL catalog Work Area counts recorded after PR #162:
-  - Fuxing: 76 total = noodles 28 / soup 18 / seafood 21 / meat 9.
-  - Yongji: 72 total = noodles 31 / soup 16 / seafood 17 / meat 8.
-- Do not run another stock/catalog migration until the UI count path is proven wrong. Schema 026 production audits already reported catalog mismatch 0, work-stock mismatch 0 and location-classification violations 0.
+PR #167 merged into `main` as `7ae8d3fcbff9ceb9e3ddb1171985728a01b9b0c7` and is verified in production through Deploy Kitchen OS to VPS #981 / run `36344197565`.
 
-Next verification must compare, separately for `fuxing` and `yongji`:
-1. PostgreSQL `inventory_items.work_area` catalog counts.
-2. PostgreSQL stock rows at synchronized Work Locations.
-3. `/api/inventory/:site` snapshot payload: catalog inventory vs `workInventory`.
-4. Website Work Area tab count/filter implementation.
-5. Browser cache/site switching behavior after moving Fuxing ↔ Yongji.
-6. Whether the UI is counting only Work Location stock rows instead of all catalog items assigned to that Work Area.
+Root cause of the reported Storage vs Work Area count gap:
+- branch Website hydration built `workInventory` only from PostgreSQL `inventory_stock` rows already attached to `kind='work'` locations;
+- many legacy Fuxing/Yongji catalog items existed only in storage rows, so those products disappeared from 工作區 even though `inventory_items.work_area` was valid;
+- Storage UI also counted storage-location rows, so one product stored in multiple locations could inflate the “all storage” number.
 
-Acceptance criteria:
-- Storage/Kho tổng and Work Area counts have clearly defined semantics and are consistent across Central/Fuxing/Yongji.
-- Work Area category counts use the same database-declared `inventory_items.work_area` classification unless the UI explicitly labels itself as “stock rows only”.
-- No display-label inference, fixed Fuxing/Yongji mappings, or browser-local fallback may decide Work Area membership.
-- Any correction must preserve PostgreSQL as the only inventory authority and keep site isolation/audit invariants intact.
+Schema 027 / runtime changes:
+- materializes the remaining browser-era branch catalog into PostgreSQL: 75 canonical legacy item suffixes, with Fuxing/Yongji coverage verified by an audit manifest;
+- creates only missing item/location associations and never overwrites existing physical quantity/minimum rows;
+- every active branch item is projected into exactly one active Work Location matching `inventory_items.work_area`, including historical `storage_only` items;
+- PostgreSQL trigger `inventory_items_sync_branch_work_projection` keeps that invariant for future Website/Super Admin/API edits;
+- branch catalog API sync also attaches the database Work Location and preserves storage links on metadata-only edits;
+- Website “all storage” and top item badges now count unique product identity instead of duplicate location rows;
+- Super Admin Database Integrity reports `missingWorkStock` as “Nguyên liệu chưa được chiếu sang Khu làm việc / 食材尚未同步到工作區”;
+- three-digit minimum values are no longer clipped in the inventory UI.
 
-Current baseline before this investigation: production release `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`, schema `026`; repository `main` head when this task was recorded: `c7477cdb437e00378b63d87c5143f95db6bf251f`.
+Production verification after deployment:
+- release `7ae8d3f`, PostgreSQL schema `027`, production UI smoke PASS;
+- Inventory Site Production Audit #252 / run `36345117340` PASS;
+- Fuxing: 78 active products = noodles 30 / soup 18 / seafood 21 / meat 9;
+- Yongji: 75 active products = noodles 33 / soup 17 / seafood 17 / meat 8;
+- Central remains 41 products = noodles 38 / soup 1 / seafood 2;
+- `active_branch_item_without_work_row=0`;
+- legacy catalog manifest: Fuxing expected 75 / missing 0; Yongji expected 75 / missing 0;
+- site-integrity violations 0, location/work-area classification violations 0, legacy-catalog materialization violations 0, hidden-inventory violations 0;
+- deployed release verification: actual `7ae8d3f` = expected `7ae8d3f`.
 
+Super Admin synchronization is verified:
+- Database inventory reads directly from VPS/PostgreSQL endpoints;
+- catalog/master-data writes use the authoritative inventory/master-data APIs;
+- inventory SSE invalidation plus focus/poll fallback refreshes other open surfaces;
+- Super Admin branch inventory database round-trip and Super Admin browser regression both PASS.
+
+Next inventory hard-code cleanup remains separate: procurement/factory rules in `rules-core.js` and retirement of the now-non-authoritative legacy constants in `store-core.js` after all non-inventory/offline dependencies are proven safe.
 
 ## Completed release — database-driven inventory replenishment routing, 2026-09-28
 
