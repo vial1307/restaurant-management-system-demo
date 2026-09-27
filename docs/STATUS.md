@@ -1,18 +1,21 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — unified inventory location/work-area classification, 2026-09-27
+## DONE — unified inventory location/work-area classification, 2026-09-27
 
-- Branch: `refactor/inventory-location-workarea-unification-20260927`.
-- Central/Fuxing/Yongji now target one DB invariant: storage = primary/service; work area = one master row + one synchronized work location.
-- Migration 025 splits Central legacy 使用中 stock by `inventory_items.work_area`, normalizes all sites and installs PostgreSQL guards/triggers.
-- Super Admin treats Work Location as a derived projection of Work Area and audits classification mismatches.
-- Inventory runtime no longer guesses work areas from global UI state.
-- Shared pick/work-area routing now keys directly off PostgreSQL work-area metadata; legacy `noodles`, `central-work-use` and Fuxing-only compatibility paths are removed.
-- Regression now verifies `primary` + `service` storage and classified work locations on Central, Fuxing and Yongji explicitly.
-- Production audit will fail if any active site has an invalid storage group, orphan/missing work location or work-stock mismatch.
-- No production stock rewrite beyond same-item/same-site work-location relocation; total quantity is preserved.
-- Candidate until exact-head CI + merge + production deploy/audit/smoke pass.
-
+- PR #159 merged as `fb7c27cc64963c238ff2b86b999dac2f818f3507`; Deploy #948 / run `36329813136` is verified in production.
+- PostgreSQL schema is now `025`.
+- Central/Fuxing/Yongji share one inventory structure: storage = explicit `primary|service`; Work Area = master row + exactly one synchronized active Work Location.
+- Central generic `使用中 / central-work-use` is retired; Central Work view shows the actual database Work Area.
+- Central storage UI now separates Kho tổng/primary and Kho khu vực/service, matching Fuxing/Yongji.
+- Fuxing/Yongji require explicit service classification; invalid/unknown storage groups are not silently accepted as service.
+- Work Area owns Work Location lifecycle; direct work-location mutations are blocked.
+- Pre-deploy production audit: classification violations 7, work-stock mismatch 2.
+- Post-deploy audit #215: classification violations 0, work-stock mismatch 0, hidden inventory violations 0, site mismatch 0.
+- Production totals preserved after normalization: Central 81, Fuxing 1805, Yongji 17.
+- Exact head `0ed9a401ee74de3b48dfc8e74a183f05d6e0adc8` passed Schema #236, Master Data/Admin #285, Super Admin Browser #213, Workforce Approval #338, Load #504 and Deploy #947.
+- Production #948 passed full regression, backup/deploy, `DATA_INTEGRITY_OK`, health `release=fb7c27c` / schema `025`, and `PRODUCTION_UI_SMOKE_OK`.
+- Backup: `kitchen_os_20260927T153508Z.dump`.
+- NEXT: audit remaining non-structural restaurant hard-code separately; inventory structure stays DB-driven.
 
 ## ACTIVE — Central storage-row pick shortcut, 2026-09-27
 
