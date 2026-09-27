@@ -1,13 +1,15 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Central priority receive shortcut, 2026-09-27
+## DONE — Central priority receive shortcut, 2026-09-27
 
-- Branch: `feat/central-priority-receive-shortcut-20260927`.
-- Low-stock priority rows can deep-link into 進貨 with exact database item/location focus.
-- Shared operation controller remains the only write UI and all mutations still use VPS API/PostgreSQL.
-- No schema, endpoint, permission or production stock changes.
-- Candidate until exact-head regression + merge + production deploy/smoke pass.
-
+- PR #156 merged as `07d42a30eab8932507c3ccdd54f92f6a8f69a853`; Deploy #903 / run `36301227833` is verified in production.
+- Central low-stock rows now provide a per-item 進貨 shortcut that focuses the exact database item and shortage location in the shared operation controller.
+- Manual search exits the deep-link focus; normal generic operation behavior remains unchanged.
+- Exact PR head `bdbaffcb737a8d5350a26ff9fd51babb3bbad66b` passed Deploy #902, Super Admin Browser #170 and Workforce Approval #295.
+- Production #903 passed full regression, backup/deploy, `DATA_INTEGRITY_OK`, health `release=07d42a3` / schema `024`, and `PRODUCTION_UI_SMOKE_OK`.
+- Backup: `kitchen_os_20260927T065418Z.dump`.
+- No schema, endpoint, permission or stock rewrite.
+- NEXT: apply the same database-keyed low-friction pattern to 領貨 / 轉撥 / 出貨 where it materially reduces operator steps.
 
 ## DONE — Central Kitchen operator priority workspace, 2026-09-27
 
