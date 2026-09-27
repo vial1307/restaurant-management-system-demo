@@ -888,8 +888,8 @@ function inventory(context) {
       ? "新到貨時使用：選擇要入庫的儲位、輸入數量後按「進貨入庫」，數量只會增加到所選儲位。"
       : "Dùng khi có hàng mới: chọn đúng vị trí nhập, nhập số lượng rồi bấm 進貨入庫; hàng chỉ được cộng vào vị trí đã chọn.",
     pick: language === "zh"
-      ? "從儲位領到「使用中」；實際用掉請按「使用」，剩餘品項請選擇「歸位儲位」後歸位。"
-      : "Lấy hàng từ kho vào 使用中; phần đã dùng bấm 使用, phần còn thừa chọn đúng 歸位儲位 rồi cất lại.",
+      ? "從儲位領到此品項在資料庫設定的工作區；實際用掉請按「使用」，剩餘品項請選擇「歸位儲位」後歸位。"
+      : "Lấy hàng từ kho vào khu làm việc đã cấu hình cho nguyên liệu trong Database; phần đã dùng bấm 使用, phần còn thừa chọn đúng 歸位儲位 rồi cất lại.",
     transfer: language === "zh"
       ? "同一據點內換儲位時使用；選擇來源與目的儲位後轉撥，來源扣除、目的同步增加。"
       : "Dùng để chuyển giữa các vị trí trong cùng cơ sở; kho nguồn bị trừ và kho đích được cộng đồng thời.",
