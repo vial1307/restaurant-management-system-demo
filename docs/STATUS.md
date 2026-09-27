@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Central Kitchen operator priority workspace, 2026-09-27
+
+- Branch: `redesign/central-kitchen-operator-ui-20260927`.
+- Central Overview now includes a database-driven `待處理 / Cần xử lý` panel for stock rows below configured minimum.
+- Empty rows are prioritized before low-stock rows; quantities remain item/unit specific and are never summed across incompatible units.
+- Alert rows use PostgreSQL-loaded storage labels and drill into the matching storage filter.
+- Healthy state, operation quick action, responsive desktop/mobile layout and static/browser contracts are included.
+- Existing VPS API/PostgreSQL inventory mutation authority is unchanged.
+- Candidate requires exact-head CI + merge + production deploy/smoke before being marked DONE.
+
 ## DONE — Central Kitchen inventory UI redesign, 2026-09-27
 
 - PR #152 merged as `7157d0b5263209b3391ccab57c088668d7902973`; Deploy #898 / run `36287068079` is verified in production.
