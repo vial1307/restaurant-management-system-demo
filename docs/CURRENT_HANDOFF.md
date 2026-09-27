@@ -1,5 +1,21 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — Central priority receive shortcut, 2026-09-27
+
+Branch: `feat/central-priority-receive-shortcut-20260927`.
+
+Goal: reduce Central daily receiving friction without changing PostgreSQL authority. Each low-stock row in `待處理 / Cần xử lý` can jump directly into `進貨入庫` focused on the exact database item and shortage location.
+
+Implemented:
+- priority rows remain database-derived from quantity/minimum and storage master data;
+- authorized users get a per-row 進貨 shortcut carrying the item's stable database key and location code;
+- the shared inventory operation controller accepts optional initial item/location focus, filters to the exact item and preselects the matching database location;
+- editing the operation search clears the deep-link focus and returns to normal generic search;
+- no API/schema/permission changes and no business master data is hard-coded.
+
+Candidate is not production-complete until exact-head CI, merge, production deploy/health and UI smoke pass.
+
+
 ## Completed release — Central Kitchen operator priority workspace, 2026-09-27
 
 PR #154 merged into `main` as `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2` and is verified in production through Deploy Kitchen OS to VPS #900 / run `36291179320`.
