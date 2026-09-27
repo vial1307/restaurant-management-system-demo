@@ -342,6 +342,14 @@ async function roleDesktop(browser, username, checks) {
 
     assert.equal(await page.locator(".central-kitchen-kpis").count(),1,"central inventory KPI summary missing");
     assert.equal(await page.locator(".central-kitchen-kpis > article").count(),4,"central inventory KPI summary must expose four database-driven indicators");
+    assert.equal(await page.locator("[data-central-priority]").count(),1,"central operator priority panel missing");
+    const priorityZone = page.locator("[data-central-priority-zone]").first();
+    if (await priorityZone.count()) {
+      const zone = await priorityZone.getAttribute("data-central-priority-zone");
+      await priorityZone.click();
+      assert.equal(await page.locator('[data-central-view="storage"].selected').count(),1,"priority drill-down must return to storage view");
+      assert.equal(await page.locator(`[data-central-zone="${zone}"].selected`).count(),1,"priority drill-down must select its database storage location");
+    }
     assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation navigation must preserve shared operation-tab behavior");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
     assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
