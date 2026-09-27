@@ -41,6 +41,26 @@ assert.deepEqual(groups.storage.map((entry) => entry.id), ["large-freezer", "kit
 assert.deepEqual(groups.storage.map((entry) => entry.storageGroup), ["primary", "service"]);
 assert.deepEqual(groups.workAreas.map((entry) => entry.id), ["noodles"]);
 
+assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
+  site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
+  locations:[
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles", storage_group:"service" } },
+  ],
+  workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
+}), /INVENTORY_WORK_LOCATION_STORAGE_GROUP_FORBIDDEN/,
+"work locations must never carry storage classification");
+
+assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
+  site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
+  locations:[
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:99, name_zh_tw:"錯誤名稱", name_vi:"Tên sai", metadata:{ ui_key:"noodles", work_area:"noodles" } },
+  ],
+  workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
+}), /INVENTORY_WORK_LOCATION_PROJECTION_MISMATCH/,
+"work locations must mirror Work Area display master data");
+
 const cloudSource = fs.readFileSync(new URL("../src/inventory-cloud.js", import.meta.url), "utf8");
 for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTRAL_ZONE_CODES", "BRANCH_STORAGE_CODES", "BRANCH_CODE_TO_ZONE"]) {
   assert.equal(cloudSource.includes(legacyName), false, `${legacyName} must not remain a production master-data source`);
