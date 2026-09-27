@@ -219,6 +219,7 @@ export function inventoryUiGroups(siteCode) {
     vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
     code:location.code,
     storageGroup:inventoryStorageGroup(location),
+    sortOrder:Number(location.sort_order || 0),
   }));
   const workAreas = inventoryWorkAreas(siteCode).map((area) => ({
     id:area.code,
