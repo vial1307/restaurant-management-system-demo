@@ -41,11 +41,50 @@ assert.deepEqual(groups.storage.map((entry) => entry.id), ["large-freezer", "kit
 assert.deepEqual(groups.storage.map((entry) => entry.storageGroup), ["primary", "service"]);
 assert.deepEqual(groups.workAreas.map((entry) => entry.id), ["noodles"]);
 
+assert.throws(
+  () => replaceInventoryMasterSnapshot("missing-work-location", {
+    site:{ code:"missing-work-location", metadata:{ inventory_mode:"branch" } },
+    locations:[
+      { code:"missing-work-location-freezer", site:"missing-work-location", kind:"storage", active:true, metadata:{ ui_key:"freezer", storage_group:"primary" } },
+    ],
+    workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", active:true }],
+  }),
+  /INVENTORY_WORK_LOCATION_MISSING/,
+  "site master snapshot must fail closed when an active work area has no work location",
+);
+assert.throws(
+  () => replaceInventoryMasterSnapshot("invalid-work-location", {
+    site:{ code:"invalid-work-location", metadata:{ inventory_mode:"branch" } },
+    locations:[
+      { code:"invalid-work-location-freezer", site:"invalid-work-location", kind:"storage", active:true, metadata:{ ui_key:"freezer", storage_group:"primary" } },
+      { code:"invalid-work-location-use", site:"invalid-work-location", kind:"work", active:true, metadata:{ ui_key:"ghost", work_area:"ghost" } },
+    ],
+    workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", active:true }],
+  }),
+  /INVENTORY_WORK_LOCATION_AREA_INVALID/,
+  "site master snapshot must reject work locations that point outside active work-area master data",
+);
+assert.throws(
+  () => replaceInventoryMasterSnapshot("missing-storage", {
+    site:{ code:"missing-storage", metadata:{ inventory_mode:"branch" } },
+    locations:[
+      { code:"missing-storage-work", site:"missing-storage", kind:"work", active:true, metadata:{ ui_key:"noodles", work_area:"noodles" } },
+    ],
+    workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", active:true }],
+  }),
+  /INVENTORY_STORAGE_LOCATION_REQUIRED/,
+  "inventory site master snapshot must require at least one storage location",
+);
+
 const cloudSource = fs.readFileSync(new URL("../src/inventory-cloud.js", import.meta.url), "utf8");
 for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTRAL_ZONE_CODES", "BRANCH_STORAGE_CODES", "BRANCH_CODE_TO_ZONE"]) {
   assert.equal(cloudSource.includes(legacyName), false, `${legacyName} must not remain a production master-data source`);
 }
 assert.equal(/\bDEFAULT_ITEMS\b/.test(cloudSource), false, "production inventory cloud path must not use DEFAULT_ITEMS fallback");
+assert.doesNotMatch(cloudSource, /\b(?:WORK_AREAS|ZONES|PRIMARY_ZONES)\b/,
+  "production inventory cloud path must use site-scoped PostgreSQL master data instead of mutable global zone/work-area mirrors");
+assert.match(cloudSource, /function defaultInventoryWorkArea\(site = currentSite\(\)\)[\s\S]{0,180}inventoryUiGroups\(site\)\.workAreas\[0\]/,
+  "inventory work-area fallback must resolve from the requested site's master-data snapshot");
 
 const appSource = fs.readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 assert.doesNotMatch(appSource, /function appStagingLocations|function appWorkLocations|function branchDraftOperationData/,
@@ -105,6 +144,39 @@ assert.match(authLayer, /const defaultZone = zones\[0\] \|\| "";/,
   "new Central items must default to the first database-declared storage location");
 assert.match(authLayer, /centralZones\(\)\.map\(\(zone\) => `<button data-central-zone=[\s\S]{0,240}centralZoneLabel\(zone, language\)/,
   "Central management tabs must render current PostgreSQL location labels rather than raw UI keys");
+
+const storeCore = fs.readFileSync(new URL("../src/store-core.js", import.meta.url), "utf8");
+assert.doesNotMatch(storeCore, /ZONES\.some\(\(zone\) => zone\.id === location\.zone\)/,
+  "legacy store hydration must not reject database-declared custom storage UI keys");
+assert.doesNotMatch(storeCore, /item\.zone === "kitchen"/,
+  "legacy work inventory selection must not privilege a source-coded kitchen location");
+
+const parityMigration = fs.readFileSync(new URL("../vps/database/migrations/025_inventory_three_site_master_data_parity.sql", import.meta.url), "utf8");
+for (const marker of [
+  "inventory_locations_work_area_guard",
+  "inventory_stock_work_area_guard",
+  "inventory_items_work_area_stock_guard",
+  "strict_site_majority",
+  "unique_primary_storage",
+  "INVENTORY_CROSS_SITE_WORK_AREA_PARITY_INCOMPLETE",
+]) assert(parityMigration.includes(marker), `migration 025 missing parity marker: ${marker}`);
+assert.doesNotMatch(parityMigration, /central-work-use|fuxing-work-noodles|yongji-work-noodles/,
+  "migration 025 must derive work-location topology from PostgreSQL work_areas instead of fixed location codes");
+
+const productionVerifier = fs.readFileSync(new URL("../vps/scripts/verify-vps-data.sh", import.meta.url), "utf8");
+assert.match(productionVerifier, /schema version \$\{schema\} is older than 025/,
+  "production verifier must require schema 025");
+assert.match(productionVerifier, /cross-site inventory work-area variants/,
+  "production verifier must block cross-site work-area drift");
+assert.match(productionVerifier, /branch multi-location items missing fixed receive default/,
+  "production verifier must enforce receive-default completeness");
+assert.doesNotMatch(productionVerifier, /Fuxing locations exist|Yongji locations exist|Central locations exist|central-work-use/,
+  "production verifier must not encode the current physical site/location list");
+
+const adminInventoryDb = fs.readFileSync(new URL("../src/admin-inventory-database.js", import.meta.url), "utf8");
+for (const marker of ["missingWorkLocation","invalidWorkLocation","workStockMismatch"]) {
+  assert(adminInventoryDb.includes(marker), `Super Admin integrity view missing topology check: ${marker}`);
+}
 
 const adminSource = fs.readFileSync(new URL("../src/admin-panel.js", import.meta.url), "utf8");
 assert.equal(/const\s+SITES\s*=/.test(adminSource), false, "Admin Panel site list must come from PostgreSQL");
