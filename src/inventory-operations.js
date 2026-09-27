@@ -126,12 +126,15 @@ function workLocationForItem(item,workLocations=[]){
     inventoryLocationWorkArea(loc)===wanted || inventoryLocationUiKey(loc)===wanted
   ) || null;
 }
-function inboundDestinationForItem(item,site,locations,receiveDefaults=[]){
+function configuredReceiveDestination(item,site,locations,receiveDefaults=[]){
   const catalogKey=String(item?.catalogKey||item?.catalog_key||"").trim();
   const configured=catalogKey
     ? receiveDefaults.find((entry)=>entry.site===site && entry.catalogKey===catalogKey && entry.locationCode)
     : null;
-  return locations.find((location)=>location.code===configured?.locationCode)
+  return locations.find((location)=>location.code===configured?.locationCode) || null;
+}
+function inboundDestinationForItem(item,site,locations,receiveDefaults=[]){
+  return configuredReceiveDestination(item,site,locations,receiveDefaults)
     || locations.find((location)=>item.locations?.some((stored)=>stored.id===location.id))
     || locations[0]
     || null;
@@ -144,7 +147,7 @@ function centralOperationSummary(data,mode,language){
   const total=data.items.length;
   const sourceReady=sourceReadyCount(data.items);
   const receiveReady=mode==="in"
-    ? data.items.filter((item)=>Boolean(inboundDestinationForItem(item,data.site,data.locations,data.receiveDefaults||[]))).length
+    ? data.items.filter((item)=>Boolean(configuredReceiveDestination(item,data.site,data.locations,data.receiveDefaults||[]))).length
     : 0;
   const secondary=mode==="in"
     ? {label:t.receiveReady,value:receiveReady}
@@ -188,10 +191,11 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const positiveSource=preferredStorageSource(item);
   const firstSource=positiveSource || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
+  const inboundLocation=inboundDestinationForItem(item,site,locations,receiveDefaults);
   const currentLocationId=["pick","transfer","ship"].includes(mode)
     ? firstSource?.id
     : mode==="in"
-      ? (item.locations[0]?.id || locations[0]?.id)
+      ? inboundLocation?.id
       : "";
   const currentQuantity=currentLocationId ? Number(stockAt(item,currentLocationId)||0) : Number(item.total||0);
   const workLocation=workLocationForItem(item,workLocations);
@@ -199,7 +203,6 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const otherSites=INVENTORY_SITES.filter((entry)=>entry.id!==site);
   const sourceSelect = `<label><span>${esc(t.from)}</span><select data-op-source="${esc(item.id)}">${sourceOptions(item,language)}</select></label>`;
   const destinationSelect = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,firstDestination?.id)}</select></label>`;
-  const inboundLocation=inboundDestinationForItem(item,site,locations,receiveDefaults);
   const inboundDestination = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,inboundLocation?.id)}</select></label>`;
   const workDestination = workLocation
     ? `<label><span>${esc(t.workDestination)}</span><select data-op-work-destination="${esc(item.id)}"><option value="${esc(workLocation.id)}" data-code="${esc(workLocation.code)}">${esc(locationLabel(workLocation,language))}</option></select></label>`
@@ -231,7 +234,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
     action=`<button class="op-primary op-out" data-op-submit="ship" data-item-id="${esc(item.id)}" ${positiveSource?"":"disabled"}>${esc(t.shipAction)}</button>`;
   }else{
     controls=sourceSelect+destinationSelect;
-    action=`<button class="op-primary" data-op-submit="transfer" data-item-id="${esc(item.id)}" ${firstSource?"":"disabled"}>${esc(t.move)}</button>`;
+    action=`<button class="op-primary" data-op-submit="transfer" data-item-id="${esc(item.id)}" ${positiveSource?"":"disabled"}>${esc(t.move)}</button>`;
   }
 
   const transferBalance = mode==="transfer" && firstSource && firstDestination
