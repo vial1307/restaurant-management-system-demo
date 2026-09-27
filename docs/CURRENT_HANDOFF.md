@@ -1,5 +1,26 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — Central Kitchen inventory UI redesign, 2026-09-27
+
+Branch: `redesign/central-kitchen-inventory-ui-20260927`.
+
+Goal: redesign 央廚 / Bếp trung tâm inventory UI without changing the verified PostgreSQL transaction/API authority.
+
+Implemented in this candidate:
+- new Central Kitchen shell with database-derived site name, connection state and four meaningful KPIs;
+- removed the mixed-unit “total quantity” KPI; summary now shows ingredient count, database storage-location count, low-stock count and database work-area count;
+- responsive function navigation for Overview / 入庫 / 領貨 / 轉撥 / 出貨 / 管理 / 紀錄 while preserving the existing `data-central-mode` hooks;
+- overview now exposes database-generated storage cards and work-area cards before the detailed inventory rows;
+- Central storage/work-area labels and counts continue to come from `inventoryUiGroups("central")`;
+- daily operation modes still mount the existing `mountInventoryOperations(... site:"central" ...)` controller; catalog edit, relocation, stocktake and history API paths are unchanged;
+- Manage mode now visually separates master-data maintenance from daily inventory movement;
+- dedicated `src/central-kitchen-ui.css` is loaded after legacy responsive/mobile styles in both canonical shells to avoid another override cascade;
+- mobile navigation becomes horizontally touch-scrollable and storage/work cards collapse to compact responsive grids;
+- static regression protects database-driven structure, operation hooks, stylesheet load order and canonical/VPS shell parity.
+
+No schema migration, no inventory data rewrite and no endpoint/transaction change. Candidate is not production-complete until exact-head CI, merge, Deploy-to-VPS health and production UI smoke pass.
+
+
 ## Completed release — inventory UI master-data cutover, 2026-09-27
 
 PR #150 merged into `main` as `b1447b727e310b7a3095f5782c0a933916ef6234` and is verified in production through Deploy Kitchen OS to VPS #885 / run `36270568342`.

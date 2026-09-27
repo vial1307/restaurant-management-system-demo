@@ -248,6 +248,38 @@ async function switchWarehouse(button, { centralContent = null } = {}) {
   }
 }
 
+function centralSiteRecord() {
+  return inventorySites().find((site) => site.code === "central") || null;
+}
+
+function centralSiteDisplayName(language) {
+  const site = centralSiteRecord();
+  if (!site) return language === "zh" ? "央廚" : "Bếp trung tâm · 央廚";
+  const zh = site.name_zh_tw || site.name_zh || site.code;
+  const vi = site.name_vi || zh;
+  return language === "zh" ? zh : (vi === zh ? zh : `${vi} · ${zh}`);
+}
+
+function centralModeNavigation({ mode, language, operationsEnabled, catalogManageVisible, canViewHistory }) {
+  const definitions = [
+    { id:"overview", icon:"▦", zh:"庫存總覽", vi:"Tổng quan", group:"overview" },
+    ...(operationsEnabled ? [
+      { id:"in", icon:"↓", zh:"進貨入庫", vi:"Nhập kho", group:"daily" },
+      { id:"pick", icon:"↗", zh:"領貨", vi:"Lấy hàng", group:"daily" },
+      { id:"transfer", icon:"⇄", zh:"庫存轉撥", vi:"Điều chuyển", group:"daily" },
+      { id:"ship", icon:"→", zh:"出貨", vi:"Xuất hàng", group:"daily" },
+    ] : []),
+    ...(catalogManageVisible ? [{ id:"manage", icon:"⚙", zh:"庫存管理", vi:"Quản trị kho", group:"admin" }] : []),
+    ...(canViewHistory ? [{ id:"history", icon:"≡", zh:"操作紀錄", vi:"Lịch sử", group:"admin" }] : []),
+  ];
+  return `<nav class="central-tabs branch-ops-tabs central-kitchen-modebar" aria-label="${language === "zh" ? "央廚功能" : "Chức năng Bếp trung tâm"}">
+    ${definitions.map((entry) => `<button type="button" data-central-mode="${entry.id}" data-mode-group="${entry.group}" class="central-kitchen-mode ${mode === entry.id ? "active" : ""}">
+      <span class="central-kitchen-mode-icon" aria-hidden="true">${entry.icon}</span>
+      <span><strong>${esc(language === "zh" ? entry.zh : entry.vi)}</strong><small>${esc(entry.zh)}</small></span>
+    </button>`).join("")}
+  </nav>`;
+}
+
 function centralPage(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
@@ -255,10 +287,6 @@ function centralPage(user) {
   const editGranted = user.role === "admin" || user.accountRole === "admin" || Boolean(user.permissions?.inventory?.edit);
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
-  // Central stock is a live balance shared by all service dates. Only branch
-  // snapshots are date-locked; changing the service date must never hide or
-  // disable central inventory operations.
-  const historical = false;
   const directAdjust = canDirectInventoryAdjust();
   const operationsEnabled = editGranted && cloudReady;
   let mode = content.dataset.centralMode || "overview";
@@ -272,9 +300,12 @@ function centralPage(user) {
   const inventoryView = content.dataset.centralInventoryView || "storage";
   const query = content.dataset.centralSearch || "";
   const editorKey = content.dataset.centralEditor || "";
-  const total = items.reduce((s, i) => s + Number(i.qty || 0), 0);
   const productCount = new Set(items.map((item) => centralBaseKey(item))).size;
   const lowCount = items.filter((item) => Number(item.qty || 0) < Number(item.minimum || 0)).length;
+  const emptyCount = items.filter((item) => Number(item.qty || 0) <= 0).length;
+  const uiGroups = inventoryUiGroups("central");
+  const storageCount = uiGroups.storage.length;
+  const workAreaCount = uiGroups.workAreas.length;
   const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
   const catalogManageVisible = editGranted && ["central","all"].includes(user.location);
   const canManageCatalog = catalogManageVisible && canManageCentralCatalog();
@@ -283,60 +314,82 @@ function centralPage(user) {
   if (mode === "history" && !canViewHistory) { mode = "overview"; content.dataset.centralMode = mode; }
   const log = [];
   const language = document.documentElement.lang === "vi" ? "vi" : "zh";
-  const label = {
-    overview: language === "vi" ? "Tổng quan · 庫存總覽" : "庫存總覽",
-    inbound: language === "vi" ? "Nhập kho · 進貨入庫" : "進貨入庫",
-    pick: language === "vi" ? "Lấy hàng · 領貨" : "領貨",
-    transfer: language === "vi" ? "Điều chuyển · 庫存轉撥" : "庫存轉撥",
-    ship: language === "vi" ? "Xuất hàng · 出貨" : "出貨",
-    manage: language === "vi" ? "Quản trị kho · 庫存管理" : "庫存管理",
-    history: language === "vi" ? "Lịch sử · 操作紀錄" : "操作紀錄",
-  };
   const guide = {
     overview: language === "zh"
-      ? "查看央廚各儲位的實際庫存；需要操作庫存時請切換到對應功能。"
-      : "Xem tồn thực tế của từng khu trong xưởng; khi cần thao tác hãy chuyển sang đúng chức năng.",
+      ? "依資料庫設定的儲位與工作區查看即時庫存；低於標準量的品項會集中顯示。"
+      : "Xem tồn kho theo vị trí và khu làm việc được cấu hình trong Database; nguyên liệu dưới định mức được đánh dấu rõ.",
     in: language === "zh"
-      ? "新到原物料入庫：選擇要存放的央廚儲位並輸入實際到貨數量。"
-      : "Nhập nguyên vật liệu mới: chọn đúng vị trí trong xưởng và nhập số lượng thực nhận.",
+      ? "新到原物料入庫：選擇實際儲位並輸入實際到貨數量。"
+      : "Nhập nguyên liệu mới: chọn đúng vị trí lưu và nhập số lượng thực nhận.",
     pick: language === "zh"
       ? "從央廚儲位領到使用中；已使用的扣除，剩餘物料可選擇儲位歸位。"
-      : "Lấy từ kho xưởng vào 使用中; phần dùng rồi được trừ, phần thừa chọn đúng vị trí để cất lại.",
+      : "Lấy từ kho xưởng vào khu sử dụng; phần còn lại có thể trả về đúng vị trí lưu.",
     transfer: language === "zh"
       ? "只用於央廚內部換儲位；來源扣除、目的儲位增加。"
-      : "Chỉ dùng để chuyển vị trí trong xưởng; nơi nguồn bị trừ và nơi đích được cộng.",
+      : "Chỉ dùng để chuyển vị trí trong Bếp trung tâm; nguồn bị trừ và đích được cộng.",
     ship: language === "zh"
-      ? "從央廚出貨至分店時，請選擇分店及分店實際收貨儲位，資料會同步更新。"
-      : "Khi xuất từ xưởng sang chi nhánh, chọn chi nhánh và vị trí nhận thực tế; dữ liệu hai bên cập nhật đồng thời.",
+      ? "出貨至分店時選擇分店及實際收貨儲位，兩端庫存會同一交易更新。"
+      : "Khi xuất sang chi nhánh, chọn chi nhánh và vị trí nhận; tồn hai bên cập nhật trong cùng giao dịch.",
     manage: language === "zh"
-      ? "新增或編輯原物料、單位、工作區、存放位置與標準量；日常進出貨請勿在此頁操作。"
-      : "Thêm/sửa nguyên vật liệu, đơn vị, khu sử dụng, vị trí lưu và định mức; không dùng mục này cho nhập/xuất hằng ngày.",
+      ? "維護原物料、單位、工作區、存放位置與標準量；日常進出貨請使用上方作業功能。"
+      : "Quản lý nguyên liệu, đơn vị, khu sử dụng, vị trí lưu và định mức; nhập/xuất hằng ngày dùng các chức năng vận hành.",
     history: language === "zh"
-      ? "查看庫存操作人員、時間、數量及前後變化；目前僅系統管理員可查看。"
-      : "Xem người thao tác, thời gian, số lượng và thay đổi trước/sau; hiện chỉ Admin được xem.",
+      ? "查看資料庫中的操作人員、時間、數量及前後變化。"
+      : "Xem người thao tác, thời gian, số lượng và thay đổi trước/sau từ Database.",
   };
-  const guideHtml = `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${esc(guide[mode] || "")}</span></div>`;
   const cloudNotice = cloudReady
-    ? `<div class="inventory-sql-status inventory-sql-ready"><strong>VPS PostgreSQL · 已連線</strong><small>Dữ liệu kho đang đọc/ghi trực tiếp trên VPS Singapore và được backup tự động. · 庫存資料目前直接讀寫 VPS PostgreSQL，並由伺服器自動備份。</small></div>`
+    ? `<div class="central-kitchen-dbstate is-ready"><span class="central-kitchen-db-dot"></span><div><strong>VPS PostgreSQL · ${language === "zh" ? "已連線" : "Đã kết nối"}</strong><small>${language === "zh" ? "目前所有庫存寫入皆由 VPS API 驗證並儲存。" : "Mọi thao tác ghi kho hiện được VPS API xác thực và lưu vào PostgreSQL."}</small></div></div>`
     : cloudState === "checking"
-      ? `<div class="inventory-cloud-notice"><strong>Đang kết nối VPS database · 正在連線 VPS 資料庫</strong><small>Hệ thống đang tự kiểm tra API và PostgreSQL. · 系統正在自動檢查 API 與 PostgreSQL。</small></div>`
-      : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Không kết nối được VPS database · VPS 資料庫連線失敗</strong><small>Thao tác ghi kho tạm khóa để tránh sai lệch dữ liệu. · 為避免資料分歧，暫時鎖定庫存寫入。</small></div>`;
+      ? `<div class="central-kitchen-dbstate is-checking"><span class="central-kitchen-db-dot"></span><div><strong>${language === "zh" ? "正在連線 VPS 資料庫" : "Đang kết nối VPS database"}</strong><small>${language === "zh" ? "系統正在檢查 API 與 PostgreSQL。" : "Hệ thống đang kiểm tra API và PostgreSQL."}</small></div></div>`
+      : `<div class="central-kitchen-dbstate is-offline"><span class="central-kitchen-db-dot"></span><div><strong>${language === "zh" ? "VPS 資料庫連線失敗" : "Không kết nối được VPS database"}</strong><small>${language === "zh" ? "為避免資料分歧，庫存寫入已鎖定。" : "Thao tác ghi đã khóa để tránh dữ liệu lệch."}</small></div></div>`;
   const manageNotice = mode === "manage" && catalogManageVisible && !canManageCatalog
     ? `<div class="inventory-readonly-notice"><strong>${language === "zh" ? "目前無法編輯央廚庫存" : "Hiện chưa thể chỉnh sửa kho Bếp trung tâm"}</strong><small>${language === "zh" ? "請確認帳號權限與 VPS 資料庫連線。" : "Hãy kiểm tra quyền tài khoản và kết nối VPS database."}</small></div>`
     : "";
-  const pageTitle = language === "zh" ? "庫存" : "Tồn kho";
-  const pageSubtitle = language === "zh" ? "央廚冷凍、4門、臥櫃與冷藏的庫存管理。" : "Quản lý kho đông, kho mát, tủ 4 cánh và tủ đông nằm của Bếp trung tâm.";
-  const siteEyebrow = language === "zh" ? "央廚" : "BẾP TRUNG TÂM · 央廚";
+  const siteName = centralSiteDisplayName(language);
+  const modeNav = centralModeNavigation({ mode, language, operationsEnabled, catalogManageVisible, canViewHistory });
+  const modeTitle = {
+    overview: language === "zh" ? "庫存總覽" : "Tổng quan kho · 庫存總覽",
+    in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
+    pick: language === "zh" ? "領貨" : "Lấy hàng · 領貨",
+    transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
+    ship: language === "zh" ? "出貨" : "Xuất hàng · 出貨",
+    manage: language === "zh" ? "庫存管理" : "Quản trị kho · 庫存管理",
+    history: language === "zh" ? "操作紀錄" : "Lịch sử · 操作紀錄",
+  }[mode] || "";
 
-  content.innerHTML = `<div class="page-heading central-heading"><div><div class="eyebrow central-eyebrow">${esc(siteEyebrow)}</div><h1>${esc(pageTitle)}</h1><p>${esc(pageSubtitle)}</p></div>${branchSwitcher(user, "central")}</div>
-    ${cloudNotice}${historical ? `<div class="inventory-readonly-notice">${language === "zh" ? "歷史庫存快照：僅供查看，請切回今天後再調整庫存。" : "Ảnh chụp tồn kho theo ngày: chỉ để xem; hãy chuyển về hôm nay để điều chỉnh kho. · 歷史庫存快照"}</div>` : ""}
-    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span><strong data-central-stat-items>${productCount}</strong> ${language === "zh" ? "品項" : "mặt hàng"}</span><span class="summary-pill"><span class="summary-dot amber"></span><strong data-central-stat-low>${lowCount}</strong> ${language === "zh" ? "庫存不足" : "sắp thiếu"}</span><span class="summary-pill"><strong data-central-stat-total>${total}</strong> ${language === "zh" ? "總數量" : "tổng số lượng"}</span></div>
-    <div class="central-tabs branch-ops-tabs"><button data-central-mode="overview" class="${mode === "overview" ? "active" : ""}">${esc(label.overview)}</button>${operationsEnabled ? `<button data-central-mode="in" class="${mode === "in" ? "active" : ""}">${esc(label.inbound)}</button><button data-central-mode="pick" class="${mode === "pick" ? "active" : ""}">${esc(label.pick)}</button><button data-central-mode="transfer" class="${mode === "transfer" ? "active" : ""}">${esc(label.transfer)}</button><button data-central-mode="ship" class="${mode === "ship" ? "active" : ""}">${esc(label.ship)}</button>` : ""}${catalogManageVisible ? `<button data-central-mode="manage" class="${mode === "manage" ? "active" : ""}">${esc(label.manage)}</button>` : ""}${canViewHistory ? `<button data-central-mode="history" class="${mode === "history" ? "active" : ""}">${esc(label.history)}</button>` : ""}</div>
-    ${guideHtml}
+  content.innerHTML = `<section class="central-kitchen-shell" data-central-kitchen-shell>
+    <header class="central-kitchen-hero">
+      <div class="central-kitchen-identity">
+        <span class="central-kitchen-eyebrow">CENTRAL KITCHEN · 央廚</span>
+        <h1>${esc(siteName)}</h1>
+        <p>${language === "zh" ? `資料庫目前設定 ${storageCount} 個儲位、${workAreaCount} 個工作區。` : `Database hiện cấu hình ${storageCount} vị trí lưu và ${workAreaCount} khu làm việc.`}</p>
+      </div>
+      <div class="central-kitchen-hero-actions">${branchSwitcher(user, "central")}${cloudNotice}</div>
+    </header>
+
+    <section class="central-kitchen-kpis" aria-label="${language === "zh" ? "央廚庫存摘要" : "Tóm tắt kho Bếp trung tâm"}">
+      <article><span>${language === "zh" ? "原物料" : "Nguyên liệu"}</span><strong data-central-stat-items>${productCount}</strong><small>${language === "zh" ? "資料庫品項" : "mặt hàng trong DB"}</small></article>
+      <article><span>${language === "zh" ? "儲位" : "Vị trí kho"}</span><strong data-central-stat-locations>${storageCount}</strong><small>${language === "zh" ? "由 Database 設定" : "cấu hình từ Database"}</small></article>
+      <article class="${lowCount ? "is-warning" : ""}"><span>${language === "zh" ? "需補貨" : "Cần bổ sung"}</span><strong data-central-stat-low>${lowCount}</strong><small>${emptyCount} ${language === "zh" ? "個儲位已歸零" : "vị trí đã hết"}</small></article>
+      <article><span>${language === "zh" ? "工作區" : "Khu làm việc"}</span><strong data-central-stat-workareas>${workAreaCount}</strong><small>${language === "zh" ? "由 Database 設定" : "cấu hình từ Database"}</small></article>
+    </section>
+
+    ${modeNav}
+
+    <section class="central-kitchen-context">
+      <div><span>${language === "zh" ? "目前功能" : "Chức năng hiện tại"}</span><strong>${esc(modeTitle)}</strong></div>
+      <p>${esc(guide[mode] || "")}</p>
+    </section>
+
     ${manageNotice}
-    ${mode === "history" && canViewHistory ? historyView(log) : mode === "manage" && catalogManageVisible ? centralManageView(items, selectedZone, query, language, canViewHistory, canManageCatalog, canDirectInventoryAdjust()) : mode === "overview" ? stockView(items, selectedZone, query, directAdjust, { inventoryView, canManageCatalog, workMap:readCentralWork() }) : `<section class="inventory-operations-host" data-inventory-operations></section>`}
+    <section class="central-kitchen-workspace" data-central-workspace="${esc(mode)}">
+      ${mode === "history" && canViewHistory ? historyView(log)
+        : mode === "manage" && catalogManageVisible ? centralManageView(items, selectedZone, query, language, canViewHistory, canManageCatalog, canDirectInventoryAdjust())
+          : mode === "overview" ? stockView(items, selectedZone, query, directAdjust, { inventoryView, canManageCatalog, workMap:readCentralWork() })
+            : `<section class="inventory-operations-host central-kitchen-operation-host" data-inventory-operations></section>`}
+    </section>
     ${canManageCatalog ? centralEditorModal(items, editorKey, language, canDirectInventoryAdjust()) : ""}
-  `;
+  </section>`;
   bindCentral(user);
   const centralSearchInput = content.querySelector("[data-central-search]");
   if (centralSearchInput) applyCentralSearchDom(content, centralSearchInput.value || "");
@@ -367,6 +420,32 @@ function centralQuantityControl({id,itemKey,locationCode,quantity,unit,direct,ma
   return `<div class="quantity-control central-quantity-control"><button class="quantity-button" type="button" data-central-step="${esc(id)}" data-delta="-1"${manageAttribute} aria-label="Decrease">−</button><input class="quantity-input" type="number" min="0" inputmode="numeric" value="${Number(quantity||0)}" data-central-set-qty="${esc(id)}" data-central-item-key="${esc(itemKey)}" data-central-location-code="${esc(locationCode)}"${manageAttribute}><button class="quantity-button plus" type="button" data-central-step="${esc(id)}" data-delta="1"${manageAttribute} aria-label="Increase">＋</button><small>${esc(unit)}</small><span class="quantity-sync-status" data-quantity-sync-status role="status" aria-live="polite"></span></div>`;
 }
 
+function centralStorageOverviewCards(items, selectedZone, language) {
+  return `<div class="central-kitchen-location-grid">${centralZones().map((zone) => {
+    const rows = items.filter((item) => item.zone === zone);
+    const low = rows.filter((item) => Number(item.qty || 0) < Number(item.minimum || 0)).length;
+    const empty = rows.filter((item) => Number(item.qty || 0) <= 0).length;
+    return `<button type="button" class="central-kitchen-location-card ${selectedZone === zone ? "is-selected" : ""} ${low ? "has-alert" : ""}" data-central-zone="${esc(zone)}">
+      <span>${esc(centralZoneLabel(zone, language))}</span>
+      <strong>${rows.length}</strong>
+      <small>${language === "zh" ? `品項 · ${low} 需補貨 · ${empty} 缺貨` : `mặt hàng · ${low} cần bù · ${empty} đã hết`}</small>
+    </button>`;
+  }).join("")}</div>`;
+}
+
+function centralWorkAreaOverviewCards(items, workMap, language) {
+  const groups = centralProductGroups(items);
+  return `<div class="central-kitchen-location-grid is-workareas">${centralWorkAreas().map((area) => {
+    const rows = groups.filter(({ item }) => (item.workArea || centralDefaultWorkArea()) === area.id);
+    const active = rows.filter(({ key }) => centralWorkEntry(workMap,key).quantity > 0).length;
+    return `<article class="central-kitchen-location-card is-readonly">
+      <span>${esc(centralWorkAreaLabel(area.id,language))}</span>
+      <strong>${rows.length}</strong>
+      <small>${language === "zh" ? `品項 · ${active} 使用中` : `mặt hàng · ${active} đang dùng`}</small>
+    </article>`;
+  }).join("")}</div>`;
+}
+
 function stockView(items, selectedZone, query, directAdjust = false, { inventoryView="storage", canManageCatalog=false, workMap={} } = {}) {
   const language = document.documentElement.lang === "vi" ? "vi" : "zh";
   const groups=centralProductGroups(items);
@@ -391,9 +470,20 @@ function stockView(items, selectedZone, query, directAdjust = false, { inventory
   }).join("");
   const filters=inventoryView==="storage"?`<div class="storage-tab-groups"><div class="storage-tab-group"><span class="storage-group-label">${language==="zh"?"主要儲位":"Kho dự trữ chính · 主要儲位"}</span><div class="zone-tabs"><button data-central-zone="all" class="filter-tab ${selectedZone==="all"?"selected":""}">${language==="zh"?"全部":"Tất cả · 全部"} <span>${items.length}</span></button>${centralZones().map((zone)=>`<button data-central-zone="${esc(zone)}" class="filter-tab ${selectedZone===zone?"selected":""}">${esc(centralZoneLabel(zone,language))} <span>${items.filter((item)=>item.zone===zone).length}</span></button>`).join("")}</div></div></div>`:"";
   const columns=inventoryView==="storage"?[language==="zh"?"品項":"Mặt hàng",language==="zh"?"工作區":"Khu làm việc",language==="zh"?"儲存位置":"Nơi cất",language==="zh"?"庫存數量":"Tồn kho",language==="zh"?"使用中":"Đang dùng",language==="zh"?"狀態":"Trạng thái"]:[language==="zh"?"品項":"Mặt hàng",language==="zh"?"工作區":"Khu làm việc",language==="zh"?"目前數量":"Hiện có",language==="zh"?"安全庫存":"Định mức",language==="zh"?"補貨來源":"Nguồn bổ sung",language==="zh"?"狀態":"Trạng thái"];
-  return `<div class="inventory-view-switch"><button class="inventory-view-button ${inventoryView==="storage"?"selected":""}" data-central-view="storage">▣ ${language==="zh"?"總備庫":"Kho tổng · 總備庫"}</button><button class="inventory-view-button ${inventoryView==="work"?"selected":""}" data-central-view="work">✓ ${language==="zh"?"工作區":"Khu làm việc · 工作區"}</button></div>${filters}<div class="filters-row"><p class="inventory-view-description">${inventoryView==="storage"?(language==="zh"?"依央廚儲位查看實際庫存。":"Xem tồn thực tế theo từng vị trí của Bếp trung tâm."):(language==="zh"?"查看已領至使用中的原物料。":"Xem nguyên liệu đã lấy ra khu sử dụng.")}</p>${centralSearchField(query,language)}</div><section class="inventory-table ${inventoryView==="storage"?"storage-table":"work-table"}"><div class="inventory-table-head">${columns.map((column)=>`<span>${esc(column)}</span>`).join("")}</div>${inventoryView==="storage"?(storageRows||`<p class="central-empty">${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p>`):(workRows||`<p class="central-empty">${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p>`)}<p class="central-empty" data-central-search-empty hidden>${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p></section>`;
+  const structureOverview = inventoryView === "storage"
+    ? centralStorageOverviewCards(items,selectedZone,language)
+    : centralWorkAreaOverviewCards(items,workMap,language);
+  return `<section class="central-kitchen-overview">
+    <div class="central-kitchen-overview-head">
+      <div class="inventory-view-switch"><button class="inventory-view-button ${inventoryView==="storage"?"selected":""}" data-central-view="storage">▣ ${language==="zh"?"儲位庫存":"Kho theo vị trí · 儲位庫存"}</button><button class="inventory-view-button ${inventoryView==="work"?"selected":""}" data-central-view="work">✓ ${language==="zh"?"工作區使用中":"Khu sử dụng · 工作區"}</button></div>
+      ${centralSearchField(query,language)}
+    </div>
+    ${structureOverview}
+    ${filters}
+    <p class="inventory-view-description">${inventoryView==="storage"?(language==="zh"?"依 Database 設定的央廚儲位查看實際庫存。":"Xem tồn thực tế theo các vị trí được cấu hình trong Database."):(language==="zh"?"依工作區查看已領出使用中的原物料。":"Xem nguyên liệu đang sử dụng theo khu làm việc từ Database.")}</p>
+    <section class="inventory-table ${inventoryView==="storage"?"storage-table":"work-table"}"><div class="inventory-table-head">${columns.map((column)=>`<span>${esc(column)}</span>`).join("")}</div>${inventoryView==="storage"?(storageRows||`<p class="central-empty">${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p>`):(workRows||`<p class="central-empty">${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p>`)}<p class="central-empty" data-central-search-empty hidden>${language==="zh"?"沒有符合條件的品項。":"Không có nguyên liệu phù hợp."}</p></section>
+  </section>`;
 }
-
 
 function centralProductKey(item) {
   const key = centralBaseKey(item);
@@ -438,7 +528,8 @@ function centralManageView(items, selectedZone, query, language, allowDelete = f
   const addLabel = language === "zh" ? "新增食材" : "Thêm nguyên liệu · 新增食材";
   const editLabel = language === "zh" ? "編輯" : "Sửa · 編輯";
   const deleteLabel = language === "zh" ? "刪除" : "Xóa · 刪除";
-  return `<section class="central-card central-manage-card">
+  return `<section class="central-card central-manage-card central-kitchen-manage">
+    <header class="central-kitchen-section-head"><div><span>MASTER DATA</span><h2>${language === "zh" ? "原物料與儲位設定" : "Nguyên liệu & cấu hình kho"}</h2><p>${language === "zh" ? "此頁只維護主資料與標準量；日常庫存流動請使用進貨、領貨、轉撥或出貨。" : "Mục này chỉ quản lý master data và định mức; luồng kho hằng ngày dùng Nhập/Lấy/Điều chuyển/Xuất."}</p></div></header>
     <div class="central-toolbar central-manage-toolbar">
       <div class="central-zone-tabs"><button data-central-zone="all" class="${selectedZone === "all" ? "active" : ""}">全部</button>${centralZones().map((zone) => `<button data-central-zone="${esc(zone)}" class="${selectedZone === zone ? "active" : ""}">${esc(centralZoneLabel(zone, language))}</button>`).join("")}</div>
       ${writable ? `<button class="primary-button" type="button" data-central-editor-open="new">＋ ${esc(addLabel)}</button>` : ""}
@@ -502,7 +593,7 @@ function historyView(log) {
     transfer:"庫存轉撥",
     adjust:"盤點調整",
   };
-  return `<section class="central-card"><div class="history-title"><div><h2>央廚庫存操作紀錄</h2><p>僅系統管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
+  return `<section class="central-card central-kitchen-history"><div class="history-title"><div><h2>央廚庫存操作紀錄</h2><p>僅系統管理員可查看。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
     const sign=x.direction==="in"?"+":x.direction==="use"||x.direction==="ship"?"−":"↔";
     const tone=x.direction==="in"?"history-in":x.direction==="use"||x.direction==="ship"?"history-out":"history-adjust";
     return `<article><div><strong>${esc(x.product)}</strong><small>${new Date(x.at).toLocaleString("zh-TW")} · ${esc(x.user)} · ${esc(actionLabel[x.direction]||x.direction||"")}</small></div><span>${esc(x.zone)}</span><strong class="${tone}">${sign}${x.amount} ${esc(x.unit)}</strong><small>${x.before} → ${x.after}</small></article>`;
@@ -510,7 +601,7 @@ function historyView(log) {
 }
 
 function cloudHistoryView(log) {
-  return `<section class="central-card"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>僅系統管理員可查看；資料來自目前主資料庫。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
+  return `<section class="central-card central-kitchen-history"><div class="history-title"><div><h2>央廚進出庫紀錄</h2><p>僅系統管理員可查看；資料來自目前主資料庫。</p></div><span>${log.length} 筆</span></div><div class="central-history">${log.map(x => {
     const direction = x.direction;
     const sign = direction === "out" ? "−" : direction === "in" ? "+" : "↔";
     const tone = direction === "out" ? "history-out" : direction === "in" ? "history-in" : "history-adjust";
@@ -933,7 +1024,7 @@ function applyAccess() {
       // The mutation observer also sees the DOM written by centralPage(). Do not
       // render it again here or async operation panels are replaced in a loop
       // before their controls finish loading.
-      if (!document.querySelector(".central-heading")) centralPage(user);
+      if (!document.querySelector("[data-central-kitchen-shell]")) centralPage(user);
     } else if ((user.role === "admin" || user.location === "all") && location.hash.startsWith("#inventory")) {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
@@ -972,7 +1063,8 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;
-  if (!location.hash.startsWith("#inventory") || !document.querySelector(".central-heading")) return;
+  if (!location.hash.startsWith("#inventory") || !document.querySelector("[data-central-kitchen-shell]")) return;
+  if (preserveInventoryEditor(document.querySelector('[data-central-editor-form]'))) return;
   const user = session();
   if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
 });

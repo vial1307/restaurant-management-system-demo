@@ -1351,3 +1351,17 @@ The separate read-cutover candidate:
 - No schema migration or production stock rewrite.
 - Next stage: redesign Central Kitchen (央廚) inventory UI on the database-declared model.
 
+## 2026-09-27 — Central Kitchen inventory UI redesign candidate
+
+- Branch: `redesign/central-kitchen-inventory-ui-20260927`.
+- Started from production-complete Stage 4 / main after docs merge `00c16a7bcc486ae67170bbea82be99c25898351c`.
+- Redesigned the Central Kitchen inventory shell while preserving verified VPS API/PostgreSQL mutation logic.
+- Header/site identity and structural KPIs are database-driven; the old mixed-unit total-quantity KPI was removed.
+- Added responsive Overview/入庫/領貨/轉撥/出貨/管理/紀錄 navigation with existing operation hooks intact.
+- Added database-generated storage/work-area overview cards.
+- Added dedicated late-loaded `src/central-kitchen-ui.css` to isolate the redesign from legacy Central/mobile override chains.
+- Canonical `index.html` and `vps-entry.html` remain in parity.
+- Added `tests/central-kitchen-ui-regression.mjs` and wired it into static preflight.
+- No schema migration, stock rewrite, permission change or transaction endpoint change.
+- Next: open PR, run exact-head static/API/PostgreSQL/browser/full-device regression, fix only redesign regressions, then deploy and verify production.
+

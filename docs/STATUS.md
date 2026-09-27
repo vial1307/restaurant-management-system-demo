@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Central Kitchen inventory UI redesign, 2026-09-27
+
+Branch: `redesign/central-kitchen-inventory-ui-20260927`.
+
+The verified database/API inventory authority is unchanged. This stage replaces the fragmented legacy 央廚 presentation with a dedicated responsive shell: database-derived site/storage/work-area summaries, function navigation, storage/work overview cards and separated master-data management. Daily operation controllers and PostgreSQL mutation paths remain unchanged.
+
+No schema migration or stock rewrite. Candidate remains unverified until exact-head regression + merge + production deploy/smoke pass.
+
+
 ## DONE — inventory UI master-data cutover, 2026-09-27
 
 - PR #150 merged as `b1447b727e310b7a3095f5782c0a933916ef6234`; Deploy #885 / run `36270568342` is verified in production.
