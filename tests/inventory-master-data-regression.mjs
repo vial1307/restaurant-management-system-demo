@@ -252,6 +252,8 @@ assert.match(productionAuditSource, /catalog_work_area_mismatch_with_central/,
   "production audit must report Central-to-branch work-area drift");
 assert.match(productionAuditSource, /detail_work_area_drift/,
   "production audit must print exact drift details");
+assert.match(productionAuditSource, /'work_area\|' \|\| split_part\(i\.item_key,':',1\)[\s\S]{0,220}'\|items\|' \|\| count\(\*\)/,
+  "production audit must report per-site work-area item counts for post-deploy verification");
 
 const dynamicSiteMigration = fs.readFileSync(new URL("../vps/database/migrations/017_dynamic_site_scope.sql", import.meta.url), "utf8");
 assert.match(dynamicSiteMigration, /drop constraint if exists inventory_locations_site_check/);
