@@ -350,6 +350,18 @@ async function roleDesktop(browser, username, checks) {
       assert.equal(await page.locator('[data-central-view="storage"].selected').count(),1,"priority drill-down must return to storage view");
       assert.equal(await page.locator(`[data-central-zone="${zone}"].selected`).count(),1,"priority drill-down must select its database storage location");
     }
+    const priorityReceive = page.locator("[data-central-priority-receive]").first();
+    if (await priorityReceive.count()) {
+      const itemKey = await priorityReceive.getAttribute("data-item-key");
+      const locationCode = await priorityReceive.getAttribute("data-location-code");
+      await priorityReceive.click();
+      await page.locator('[data-central-mode="in"].active').waitFor({state:"visible"});
+      const focusedCard = page.locator(`[data-op-item-key="${itemKey}"]`);
+      await focusedCard.waitFor({state:"visible"});
+      assert.equal(await page.locator("[data-op-item]:visible").count(),1,"priority receive shortcut must focus the exact database item");
+      assert.equal(await focusedCard.locator('[data-op-destination] option:checked').getAttribute("data-code"),locationCode,"priority receive shortcut must preselect the shortage storage location");
+      await page.locator("[data-op-search]").fill("");
+    }
     assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation navigation must preserve shared operation-tab behavior");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
     assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
