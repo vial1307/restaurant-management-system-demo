@@ -34,15 +34,42 @@ function normalizedWorkArea(row) {
   };
 }
 
-function assertMasterSnapshotReady(site, locations) {
+function assertMasterSnapshotReady(site, locations, workAreas) {
   const mode = String(site?.metadata?.inventory_mode || "");
   if (!site?.code || !["central","branch"].includes(mode)) {
     throw new Error("INVENTORY_MASTER_DATA_NOT_READY");
   }
-  const invalidLocation = locations.find((location) =>
-    location.active !== false && !String(location.metadata?.ui_key || "").trim()
+
+  const activeLocations = locations.filter((location) => location.active !== false);
+  const activeWorkAreas = workAreas.filter((area) => area.active !== false);
+  const workAreaCodes = new Set(activeWorkAreas.map((area) => area.code));
+
+  const invalidUiKey = activeLocations.find((location) =>
+    !String(location.metadata?.ui_key || "").trim()
   );
-  if (invalidLocation) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+  if (invalidUiKey) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+
+  const invalidStorage = activeLocations.find((location) =>
+    location.kind === "storage"
+    && !["primary","service"].includes(String(location.metadata?.storage_group || "").trim())
+  );
+  if (invalidStorage) throw new Error("INVENTORY_STORAGE_GROUP_INVALID");
+
+  const invalidWorkLocation = activeLocations.find((location) => {
+    if (location.kind !== "work") return false;
+    const area = String(location.metadata?.work_area || "").trim();
+    return !area || !workAreaCodes.has(area);
+  });
+  if (invalidWorkLocation) throw new Error("INVENTORY_WORK_LOCATION_AREA_INVALID");
+
+  if (!activeWorkAreas.length) throw new Error("INVENTORY_WORK_AREA_REQUIRED");
+  for (const area of activeWorkAreas) {
+    const matches = activeLocations.filter((location) =>
+      location.kind === "work"
+      && String(location.metadata?.work_area || "").trim() === area.code
+    );
+    if (matches.length !== 1) throw new Error("INVENTORY_WORK_AREA_LOCATION_PARITY_REQUIRED");
+  }
 }
 
 export function replaceInventorySites(rows = []) {
@@ -100,7 +127,7 @@ export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
   const workAreas = (Array.isArray(snapshot.workAreas) ? snapshot.workAreas : [])
     .map(normalizedWorkArea)
     .filter(Boolean);
-  assertMasterSnapshotReady(site, locations);
+  assertMasterSnapshotReady(site, locations, workAreas);
   sites.set(code, site);
   const next = { site, locations, workAreas };
   snapshots.set(code, next);
