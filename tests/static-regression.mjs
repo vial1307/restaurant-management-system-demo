@@ -140,10 +140,12 @@ for (const marker of [
   'class="inventory-view-switch"',
   'data-central-view="storage"',
   'data-central-view="work"',
-  'data-central-mode="manage"',
 ]) assert(authLayer.includes(marker), `central inventory missing shared branch UI marker: ${marker}`);
-for (const mode of ["in", "pick", "transfer", "ship"]) {
-  assert(authLayer.includes(`data-central-mode="${mode}"`), `central inventory missing ${mode} operation`);
+for (const mode of ["overview", "in", "pick", "transfer", "ship", "manage", "history"]) {
+  assert(
+    authLayer.includes(`id:"${mode}"`) || authLayer.includes(`data-central-mode="${mode}"`),
+    `central inventory missing ${mode} mode`,
+  );
 }
 assert(app.includes('data-manage-adjust="true"'), "branch management must expose quantity controls");
 assert(authLayer.includes('data-central-manage-adjust="true"'), "central management must expose quantity controls");
