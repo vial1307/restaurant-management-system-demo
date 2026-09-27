@@ -1514,3 +1514,24 @@ The separate read-cutover candidate:
 - Do not change stock quantities during diagnosis. Preserve PostgreSQL authority, site isolation and audit trail.
 - Baseline production release: `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`, schema `026`; main head at task capture: `c7477cdb437e00378b63d87c5143f95db6bf251f`.
 
+
+
+## 2026-09-28 — Schema 027 branch catalog + Work Area projection production closure
+
+- User reported a severe branch UI mismatch: Storage showed many more products than 工作區.
+- Diagnosis proved Website `workInventory` was derived only from existing `kind='work'` stock rows; products present only in storage were therefore invisible in Work Area despite valid PostgreSQL `work_area`.
+- PR #167 introduced migration 027, branch catalog materialization, automatic Work Location projection, Super Admin integrity diagnostics, unique-product storage counting, and a minimum-input layout fix exposed by the larger catalog.
+- Existing stock quantity/minimum was preserved; only missing catalog/location rows were added.
+- Exact PR CI passed after correcting legacy regression assumptions and one UI geometry issue.
+- Merge commit: `7ae8d3fcbff9ceb9e3ddb1171985728a01b9b0c7`.
+- Main Deploy #981 initially hit one flaky cross-surface browser timeout on Yongji; the failed regression job was rerun and passed, after which deploy + production UI smoke succeeded.
+- Post-deploy Inventory Site Production Audit #252 / run `36345117340` passed on schema 027:
+  - Central items 41, quantity 81;
+  - Fuxing items 78, quantity 1807;
+  - Yongji items 75, quantity 17;
+  - Fuxing Work Area counts 30 noodles / 18 soup / 21 seafood / 9 meat;
+  - Yongji Work Area counts 33 noodles / 17 soup / 17 seafood / 8 meat;
+  - `active_branch_item_without_work_row=0`;
+  - both branch legacy manifests expected 75, missing 0;
+  - inventory site, classification, legacy materialization and hidden-inventory violations all 0.
+- Super Admin direct Database round-trip and browser regression passed; realtime invalidation remains PostgreSQL/VPS-backed.
