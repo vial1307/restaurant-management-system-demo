@@ -1089,63 +1089,6 @@ export async function cloudRelocateWorkArea({
   }
 }
 
-export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
-  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
-  const site = "fuxing";
-  const rows = await fetchSite(site);
-  const { record } = selectedBranchRecord();
-  if (!record) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-
-  const local = new Map();
-  for (const entry of record.inventory || []) {
-    const stockKey = entry.stockKey || stockKeyFor(entry);
-    const code = branchLocationCode(site,entry.zone);
-    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
-  }
-  for (const entry of record.workInventory || []) {
-    const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
-    const code = branchWorkLocationCode(site,entry.workArea);
-    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
-  }
-
-  const changes = [];
-  for (const row of rows) {
-    const key = `${row.item.item_key}|${row.location.code}`;
-    if (!local.has(key)) continue;
-    const target = local.get(key);
-    const current = Number(row.quantity) || 0;
-    if (target === current) continue;
-    changes.push({
-      itemId: row.item.id,
-      locationId: row.location.id,
-      direction: target > current ? "in" : "out",
-      amount: Math.abs(target - current),
-    });
-  }
-
-  if (!changes.length) return { ok: true, changed: 0 };
-
-  for (const change of changes) {
-    try {
-      await vpsAdjustInventory({
-        itemId: change.itemId,
-        locationId: change.locationId,
-        direction: change.direction,
-        amount: change.amount,
-        note,
-      });
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
-      await syncInventoryNow(site, { reloadBranch: false });
-      return { ok: false, fallback: false, error };
-    }
-  }
-
-  await syncInventoryNow(site, { reloadBranch: false });
-  return { ok: true, changed: changes.length };
-}
-
 export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true, draft = null } = {}) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
@@ -1223,14 +1166,6 @@ export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   }
 }
 
-export function cloudSyncFuxingCatalogItem(stockKey) {
-  return cloudSyncBranchCatalogItem(stockKey,"fuxing");
-}
-
-export function cloudArchiveFuxingItem(stockKey) {
-  return cloudArchiveBranchItem(stockKey,"fuxing");
-}
-
 export function branchLocationCode(site, zone) {
   return inventoryLocationByUiKey(site,zone,"storage")?.code || "";
 }
@@ -1243,20 +1178,8 @@ export function branchItemKey(site, stockKey) {
   return site && stockKey ? `${site}:${stockKey}` : "";
 }
 
-export function fuxingLocationCode(zone) {
-  return branchLocationCode("fuxing",zone);
-}
-
-export function fuxingWorkLocationCode(area) {
-  return branchWorkLocationCode("fuxing",area);
-}
-
 export function centralLocationCode(zone) {
   return inventoryLocationByUiKey("central",zone,"storage")?.code || "";
-}
-
-export function fuxingItemKey(stockKey) {
-  return branchItemKey("fuxing",stockKey);
 }
 
 export function centralItemKey(id) {
