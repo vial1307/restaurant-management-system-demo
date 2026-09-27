@@ -224,6 +224,17 @@ declare
 begin
   new.metadata := coalesce(new.metadata,'{}'::jsonb);
 
+  if tg_op='UPDATE'
+     and old.kind='work'
+     and coalesce(old.metadata->>'managed_by_work_area','false')='true' then
+    if new.kind<>'work' then
+      raise exception 'WORK_LOCATION_KIND_MANAGED_BY_WORK_AREA';
+    end if;
+    if coalesce(new.metadata->>'work_area','')<>coalesce(old.metadata->>'work_area','') then
+      raise exception 'WORK_LOCATION_AREA_MANAGED_BY_WORK_AREA';
+    end if;
+  end if;
+
   if new.kind='storage' then
     group_code := coalesce(nullif(btrim(new.metadata->>'storage_group'),''),'service');
     if group_code not in ('primary','service') then
@@ -261,6 +272,10 @@ begin
 
   if not found then
     raise exception 'WORK_LOCATION_AREA_NOT_FOUND';
+  end if;
+
+  if new.active<>area_row.active then
+    raise exception 'WORK_LOCATION_ACTIVE_MANAGED_BY_WORK_AREA';
   end if;
 
   new.name_vi := area_row.name_vi;
