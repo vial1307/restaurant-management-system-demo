@@ -24,7 +24,7 @@ assert.match(auth, /centralWorkAreas\(\)\.map\(\(area\) =>[\s\S]{0,700}centralWo
   "Central work-area overview cards must be generated from database-declared work areas");
 assert.match(auth, /function centralPriorityPanel\(items, language, operationsEnabled\)[\s\S]{0,900}Number\(item\.qty \|\| 0\) < Number\(item\.minimum \|\| 0\)/,
   "Central priority panel must derive low-stock work from database quantities/minimums");
-assert.match(auth, /data-central-priority-zone=[^\n]+centralZoneLabel\(item\.zone,language\)/,
+assert.match(auth, /data-central-priority-zone[\s\S]{0,420}centralZoneLabel\(item\.zone,language\)/,
   "Central priority rows must use database-declared location labels");
 assert.match(auth, /data-central-priority-zone[\s\S]{0,900}centralInventoryView = "storage"[\s\S]{0,260}centralZone = button\.dataset\.centralPriorityZone/,
   "Central priority rows must drill into the selected database storage location");
