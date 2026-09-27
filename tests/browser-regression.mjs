@@ -276,11 +276,17 @@ async function adminDesktop(browser) {
   await centralSearch.fill("");
   await page.waitForTimeout(50);
   assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"clearing central search did not restore all rows");
-  const freezerTab=page.locator('[data-central-zone="央廚冷凍"]').first();
-  await freezerTab.click();
+  const zoneTabs=page.locator('[data-central-zone]:not([data-central-zone="all"])');
+  const zoneKey=await zoneTabs.evaluateAll((nodes)=>{
+    const match=nodes.find((node)=>Number(node.querySelector("span")?.textContent||0)>0);
+    return match?.dataset.centralZone||"";
+  });
+  assert(zoneKey,"central inventory fixture has no database storage location with stock");
+  await page.locator(`[data-central-zone="${zoneKey}"]`).first().click();
   const zonedRows=page.locator(".central-row:visible");
   assert((await zonedRows.count()) > 0,"central zone filter returned no rows");
-  for(let i=0;i<await zonedRows.count();i++) assert.match(await zonedRows.nth(i).innerText(),/央廚冷凍/);
+  assert.equal(await page.locator(".inventory-group:visible").count(),1,"central zone filter must isolate one database storage group");
+  assert((await page.locator(".inventory-group:visible .inventory-group-heading strong").innerText()).trim().length>0,"central filtered storage label missing");
   await page.locator('[data-central-zone="all"]').first().click();
   assert.equal(await page.locator(".central-row:visible").count(),centralBefore,"central all-zone filter did not restore rows");
 
