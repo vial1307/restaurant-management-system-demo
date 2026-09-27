@@ -21,7 +21,7 @@ replaceInventoryMasterSnapshot("branch-a", {
   locations:[
     { code:"branch-a-freezer", site:"branch-a", kind:"storage", sort_order:10, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
     { code:"branch-a-kitchen", site:"branch-a", kind:"storage", sort_order:20, name_zh_tw:"廚房冰箱", name_vi:"Tủ bếp", metadata:{ ui_key:"kitchen", storage_group:"service" } },
-    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", sort_order:30, name_zh_tw:"麵台使用中", name_vi:"Khu mì đang dùng", metadata:{ ui_key:"noodles", work_area:"noodles" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles" } },
   ],
   workAreas:[
     { code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true },
