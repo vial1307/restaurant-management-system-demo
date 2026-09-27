@@ -45,8 +45,12 @@ function assertMasterSnapshotReady(site, locations, workAreas) {
     !String(location.metadata?.ui_key || "").trim()
   );
   if (invalidLocation) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+  if (!activeLocations.some((location) => location.kind === "storage")) {
+    throw new Error("INVENTORY_STORAGE_LOCATION_REQUIRED");
+  }
 
   const activeAreas = workAreas.filter((area) => area.active !== false);
+  if (!activeAreas.length) throw new Error("INVENTORY_WORK_AREAS_REQUIRED");
   const areaCodes = new Set(activeAreas.map((area) => String(area.code || "").trim()).filter(Boolean));
   const workLocations = activeLocations.filter((location) => location.kind === "work");
 
