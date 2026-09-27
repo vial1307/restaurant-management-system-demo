@@ -132,13 +132,14 @@ export function stockKeyFor(item) {
 function normalizeStorageLocations(item) {
   const requested = Array.isArray(item.locations) && item.locations.length
     ? item.locations
-    : [{ zone: item.zone || "kitchen", quantity: item.quantity, minimum: item.minimum }];
+    : [{ zone: item.zone || "", quantity: item.quantity, minimum: item.minimum }];
   const locations = new Map();
 
   for (const location of requested) {
-    if (!ZONES.some((zone) => zone.id === location.zone)) continue;
-    locations.set(location.zone, {
-      zone: location.zone,
+    const zone = String(location.zone || "").trim();
+    if (!zone) continue;
+    locations.set(zone, {
+      zone,
       quantity: clampNumber(location.quantity),
       minimum: clampNumber(location.minimum, 1),
     });
@@ -153,8 +154,7 @@ export function buildWorkInventory(inventory) {
   for (const item of inventory) {
     if (item.storageOnly) continue;
     const stockKey = stockKeyFor(item);
-    const previous = grouped.get(stockKey);
-    if (!previous || item.zone === "kitchen") grouped.set(stockKey, item);
+    if (!grouped.has(stockKey)) grouped.set(stockKey, item);
   }
 
   return [...grouped.entries()].map(([stockKey, item]) => ({
