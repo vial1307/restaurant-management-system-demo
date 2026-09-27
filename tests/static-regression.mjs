@@ -135,8 +135,8 @@ assert.match(retirementWorker, /caches\.delete/, "retirement worker must delete 
 assert.match(app, /route\(\) === "dashboard" && !accountCan\("dashboard", "edit"\)/, "dashboard task edits must enforce dashboard edit permission");
 
 const authLayer = read("src/auth-layer.js");
+assert.match(authLayer, /class="central-tabs branch-ops-tabs[^"]*"/, "central inventory must preserve shared branch operation tab classes");
 for (const marker of [
-  'class="central-tabs branch-ops-tabs"',
   'class="inventory-view-switch"',
   'data-central-view="storage"',
   'data-central-view="work"',
@@ -150,6 +150,7 @@ assert(authLayer.includes('data-central-manage-adjust="true"'), "central managem
 assert.match(authLayer, /function centralPage[\s\S]{0,900}const historical = false;/, "central inventory must remain live across service dates");
 assert.doesNotMatch(authLayer, /function centralPage[\s\S]{0,900}const historical = !isCurrentBranchInventoryDate\(\)/, "central inventory must not inherit the branch historical-date lock");
 assert.match(authLayer, /const operationsEnabled = editGranted && cloudReady;/, "central operation tabs must stay available whenever permission and VPS are ready");
+assert.match(authLayer, /if \(!document\.querySelector\("\[data-central-kitchen-shell\]"\)\) centralPage\(user\);/, "Central auth observer must detect the redesigned shell and avoid rerender loops");
 assert.match(authLayer, /const canManageCatalog = catalogManageVisible && canManageCentralCatalog\(\);/, "central management must not be locked by service date");
 assert(app.includes("data-save-item"), "branch product editor must expose an explicit save button");
 assert(authLayer.includes("data-central-save-item"), "central product editor must expose an explicit save button");
