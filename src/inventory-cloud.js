@@ -629,18 +629,6 @@ export async function refreshInventoryCloudState() {
   return verifyMigration({ force: true });
 }
 
-export async function bootstrapFuxingInventory() {
-  return isVpsApiConfigured();
-}
-
-export async function bootstrapYongjiInventory() {
-  return isVpsApiConfigured();
-}
-
-export async function bootstrapCentralInventory() {
-  return isVpsApiConfigured();
-}
-
 async function fetchSite(site, { force = false } = {}) {
   if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
 
