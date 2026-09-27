@@ -60,6 +60,7 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
       code: row.location.code,
       zh: row.location.name_zh_tw,
       vi: row.location.name_vi,
+      workArea:String(row.location.metadata?.work_area || "").trim(),
       quantity,
       minimum: Number(row.minimum_quantity) || 0,
     };
