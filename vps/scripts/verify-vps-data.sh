@@ -90,9 +90,12 @@ warn_nonzero() {
 
 check_positive "active inventory items exist" "select count(*) from public.inventory_items where active=true"
 check_positive "inventory stock rows exist" "select count(*) from public.inventory_stock"
-check_positive "Fuxing locations exist" "select count(*) from public.inventory_locations where site='fuxing' and active=true"
-check_positive "Yongji locations exist" "select count(*) from public.inventory_locations where site='yongji' and active=true"
-check_positive "Central locations exist" "select count(*) from public.inventory_locations where site='central' and active=true"
+check_positive "active inventory sites exist" "
+  select count(*)
+  from public.sites
+  where active=true
+    and coalesce(metadata->>'inventory_mode','') in ('central','branch')
+"
 check_positive "operational work areas exist" "select count(*) from public.work_areas where active=true"
 
 check_zero "active inventory sites without storage locations" "
@@ -152,7 +155,12 @@ check_zero "active inventory items missing active work-area master data" "
   select count(*)
   from public.inventory_items i
   where i.active=true
-    and split_part(i.item_key,':',1) in ('central','fuxing','yongji')
+    and exists (
+      select 1 from public.sites site
+      where site.code=split_part(i.item_key,':',1)
+        and site.active=true
+        and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+    )
     and not exists (
       select 1 from public.work_areas w
       where w.site_code=split_part(i.item_key,':',1)
@@ -249,7 +257,12 @@ check_zero "active catalog rows missing required fields" "
     and (trim(item_key)='' or trim(catalog_key)='' or trim(name_zh_tw)='' or trim(name_vi)='' or trim(unit)='')
 "
 check_zero "business state rows outside known sites" "
-  select count(*) from public.business_state where site not in ('central','fuxing','yongji')
+  select count(*)
+  from public.business_state state
+  where not exists (
+    select 1 from public.sites site
+    where site.code=state.site and site.active=true
+  )
 "
 check_zero "business state module revision maps invalid" "
   select count(*) from public.business_state
