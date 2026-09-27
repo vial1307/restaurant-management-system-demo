@@ -15,7 +15,18 @@ for(const site of ["central","fuxing","yongji"]) {
   const area={action:"save",site,code:suffix,name_vi:`Khu ${site}`,name_zh_tw:`${site}工作區`,sort_order:90,active:true,metadata:{test:suffix},createOnly:true};
   const createdArea=(await post("/api/master-data/work-areas",area)).workArea;
   assert.equal((await post("/api/master-data/work-areas",area,409)).error,"MASTER_DATA_ALREADY_EXISTS");
+  let areaMaster=await get(`/api/master-data/${site}?includeInactive=true`);
+  let autoWorkLocation=areaMaster.locations.find((l)=>l.active&&l.kind==="work"&&l.metadata?.work_area===area.code);
+  assert(autoWorkLocation,`${site} work area did not create its work location`);
+  assert.equal(autoWorkLocation.metadata?.ui_key,area.code);
+  assert.equal(autoWorkLocation.name_vi,area.name_vi);
+  assert.equal((await post("/api/master-data/locations",{action:"archive",site,id:autoWorkLocation.id},409)).error,"WORK_LOCATION_MANAGED_BY_WORK_AREA");
+  assert.equal((await post("/api/master-data/locations",{action:"save",site,id:autoWorkLocation.id,code:autoWorkLocation.code,name_vi:"Không được sửa",name_zh_tw:"不可直接修改",kind:"work",sort_order:999,active:true,metadata:autoWorkLocation.metadata},409)).error,"WORK_LOCATION_MANAGED_BY_WORK_AREA");
   const updatedArea=(await post("/api/master-data/work-areas",{...area,createOnly:false,expectedUpdatedAt:createdArea.updated_at,name_vi:`Khu riêng ${site}`})).workArea;
+  areaMaster=await get(`/api/master-data/${site}?includeInactive=true`);
+  autoWorkLocation=areaMaster.locations.find((l)=>l.active&&l.kind==="work"&&l.metadata?.work_area===area.code);
+  assert.equal(autoWorkLocation.name_vi,`Khu riêng ${site}`);
+  assert.equal(autoWorkLocation.sort_order,updatedArea.sort_order);
   assert.equal((await post("/api/master-data/work-areas",{...area,createOnly:false,expectedUpdatedAt:createdArea.updated_at},409)).error,"MASTER_DATA_STALE");
   const location={action:"save",site,code:`${site}-${suffix}`,name_vi:`Tủ ${site}`,name_zh_tw:`${site}冰箱`,kind:"storage",sort_order:90,active:true,metadata:{ui_key:suffix,storage_group:"service",test:suffix}};
   const savedLocation=(await post("/api/master-data/locations",location)).location;
@@ -71,6 +82,9 @@ for(const site of ["central","fuxing","yongji"]) {
   await post("/api/master-data/locations",{action:"archive",site,id:savedLocation.id,expectedUpdatedAt:renamedLocation.updated_at});
   await post("/api/master-data/locations",{action:"archive",site,id:spare.id});
   await post("/api/master-data/work-areas",{action:"archive",site,code:area.code,expectedUpdatedAt:updatedArea.updated_at});
+  areaMaster=await get(`/api/master-data/${site}?includeInactive=true`);
+  assert.equal(areaMaster.workAreas.find((a)=>a.code===area.code)?.active,false);
+  assert.equal(areaMaster.locations.find((l)=>l.id===autoWorkLocation.id)?.active,false);
   console.log("ADMIN_INVENTORY_DATABASE_SITE_OK",site);
 }
 await request("/api/admin/super/data/inventory-products",{cookie:restricted,status:403});
