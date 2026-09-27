@@ -1456,3 +1456,14 @@ The separate read-cutover candidate:
 - Central UI now separates primary/service storage and shows real database Work Area names; Fuxing/Yongji use the same explicit classification contract.
 - Structural inventory hard-code cleanup is complete for storage/work-area identity. Remaining hard-code audit should focus on separate business domains such as procurement rules/copy, not reintroduce inventory location lists.
 
+## 2026-09-28 — Branch work-area classification normalization
+
+- User reported Fuxing/Yongji Work Area counts still heavily skewed while Central was already correct.
+- Root cause: schema 025 guarantees Work Location ↔ item work_area consistency but does not make same-catalog operational work_area equal across sites; legacy branch work_area values therefore remained valid but semantically wrong.
+- Added migration 026 using Central catalog identity as canonical only for shared catalog keys; branch-only items remain site-owned.
+- Migration moves work stock to the corrected synchronized Work Location, preserves total quantity, preserves the larger minimum and writes system audit logs.
+- Added Super Admin cross-site work-area drift diagnostics and production audit enforcement.
+- Added real PostgreSQL regression for mismatched branch item + stock relocation.
+- No item-name inference and no hard-coded Fuxing/Yongji item mapping.
+- Next: exact-head CI, then deploy and confirm Fuxing/Yongji counts after migration/audit.
+

@@ -1,5 +1,27 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — Fuxing/Yongji catalog work-area normalization, 2026-09-28
+
+Branch: `fix/branch-workarea-catalog-sync-20260928`.
+
+Observed production symptom: branch Work Area counts can be internally consistent with Work Locations but operationally wrong (for example most items classified as 麵區) because migration 025 intentionally preserves each `inventory_items.work_area`. Central is already classified correctly.
+
+This candidate:
+- adds schema migration 026 to use the active Central item with the same `catalog_key` as the canonical work-area source for branch items;
+- targets every database-declared `inventory_mode=branch` site, not hard-coded Fuxing/Yongji lists;
+- refuses partial synchronization if the target branch Work Area / synchronized Work Location does not exist;
+- moves existing branch work stock to the corrected Work Location in one transaction, preserving total quantity and the larger minimum;
+- writes one audit log per corrected item;
+- verifies no Central/branch catalog work-area mismatch and no work-stock/location mismatch remains;
+- extends Super Admin catalog audit and Database Integrity with a dedicated cross-site work-area drift section;
+- extends the production inventory audit so future drift is visible and blocks a deployment audit;
+- adds a PostgreSQL regression that intentionally creates a wrong branch classification, reruns migration 026, and proves item area, stock location, quantity, minimum and audit log are correct.
+
+No label/name heuristic is used. Branch-only catalog identities remain site-owned. No frontend inventory quantity logic is changed.
+
+Candidate is not production-complete until Database Schema, Deploy preflight/full regression, Super Admin Browser and production deploy/audit pass.
+
+
 ## Completed release — unified storage/work-area model for Central, Fuxing and Yongji, 2026-09-27
 
 PR #159 merged into `main` as `fb7c27cc64963c238ff2b86b999dac2f818f3507` and is verified in production through Deploy Kitchen OS to VPS #948 / run `36329813136`.

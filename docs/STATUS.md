@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Fuxing/Yongji work-area catalog normalization, 2026-09-28
+
+Branch: `fix/branch-workarea-catalog-sync-20260928`.
+
+Migration 026 normalizes branch `inventory_items.work_area` from the matching active Central `catalog_key`, relocates work stock transactionally without changing quantity, and audits each correction. Super Admin Integrity and the production inventory audit now expose Central-to-branch work-area drift explicitly.
+
+No heuristic classification, no frontend quantity rewrite, no site-name hard-code. Status remains candidate until exact-head CI + production deploy/audit pass.
+
+
 ## DONE — unified inventory location/work-area classification, 2026-09-27
 
 - PR #159 merged as `fb7c27cc64963c238ff2b86b999dac2f818f3507`; Deploy #948 / run `36329813136` is verified in production.

@@ -219,6 +219,42 @@ assert.match(classificationMigration, /WORK_STOCK_AREA_MISMATCH/);
 assert.match(classificationMigration, /central-work-use/);
 assert.match(classificationMigration, /target\.metadata->>'work_area'=i\.work_area/);
 
+const branchWorkAreaSyncMigration = fs.readFileSync(new URL("../vps/database/migrations/026_branch_catalog_workarea_sync.sql", import.meta.url), "utf8");
+assert.match(branchWorkAreaSyncMigration, /inventory_mode',''\)='central'/,
+  "branch work-area normalization must derive its canonical source from database site metadata");
+assert.match(branchWorkAreaSyncMigration, /inventory_mode',''\)='branch'/,
+  "branch work-area normalization must discover branches from database site metadata");
+assert.match(branchWorkAreaSyncMigration, /join central_catalog c using\(catalog_key\)/,
+  "same catalog identity must drive Central-to-branch work-area normalization");
+assert.match(branchWorkAreaSyncMigration, /public\.inventory_stock[\s\S]{0,900}target_location_id/,
+  "work-area normalization must move existing branch work stock to the target database location");
+assert.match(branchWorkAreaSyncMigration, /BRANCH_WORK_AREA_SYNC_QUANTITY_CHANGED/,
+  "migration must prove work quantity is unchanged");
+assert.match(branchWorkAreaSyncMigration, /system_inventory_catalog_work_area_sync/,
+  "migration must audit each corrected item");
+assert.match(branchWorkAreaSyncMigration, /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
+  "migration must stop if Central/branch classification remains divergent");
+
+const superAdminRoutesSource = fs.readFileSync(new URL("../vps/backend/src/super-admin-routes.mjs", import.meta.url), "utf8");
+assert.match(superAdminRoutesSource, /workAreaMismatchesWithCentral/,
+  "Super Admin catalog audit must expose Central-to-branch work-area drift");
+assert.match(superAdminRoutesSource, /centralWorkArea/,
+  "cross-site work-area audit must include the canonical Central area");
+
+const inventoryDatabaseSource = fs.readFileSync(new URL("../src/admin-inventory-database.js", import.meta.url), "utf8");
+assert.match(inventoryDatabaseSource, /crossSiteWorkArea/,
+  "Super Admin Database integrity view must show cross-site work-area drift");
+assert.match(inventoryDatabaseSource, /\/api\/admin\/super\/inventory-catalog-audit/,
+  "Super Admin Database integrity view must load the cross-site catalog audit");
+
+const productionAuditSource = fs.readFileSync(new URL("../.github/workflows/inventory-site-production-audit.yml", import.meta.url), "utf8");
+assert.match(productionAuditSource, /catalog_work_area_mismatch_with_central/,
+  "production audit must report Central-to-branch work-area drift");
+assert.match(productionAuditSource, /detail_work_area_drift/,
+  "production audit must print exact drift details");
+assert.match(productionAuditSource, /'work_area\|' \|\| split_part\(i\.item_key,':',1\)[\s\S]{0,220}'\|items\|' \|\| count\(\*\)/,
+  "production audit must report per-site work-area item counts for post-deploy verification");
+
 const dynamicSiteMigration = fs.readFileSync(new URL("../vps/database/migrations/017_dynamic_site_scope.sql", import.meta.url), "utf8");
 assert.match(dynamicSiteMigration, /drop constraint if exists inventory_locations_site_check/);
 assert.match(dynamicSiteMigration, /drop constraint if exists inventory_receive_defaults_site_check/);

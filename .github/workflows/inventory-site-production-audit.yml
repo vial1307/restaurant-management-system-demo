@@ -65,6 +65,18 @@ jobs:
           group by l.site
           order by l.site;
 
+          select 'work_area|' || split_part(i.item_key,':',1)
+                 || '|' || i.work_area
+                 || '|items|' || count(*)
+          from public.inventory_items i
+          join public.sites st
+            on st.code=split_part(i.item_key,':',1)
+           and st.active=true
+           and coalesce(st.metadata->>'inventory_mode','') in ('central','branch')
+          where i.active=true
+          group by split_part(i.item_key,':',1),i.work_area
+          order by split_part(i.item_key,':',1),i.work_area;
+
           select 'stock_site_mismatch|' || count(*)
           from public.inventory_stock s
           join public.inventory_items i on i.id=s.item_id
@@ -203,6 +215,52 @@ jobs:
             and l.kind='work'
             and l.metadata->>'work_area'<>i.work_area;
 
+          with central_catalog as (
+            select i.catalog_key,min(i.work_area) as work_area
+            from public.inventory_items i
+            join public.sites st
+              on st.code=split_part(i.item_key,':',1)
+             and st.active=true
+             and coalesce(st.metadata->>'inventory_mode','')='central'
+            where i.active=true
+            group by i.catalog_key
+            having count(distinct i.work_area)=1
+          )
+          select 'catalog_work_area_mismatch_with_central|' || count(*)
+          from public.inventory_items i
+          join public.sites st
+            on st.code=split_part(i.item_key,':',1)
+           and st.active=true
+           and coalesce(st.metadata->>'inventory_mode','')='branch'
+          join central_catalog c using(catalog_key)
+          where i.active=true
+            and i.work_area is distinct from c.work_area;
+
+          with central_catalog as (
+            select i.catalog_key,min(i.work_area) as work_area
+            from public.inventory_items i
+            join public.sites st
+              on st.code=split_part(i.item_key,':',1)
+             and st.active=true
+             and coalesce(st.metadata->>'inventory_mode','')='central'
+            where i.active=true
+            group by i.catalog_key
+            having count(distinct i.work_area)=1
+          )
+          select 'detail_work_area_drift|' || split_part(i.item_key,':',1)
+                 || '|' || i.catalog_key
+                 || '|branch|' || i.work_area
+                 || '|central|' || c.work_area
+          from public.inventory_items i
+          join public.sites st
+            on st.code=split_part(i.item_key,':',1)
+           and st.active=true
+           and coalesce(st.metadata->>'inventory_mode','')='branch'
+          join central_catalog c using(catalog_key)
+          where i.active=true
+            and i.work_area is distinct from c.work_area
+          order by split_part(i.item_key,':',1),i.catalog_key;
+
           select 'detail_duplicate_catalog|' ||
                  split_part(item_key,':',1) || '|' || catalog_key || '|count|' || count(*)
           from public.inventory_items
@@ -292,7 +350,27 @@ jobs:
              join public.inventory_locations l on l.id=s.location_id
              where l.active=true
                and l.kind='work'
-               and l.metadata->>'work_area'<>i.work_area);
+               and l.metadata->>'work_area'<>i.work_area)
+            +
+            (select count(*)
+             from public.inventory_items i
+             join public.sites st
+               on st.code=split_part(i.item_key,':',1)
+              and st.active=true
+              and coalesce(st.metadata->>'inventory_mode','')='branch'
+             join (
+               select ci.catalog_key,min(ci.work_area) as work_area
+               from public.inventory_items ci
+               join public.sites cs
+                 on cs.code=split_part(ci.item_key,':',1)
+                and cs.active=true
+                and coalesce(cs.metadata->>'inventory_mode','')='central'
+               where ci.active=true
+               group by ci.catalog_key
+               having count(distinct ci.work_area)=1
+             ) central_catalog using(catalog_key)
+             where i.active=true
+               and i.work_area is distinct from central_catalog.work_area);
           SQL
           )"
           echo "inventory_location_classification_violations=${result}"
