@@ -1,20 +1,25 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — Central priority receive shortcut, 2026-09-27
+## Completed release — Central priority receive shortcut, 2026-09-27
 
-Branch: `feat/central-priority-receive-shortcut-20260927`.
+PR #156 merged into `main` as `07d42a30eab8932507c3ccdd54f92f6a8f69a853` and is verified in production through Deploy Kitchen OS to VPS #903 / run `36301227833`.
 
-Goal: reduce Central daily receiving friction without changing PostgreSQL authority. Each low-stock row in `待處理 / Cần xử lý` can jump directly into `進貨入庫` focused on the exact database item and shortage location.
+This release reduces Central receiving friction while keeping PostgreSQL/VPS API as the only inventory authority:
+- every low-stock row in `待處理 / Cần xử lý` keeps the existing storage drill-down and, for authorized operators, adds a per-row `進貨` shortcut;
+- the shortcut carries the stable database item key plus the exact shortage location code into the shared inventory operation controller;
+- the operation controller can start focused on one exact item and preselect the matching database-declared destination location;
+- destination options now expose their database location code for precise UI reconciliation;
+- editing the operation search clears the deep-link focus and returns to the normal generic search behavior;
+- desktop/mobile priority layout was adjusted without adding fixed business master data.
 
-Implemented:
-- priority rows remain database-derived from quantity/minimum and storage master data;
-- authorized users get a per-row 進貨 shortcut carrying the item's stable database key and location code;
-- the shared inventory operation controller accepts optional initial item/location focus, filters to the exact item and preselects the matching database location;
-- editing the operation search clears the deep-link focus and returns to normal generic search;
-- no API/schema/permission changes and no business master data is hard-coded.
+Verification:
+- exact PR head `bdbaffcb737a8d5350a26ff9fd51babb3bbad66b`: Deploy preflight/full regression #902 / run `36300779804`, Super Admin Browser #170 / run `36300779802`, and Workforce Approval #295 / run `36300779803` all PASS;
+- merge release `07d42a30eab8932507c3ccdd54f92f6a8f69a853`: Deploy #903 / run `36301227833` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260927T065418Z.dump`;
+- production audit: `DATA_INTEGRITY_OK`; runtime returned `release=07d42a3`, `schema=024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK` passed;
+- no schema migration, endpoint change, permission change or production stock rewrite.
 
-Candidate is not production-complete until exact-head CI, merge, production deploy/health and UI smoke pass.
-
+Next Central work: continue reducing friction in `領貨 / 轉撥 / 出貨` using database-keyed preselection and existing transaction APIs; do not introduce browser-side business authority.
 
 ## Completed release — Central Kitchen operator priority workspace, 2026-09-27
 
