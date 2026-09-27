@@ -337,6 +337,20 @@ button.central-kitchen-location-card{cursor:pointer}
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+.central-kitchen-shell .inventory-item-tools{align-items:center;gap:5px}
+.central-kitchen-row-operation{
+  min-height:30px;
+  padding:5px 8px;
+  border:1px solid #c5ddd5;
+  border-radius:8px;
+  background:#eef8f4;
+  color:#176f58;
+  font-size:9px;
+  font-weight:820;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.central-kitchen-row-operation:hover{border-color:#9ccaba;background:#e5f5ef}
 
 .central-kitchen-section-head{
   padding:16px 16px 13px;
