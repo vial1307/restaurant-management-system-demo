@@ -1005,6 +1005,7 @@ Candidate invariant:
 - before/after store `location_id` and `location_code`;
 - metadata stores `catalog_key` and operation `create/update/delete`;
 - physical inventory history remains separate because receive-default is routing configuration, not stock movement.
+
 Dynamic API regression uses a dedicated two-location fixture and verifies exactly three audit rows:
 
 1. create default -> audit create;
