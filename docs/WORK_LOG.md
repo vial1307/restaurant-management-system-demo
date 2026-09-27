@@ -1,16 +1,17 @@
 # Kitchen OS Work Log
 
-## 2026-09-27 — Central Kitchen operator priority workspace candidate
+## 2026-09-27 — Central Kitchen operator priority workspace production verification
 
-- Started from verified production release `7157d0b5263209b3391ccab57c088668d7902973` / Deploy #898.
-- Branch: `redesign/central-kitchen-operator-ui-20260927`.
-- Added an Overview-only priority panel generated from current PostgreSQL-projected stock rows below their database minimums.
-- No cross-unit total is calculated. Each alert retains its own unit, actual quantity, minimum and database storage label.
-- Empty stock sorts before low stock; the first six actionable rows are shown with a count for remaining rows.
-- Alert click returns to storage view and filters the exact database-declared storage location.
-- Added a healthy state and permission/cloud-gated direct link to 進貨入庫.
-- Added responsive CSS and static/browser regression coverage.
-- No schema, endpoint, permission or stock-data change. Exact-head CI/PR verification pending.
+- PR #154 exact head `5667b411b63190acae7cc7b5a23c32db5e0b5309` passed Deploy #899 / run `36290930131`, Super Admin Browser #168 / run `36290930053` and Workforce Approval #293 / run `36290930009`.
+- Central Overview now surfaces PostgreSQL-derived low/empty stock as actionable operator work without aggregating different units.
+- Priority rows retain database storage labels and drill directly into the selected storage view/location; healthy state and quick 進貨 access are permission/cloud gated.
+- PR #154 merged as `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`.
+- Deploy #900 / run `36291179320` passed preflight, API/PostgreSQL/concurrency, desktop/mobile Chromium, full-device cross-browser, backup/deploy and production UI smoke.
+- Backup: `kitchen_os_20260927T032703Z.dump`.
+- Production: `DATA_INTEGRITY_OK`; health `release=26bfd49`, schema `024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #166 / run `36291520138` PASS. Workforce staff/schedule/attendance parity/backfill post-deploy workflows also PASS.
+- No schema migration, permission change, inventory endpoint change or production stock rewrite.
+- Next: continue daily-operation UX refinement for Central receive/pick/transfer/ship flows while preserving database-defined structure.
 
 ## 2026-09-27 — Central Kitchen inventory UI redesign production verification
 
