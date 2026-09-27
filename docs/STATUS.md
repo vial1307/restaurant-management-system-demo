@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — verify Fuxing/Yongji Work Area UI counts, 2026-09-28
+
+- Central appears correct, but a branch Work Area UI was observed showing only 16 items (14 noodles / 0 soup / 2 seafood / 0 meat).
+- This conflicts with verified schema-026 catalog counts: Fuxing 76 and Yongji 72.
+- Treat this as a UI/snapshot/count-semantics regression until proven otherwise; do not re-run migration 026 or rewrite stock blindly.
+- Next action: compare DB catalog classification, Work Location stock, API snapshot and Website count/filter logic for Fuxing and Yongji independently.
+- Acceptance: all three sites use one PostgreSQL Work Area classification contract; UI must not derive membership from stock presence, labels, hard-coded site mappings or browser-local data unless explicitly designed/labeled that way.
+
+
 ## DONE — database-driven inventory replenishment routing, 2026-09-28
 
 - PR #164 merged as `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`; Deploy #959 / run `36336697537` is verified in production.
