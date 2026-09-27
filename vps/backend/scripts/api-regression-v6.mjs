@@ -63,15 +63,15 @@ assert.deepEqual(
   new Set([fxFreezer.code,fxFour.code,fxWorkMeat.code])
 );`;
 
-const oldUnconfiguredDestinationAssertion = \`const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
+const oldUnconfiguredDestinationAssertion = `const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
   method:"POST",cookie:employee.cookie,
   body:{itemId:tofuFx.id,sourceLocationId:fxFreezer.id,destinationLocationId:yjFour.id,quantity:1}
 });
 assert.equal(unconfiguredDestination.response.status,409);
-assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");\`;
+assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");`;
 assert(source.includes(oldUnconfiguredDestinationAssertion), "legacy unconfigured-destination fixture changed; update v6 adapter explicitly");
 
-const databaseUnconfiguredDestinationAssertion = \`const unconfiguredCatalogKey="unconfigured-destination-regression";
+const databaseUnconfiguredDestinationAssertion = `const unconfiguredCatalogKey="unconfigured-destination-regression";
 const unconfiguredSource=await request("/api/inventory/catalog/sync",{
   method:"POST",cookie:admin.cookie,
   body:{item:{key:"fuxing:unconfigured-destination-regression",catalog_key:unconfiguredCatalogKey,
@@ -91,7 +91,7 @@ const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
   body:{itemId:unconfiguredSource.data.item.id,sourceLocationId:fxFreezer.id,destinationLocationId:yjFour.id,quantity:1}
 });
 assert.equal(unconfiguredDestination.response.status,409);
-assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");\`;
+assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");`;
 
 const oldSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""}]},`;
 assert(source.includes(oldSharedStaffFixture), "legacy workforce fixture changed; update scoped workforce injection explicitly");
