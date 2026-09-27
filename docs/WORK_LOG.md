@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-09-27 — Central Kitchen inventory UI redesign production verification
+
+- PR #152 exact head `df64c415950acccb3741cc43e75052710a1c3618` passed Deploy #897 / run `36286847264`, Super Admin Browser #167 / run `36286847257` and the related workforce diagnostics.
+- Browser CI exposed two real integration regressions caused by retiring the legacy `.central-heading` marker: the branch renderer could take over the new Central shell, and Central lifecycle refreshes could erase a dirty ingredient editor before stale-edit protection ran.
+- Runtime guards in both `src/app.js` and `src/auth-layer.js` now detect `[data-central-kitchen-shell]`; dirty Central editors are preserved on inventory update/status events. Super Admin Browser #166/#167 verified stale-draft retention and cross-surface synchronization.
+- Legacy browser/static tests were updated to assert the redesigned Central KPI/navigation shell and the actual invariant that Central inventory is not branch-date-locked.
+- PR #152 merged as `7157d0b5263209b3391ccab57c088668d7902973`.
+- Deploy #898 / run `36287068079` passed preflight, API/PostgreSQL/concurrency, desktop/mobile Chromium, full-device cross-browser, backup/deploy and production UI smoke.
+- Backup: `kitchen_os_20260927T020142Z.dump`.
+- Production: `DATA_INTEGRITY_OK`; health `release=7157d0b`, schema `024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #164 / run `36287397492` PASS. Post-deploy workforce schedule/staff/attendance verification also PASS.
+- No schema migration, permission change, inventory endpoint change or production stock rewrite.
+- Next: continue the Central Kitchen operator-facing UI on PostgreSQL-defined site/location/work-area structure.
+
 ## 2026-09-25 — Inventory main website ↔ Super Admin correction deployed
 
 - PR #139 merged as `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`. Final head `19ff741` passed Super Admin Browser `36142056162` (all six device profiles and two independent sessions for Central/Fuxing/Yongji at 320px and 1366px), full-system/API/PostgreSQL regression `36142055831`, API load `36142055866` and workforce diagnostic `36142055825`.
