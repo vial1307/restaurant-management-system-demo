@@ -34,7 +34,8 @@ assert.match(read("src/admin-panel.js"),/Database kho · 庫存資料庫/);
 assert.match(read("src/admin-inventory-database.css"),/@media\(max-width:760px\)/);
 const routes=read("vps/backend/src/inventory-extra-routes.mjs");
 assert.match(routes,/expectedQuantity/);assert.match(routes,/expectedMinimum/);assert.match(routes,/expectedLocationCode/);
-assert.match(routes,/wantedLocationIds.length && !request.body\?\.appendLocations/);
+assert.match(routes,/explicitLocations.length && !request.body\?\.appendLocations/,
+  "catalog sync may prune locations only when the caller explicitly supplies a location list");
 assert.match(routes,/guardWorkArea/);
 assert.match(routes,/siteMode === "branch"[\s\S]{0,900}metadata->>'work_area'=\$2[\s\S]{0,700}attachLocation\(workLocation\.rows\[0\]\.id\)/,
   "branch catalog sync must always attach the database work-area row, including storage_only products");
