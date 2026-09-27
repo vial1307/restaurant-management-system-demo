@@ -294,9 +294,10 @@ join public.inventory_locations l
  and l.metadata->>'ui_key'=mapping.storage_ui_key
 on conflict(item_id,location_id) do nothing;
 
--- Non-storage-only branch products also get their database-owned Work Location
--- association. This creates zero stock only when missing and never rewrites an
--- existing work quantity/minimum.
+-- Every active branch product with a configured work_area must be recognized
+-- by its database-owned Work Location, even when it is reserve-heavy or carries
+-- the historical storage_only flag. The work row represents the item at the
+-- workstation and starts at zero; it does not move or duplicate storage quantity.
 insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
 select
   i.id,
@@ -308,15 +309,43 @@ from legacy_branch_sites s
 join public.inventory_items i
   on split_part(i.item_key,':',1)=s.code
  and i.active=true
- and i.storage_only=false
-join legacy_branch_catalog p
-  on p.item_suffix=substring(i.item_key from position(':' in i.item_key)+1)
 join public.inventory_locations l
   on l.site=s.code
  and l.kind='work'
  and l.active=true
  and l.metadata->>'work_area'=i.work_area
 on conflict(item_id,location_id) do nothing;
+
+-- A branch item with a valid work_area but no corresponding work-stock row
+-- would disappear from the 工作區 UI because hydration is database-driven.
+do $branch_work_stock_guard$
+begin
+  if exists (
+    select 1
+    from legacy_branch_sites s
+    join public.inventory_items i
+      on split_part(i.item_key,':',1)=s.code
+     and i.active=true
+    join public.work_areas w
+      on w.site_code=s.code
+     and w.code=i.work_area
+     and w.active=true
+    where not exists (
+      select 1
+      from public.inventory_stock st
+      join public.inventory_locations l
+        on l.id=st.location_id
+       and l.site=s.code
+       and l.kind='work'
+       and l.active=true
+       and l.metadata->>'work_area'=i.work_area
+      where st.item_id=i.id
+    )
+  ) then
+    raise exception 'BRANCH_ACTIVE_ITEM_WORK_STOCK_MISSING';
+  end if;
+end;
+$branch_work_stock_guard$;
 
 -- Every branch must now contain every historical catalog identity. Storage rows
 -- are allowed to remain unconfigured only when that branch intentionally does not
