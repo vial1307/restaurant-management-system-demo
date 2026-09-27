@@ -1,7 +1,6 @@
 import { mountInventoryOperations, operationTabLabels } from "./inventory-operations.js";
 import {
   activeInventorySite,
-  bootstrapCentralInventory,
   canDirectInventoryAdjust,
   canInventoryEdit,
   canManageCentralCatalog,
@@ -458,7 +457,6 @@ function centralPage(user) {
       onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); },
     });
   }
-  if (cloudReady) void bootstrapCentralInventory(items);
   if (cloudReady && mode === "history" && canViewHistory) {
     void getCloudInventoryHistory("central", 300).then((cloudLog) => {
       const current = document.querySelector(".page-content");
