@@ -19,6 +19,31 @@ assert(source.includes(oldSupervisorReceiveDefaultAssertion), "supervisor receiv
 const oldAllSiteViewAssertion = `for (const site of ["fuxing","yongji","central"]) {\n  assert.equal((await inventory(admin.cookie,site)).response.status,200,\`admin cannot view \${site}\`);\n}`;
 assert(source.includes(oldAllSiteViewAssertion), "all-site inventory regression changed; update snapshot integrity injection explicitly");
 
+const oldCatalogAuditStockAssertion = `const catalogAuditStock=catalogAuditSnapshot.stock.filter((row)=>row.item_id===catalogAuditItem.id);
+assert.equal(catalogAuditStock.length,2);
+for(const row of catalogAuditStock){
+  assert.equal(Number(row.quantity),0,"catalog sync seeded physical quantity");
+  assert.equal(Number(row.minimum_quantity),0,"catalog sync seeded physical minimum");
+}`;
+assert(source.includes(oldCatalogAuditStockAssertion), "legacy catalog stock assertion changed; update branch work-projection adapter explicitly");
+
+const branchCatalogWorkProjectionAssertion = `const catalogAuditStock=catalogAuditSnapshot.stock.filter((row)=>row.item_id===catalogAuditItem.id);
+assert.equal(catalogAuditStock.length,3,"branch item must retain two storage rows plus one work-area projection");
+const catalogAuditWorkRows=catalogAuditStock.filter((row)=>{
+  const location=catalogAuditSnapshot.locations.find((entry)=>entry.id===row.location_id);
+  return location?.kind==="work";
+});
+assert.equal(catalogAuditWorkRows.length,1,"branch item must have exactly one work-area stock row");
+assert.equal(
+  catalogAuditSnapshot.locations.find((entry)=>entry.id===catalogAuditWorkRows[0].location_id)?.metadata?.work_area,
+  "meat",
+  "branch work projection must follow the updated item work_area"
+);
+for(const row of catalogAuditStock){
+  assert.equal(Number(row.quantity),0,"catalog sync seeded physical quantity");
+  assert.equal(Number(row.minimum_quantity),0,"catalog sync seeded physical minimum");
+}`;
+
 const oldSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""}]},`;
 assert(source.includes(oldSharedStaffFixture), "legacy workforce fixture changed; update scoped workforce injection explicitly");
 const scopedSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""},{id:"staff-employee",name:"employeefx",role:"employee",area:"soup",hourlyRate:220,active:true,pin:""},{id:"staff-parttime",name:"parttimefx",role:"parttime",area:"seafood",hourlyRate:225,active:true,pin:""}]},`;
@@ -34,7 +59,8 @@ const migrated = source
   .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"027");')
   .replace(oldSharedStaffFixture, scopedSharedStaffFixture)
   .replace(oldEmployeeStateRegression, scopedEmployeeStateRegression)
-  .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression);
+  .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression)
+  .replace(oldCatalogAuditStockAssertion, branchCatalogWorkProjectionAssertion);
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
