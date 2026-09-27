@@ -215,9 +215,7 @@ begin
       on w.site_code=s.code
      and w.code=p.work_area
      and w.active=true
-    where s.active=true
-      and coalesce(s.metadata->>'inventory_mode','')='branch'
-      and w.code is null
+    where w.code is null
   ) then
     raise exception 'LEGACY_BRANCH_CATALOG_WORK_AREA_MISSING';
   end if;
@@ -331,9 +329,7 @@ begin
     cross join legacy_branch_catalog p
     left join public.inventory_items i
       on i.item_key=s.code||':'||p.item_suffix
-    where s.active=true
-      and coalesce(s.metadata->>'inventory_mode','')='branch'
-      and i.id is null
+    where i.id is null
   ) then
     raise exception 'LEGACY_BRANCH_CATALOG_MATERIALIZATION_INCOMPLETE';
   end if;
