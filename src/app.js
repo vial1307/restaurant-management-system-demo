@@ -32,8 +32,6 @@ import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
 import { createTaskDerivationCache } from "./task-derivation-cache.js";
 import {
   activeInventorySite,
-  bootstrapFuxingInventory,
-  bootstrapYongjiInventory,
   branchItemKey,
   branchLocationCode,
   branchWorkLocationCode,
@@ -1939,4 +1937,3 @@ window.addEventListener("shitu:inventory-cloud-status", (event) => {
 // The former offline worker is retired so every VPS session loads one release.
 store.subscribe(renderWhenAuthorized);
 renderWhenAuthorized();
-setTimeout(() => { void bootstrapFuxingInventory(); }, 0);
