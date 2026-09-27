@@ -231,6 +231,9 @@ export async function registerMasterDataRoutes(app) {
           const current = currentResult.rows[0];
           if (!current) throw Object.assign(new Error("LOCATION_NOT_FOUND"), { statusCode: 404 });
           if (current.site !== site) throw Object.assign(new Error("LOCATION_SITE_MISMATCH"), { statusCode: 409 });
+          if (current.kind === "work") {
+            throw Object.assign(new Error("WORK_LOCATION_MANAGED_BY_WORK_AREA"), { statusCode: 409 });
+          }
           assertFreshMaster(current, request.body);
           await assertLocationCanArchive(client, id);
           const result = await client.query(
@@ -268,6 +271,9 @@ export async function registerMasterDataRoutes(app) {
         }
 
         if (!id) {
+          if (kind === "work") {
+            throw Object.assign(new Error("WORK_LOCATION_MANAGED_BY_WORK_AREA"), { statusCode: 409 });
+          }
           if (!CODE_RE.test(code) || !code.startsWith(`${site}-`)) {
             throw Object.assign(new Error("INVALID_LOCATION_CODE"), { statusCode: 400 });
           }
@@ -295,6 +301,9 @@ export async function registerMasterDataRoutes(app) {
         const current = currentResult.rows[0];
         if (!current) throw Object.assign(new Error("LOCATION_NOT_FOUND"), { statusCode: 404 });
         if (current.site !== site) throw Object.assign(new Error("LOCATION_SITE_MISMATCH"), { statusCode: 409 });
+        if (current.kind === "work" || kind === "work") {
+          throw Object.assign(new Error("WORK_LOCATION_MANAGED_BY_WORK_AREA"), { statusCode: 409 });
+        }
         assertFreshMaster(current, request.body);
         if (code && code !== current.code) {
           throw Object.assign(new Error("LOCATION_CODE_IMMUTABLE"), { statusCode: 409 });
