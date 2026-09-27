@@ -589,6 +589,8 @@ export async function registerInventoryExtraRoutes(app) {
           )).rows[0];
         }
 
+        const explicitLocations = (Array.isArray(item.locations) ? item.locations : [])
+          .filter((loc) => String(loc?.code || "").trim());
         const wantedLocationIds = [];
         const attachLocation = async (locationId) => {
           if (!wantedLocationIds.includes(locationId)) wantedLocationIds.push(locationId);
@@ -631,7 +633,7 @@ export async function registerInventoryExtraRoutes(app) {
           await attachLocation(workLocation.rows[0].id);
         }
 
-        for (const loc of Array.isArray(item.locations) ? item.locations : []) {
+        for (const loc of explicitLocations) {
           const code = String(loc.code || "");
           if (!code) continue;
 
@@ -643,7 +645,7 @@ export async function registerInventoryExtraRoutes(app) {
           await attachLocation(location.rows[0].id);
         }
 
-        if (wantedLocationIds.length && !request.body?.appendLocations) {
+        if (explicitLocations.length && !request.body?.appendLocations) {
           const protectedOmitted = await client.query(
             `select s.location_id,l.code as location_code,s.quantity,s.minimum_quantity
              from public.inventory_stock s
