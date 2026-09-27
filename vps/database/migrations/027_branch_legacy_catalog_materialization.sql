@@ -428,9 +428,9 @@ after insert or update of item_key,work_area,active
 on public.inventory_items
 for each row execute function public.sync_branch_inventory_item_work_projection();
 
--- Every branch must now contain every historical catalog identity. Storage rows
--- are allowed to remain unconfigured only when that branch intentionally does not
--- expose the corresponding legacy ui_key; Super Admin Integrity will show it.
+-- Every branch must now contain every historical catalog identity, and every
+-- active branch item must be projected exactly once into the Work Area declared
+-- by inventory_items.work_area.
 do $legacy_catalog_verify$
 begin
   if exists (
@@ -442,6 +442,25 @@ begin
     where i.id is null
   ) then
     raise exception 'LEGACY_BRANCH_CATALOG_MATERIALIZATION_INCOMPLETE';
+  end if;
+
+  if exists (
+    select 1
+    from legacy_branch_sites s
+    join public.inventory_items i
+      on split_part(i.item_key,':',1)=s.code
+     and i.active=true
+    left join public.inventory_stock st on st.item_id=i.id
+    left join public.inventory_locations l
+      on l.id=st.location_id
+     and l.site=s.code
+     and l.kind='work'
+     and l.active=true
+     and l.metadata->>'work_area'=i.work_area
+    group by i.id
+    having count(l.id)<>1
+  ) then
+    raise exception 'BRANCH_ITEM_WORK_PROJECTION_INCOMPLETE';
   end if;
 end;
 $legacy_catalog_verify$;
@@ -475,6 +494,19 @@ select
         and l.kind='storage'
         and substring(i.item_key from position(':' in i.item_key)+1)
             in (select item_suffix from legacy_branch_catalog)
+    ),
+    'work_area_products',(
+      select count(distinct i.id)::int
+      from public.inventory_items i
+      join public.inventory_stock st on st.item_id=i.id
+      join public.inventory_locations l
+        on l.id=st.location_id
+       and l.site=s.code
+       and l.kind='work'
+       and l.active=true
+       and l.metadata->>'work_area'=i.work_area
+      where i.active=true
+        and split_part(i.item_key,':',1)=s.code
     )
   ),
   jsonb_build_object(
