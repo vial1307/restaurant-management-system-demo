@@ -215,7 +215,11 @@ try {
   const addStock = async (itemKey, locationCode, quantity, minimum=0) => {
     await client.query(
       `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
-       values($1,$2,$3,$4)`,
+       values($1,$2,$3,$4)
+       on conflict(item_id,location_id) do update
+       set quantity=excluded.quantity,
+           minimum_quantity=excluded.minimum_quantity,
+           updated_at=now()`,
       [items[itemKey].id,locations[locationCode].id,quantity,minimum]
     );
   };
