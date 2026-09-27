@@ -181,15 +181,26 @@ insert into legacy_branch_catalog_locations(item_suffix,storage_ui_key,minimum_q
   ('freezer-lobster','large-freezer',5.000),
   ('freezer-sous-vide-chicken','large-freezer',0.000);
 
+create temporary table legacy_branch_sites on commit drop as
+select s.code,s.sort_order
+from public.sites s
+where s.active=true
+  and coalesce(s.metadata->>'inventory_mode','')='branch'
+  and exists (
+    select 1
+    from public.inventory_locations l
+    where l.site=s.code
+      and l.active=true
+      and l.kind='storage'
+  );
+
 create temporary table legacy_branch_catalog_before on commit drop as
 select
   s.code as site,
   count(i.id)::int as item_count
-from public.sites s
+from legacy_branch_sites s
 left join public.inventory_items i
   on split_part(i.item_key,':',1)=s.code
-where s.active=true
-  and coalesce(s.metadata->>'inventory_mode','')='branch'
 group by s.code;
 
 -- Refuse to create branch items whose declared Work Area is not configured in
@@ -198,7 +209,7 @@ do $legacy_work_area_guard$
 begin
   if exists (
     select 1
-    from public.sites s
+    from legacy_branch_sites s
     cross join legacy_branch_catalog p
     left join public.work_areas w
       on w.site_code=s.code
@@ -218,9 +229,7 @@ $legacy_work_area_guard$;
 -- second branch does not fork the same product into another identity.
 with branch_sites as (
   select code,sort_order
-  from public.sites
-  where active=true
-    and coalesce(metadata->>'inventory_mode','')='branch'
+  from legacy_branch_sites
 ),
 missing as (
   select
@@ -275,7 +284,7 @@ select
   0,
   mapping.minimum_quantity,
   now()
-from public.sites s
+from legacy_branch_sites s
 join legacy_branch_catalog_locations mapping on true
 join public.inventory_items i
   on i.item_key=s.code||':'||mapping.item_suffix
@@ -285,8 +294,6 @@ join public.inventory_locations l
  and l.kind='storage'
  and l.active=true
  and l.metadata->>'ui_key'=mapping.storage_ui_key
-where s.active=true
-  and coalesce(s.metadata->>'inventory_mode','')='branch'
 on conflict(item_id,location_id) do nothing;
 
 -- Non-storage-only branch products also get their database-owned Work Location
@@ -299,7 +306,7 @@ select
   0,
   0,
   now()
-from public.sites s
+from legacy_branch_sites s
 join public.inventory_items i
   on split_part(i.item_key,':',1)=s.code
  and i.active=true
@@ -311,8 +318,6 @@ join public.inventory_locations l
  and l.kind='work'
  and l.active=true
  and l.metadata->>'work_area'=i.work_area
-where s.active=true
-  and coalesce(s.metadata->>'inventory_mode','')='branch'
 on conflict(item_id,location_id) do nothing;
 
 -- Every branch must now contain every historical catalog identity. Storage rows
@@ -322,7 +327,7 @@ do $legacy_catalog_verify$
 begin
   if exists (
     select 1
-    from public.sites s
+    from legacy_branch_sites s
     cross join legacy_branch_catalog p
     left join public.inventory_items i
       on i.item_key=s.code||':'||p.item_suffix
@@ -373,9 +378,7 @@ select
     'materialized_catalog_identities',75,
     'historical_extra_items',1
   )
-from public.sites s
-left join legacy_branch_catalog_before b on b.site=s.code
-where s.active=true
-  and coalesce(s.metadata->>'inventory_mode','')='branch';
+from legacy_branch_sites s
+left join legacy_branch_catalog_before b on b.site=s.code;
 
 commit;
