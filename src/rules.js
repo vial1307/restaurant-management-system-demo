@@ -37,26 +37,26 @@ export function calculateRice(date, remaining, settings) {
   );
 }
 
-export function buildGeneratedTasks(state, date) {
+export function buildGeneratedTasks(state, date, storageGroups = []) {
   return cachedDuringSearch(
     "buildGeneratedTasks",
-    [state, date],
-    () => core.buildGeneratedTasks(state, date),
+    [state, date, storageGroups],
+    () => core.buildGeneratedTasks(state, date, storageGroups),
   );
 }
 
-export function summarizeReserveInventory(record) {
+export function summarizeReserveInventory(record, storageGroups = []) {
   return cachedDuringSearch(
     "summarizeReserveInventory",
-    [record],
-    () => core.summarizeReserveInventory(record),
+    [record, storageGroups],
+    () => core.summarizeReserveInventory(record, storageGroups),
   );
 }
 
-export function buildInventoryAlerts(record) {
+export function buildInventoryAlerts(record, storageGroups = []) {
   return cachedDuringSearch(
     "buildInventoryAlerts",
-    [record],
-    () => core.buildInventoryAlerts(record),
+    [record, storageGroups],
+    () => core.buildInventoryAlerts(record, storageGroups),
   );
 }
