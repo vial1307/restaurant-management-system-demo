@@ -46,6 +46,10 @@ for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTR
   assert.equal(cloudSource.includes(legacyName), false, `${legacyName} must not remain a production master-data source`);
 }
 assert.equal(/\bDEFAULT_ITEMS\b/.test(cloudSource), false, "production inventory cloud path must not use DEFAULT_ITEMS fallback");
+assert.doesNotMatch(cloudSource, /WORK_AREAS\[0\]\?\.id/,
+  "inventory hydration/catalog sync must not infer a work area from mutable global UI state");
+assert.doesNotMatch(cloudSource, /bootstrapFuxingInventory|bootstrapYongjiInventory|bootstrapCentralInventory/,
+  "inventory startup must not expose site-specific bootstrap paths");
 
 const appSource = fs.readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 assert.doesNotMatch(appSource, /function appStagingLocations|function appWorkLocations|function branchDraftOperationData/,
@@ -150,6 +154,14 @@ assert.match(migration, /inventory_mode/);
 assert.match(migration, /ui_key/);
 assert.match(migration, /storage_group/);
 assert.match(migration, /work_area/);
+
+const classificationMigration = fs.readFileSync(new URL("../vps/database/migrations/025_inventory_location_workarea_unification.sql", import.meta.url), "utf8");
+assert.match(classificationMigration, /inventory_location_classification_guard/);
+assert.match(classificationMigration, /sync_work_area_inventory_location/);
+assert.match(classificationMigration, /WORK_AREA_LOCATION_CARDINALITY_INVALID/);
+assert.match(classificationMigration, /WORK_STOCK_AREA_MISMATCH/);
+assert.match(classificationMigration, /central-work-use/);
+assert.match(classificationMigration, /target\.metadata->>'work_area'=i\.work_area/);
 
 const dynamicSiteMigration = fs.readFileSync(new URL("../vps/database/migrations/017_dynamic_site_scope.sql", import.meta.url), "utf8");
 assert.match(dynamicSiteMigration, /drop constraint if exists inventory_locations_site_check/);
