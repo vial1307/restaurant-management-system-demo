@@ -144,13 +144,10 @@ try {
   for (const entry of [
     ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm","central","storage",10],
     ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm","central","storage",20],
-    ["central-work-use","使用中","Đang sử dụng","central","work",90],
     ["fuxing-freezer","大冷凍","Tủ đông lớn","fuxing","storage",10],
     ["fuxing-four","四門冰箱","Tủ lạnh 4 cánh","fuxing","storage",20],
-    ["fuxing-work-noodles","麵區","Khu mì","fuxing","work",90],
     ["yongji-freezer","大冷凍","Tủ đông lớn","yongji","storage",10],
-    ["yongji-four","四門冰箱","Tủ lạnh 4 cánh","yongji","storage",20],
-    ["yongji-work-noodles","麵區","Khu mì","yongji","work",90]
+    ["yongji-four","四門冰箱","Tủ lạnh 4 cánh","yongji","storage",20]
   ]) {
     const { rows } = await client.query(
       `insert into public.inventory_locations(code,name_zh_tw,name_vi,site,kind,sort_order,active)
@@ -167,6 +164,21 @@ try {
       entry
     );
     locations[entry[0]] = rows[0];
+  }
+
+  // Work locations are derived from work_areas by migration 025. Reuse the
+  // canonical rows instead of creating a second fixture-owned work structure.
+  for (const code of [
+    "central-work-noodles","central-work-soup","central-work-seafood","central-work-meat",
+    "fuxing-work-noodles","fuxing-work-soup","fuxing-work-seafood","fuxing-work-meat",
+    "yongji-work-noodles","yongji-work-soup","yongji-work-seafood","yongji-work-meat",
+  ]) {
+    const { rows } = await client.query(
+      "select * from public.inventory_locations where code=$1 and active=true limit 1",
+      [code]
+    );
+    assert.equal(rows.length,1,`missing derived work location: ${code}`);
+    locations[code]=rows[0];
   }
 
   const items = {};
@@ -196,7 +208,7 @@ try {
 
   await addStock("fuxing:beef","fuxing-freezer",10,4);
   await addStock("fuxing:beef","fuxing-four",1,1);
-  await addStock("fuxing:beef","fuxing-work-noodles",0,0);
+  await addStock("fuxing:beef","fuxing-work-meat",0,0);
   await addStock("yongji:beef","yongji-freezer",2,1);
   await addStock("yongji:beef","yongji-four",3,1);
   await addStock("central:beef","central-freezer",20,5);
