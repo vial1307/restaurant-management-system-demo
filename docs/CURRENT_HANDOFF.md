@@ -1,25 +1,33 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — Central Kitchen inventory UI redesign, 2026-09-27
+## Completed release — Central Kitchen inventory UI redesign, 2026-09-27
 
-Branch: `redesign/central-kitchen-inventory-ui-20260927`.
+PR #152 merged into `main` as `7157d0b5263209b3391ccab57c088668d7902973` and is verified in production through Deploy Kitchen OS to VPS #898 / run `36287068079`.
 
-Goal: redesign 央廚 / Bếp trung tâm inventory UI without changing the verified PostgreSQL transaction/API authority.
+This stage redesigns the 央廚 / Bếp trung tâm inventory workspace without changing PostgreSQL transaction authority:
+- dedicated Central shell with database-derived site identity, connection state and four KPIs: ingredient count, storage-location count, low-stock count and work-area count;
+- responsive function navigation for Overview / 入庫 / 領貨 / 轉撥 / 出貨 / 管理 / 紀錄;
+- storage and work-area overview cards are generated from PostgreSQL master data;
+- daily operation modes continue to use the existing authoritative inventory operation controller and APIs;
+- Manage mode is visually separated from daily inventory movement;
+- dedicated late-loaded `src/central-kitchen-ui.css` protects responsive/mobile layout from legacy override chains;
+- Central remains live across service-date changes and is not subject to branch historical-date locking.
 
-Implemented in this candidate:
-- new Central Kitchen shell with database-derived site name, connection state and four meaningful KPIs;
-- removed the mixed-unit “total quantity” KPI; summary now shows ingredient count, database storage-location count, low-stock count and database work-area count;
-- responsive function navigation for Overview / 入庫 / 領貨 / 轉撥 / 出貨 / 管理 / 紀錄 while preserving the existing `data-central-mode` hooks;
-- overview now exposes database-generated storage cards and work-area cards before the detailed inventory rows;
-- Central storage/work-area labels and counts continue to come from `inventoryUiGroups("central")`;
-- daily operation modes still mount the existing `mountInventoryOperations(... site:"central" ...)` controller; catalog edit, relocation, stocktake and history API paths are unchanged;
-- Manage mode now visually separates master-data maintenance from daily inventory movement;
-- dedicated `src/central-kitchen-ui.css` is loaded after legacy responsive/mobile styles in both canonical shells to avoid another override cascade;
-- mobile navigation becomes horizontally touch-scrollable and storage/work cards collapse to compact responsive grids;
-- static regression protects database-driven structure, operation hooks, stylesheet load order and canonical/VPS shell parity.
+Integration corrections found by CI and fixed before merge:
+- legacy runtime guards still looked for `.central-heading`; after the redesign this allowed both the branch renderer and Central auth observer to rerender the new shell;
+- those guards now use `[data-central-kitchen-shell]`, preventing branch rendering from taking over the Central page;
+- dirty Central ingredient editors are preserved across both inventory-updated and cloud-status events, so a Super Admin peer edit shows the stale-draft warning instead of erasing unsaved input;
+- regression contracts now validate the redesigned KPI/navigation shell rather than requiring the retired branch summary markup.
 
-No schema migration, no inventory data rewrite and no endpoint/transaction change. Candidate is not production-complete until exact-head CI, merge, Deploy-to-VPS health and production UI smoke pass.
+Verification:
+- exact PR head `df64c415950acccb3741cc43e75052710a1c3618`: Deploy preflight/full regression #897 / run `36286847264`, Super Admin Browser #167 / run `36286847257`, Workforce Approval #292 / run `36286847258`, Attendance #48 / run `36286847249` and Schedule #150 / run `36286847278` all PASS;
+- merge release `7157d0b5263209b3391ccab57c088668d7902973`: Deploy #898 / run `36287068079` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260927T020142Z.dump`;
+- production audit: `DATA_INTEGRITY_OK`; runtime returned `release=7157d0b`, `schema=024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK` passed;
+- Inventory Site Production Audit #164 / run `36287397492` PASS; workforce schedule/staff/attendance post-deploy verification runs also PASS;
+- no schema migration, permission change, endpoint change or production stock rewrite.
 
+Next Central work: iterate the operator-facing Central Kitchen UI on this database-declared model; do not reintroduce hard-coded site/location/work-area business master data.
 
 ## Completed release — inventory UI master-data cutover, 2026-09-27
 
@@ -150,7 +158,7 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `b1447b727e310b7a3095f5782c0a933916ef6234`
+- Current verified production SHA: `7157d0b5263209b3391ccab57c088668d7902973`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -162,9 +170,9 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #872
-- Run ID: `36265842924`
-- Tested/deployed commit: `d88a90d9487d8edbb5f7e8020397893a5a5e9849`
+- Workflow: Deploy Kitchen OS to VPS #898
+- Run ID: `36287068079`
+- Tested/deployed commit: `7157d0b5263209b3391ccab57c088668d7902973`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS
@@ -997,7 +1005,6 @@ Candidate invariant:
 - before/after store `location_id` and `location_code`;
 - metadata stores `catalog_key` and operation `create/update/delete`;
 - physical inventory history remains separate because receive-default is routing configuration, not stock movement.
-
 Dynamic API regression uses a dedicated two-location fixture and verifies exactly three audit rows:
 
 1. create default -> audit create;
