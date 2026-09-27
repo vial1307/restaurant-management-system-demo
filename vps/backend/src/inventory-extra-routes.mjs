@@ -589,19 +589,11 @@ export async function registerInventoryExtraRoutes(app) {
           )).rows[0];
         }
 
+        const explicitLocations = (Array.isArray(item.locations) ? item.locations : [])
+          .filter((loc) => String(loc?.code || "").trim());
         const wantedLocationIds = [];
-        for (const loc of Array.isArray(item.locations) ? item.locations : []) {
-          const code = String(loc.code || "");
-          if (!code) continue;
-
-          const location = await client.query(
-            "select id,site from public.inventory_locations where code=$1 and active=true limit 1",
-            [code]
-          );
-          if (!location.rowCount || location.rows[0].site !== site) continue;
-          const locationId = location.rows[0].id;
-          wantedLocationIds.push(locationId);
-
+        const attachLocation = async (locationId) => {
+          if (!wantedLocationIds.includes(locationId)) wantedLocationIds.push(locationId);
           // Catalog sync owns only catalog/location association metadata.
           // Physical quantity and minimum configuration must use the dedicated
           // stocktake endpoints so quantity changes remain auditable and cannot
@@ -612,9 +604,48 @@ export async function registerInventoryExtraRoutes(app) {
              on conflict(item_id,location_id) do nothing`,
             [savedItem.id,locationId]
           );
+        };
+
+        const siteMode = (await client.query(
+          `select coalesce(metadata->>'inventory_mode','') as inventory_mode
+           from public.sites where code=$1 limit 1`,
+          [site]
+        )).rows[0]?.inventory_mode || "";
+
+        // Branch 工作區 is a database projection of each item's work_area.
+        // Even reserve-heavy/storage_only items must have a zero-capable work
+        // row or they disappear from the work-area inventory UI.
+        if (siteMode === "branch") {
+          const workLocation = await client.query(
+            `select id
+             from public.inventory_locations
+             where site=$1
+               and kind='work'
+               and active=true
+               and metadata->>'work_area'=$2
+             order by sort_order,code
+             limit 2`,
+            [site,target.work_area]
+          );
+          if (workLocation.rowCount !== 1) {
+            throw Object.assign(new Error("WORK_LOCATION_NOT_FOUND"), { statusCode:409 });
+          }
+          await attachLocation(workLocation.rows[0].id);
         }
 
-        if (wantedLocationIds.length && !request.body?.appendLocations) {
+        for (const loc of explicitLocations) {
+          const code = String(loc.code || "");
+          if (!code) continue;
+
+          const location = await client.query(
+            "select id,site from public.inventory_locations where code=$1 and active=true limit 1",
+            [code]
+          );
+          if (!location.rowCount || location.rows[0].site !== site) continue;
+          await attachLocation(location.rows[0].id);
+        }
+
+        if (explicitLocations.length && !request.body?.appendLocations) {
           const protectedOmitted = await client.query(
             `select s.location_id,l.code as location_code,s.quantity,s.minimum_quantity
              from public.inventory_stock s

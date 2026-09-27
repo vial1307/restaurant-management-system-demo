@@ -36,6 +36,7 @@ export const INVENTORY_ADMIN_TEXT = {
   missingDefault:["Nhiều nơi cất nhưng chưa chọn nơi nhận mặc định","多個儲位但未設定預設收貨位置"],
   invalidArea:["Nguyên liệu tham chiếu khu không hoạt động","食材參照未啟用工作區"],
   duplicateCatalog:["Mã nguyên liệu trùng trong chi nhánh","店內共用品項代碼重複"],
+  missingWorkStock:["Nguyên liệu chưa được chiếu sang Khu làm việc","食材尚未同步到工作區"],
   missingWorkLocation:["Khu làm việc chưa có vị trí tồn kho tương ứng","工作區缺少對應庫存位置"],
   orphanWorkLocation:["Vị trí làm việc không thuộc khu làm việc đang hoạt động","使用位置未連結啟用中的工作區"],
   invalidStorageGroup:["Kho chưa phân loại Kho tổng / Kho khu vực","儲位尚未分類為總倉／區域庫"],

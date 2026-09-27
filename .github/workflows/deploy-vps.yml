@@ -57,6 +57,9 @@ jobs:
       - name: Full static regression
         run: node tests/static-regression.mjs
 
+      - name: Branch legacy catalog database contract
+        run: node tests/branch-legacy-catalog-materialization-contract-regression.mjs
+
       - name: Workforce schedule publication regression
         run: node tests/workforce-schedule-publication-regression.mjs
 
@@ -150,6 +153,8 @@ jobs:
           test -f vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
           test -f vps/database/migrations/026_branch_catalog_workarea_sync.sql
+          test -f vps/database/migrations/027_branch_legacy_catalog_materialization.sql
+          test -f tests/branch-legacy-catalog-materialization-contract-regression.mjs
           test -f tests/inventory-archive-integrity-contract-regression.mjs
           test -f tests/inventory-location-archive-integrity-contract-regression.mjs
           test -f tests/workforce-approval-browser-regression.mjs

@@ -1103,7 +1103,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
     work_area:draft.workArea, storage_only:Boolean(draft.storageOnly),
     locations:[
       ...draft.locations.map((location) => ({ code:branchLocationCode(site,location.zone) })),
-      ...(!draft.storageOnly && branchWorkLocationCode(site,draft.workArea)
+      ...(branchWorkLocationCode(site,draft.workArea)
         ? [{ code:branchWorkLocationCode(site,draft.workArea) }] : []),
     ],
   } : buildBranchCatalog(site).find((entry) => entry.key === branchItemKey(site,stockKey));

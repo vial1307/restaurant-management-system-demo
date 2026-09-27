@@ -17,9 +17,16 @@ const centralItemKey="central:workarea-sync-regression";
 const branchItemKey="fuxing:workarea-sync-regression";
 
 await client.connect();
+let projectionTriggerDisabled=false;
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"026","schema 026 must be active");
+  assert.equal(schema.rows[0]?.version,"027","schema 027 must be active");
+
+  // This regression deliberately replays migration 026. In production 026 ran
+  // before migration 027 installed the branch work-projection trigger, so
+  // disable only that newer trigger while reconstructing the historical state.
+  await client.query("alter table public.inventory_items disable trigger inventory_items_sync_branch_work_projection");
+  projectionTriggerDisabled=true;
 
   await client.query("delete from public.audit_logs where metadata->>'catalog_key'=$1",[catalogKey]);
   await client.query(
@@ -113,5 +120,10 @@ try {
 
   console.log("INVENTORY_BRANCH_WORKAREA_SYNC_REGRESSION_OK");
 } finally {
+  if(projectionTriggerDisabled) {
+    try {
+      await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
+    } catch {}
+  }
   await client.end();
 }

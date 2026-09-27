@@ -13,7 +13,7 @@ const client = new Client({
 await client.connect();
 try {
   const schema = await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version, "026", "schema 026 must be active");
+  assert.equal(schema.rows[0]?.version, "027", "schema 027 must be active");
 
   const sites = await client.query(
     `select code from public.sites where code in ('fuxing','yongji') order by code`

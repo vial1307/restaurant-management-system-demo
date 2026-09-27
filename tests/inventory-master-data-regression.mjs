@@ -267,6 +267,25 @@ assert.match(branchWorkAreaSyncMigration, /system_inventory_catalog_work_area_sy
 assert.match(branchWorkAreaSyncMigration, /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
   "migration must stop if Central/branch classification remains divergent");
 
+const legacyBranchCatalogMigration = fs.readFileSync(new URL("../vps/database/migrations/027_branch_legacy_catalog_materialization.sql", import.meta.url), "utf8");
+assert.match(legacyBranchCatalogMigration, /legacy_branch_catalog/,
+  "legacy branch product identities must be materialized in PostgreSQL");
+assert.match(legacyBranchCatalogMigration, /metadata->>'work_area'=i\.work_area/,
+  "every active branch item must project into its database work area");
+assert.doesNotMatch(legacyBranchCatalogMigration, /i\.storage_only=false/,
+  "storage_only branch items must not disappear from the work-area projection");
+assert.match(legacyBranchCatalogMigration, /BRANCH_ITEM_WORK_PROJECTION_INCOMPLETE/,
+  "migration must stop if a branch product is still missing its work projection");
+
+assert.match(appSource, /function inventoryDistinctItemCount\([\s\S]{0,220}stockKey/,
+  "inventory product badges must count unique products instead of storage-location rows");
+assert.match(appSource, /groupKey === "zone" \? inventoryDistinctItemCount\(entries\) : entries\.length/,
+  "all-storage tab must compare product identities with the work-area product count");
+
+const inventoryDatabaseSource2 = fs.readFileSync(new URL("../src/admin-inventory-database.js", import.meta.url), "utf8");
+assert.match(inventoryDatabaseSource2, /missingWorkStock/,
+  "Super Admin integrity must surface products missing their work-area projection");
+
 const superAdminRoutesSource = fs.readFileSync(new URL("../vps/backend/src/super-admin-routes.mjs", import.meta.url), "utf8");
 assert.match(superAdminRoutesSource, /workAreaMismatchesWithCentral/,
   "Super Admin catalog audit must expose Central-to-branch work-area drift");

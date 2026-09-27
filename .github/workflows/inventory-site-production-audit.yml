@@ -215,6 +215,29 @@ jobs:
             and l.kind='work'
             and l.metadata->>'work_area'<>i.work_area;
 
+          select 'active_branch_item_without_work_row|' || count(*)
+          from public.inventory_items i
+          join public.sites st
+            on st.code=split_part(i.item_key,':',1)
+           and st.active=true
+           and coalesce(st.metadata->>'inventory_mode','')='branch'
+          join public.work_areas w
+            on w.site_code=st.code
+           and w.code=i.work_area
+           and w.active=true
+          where i.active=true
+            and not exists (
+              select 1
+              from public.inventory_stock s
+              join public.inventory_locations l
+                on l.id=s.location_id
+               and l.site=st.code
+               and l.kind='work'
+               and l.active=true
+               and l.metadata->>'work_area'=i.work_area
+              where s.item_id=i.id
+            );
+
           with central_catalog as (
             select i.catalog_key,min(i.work_area) as work_area
             from public.inventory_items i
@@ -268,6 +291,44 @@ jobs:
           group by split_part(item_key,':',1),catalog_key
           having count(*)>1
           order by split_part(item_key,':',1),catalog_key;
+
+          with branch_sites as (
+            select st.code
+            from public.sites st
+            where st.active=true
+              and coalesce(st.metadata->>'inventory_mode','')='branch'
+              and exists (
+                select 1
+                from public.inventory_locations l
+                where l.site=st.code and l.active=true and l.kind='storage'
+              )
+          ),
+          latest_manifest as (
+            select distinct on (a.site)
+              a.site,a.metadata,a.created_at,a.id
+            from public.audit_logs a
+            join branch_sites b on b.code=a.site
+            where a.action='system_branch_legacy_catalog_materialize'
+            order by a.site,a.created_at desc,a.id desc
+          )
+          select 'branch_legacy_catalog_manifest|' || b.code
+                 || '|expected|' || coalesce(jsonb_array_length(m.metadata->'item_suffixes'),0)
+                 || '|missing|' ||
+                    case
+                      when m.site is null then -1
+                      else (
+                        select count(*)
+                        from jsonb_array_elements_text(coalesce(m.metadata->'item_suffixes','[]'::jsonb)) suffix
+                        where not exists (
+                          select 1
+                          from public.inventory_items i
+                          where i.item_key=b.code||':'||suffix.value
+                        )
+                      )
+                    end
+          from branch_sites b
+          left join latest_manifest m on m.site=b.code
+          order by b.code;
 
           select 'detail_hidden_stock|' || i.item_key || '|location|' || l.code
                  || '|quantity|' || s.quantity || '|minimum|' || s.minimum_quantity
@@ -358,6 +419,29 @@ jobs:
                on st.code=split_part(i.item_key,':',1)
               and st.active=true
               and coalesce(st.metadata->>'inventory_mode','')='branch'
+             join public.work_areas w
+               on w.site_code=st.code
+              and w.code=i.work_area
+              and w.active=true
+             where i.active=true
+               and not exists (
+                 select 1
+                 from public.inventory_stock s
+                 join public.inventory_locations l
+                   on l.id=s.location_id
+                  and l.site=st.code
+                  and l.kind='work'
+                  and l.active=true
+                  and l.metadata->>'work_area'=i.work_area
+                 where s.item_id=i.id
+               ))
+            +
+            (select count(*)
+             from public.inventory_items i
+             join public.sites st
+               on st.code=split_part(i.item_key,':',1)
+              and st.active=true
+              and coalesce(st.metadata->>'inventory_mode','')='branch'
              join (
                select ci.catalog_key,min(ci.work_area) as work_area
                from public.inventory_items ci
@@ -374,6 +458,50 @@ jobs:
           SQL
           )"
           echo "inventory_location_classification_violations=${result}"
+          test "$result" = "0"
+
+      - name: Enforce branch legacy catalog materialization
+        if: github.event_name == 'workflow_run'
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
+          result="$("${SSH[@]}" 'cd /opt/kitchen-os && set -a && source .env && set +a && docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL'
+          with branch_sites as (
+            select st.code
+            from public.sites st
+            where st.active=true
+              and coalesce(st.metadata->>'inventory_mode','')='branch'
+              and exists (
+                select 1
+                from public.inventory_locations l
+                where l.site=st.code and l.active=true and l.kind='storage'
+              )
+          ),
+          latest_manifest as (
+            select distinct on (a.site)
+              a.site,a.metadata,a.created_at,a.id
+            from public.audit_logs a
+            join branch_sites b on b.code=a.site
+            where a.action='system_branch_legacy_catalog_materialize'
+            order by a.site,a.created_at desc,a.id desc
+          )
+          select count(*)
+          from branch_sites b
+          left join latest_manifest m on m.site=b.code
+          where m.site is null
+             or coalesce(jsonb_array_length(m.metadata->'item_suffixes'),0)<>75
+             or exists (
+               select 1
+               from jsonb_array_elements_text(coalesce(m.metadata->'item_suffixes','[]'::jsonb)) suffix
+               where not exists (
+                 select 1
+                 from public.inventory_items i
+                 where i.item_key=b.code||':'||suffix.value
+               )
+             );
+          SQL
+          )"
+          echo "branch_legacy_catalog_materialization_violations=${result}"
           test "$result" = "0"
 
       - name: Enforce zero hidden inventory after deploy

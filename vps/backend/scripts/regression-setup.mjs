@@ -196,7 +196,17 @@ try {
   ]) {
     const { rows } = await client.query(
       `insert into public.inventory_items(item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active)
-       values($1,$2,$3,$4,$5,$6,$7,true) returning *`,
+       values($1,$2,$3,$4,$5,$6,$7,true)
+       on conflict(item_key) do update set
+         catalog_key=excluded.catalog_key,
+         name_zh_tw=excluded.name_zh_tw,
+         name_vi=excluded.name_vi,
+         unit=excluded.unit,
+         work_area=excluded.work_area,
+         storage_only=excluded.storage_only,
+         active=true,
+         updated_at=now()
+       returning *`,
       entry
     );
     items[entry[0]] = rows[0];
@@ -205,7 +215,11 @@ try {
   const addStock = async (itemKey, locationCode, quantity, minimum=0) => {
     await client.query(
       `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
-       values($1,$2,$3,$4)`,
+       values($1,$2,$3,$4)
+       on conflict(item_id,location_id) do update
+       set quantity=excluded.quantity,
+           minimum_quantity=excluded.minimum_quantity,
+           updated_at=now()`,
       [items[itemKey].id,locations[locationCode].id,quantity,minimum]
     );
   };

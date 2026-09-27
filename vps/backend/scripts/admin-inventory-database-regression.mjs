@@ -44,6 +44,28 @@ for(const site of ["central","fuxing","yongji"]) {
   assert.equal((await post("/api/inventory/catalog/sync",{item,expectedRevision:firstRevision},409)).error,"INVENTORY_STALE");
   assert.equal((await post("/api/inventory/catalog/sync",{item:{...item,catalog_key:"different-key"},expectedRevision:String(savedItem.revision)},409)).error,"CATALOG_KEY_IMMUTABLE");
   item.vi=savedItem.name_vi;
+
+  if(site!=="central") {
+    const reserveSuffix=`${suffix}-reserve`;
+    const reserveItem={
+      key:`${site}:${reserveSuffix}`,
+      catalog_key:reserveSuffix,
+      vi:`Nguyên liệu dự trữ ${site}`,
+      zh:`${site}儲備食材`,
+      unit:"包",
+      work_area:area.code,
+      storage_only:true,
+      locations:[{code:location.code}],
+    };
+    const reserveSaved=(await post("/api/inventory/catalog/sync",{item:reserveItem,expectedRevision:"0",guardWorkArea:true})).item;
+    const reserveSnapshot=await get(`/api/inventory/${site}`);
+    assert(
+      reserveSnapshot.stock.some((row)=>row.item_id===reserveSaved.id&&row.location_id===autoWorkLocation.id),
+      `${site} storage_only item must still be projected into its 工作區`
+    );
+    await post("/api/inventory/catalog/archive",{itemKey:reserveItem.key,expectedRevision:String(reserveSaved.revision)});
+  }
+
   const pair={itemId:savedItem.id,locationId:savedLocation.id,note:suffix};
   await post("/api/inventory/set-quantity",{...pair,quantity:3.125,expectedQuantity:0});
   assert.equal((await post("/api/inventory/set-quantity",{...pair,quantity:99,expectedQuantity:0},409)).error,"INVENTORY_STALE");
@@ -68,6 +90,21 @@ for(const site of ["central","fuxing","yongji"]) {
   const withSpare=await get(`/api/inventory/${site}`);
   assert(withSpare.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===savedLocation.id));
   assert(withSpare.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===spare.id));
+  // Super Admin metadata-only edits intentionally omit item.locations. The
+  // backend-created work projection must not turn that into a location-prune
+  // request or remove zero-valued storage associations.
+  const {locations:_explicitLocations,...metadataOnlyItem}=item;
+  savedItem=(await post("/api/inventory/catalog/sync",{
+    expectedRevision:String(savedItem.revision),
+    guardWorkArea:true,
+    item:{...metadataOnlyItem,vi:`Metadata ${site}`},
+  })).item;
+  item.vi=savedItem.name_vi;
+  const afterMetadataOnly=await get(`/api/inventory/${site}`);
+  assert(afterMetadataOnly.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===savedLocation.id),
+    `${site}: metadata-only edit pruned primary storage`);
+  assert(afterMetadataOnly.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===spare.id),
+    `${site}: metadata-only edit pruned secondary storage`);
   await post("/api/master-data/locations",{action:"archive",site,id:savedLocation.id,expectedUpdatedAt:renamedLocation.updated_at},409);
   await post("/api/inventory/catalog/archive",{itemKey:item.key,expectedRevision:String(savedItem.revision)},409);
   const tx=await get(`/api/inventory/${site}/transactions?limit=250`);

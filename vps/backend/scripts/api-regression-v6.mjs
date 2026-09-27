@@ -19,6 +19,80 @@ assert(source.includes(oldSupervisorReceiveDefaultAssertion), "supervisor receiv
 const oldAllSiteViewAssertion = `for (const site of ["fuxing","yongji","central"]) {\n  assert.equal((await inventory(admin.cookie,site)).response.status,200,\`admin cannot view \${site}\`);\n}`;
 assert(source.includes(oldAllSiteViewAssertion), "all-site inventory regression changed; update snapshot integrity injection explicitly");
 
+const oldCatalogAuditStockAssertion = `const catalogAuditStock=catalogAuditSnapshot.stock.filter((row)=>row.item_id===catalogAuditItem.id);
+assert.equal(catalogAuditStock.length,2);
+for(const row of catalogAuditStock){
+  assert.equal(Number(row.quantity),0,"catalog sync seeded physical quantity");
+  assert.equal(Number(row.minimum_quantity),0,"catalog sync seeded physical minimum");
+}`;
+assert(source.includes(oldCatalogAuditStockAssertion), "legacy catalog stock assertion changed; update branch work-projection adapter explicitly");
+
+const branchCatalogWorkProjectionAssertion = `const catalogAuditStock=catalogAuditSnapshot.stock.filter((row)=>row.item_id===catalogAuditItem.id);
+assert.equal(catalogAuditStock.length,3,"branch item must retain two storage rows plus one work-area projection");
+const catalogAuditWorkRows=catalogAuditStock.filter((row)=>{
+  const location=catalogAuditSnapshot.locations.find((entry)=>entry.id===row.location_id);
+  return location?.kind==="work";
+});
+assert.equal(catalogAuditWorkRows.length,1,"branch item must have exactly one work-area stock row");
+assert.equal(
+  catalogAuditSnapshot.locations.find((entry)=>entry.id===catalogAuditWorkRows[0].location_id)?.metadata?.work_area,
+  "meat",
+  "branch work projection must follow the updated item work_area"
+);
+for(const row of catalogAuditStock){
+  assert.equal(Number(row.quantity),0,"catalog sync seeded physical quantity");
+  assert.equal(Number(row.minimum_quantity),0,"catalog sync seeded physical minimum");
+}`;
+
+const oldCatalogAuditLocationAssertions = `assert.deepEqual(
+  new Set(catalogUpdateLog.before_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code])
+);
+assert.deepEqual(
+  new Set(catalogUpdateLog.after_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxFour.code])
+);`;
+assert(source.includes(oldCatalogAuditLocationAssertions), "legacy catalog audit location assertion changed; update branch work-projection adapter explicitly");
+
+const branchCatalogAuditLocationAssertions = `assert.deepEqual(
+  new Set(catalogUpdateLog.before_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxWorkNoodles.code])
+);
+assert.deepEqual(
+  new Set(catalogUpdateLog.after_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxFour.code,fxWorkMeat.code])
+);`;
+
+const oldUnconfiguredDestinationAssertion = `const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
+  method:"POST",cookie:employee.cookie,
+  body:{itemId:tofuFx.id,sourceLocationId:fxFreezer.id,destinationLocationId:yjFour.id,quantity:1}
+});
+assert.equal(unconfiguredDestination.response.status,409);
+assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");`;
+assert(source.includes(oldUnconfiguredDestinationAssertion), "legacy unconfigured-destination fixture changed; update v6 adapter explicitly");
+
+const databaseUnconfiguredDestinationAssertion = `const unconfiguredCatalogKey="unconfigured-destination-regression";
+const unconfiguredSource=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:admin.cookie,
+  body:{item:{key:"fuxing:unconfigured-destination-regression",catalog_key:unconfiguredCatalogKey,
+    zh:"未設定收貨測試",vi:"Kiểm thử chưa cấu hình nơi nhận",unit:"包",work_area:"noodles",
+    storage_only:false,locations:[{code:fxFreezer.code}]}}
+});
+assert.equal(unconfiguredSource.response.status,200);
+const unconfiguredTarget=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:admin.cookie,
+  body:{item:{key:"yongji:unconfigured-destination-regression",catalog_key:unconfiguredCatalogKey,
+    zh:"未設定收貨測試",vi:"Kiểm thử chưa cấu hình nơi nhận",unit:"包",work_area:"noodles",
+    storage_only:false,locations:[]}}
+});
+assert.equal(unconfiguredTarget.response.status,200);
+const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
+  method:"POST",cookie:employee.cookie,
+  body:{itemId:unconfiguredSource.data.item.id,sourceLocationId:fxFreezer.id,destinationLocationId:yjFour.id,quantity:1}
+});
+assert.equal(unconfiguredDestination.response.status,409);
+assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");`;
+
 const oldSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""}]},`;
 assert(source.includes(oldSharedStaffFixture), "legacy workforce fixture changed; update scoped workforce injection explicitly");
 const scopedSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""},{id:"staff-employee",name:"employeefx",role:"employee",area:"soup",hourlyRate:220,active:true,pin:""},{id:"staff-parttime",name:"parttimefx",role:"parttime",area:"seafood",hourlyRate:225,active:true,pin:""}]},`;
@@ -31,10 +105,13 @@ const scopedEmployeeStateRegression = `const employeeStateRead = await request("
 const allSiteSnapshotRegression = `${oldAllSiteViewAssertion}\n\nfunction assertInventorySnapshotIntegrity(snapshot, site) {\n  assert.equal(snapshot?.site, site, \`snapshot site mismatch for \${site}\`);\n  assert(Array.isArray(snapshot?.items), \`items missing for \${site}\`);\n  assert(Array.isArray(snapshot?.locations), \`locations missing for \${site}\`);\n  assert(Array.isArray(snapshot?.stock), \`stock missing for \${site}\`);\n  const itemIds = new Set(snapshot.items.map((item) => item.id));\n  const locationIds = new Set(snapshot.locations.map((location) => location.id));\n  for (const row of snapshot.stock) {\n    assert(itemIds.has(row.item_id), \`orphan/inactive item stock leaked into \${site} snapshot: \${row.item_id}\`);\n    assert(locationIds.has(row.location_id), \`inactive/foreign location stock leaked into \${site} snapshot: \${row.location_id}\`);\n  }\n}\n\nfor (const [site, locationCode] of [["central","central-freezer"],["fuxing","fuxing-freezer"],["yongji","yongji-freezer"]]) {\n  const itemKey = \`\${site}:snapshot-archive-regression\`;\n  const created = await request("/api/inventory/catalog/sync",{\n    method:"POST",cookie:admin.cookie,\n    body:{item:{\n      key:itemKey,catalog_key:\`snapshot-archive-\${site}\`,zh:\`快照封存測試-\${site}\`,vi:\`Kiểm thử snapshot archive \${site}\`,\n      unit:"包",work_area:"noodles",storage_only:true,\n      locations:[{code:locationCode,quantity:3,minimum:1}]\n    }}\n  });\n  assert.equal(created.response.status,200,\`catalog seed failed for \${site}\`);\n\n  const beforeArchive = await inventory(admin.cookie,site);\n  assert.equal(beforeArchive.response.status,200);\n  assertInventorySnapshotIntegrity(beforeArchive.data,site);\n  const seededItem = beforeArchive.data.items.find((item)=>item.item_key===itemKey);\n  assert(seededItem,\`seeded item missing before archive for \${site}\`);\n  const seededLocation = beforeArchive.data.locations.find((location)=>location.code===locationCode);\n  assert(seededLocation,\`seeded location missing before archive for \${site}\`);\n  assert(beforeArchive.data.stock.some((row)=>row.item_id===seededItem.id && row.location_id===seededLocation.id),\`zeroed catalog association missing before archive for \${site}\`);\n\n  // Catalog sync owns metadata/location associations only. Physical stock must\n  // be seeded through the dedicated stocktake APIs before testing archive.\n  const seedQuantity = await request("/api/inventory/set-quantity",{\n    method:"POST",cookie:admin.cookie,\n    body:{itemId:seededItem.id,locationId:seededLocation.id,quantity:3,note:"archive regression seed quantity"}\n  });\n  assert.equal(seedQuantity.response.status,200,\`failed to seed quantity before archive for \${site}\`);\n  const seedMinimum = await request("/api/inventory/set-minimum",{\n    method:"POST",cookie:admin.cookie,\n    body:{itemId:seededItem.id,locationId:seededLocation.id,minimum:1}\n  });\n  assert.equal(seedMinimum.response.status,200,\`failed to seed minimum before archive for \${site}\`);\n\n  const seededArchiveState = await inventory(admin.cookie,site);\n  const seededStock = seededArchiveState.data.stock.find(\n    (row)=>row.item_id===seededItem.id && row.location_id===seededLocation.id\n  );\n  assert.equal(Number(seededStock?.quantity),3,\`dedicated quantity seed missing for \${site}\`);\n  assert.equal(Number(seededStock?.minimum_quantity),1,\`dedicated minimum seed missing for \${site}\`);\n  const blockedArchive = await request("/api/inventory/catalog/archive",{\n    method:"POST",cookie:admin.cookie,body:{itemKey}\n  });\n  assert.equal(blockedArchive.response.status,409,\`archive with stock was not blocked for \${site}\`);\n  assert.equal(blockedArchive.data.error,"ITEM_HAS_STOCK");\n\n  const afterBlockedArchive = await inventory(admin.cookie,site);\n  assert.equal(afterBlockedArchive.response.status,200);\n  assertInventorySnapshotIntegrity(afterBlockedArchive.data,site);\n  assert(afterBlockedArchive.data.items.some((item)=>item.id===seededItem.id),\`stock-bearing item disappeared after blocked archive for \${site}\`);\n\n  for (const row of afterBlockedArchive.data.stock.filter((entry)=>entry.item_id===seededItem.id)) {\n    const zeroQuantity = await request("/api/inventory/set-quantity",{\n      method:"POST",cookie:admin.cookie,\n      body:{itemId:seededItem.id,locationId:row.location_id,quantity:0,note:"archive regression clear quantity"}\n    });\n    assert.equal(zeroQuantity.response.status,200,\`failed to clear quantity before archive for \${site}\`);\n    const zeroMinimum = await request("/api/inventory/set-minimum",{\n      method:"POST",cookie:admin.cookie,\n      body:{itemId:seededItem.id,locationId:row.location_id,minimum:0}\n    });\n    assert.equal(zeroMinimum.response.status,200,\`failed to clear minimum before archive for \${site}\`);\n  }\n\n  const archived = await request("/api/inventory/catalog/archive",{\n    method:"POST",cookie:admin.cookie,body:{itemKey}\n  });\n  assert.equal(archived.response.status,200,\`archive failed after stock was cleared for \${site}\`);\n  assert.equal(archived.data.archived,true);\n  assert(Number(archived.data.stockRowsRemoved)>=1,\`archive did not remove zero-stock configuration for \${site}\`);\n\n  const afterArchive = await inventory(admin.cookie,site);\n  assert.equal(afterArchive.response.status,200);\n  assertInventorySnapshotIntegrity(afterArchive.data,site);\n  assert(!afterArchive.data.items.some((item)=>item.id===seededItem.id || item.item_key===itemKey),\`archived item leaked into item list for \${site}\`);\n  assert(!afterArchive.data.stock.some((row)=>row.item_id===seededItem.id),\`archived item stock leaked into active snapshot for \${site}\`);\n}`;
 
 const migrated = source
-  .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"026");')
+  .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"027");')
   .replace(oldSharedStaffFixture, scopedSharedStaffFixture)
   .replace(oldEmployeeStateRegression, scopedEmployeeStateRegression)
-  .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression);
+  .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression)
+  .replace(oldCatalogAuditStockAssertion, branchCatalogWorkProjectionAssertion)
+  .replace(oldCatalogAuditLocationAssertions, branchCatalogAuditLocationAssertions)
+  .replace(oldUnconfiguredDestinationAssertion, databaseUnconfiguredDestinationAssertion);
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
