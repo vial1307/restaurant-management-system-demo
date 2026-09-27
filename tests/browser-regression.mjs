@@ -72,7 +72,7 @@ async function setSite(page, site) {
     await inventoryNav.click();
   }
   await page.waitForFunction(() => location.hash.replace(/^#\/?/, "").split("?")[0] === "inventory");
-  await page.locator(".inventory-sql-status,.inventory-cloud-notice,.central-heading").first().waitFor({ state:"visible", timeout:10000 });
+  await page.locator(".inventory-sql-status,.inventory-cloud-notice,[data-central-kitchen-shell]").first().waitFor({ state:"visible", timeout:10000 });
 
   const activeSite = await page.evaluate(() => {
     try {
@@ -287,10 +287,10 @@ async function adminDesktop(browser) {
   const navigationCount=await page.evaluate(()=>performance.getEntriesByType("navigation").length);
   await page.locator('[data-warehouse="fuxing"]').click();
   await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
-  assert.equal(await page.locator(".central-heading").count(),0,"central page remained mounted after switching warehouse");
+  assert.equal(await page.locator("[data-central-kitchen-shell]").count(),0,"central page remained mounted after switching warehouse");
   assert.equal(await page.evaluate(()=>performance.getEntriesByType("navigation").length),navigationCount,"switching warehouses reloaded the whole application");
   await page.locator('[data-warehouse="central"]').click();
-  await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
+  await page.locator("[data-central-kitchen-shell]").waitFor({state:"visible"});
   assert.equal(await page.evaluate(()=>performance.getEntriesByType("navigation").length),navigationCount,"returning to central warehouse reloaded the whole application");
 
   await assertNoPageErrors(page,errors,"admin desktop");
@@ -323,7 +323,7 @@ async function roleDesktop(browser, username, checks) {
   }
   if(checks.central){
     await page.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
-    await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
+    await page.locator("[data-central-kitchen-shell]").waitFor({state:"visible"});
     await selectToday(page);
     await page.waitForFunction(() => localStorage.getItem("shitu-inventory-cloud-v2") === "ready", null, {timeout:10000});
     await page.locator('[data-central-mode="in"]').waitFor({state:"visible"});
@@ -332,7 +332,7 @@ async function roleDesktop(browser, username, checks) {
     // date is moved to a historical day. This caught the production regression
     // where all four operational tabs disappeared from the central warehouse.
     await page.locator('[data-action="shift-date"][data-offset="-1"]').click();
-    await page.locator(".central-heading.page-heading").waitFor({state:"visible"});
+    await page.locator("[data-central-kitchen-shell]").waitFor({state:"visible"});
     for(const mode of ["in","pick","transfer","ship"]){
       await page.locator(`[data-central-mode="${mode}"]`).waitFor({state:"visible"});
     }
