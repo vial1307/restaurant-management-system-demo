@@ -1,5 +1,29 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — unified storage/work-area model for Central, Fuxing and Yongji, 2026-09-27
+
+Branch: `refactor/inventory-location-workarea-unification-20260927`.
+
+Goal: make all three inventory sites use the same PostgreSQL classification model. Storage and work-area identity must come from Database master data, never labels, per-site JS lists or mutable global UI fallback.
+
+Implemented:
+- migration `025_inventory_location_workarea_unification.sql` normalizes storage locations to `primary/service`, enforces work-location → work-area identity and gives every active work area exactly one active work location;
+- Central's legacy generic `central-work-use / 使用中` stock is transactionally moved to the item's database-declared work area (麵/湯/海鮮/肉) and the generic location is retired once empty;
+- ambiguous active Central items still classified as `work_area='use'` stop the migration with their item keys instead of being silently guessed;
+- Fuxing/Yongji existing work locations are normalized under the same invariant; any mismatched work stock is relocated to the item's declared work area without changing total quantity;
+- PostgreSQL trigger makes Work Area the owner of its Work Location: create/rename/order/activate/archive stays synchronized automatically;
+- direct work-location mutation through the master-data API is rejected with `WORK_LOCATION_MANAGED_BY_WORK_AREA`;
+- Super Admin Work Location view is read-only/synchronized; edits happen in Work Area, while storage locations remain directly editable and classified as Kho tổng/primary or Kho khu vực/service;
+- Super Admin integrity now reports missing/orphan work locations, invalid storage groups and work-stock mismatches;
+- frontend master-data hydration rejects an unclassified/incomplete site snapshot instead of inferring a fallback;
+- inventory cloud no longer defaults missing work areas from global `WORK_AREAS[0]`, and obsolete site-specific bootstrap wrappers were removed;
+- production inventory audit now enforces classification/cardinality/work-stock invariants across every active site.
+
+No inventory quantity is invented. The migration only moves existing work stock between work locations for the same item/site and preserves quantity; no schema authority moves back to browser storage.
+
+Candidate is not production-complete until exact-head CI, PostgreSQL migration/API regression, merge, VPS backup/deploy, production classification audit, health and UI smoke pass.
+
+
 ## Active candidate — Central storage-row pick shortcut, 2026-09-27
 
 Branch: `feat/central-storage-pick-shortcut-20260927`.
