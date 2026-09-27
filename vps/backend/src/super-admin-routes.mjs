@@ -521,11 +521,12 @@ async function inventoryCatalogAudit() {
     return {
       generatedAt:new Date().toISOString(),
       sites:[],
-      summary:{ activeItems:0,catalogKeys:0,partialCoverage:0,metadataVariants:0,identityVariants:0,operationalVariants:0,duplicatesWithinSite:0,multiLocationMissingReceiveDefault:0,unconfiguredStorage:0 },
+      summary:{ activeItems:0,catalogKeys:0,partialCoverage:0,metadataVariants:0,identityVariants:0,operationalVariants:0,workAreaMismatches:0,duplicatesWithinSite:0,multiLocationMissingReceiveDefault:0,unconfiguredStorage:0 },
       coverage:[],
       metadataVariants:[],
       identityVariants:[],
       operationalVariants:[],
+      workAreaMismatchesWithCentral:[],
       duplicatesWithinSite:[],
       multiLocationMissingReceiveDefault:[],
       unconfiguredStorage:[],
@@ -611,6 +612,40 @@ async function inventoryCatalogAudit() {
     if (hasOperationalVariance) operationalVariants.push(detail);
   }
 
+  const centralSites = new Set(
+    sites
+      .filter((site) => site.metadata?.inventory_mode === "central")
+      .map((site) => site.code)
+  );
+  const branchSites = new Set(
+    sites
+      .filter((site) => site.metadata?.inventory_mode === "branch")
+      .map((site) => site.code)
+  );
+  const workAreaMismatchesWithCentral = [];
+  for (const [catalogKey, rows] of byCatalog) {
+    const centralRows = rows.filter((row) => centralSites.has(row.site));
+    const canonicalAreas = [...new Set(centralRows.map((row) => text(row.work_area)).filter(Boolean))];
+    if (canonicalAreas.length !== 1) continue;
+    const centralWorkArea = canonicalAreas[0];
+    const branchRows = rows.filter((row) =>
+      branchSites.has(row.site) && text(row.work_area) !== centralWorkArea
+    );
+    if (!branchRows.length) continue;
+    workAreaMismatchesWithCentral.push({
+      catalogKey,
+      centralWorkArea,
+      centralItems:centralRows.map((row) => ({
+        id:row.id,itemKey:row.item_key,site:row.site,nameVi:row.name_vi,nameZhTw:row.name_zh_tw,
+        workArea:row.work_area,
+      })),
+      branchItems:branchRows.map((row) => ({
+        id:row.id,itemKey:row.item_key,site:row.site,nameVi:row.name_vi,nameZhTw:row.name_zh_tw,
+        workArea:row.work_area,
+      })),
+    });
+  }
+
   const duplicateMap = new Map();
   for (const item of items) {
     const key = `${item.site}|${item.catalog_key}`;
@@ -626,7 +661,6 @@ async function inventoryCatalogAudit() {
       items:rows.map((row) => ({ id:row.id,itemKey:row.item_key,nameVi:row.name_vi,nameZhTw:row.name_zh_tw,unit:row.unit })),
     }));
 
-  const branchSites = new Set(sites.filter((site) => site.metadata?.inventory_mode === "branch").map((site) => site.code));
   const multiLocationMissingReceiveDefault = items
     .filter((item) =>
       branchSites.has(item.site)
@@ -656,6 +690,7 @@ async function inventoryCatalogAudit() {
       metadataVariants:metadataVariants.length,
       identityVariants:identityVariants.length,
       operationalVariants:operationalVariants.length,
+      workAreaMismatches:workAreaMismatchesWithCentral.length,
       duplicatesWithinSite:duplicatesWithinSite.length,
       multiLocationMissingReceiveDefault:multiLocationMissingReceiveDefault.length,
       unconfiguredStorage:unconfiguredStorage.length,
@@ -664,6 +699,7 @@ async function inventoryCatalogAudit() {
     metadataVariants:metadataVariants.slice(0,250),
     identityVariants:identityVariants.slice(0,250),
     operationalVariants:operationalVariants.slice(0,250),
+    workAreaMismatchesWithCentral:workAreaMismatchesWithCentral.slice(0,250),
     duplicatesWithinSite:duplicatesWithinSite.slice(0,250),
     multiLocationMissingReceiveDefault:multiLocationMissingReceiveDefault.slice(0,250),
     unconfiguredStorage:unconfiguredStorage.slice(0,250),
