@@ -1925,7 +1925,7 @@ window.addEventListener("shitu:vps-auth-ready", renderWhenAuthorized);
 window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
 window.addEventListener("shitu:inventory-sites-changed", renderWhenAuthorized);
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
-  if (route() !== "inventory" || document.querySelector(".central-heading")) return;
+  if (route() !== "inventory" || document.querySelector("[data-central-kitchen-shell]")) return;
   const site = activeInventorySite();
   if (!event.detail?.site || event.detail.site === site) {
     if (view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
@@ -1934,7 +1934,7 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;
-  if (route() === "inventory" && !document.querySelector(".central-heading")) renderWhenAuthorized();
+  if (route() === "inventory" && !document.querySelector("[data-central-kitchen-shell]")) renderWhenAuthorized();
 });
 // The former offline worker is retired so every VPS session loads one release.
 store.subscribe(renderWhenAuthorized);
