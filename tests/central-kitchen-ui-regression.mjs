@@ -34,7 +34,7 @@ assert.match(auth, /centralOperationItemKey = button\.dataset\.itemKey[\s\S]{0,1
   "Central receive shortcut must carry the exact database item/location into the operation controller");
 assert.match(auth, /mountInventoryOperations\(host,\{[\s\S]{0,260}initialItemKey:content\.dataset\.centralOperationItemKey[\s\S]{0,180}initialLocationCode:content\.dataset\.centralOperationLocationCode/,
   "Central operation mount must pass priority deep-link focus into the authoritative controller");
-assert.match(auth, /mountInventoryOperations\(host,\{site:"central",mode,language/,
+assert.match(auth, /mountInventoryOperations\(host,\{[\s\S]{0,220}site:"central",[\s\S]{0,120}\bmode,[\s\S]{0,120}\blanguage,/,
   "Central redesign must preserve the existing authoritative operation controller");
 assert.match(auth, /cloudRelocateStorage\(/,
   "Central redesign must preserve PostgreSQL-backed storage relocation");
