@@ -177,7 +177,7 @@ try {
       "select * from public.inventory_locations where code=$1 and active=true limit 1",
       [code]
     );
-    assert.equal(rows.length,1,`missing derived work location: ${code}`);
+    if (rows.length !== 1) throw new Error(`missing derived work location: ${code}`);
     locations[code]=rows[0];
   }
 
