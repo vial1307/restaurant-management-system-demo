@@ -17,6 +17,11 @@ Implemented:
 - Super Admin integrity now reports missing/orphan work locations, invalid storage groups and work-stock mismatches;
 - frontend master-data hydration rejects an unclassified/incomplete site snapshot instead of inferring a fallback;
 - inventory cloud no longer defaults missing work areas from global `WORK_AREAS[0]`, and obsolete site-specific bootstrap wrappers were removed;
+- shared inventory operations now resolve the pick destination strictly from PostgreSQL `location.metadata.work_area`; the old `noodles` suffix guess and `central-work-use` fallback are removed;
+- Fuxing-only reconciliation/catalog/location compatibility APIs were removed so Central/Fuxing/Yongji all use the same generic site-aware inventory functions;
+- account/site labels and pick guidance no longer hard-code Central/Fuxing/Yongji names or the retired generic `使用中` work location;
+- Super Admin no longer presents missing/invalid storage classification as `primary`; new storage follows the DB `service` default until reclassified;
+- regression fixtures now model `primary`/`service` storage explicitly, and API regression requires Central/Fuxing/Yongji each to expose both storage classes plus classified active work locations;
 - production inventory audit now enforces classification/cardinality/work-stock invariants across every active site.
 
 No inventory quantity is invented. The migration only moves existing work stock between work locations for the same item/site and preserves quantity; no schema authority moves back to browser storage.
