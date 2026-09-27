@@ -17,16 +17,16 @@ import {
   vpsRelocateStorage,
   vpsRelocateWorkArea,
 } from "./vps-api.js";
-import { PRIMARY_ZONES, STORAGE_KEY, WORK_AREAS, ZONES, stockKeyFor } from "./store.js";
+import { STORAGE_KEY, stockKeyFor } from "./store.js";
 import {
   firstInventorySite,
   inventoryLocationByCode,
   inventoryLocationByUiKey,
   inventoryLocationUiKey,
+  inventoryLocationWorkArea,
   inventoryMasterSnapshot,
   inventorySiteForLocationCode,
   inventorySites,
-  inventoryUiGroups,
   inventoryWorkLocation,
   isBranchInventorySite,
   isKnownInventorySite,
@@ -153,21 +153,9 @@ async function ensureSiteRegistry({ force = false } = {}) {
 }
 
 function syncUiMasterData(site, snapshot) {
+  // Inventory master data is site-scoped. Never mutate shared legacy arrays
+  // when switching sites; the active site's structure lives in this snapshot.
   replaceInventoryMasterSnapshot(site, snapshot);
-  // Shipment reads fetch multiple sites; only the active site owns the UI.
-  if (site !== currentSite()) return;
-  const groups = inventoryUiGroups(site);
-  ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
-    id:entry.id,
-    zh:entry.zh,
-    vi:entry.vi,
-    code:entry.code,
-    storageGroup:entry.storageGroup,
-  })));
-  WORK_AREAS.splice(0, WORK_AREAS.length, ...groups.workAreas);
-  PRIMARY_ZONES.splice(0, PRIMARY_ZONES.length, ...groups.storage
-    .filter((entry) => entry.storageGroup === "primary")
-    .map((entry) => entry.id));
 }
 
 export function isCurrentBranchInventoryDate() {
@@ -494,7 +482,7 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
-        work_area: entry.workArea || WORK_AREAS[0]?.id || "",
+        work_area: String(entry.workArea || "").trim(),
         storage_only: Boolean(entry.storageOnly),
         locations: [],
       });
@@ -520,7 +508,7 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
     const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
     const item = grouped.get(stockKey);
     if (!item) continue;
-    const area = entry.workArea || item.work_area || WORK_AREAS[0]?.id || "";
+    const area = String(entry.workArea || item.work_area || "").trim();
     const code = branchWorkLocationCode(site, area);
     if (!code) continue;
     item.locations.push({
@@ -546,7 +534,7 @@ function buildCentralCatalog(items) {
         zh:entry.zh || baseId,
         vi:entry.vi || entry.zh || baseId,
         unit:entry.unit || "個",
-        work_area:entry.workArea || entry.work_area || WORK_AREAS[0]?.id || "",
+        work_area:String(entry.workArea || entry.work_area || "").trim(),
         storage_only:true,
         locations:[],
       });
@@ -746,10 +734,15 @@ function applyCentral(rows) {
   for (const row of rows) {
     if (!row.item.item_key?.startsWith("central:")) continue;
     if (row.location.kind === "work") {
+      const area = inventoryLocationWorkArea(row.location);
+      if (!area || area !== String(row.item.work_area || "")) {
+        throw new Error("INVENTORY_WORK_STOCK_AREA_MISMATCH");
+      }
       nextWork[row.item.item_key] = {
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
         locationCode:row.location.code,
+        workArea:area,
       };
       continue;
     }
@@ -765,7 +758,7 @@ function applyCentral(rows) {
       zh:row.item.name_zh_tw,
       vi:row.item.name_vi,
       unit:row.item.unit,
-      workArea:row.item.work_area || WORK_AREAS[0]?.id || "",
+      workArea:String(row.item.work_area || "").trim(),
       zone,
       qty:Number(row.quantity)||0,
       minimum:Number(row.minimum_quantity)||0,
@@ -814,7 +807,7 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
-        workArea:row.item.work_area||WORK_AREAS[0]?.id||"",
+        workArea:String(row.item.work_area||"").trim(),
         storageOnly:Boolean(row.item.storage_only),
         zone,
         quantity:Number(row.quantity)||0,
@@ -823,7 +816,10 @@ function applyBranch(rows, site) {
         cloudLocationId:row.location.id,
       });
     }else if(row.location.kind==="work"){
-      const area=String(row.location.metadata?.work_area || inventoryLocationUiKey(row.location) || row.item.work_area || "");
+      const area=inventoryLocationWorkArea(row.location);
+      if (!area || area !== String(row.item.work_area || "")) {
+        throw new Error("INVENTORY_WORK_STOCK_AREA_MISMATCH");
+      }
       workMap.set(stockKey,{
         id:`work-${stockKey}`,
         stockKey,
@@ -832,7 +828,7 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
-        workArea:area||row.item.work_area||WORK_AREAS[0]?.id||"",
+        workArea:area,
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
         cloudItemId:row.item.id,
