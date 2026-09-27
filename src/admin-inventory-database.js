@@ -128,11 +128,12 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
           name_zh_tw:row.nameZhTw,
           work_area:row.workArea,
           central_work_area:mismatch.centralWorkArea,
+          integrity_detail:String(row.workArea || "—") + " → " + String(mismatch.centralWorkArea || "—"),
         });
       }
     }
     const rowCode = (row) => row?.catalog_key || row?.code || row?.item_key || row?.id || "";
-    return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(label(row))} <code>${esc(rowCode(row))}</code></li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
+    return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(label(row))} <code>${esc(rowCode(row))}</code>${row.integrity_detail?`<small>${esc(row.integrity_detail)}</small>`:""}</li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
   }
   function render() {
     if (!host?.isConnected) return;
