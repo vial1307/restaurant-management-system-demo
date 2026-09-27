@@ -44,6 +44,25 @@ for(const row of catalogAuditStock){
   assert.equal(Number(row.minimum_quantity),0,"catalog sync seeded physical minimum");
 }`;
 
+const oldCatalogAuditLocationAssertions = `assert.deepEqual(
+  new Set(catalogUpdateLog.before_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code])
+);
+assert.deepEqual(
+  new Set(catalogUpdateLog.after_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxFour.code])
+);`;
+assert(source.includes(oldCatalogAuditLocationAssertions), "legacy catalog audit location assertion changed; update branch work-projection adapter explicitly");
+
+const branchCatalogAuditLocationAssertions = `assert.deepEqual(
+  new Set(catalogUpdateLog.before_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxWorkNoodles.code])
+);
+assert.deepEqual(
+  new Set(catalogUpdateLog.after_data?.locations?.map((entry)=>entry.location_code)),
+  new Set([fxFreezer.code,fxFour.code,fxWorkMeat.code])
+);`;
+
 const oldSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""}]},`;
 assert(source.includes(oldSharedStaffFixture), "legacy workforce fixture changed; update scoped workforce injection explicitly");
 const scopedSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""},{id:"staff-employee",name:"employeefx",role:"employee",area:"soup",hourlyRate:220,active:true,pin:""},{id:"staff-parttime",name:"parttimefx",role:"parttime",area:"seafood",hourlyRate:225,active:true,pin:""}]},`;
@@ -60,7 +79,8 @@ const migrated = source
   .replace(oldSharedStaffFixture, scopedSharedStaffFixture)
   .replace(oldEmployeeStateRegression, scopedEmployeeStateRegression)
   .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression)
-  .replace(oldCatalogAuditStockAssertion, branchCatalogWorkProjectionAssertion);
+  .replace(oldCatalogAuditStockAssertion, branchCatalogWorkProjectionAssertion)
+  .replace(oldCatalogAuditLocationAssertions, branchCatalogAuditLocationAssertions);
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
