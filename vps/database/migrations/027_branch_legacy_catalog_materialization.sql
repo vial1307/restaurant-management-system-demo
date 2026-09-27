@@ -372,7 +372,11 @@ select
     'policy','insert_missing_catalog_and_associations_without_rewriting_existing_stock',
     'legacy_runtime_rows',77,
     'materialized_catalog_identities',75,
-    'historical_extra_items',1
+    'historical_extra_items',1,
+    'item_suffixes',(
+      select jsonb_agg(item_suffix order by item_suffix)
+      from legacy_branch_catalog
+    )
   )
 from legacy_branch_sites s
 left join legacy_branch_catalog_before b on b.site=s.code;
