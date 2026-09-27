@@ -1,13 +1,23 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — verify Fuxing/Yongji Work Area UI counts, 2026-09-28
+## DONE — branch catalog + Work Area projection production verification, 2026-09-28
 
-- Central appears correct, but a branch Work Area UI was observed showing only 16 items (14 noodles / 0 soup / 2 seafood / 0 meat).
-- This conflicts with verified schema-026 catalog counts: Fuxing 76 and Yongji 72.
-- Treat this as a UI/snapshot/count-semantics regression until proven otherwise; do not re-run migration 026 or rewrite stock blindly.
-- Next action: compare DB catalog classification, Work Location stock, API snapshot and Website count/filter logic for Fuxing and Yongji independently.
-- Acceptance: all three sites use one PostgreSQL Work Area classification contract; UI must not derive membership from stock presence, labels, hard-coded site mappings or browser-local data unless explicitly designed/labeled that way.
-
+- PR #167 merged as `7ae8d3fcbff9ceb9e3ddb1171985728a01b9b0c7`; Deploy #981 / run `36344197565` passed preflight, PostgreSQL/API/Super Admin/browser/full-device regression, deploy, health/release check and production UI smoke.
+- Production schema is `027`; release is `7ae8d3f`.
+- Root cause of the UI mismatch was missing branch Work Location stock projections, not incorrect `inventory_items.work_area` classification.
+- Migration 027 materialized 75 legacy branch catalog identities into PostgreSQL and backfilled missing Work Location rows without overwriting existing quantity/minimum.
+- PostgreSQL trigger now keeps every active branch product projected to exactly one matching Work Area after future catalog edits.
+- Storage summary counts unique product identity instead of counting the same product once per storage location.
+- Super Admin Integrity now reports products missing Work Area projection and its direct PostgreSQL/API round-trip is regression-tested.
+- Production audit #252 / run `36345117340` PASS:
+  - Fuxing 78 active products: noodles 30 / soup 18 / seafood 21 / meat 9;
+  - Yongji 75 active products: noodles 33 / soup 17 / seafood 17 / meat 8;
+  - Central 41 active products: noodles 38 / soup 1 / seafood 2;
+  - `active_branch_item_without_work_row=0`;
+  - Fuxing legacy manifest expected 75 / missing 0;
+  - Yongji legacy manifest expected 75 / missing 0;
+  - site/classification/materialization/hidden-inventory violation counts all 0.
+- Next: procurement/factory hard-code and legacy `store-core.js` defaults are separate cleanup work; do not remove them until their remaining consumers are audited.
 
 ## DONE — database-driven inventory replenishment routing, 2026-09-28
 
