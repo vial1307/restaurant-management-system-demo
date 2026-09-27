@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-09-27 — Central Kitchen inventory UI redesign production verification
+
+- PR #152 exact head `df64c415950acccb3741cc43e75052710a1c3618` passed Deploy #897 / run `36286847264`, Super Admin Browser #167 / run `36286847257` and the related workforce diagnostics.
+- Browser CI exposed two real integration regressions caused by retiring the legacy `.central-heading` marker: the branch renderer could take over the new Central shell, and Central lifecycle refreshes could erase a dirty ingredient editor before stale-edit protection ran.
+- Runtime guards in both `src/app.js` and `src/auth-layer.js` now detect `[data-central-kitchen-shell]`; dirty Central editors are preserved on inventory update/status events. Super Admin Browser #166/#167 verified stale-draft retention and cross-surface synchronization.
+- Legacy browser/static tests were updated to assert the redesigned Central KPI/navigation shell and the actual invariant that Central inventory is not branch-date-locked.
+- PR #152 merged as `7157d0b5263209b3391ccab57c088668d7902973`.
+- Deploy #898 / run `36287068079` passed preflight, API/PostgreSQL/concurrency, desktop/mobile Chromium, full-device cross-browser, backup/deploy and production UI smoke.
+- Backup: `kitchen_os_20260927T020142Z.dump`.
+- Production: `DATA_INTEGRITY_OK`; health `release=7157d0b`, schema `024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #164 / run `36287397492` PASS. Post-deploy workforce schedule/staff/attendance verification also PASS.
+- No schema migration, permission change, inventory endpoint change or production stock rewrite.
+- Next: continue the Central Kitchen operator-facing UI on PostgreSQL-defined site/location/work-area structure.
+
 ## 2026-09-25 — Inventory main website ↔ Super Admin correction deployed
 
 - PR #139 merged as `ee5316b8ae5f12f2288aebf54e9e9cede3756ba0`. Final head `19ff741` passed Super Admin Browser `36142056162` (all six device profiles and two independent sessions for Central/Fuxing/Yongji at 320px and 1366px), full-system/API/PostgreSQL regression `36142055831`, API load `36142055866` and workforce diagnostic `36142055825`.
@@ -247,7 +261,6 @@ Verified:
 This makes `3a3392133483c6575a63d61a04d085a2d50df692` the verified production milestone, replacing the old schema-020 production baseline.
 
 ### Capacity audit
-
 Run `35377327695` succeeded. Observed host values included 2 vCPU, Ubuntu 22.04.5 LTS, 49 GB root disk with ~44 GB available, ~38 MB Kitchen OS footprint, ~15 MB backup directory and 72 backup files at audit time.
 
 ### Follow-up started
@@ -748,7 +761,6 @@ Observed read-only capacity snapshot:
 User requested that Super Admin GitHub & Handoff update the current development chain/fix directly from VPS/GitHub and provide one link that another developer or a future chat can use to continue.
 
 Created branch:
-
 - `feat/live-github-handoff-20260920`.
 
 Implementation candidate:
@@ -997,7 +1009,6 @@ Created continuation branch:
 - `fix/inventory-roundtrip-performance-20260921`;
 - prerequisite catalog-audit PR #131 merged as `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9` and PR #132 is based on that merge;
 - production remains Deploy #796 / `21d376295b6194e48bfaa599fc6c5424256a6196`, schema 024.
-
 Confirmed defects:
 
 - every rapid branch/central `+ / -` action updated the store or page and triggered a full render, then cloud synchronization triggered another full inventory fetch/render;
@@ -1364,4 +1375,3 @@ The separate read-cutover candidate:
 - Added `tests/central-kitchen-ui-regression.mjs` and wired it into static preflight.
 - No schema migration, stock rewrite, permission change or transaction endpoint change.
 - Next: open PR, run exact-head static/API/PostgreSQL/browser/full-device regression, fix only redesign regressions, then deploy and verify production.
-
