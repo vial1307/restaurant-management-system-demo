@@ -148,6 +148,7 @@ jobs:
           test -f vps/backend/scripts/api-regression-v6.mjs
           test -f vps/backend/scripts/inventory-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
+          test -f vps/backend/scripts/inventory-work-area-parity-regression.mjs
           test -f tests/inventory-archive-integrity-contract-regression.mjs
           test -f tests/inventory-location-archive-integrity-contract-regression.mjs
           test -f tests/workforce-approval-browser-regression.mjs
@@ -159,6 +160,7 @@ jobs:
           test -f vps/database/migrations/006_business_module_revisions.sql
           test -f vps/database/migrations/023_inventory_archive_integrity.sql
           test -f vps/database/migrations/024_inventory_location_archive_integrity.sql
+          test -f vps/database/migrations/025_inventory_three_site_master_data_parity.sql
 
   regression:
     runs-on: ubuntu-latest
@@ -216,6 +218,9 @@ jobs:
 
       - name: Inventory location archive integrity database regression
         run: node vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
+
+      - name: Inventory work-area parity database regression
+        run: node vps/backend/scripts/inventory-work-area-parity-regression.mjs
 
       - name: Start API
         run: |
