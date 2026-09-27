@@ -768,7 +768,7 @@ function inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, all
   if (groupKey !== "zone") return `<div class="zone-tabs work-area-tabs">${all}${groups.map(tab).join("")}</div>`;
 
   const primary = groups.filter((group) => group.storageGroup === "primary");
-  const service = groups.filter((group) => group.storageGroup !== "primary");
+  const service = groups.filter((group) => group.storageGroup === "service");
   return `<div class="storage-tab-groups"><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.primaryStorage)}</span><div class="zone-tabs">${all}${primary.map(tab).join("")}</div></div><div class="storage-tab-group"><span class="storage-group-label">${escapeHtml(text.serviceStorage)}</span><div class="zone-tabs">${service.map(tab).join("")}</div></div></div>`;
 }
 
