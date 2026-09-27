@@ -22,6 +22,7 @@ export const INVENTORY_ADMIN_TEXT = {
   discard:["Bỏ nội dung chưa lưu?","放棄尚未儲存的內容？"],
   storageOnly:["Chỉ lưu kho","僅倉儲"], sort:["Thứ tự hiển thị","顯示順序"],
   group:["Phân loại kho","儲藏分類"], primary:["Kho tổng / dự trữ chính","總倉／主要儲備"], service:["Kho khu vực / tủ sử dụng","區域庫／現場冰箱"],
+  factoryReplenishment:["Nguồn gọi hàng từ xưởng","工廠補貨來源"], factoryReplenishmentHint:["Đánh dấu Kho tổng mà hệ thống dùng để tạo cảnh báo/gợi ý gọi hàng từ xưởng. Không dựa vào tên kho.","標記系統用於工廠叫貨提醒／建議的總倉；不依賴儲位名稱。"],
   department:["Bộ phận","部門"], none:["Chưa chọn","尚未選擇"],
   quantity:["Số lượng thực tế","實際數量"], minimum:["Định mức tại vị trí","位置安全量"],
   note:["Lý do / ghi chú","原因／備註"], location:["Vị trí","位置"],
