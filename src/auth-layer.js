@@ -1024,7 +1024,7 @@ function applyAccess() {
       // The mutation observer also sees the DOM written by centralPage(). Do not
       // render it again here or async operation panels are replaced in a loop
       // before their controls finish loading.
-      if (!document.querySelector(".central-heading")) centralPage(user);
+      if (!document.querySelector("[data-central-kitchen-shell]")) centralPage(user);
     } else if ((user.role === "admin" || user.location === "all") && location.hash.startsWith("#inventory")) {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
@@ -1063,7 +1063,7 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;
-  if (!location.hash.startsWith("#inventory") || !document.querySelector(".central-heading")) return;
+  if (!location.hash.startsWith("#inventory") || !document.querySelector("[data-central-kitchen-shell]")) return;
   const user = session();
   if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
 });
