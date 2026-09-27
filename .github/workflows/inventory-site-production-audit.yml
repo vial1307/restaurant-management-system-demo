@@ -65,6 +65,69 @@ jobs:
           group by l.site
           order by l.site;
 
+          select 'topology|' || site.code
+                 || '|storage|' || count(distinct location.id) filter (where location.active=true and location.kind='storage')
+                 || '|work_areas|' || count(distinct area.code) filter (where area.active=true)
+                 || '|work_locations|' || count(distinct location.id) filter (where location.active=true and location.kind='work')
+          from public.sites site
+          left join public.inventory_locations location on location.site=site.code
+          left join public.work_areas area on area.site_code=site.code
+          where site.active=true
+            and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+          group by site.code
+          order by site.code;
+
+          select 'work_area_missing_location|' || count(*)
+          from public.work_areas area
+          join public.sites site
+            on site.code=area.site_code
+           and site.active=true
+           and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+          where area.active=true
+            and not exists (
+              select 1 from public.inventory_locations location
+              where location.site=area.site_code
+                and location.active=true
+                and location.kind='work'
+                and btrim(coalesce(location.metadata->>'work_area',''))=area.code
+            );
+
+          select 'work_location_invalid_area|' || count(*)
+          from public.inventory_locations location
+          where location.active=true
+            and location.kind='work'
+            and not exists (
+              select 1 from public.work_areas area
+              where area.site_code=location.site
+                and area.active=true
+                and area.code=btrim(coalesce(location.metadata->>'work_area',''))
+            );
+
+          select 'work_stock_area_mismatch|' || count(*)
+          from public.inventory_stock stock
+          join public.inventory_items item on item.id=stock.item_id
+          join public.inventory_locations location on location.id=stock.location_id
+          where location.kind='work'
+            and (stock.quantity>0 or stock.minimum_quantity>0)
+            and (
+              location.site<>split_part(item.item_key,':',1)
+              or btrim(coalesce(location.metadata->>'work_area',''))<>item.work_area
+            );
+
+          select 'cross_site_work_area_variants|' || count(*)
+          from (
+            select item.catalog_key
+            from public.inventory_items item
+            join public.sites site
+              on site.code=split_part(item.item_key,':',1)
+             and site.active=true
+             and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+            where item.active=true
+            group by item.catalog_key
+            having count(distinct split_part(item.item_key,':',1))>1
+               and count(distinct item.work_area)>1
+          ) variants;
+
           select 'stock_site_mismatch|' || count(*)
           from public.inventory_stock s
           join public.inventory_items i on i.id=s.item_id
@@ -205,6 +268,91 @@ jobs:
           )"
           echo "inventory_site_integrity_violations=${result}"
           test "$result" = "0"
+
+      - name: Enforce warehouse master-data parity
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
+          result="$("${SSH[@]}" 'cd /opt/kitchen-os && set -a && source .env && set +a && docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL'
+          select
+            (select count(*)
+             from public.work_areas area
+             join public.sites site
+               on site.code=area.site_code
+              and site.active=true
+              and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+             where area.active=true
+               and not exists (
+                 select 1 from public.inventory_locations location
+                 where location.site=area.site_code
+                   and location.active=true
+                   and location.kind='work'
+                   and btrim(coalesce(location.metadata->>'work_area',''))=area.code
+               ))
+            +
+            (select count(*)
+             from public.inventory_locations location
+             where location.active=true
+               and location.kind='work'
+               and not exists (
+                 select 1 from public.work_areas area
+                 where area.site_code=location.site
+                   and area.active=true
+                   and area.code=btrim(coalesce(location.metadata->>'work_area',''))
+               ))
+            +
+            (select count(*)
+             from public.inventory_stock stock
+             join public.inventory_items item on item.id=stock.item_id
+             join public.inventory_locations location on location.id=stock.location_id
+             where location.kind='work'
+               and (stock.quantity>0 or stock.minimum_quantity>0)
+               and (
+                 location.site<>split_part(item.item_key,':',1)
+                 or btrim(coalesce(location.metadata->>'work_area',''))<>item.work_area
+               ))
+            +
+            (select count(*)
+             from (
+               select item.catalog_key
+               from public.inventory_items item
+               join public.sites site
+                 on site.code=split_part(item.item_key,':',1)
+                and site.active=true
+                and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+               where item.active=true
+               group by item.catalog_key
+               having count(distinct split_part(item.item_key,':',1))>1
+                  and count(distinct item.work_area)>1
+             ) variants)
+            +
+            (select count(*)
+             from (
+               select
+                 split_part(item.item_key,':',1) as site,
+                 item.catalog_key,
+                 count(distinct location.id) filter (
+                   where location.active=true and location.kind='storage'
+                 ) as storage_locations
+               from public.inventory_items item
+               join public.sites site
+                 on site.code=split_part(item.item_key,':',1)
+                and site.active=true
+                and site.metadata->>'inventory_mode'='branch'
+               left join public.inventory_stock stock on stock.item_id=item.id
+               left join public.inventory_locations location on location.id=stock.location_id
+               where item.active=true
+               group by split_part(item.item_key,':',1),item.catalog_key
+             ) configured
+             where configured.storage_locations>1
+               and not exists (
+                 select 1 from public.inventory_receive_defaults d
+                 where d.site=configured.site and d.catalog_key=configured.catalog_key
+               ));
+          SQL
+          )"
+          echo "inventory_master_data_parity_violations=${result}"
+          test "${result}" = "0"
 
       - name: Enforce zero hidden inventory after deploy
         if: github.event_name == 'workflow_run'
