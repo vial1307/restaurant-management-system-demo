@@ -259,6 +259,16 @@ async function runSuperAdminProfile(profile) {
     await workspace.locator('[data-idb-action="tab-locations"]').click();
     for(const kind of ["storage","work","areas"]) {
       await workspace.locator(`[data-idb-action="kind-${kind}"]`).click();
+      if(kind === "work") {
+        await workspace.locator(".sa-pill").filter({hasText:/Đồng bộ|同步|Synchronized/i}).first().waitFor({state:"visible"});
+        assert.equal(
+          await workspace.locator('[data-idb-action="master"]:not([data-id])').count(),
+          0,
+          `${profile.name} work locations must be read-only projections of Work Area`,
+        );
+        await assertFit(page,`${profile.name} work location projection`);
+        continue;
+      }
       await workspace.locator('[data-idb-action="master"]:not([data-id])').click();
       await assertFit(page,`${profile.name} ${kind} editor`);
       await workspace.locator('[data-idb-action="close"]').click();

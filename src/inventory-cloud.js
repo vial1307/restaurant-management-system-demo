@@ -17,7 +17,7 @@ import {
   vpsRelocateStorage,
   vpsRelocateWorkArea,
 } from "./vps-api.js";
-import { PRIMARY_ZONES, STORAGE_KEY, WORK_AREAS, ZONES, stockKeyFor } from "./store.js";
+import { STORAGE_KEY, stockKeyFor } from "./store.js";
 import {
   firstInventorySite,
   inventoryLocationByCode,
@@ -26,7 +26,6 @@ import {
   inventoryMasterSnapshot,
   inventorySiteForLocationCode,
   inventorySites,
-  inventoryUiGroups,
   inventoryWorkLocation,
   isBranchInventorySite,
   isKnownInventorySite,
@@ -153,21 +152,10 @@ async function ensureSiteRegistry({ force = false } = {}) {
 }
 
 function syncUiMasterData(site, snapshot) {
+  // Inventory master data stays site-scoped. Do not copy a site's storage/work
+  // classification into legacy global arrays because switching sites would leak
+  // one branch's structure into another branch or into non-inventory modules.
   replaceInventoryMasterSnapshot(site, snapshot);
-  // Shipment reads fetch multiple sites; only the active site owns the UI.
-  if (site !== currentSite()) return;
-  const groups = inventoryUiGroups(site);
-  ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
-    id:entry.id,
-    zh:entry.zh,
-    vi:entry.vi,
-    code:entry.code,
-    storageGroup:entry.storageGroup,
-  })));
-  WORK_AREAS.splice(0, WORK_AREAS.length, ...groups.workAreas);
-  PRIMARY_ZONES.splice(0, PRIMARY_ZONES.length, ...groups.storage
-    .filter((entry) => entry.storageGroup === "primary")
-    .map((entry) => entry.id));
 }
 
 export function isCurrentBranchInventoryDate() {
@@ -494,7 +482,7 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
-        work_area: entry.workArea || WORK_AREAS[0]?.id || "",
+        work_area: entry.workArea || "",
         storage_only: Boolean(entry.storageOnly),
         locations: [],
       });
@@ -520,7 +508,7 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
     const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
     const item = grouped.get(stockKey);
     if (!item) continue;
-    const area = entry.workArea || item.work_area || WORK_AREAS[0]?.id || "";
+    const area = entry.workArea || item.work_area || "";
     const code = branchWorkLocationCode(site, area);
     if (!code) continue;
     item.locations.push({
@@ -546,7 +534,7 @@ function buildCentralCatalog(items) {
         zh:entry.zh || baseId,
         vi:entry.vi || entry.zh || baseId,
         unit:entry.unit || "個",
-        work_area:entry.workArea || entry.work_area || WORK_AREAS[0]?.id || "",
+        work_area:entry.workArea || entry.work_area || "",
         storage_only:true,
         locations:[],
       });
@@ -627,18 +615,6 @@ export async function refreshInventoryCloudState() {
   migrationCheckedAt = 0;
   await ensureSiteRegistry({ force:true });
   return verifyMigration({ force: true });
-}
-
-export async function bootstrapFuxingInventory() {
-  return isVpsApiConfigured();
-}
-
-export async function bootstrapYongjiInventory() {
-  return isVpsApiConfigured();
-}
-
-export async function bootstrapCentralInventory() {
-  return isVpsApiConfigured();
 }
 
 async function fetchSite(site, { force = false } = {}) {
@@ -765,7 +741,7 @@ function applyCentral(rows) {
       zh:row.item.name_zh_tw,
       vi:row.item.name_vi,
       unit:row.item.unit,
-      workArea:row.item.work_area || WORK_AREAS[0]?.id || "",
+      workArea:row.item.work_area || "",
       zone,
       qty:Number(row.quantity)||0,
       minimum:Number(row.minimum_quantity)||0,
@@ -814,7 +790,7 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
-        workArea:row.item.work_area||WORK_AREAS[0]?.id||"",
+        workArea:row.item.work_area||"",
         storageOnly:Boolean(row.item.storage_only),
         zone,
         quantity:Number(row.quantity)||0,
@@ -823,7 +799,7 @@ function applyBranch(rows, site) {
         cloudLocationId:row.location.id,
       });
     }else if(row.location.kind==="work"){
-      const area=String(row.location.metadata?.work_area || inventoryLocationUiKey(row.location) || row.item.work_area || "");
+      const area=String(row.location.metadata?.work_area || row.item.work_area || "");
       workMap.set(stockKey,{
         id:`work-${stockKey}`,
         stockKey,
@@ -832,7 +808,7 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
-        workArea:area||row.item.work_area||WORK_AREAS[0]?.id||"",
+        workArea:area||row.item.work_area||"",
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
         cloudItemId:row.item.id,
@@ -1113,63 +1089,6 @@ export async function cloudRelocateWorkArea({
   }
 }
 
-export async function reconcileFuxingSnapshot(note = "同步庫存 / Đồng bộ tồn kho") {
-  if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
-  const site = "fuxing";
-  const rows = await fetchSite(site);
-  const { record } = selectedBranchRecord();
-  if (!record) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-
-  const local = new Map();
-  for (const entry of record.inventory || []) {
-    const stockKey = entry.stockKey || stockKeyFor(entry);
-    const code = branchLocationCode(site,entry.zone);
-    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
-  }
-  for (const entry of record.workInventory || []) {
-    const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
-    const code = branchWorkLocationCode(site,entry.workArea);
-    if (code) local.set(`${site}:${stockKey}|${code}`, Number(entry.quantity) || 0);
-  }
-
-  const changes = [];
-  for (const row of rows) {
-    const key = `${row.item.item_key}|${row.location.code}`;
-    if (!local.has(key)) continue;
-    const target = local.get(key);
-    const current = Number(row.quantity) || 0;
-    if (target === current) continue;
-    changes.push({
-      itemId: row.item.id,
-      locationId: row.location.id,
-      direction: target > current ? "in" : "out",
-      amount: Math.abs(target - current),
-    });
-  }
-
-  if (!changes.length) return { ok: true, changed: 0 };
-
-  for (const change of changes) {
-    try {
-      await vpsAdjustInventory({
-        itemId: change.itemId,
-        locationId: change.locationId,
-        direction: change.direction,
-        amount: change.amount,
-        note,
-      });
-    } catch (error) {
-      dispatchStatus("error", { error: error.message, stage: "reconcile-fuxing" });
-      await syncInventoryNow(site, { reloadBranch: false });
-      return { ok: false, fallback: false, error };
-    }
-  }
-
-  await syncInventoryNow(site, { reloadBranch: false });
-  return { ok: true, changed: changes.length };
-}
-
 export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(), { sync = true, draft = null } = {}) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
   if (!canManageBranchCatalog(site)) return { ok: false, fallback: false, error: new Error("CATALOG_EDIT_NOT_ALLOWED") };
@@ -1247,14 +1166,6 @@ export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   }
 }
 
-export function cloudSyncFuxingCatalogItem(stockKey) {
-  return cloudSyncBranchCatalogItem(stockKey,"fuxing");
-}
-
-export function cloudArchiveFuxingItem(stockKey) {
-  return cloudArchiveBranchItem(stockKey,"fuxing");
-}
-
 export function branchLocationCode(site, zone) {
   return inventoryLocationByUiKey(site,zone,"storage")?.code || "";
 }
@@ -1267,20 +1178,8 @@ export function branchItemKey(site, stockKey) {
   return site && stockKey ? `${site}:${stockKey}` : "";
 }
 
-export function fuxingLocationCode(zone) {
-  return branchLocationCode("fuxing",zone);
-}
-
-export function fuxingWorkLocationCode(area) {
-  return branchWorkLocationCode("fuxing",area);
-}
-
 export function centralLocationCode(zone) {
   return inventoryLocationByUiKey("central",zone,"storage")?.code || "";
-}
-
-export function fuxingItemKey(stockKey) {
-  return branchItemKey("fuxing",stockKey);
 }
 
 export function centralItemKey(id) {

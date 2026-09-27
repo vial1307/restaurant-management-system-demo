@@ -33,7 +33,7 @@ const TEXT = {
     pickAction:"Lấy hàng · 領貨",
     move:"Chuyển · 轉撥",
     shipAction:"Xuất hàng · 出貨",
-    workDestination:"Khu sử dụng · 使用區",
+    workDestination:"Khu làm việc · 工作區",
     picked:"Đã lấy · 已領貨",
     useAction:"Sử dụng · 使用",
     returnAction:"Cất lại · 歸位",
@@ -63,7 +63,7 @@ const TEXT = {
     in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
     search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
-    workDestination:"使用區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
+    workDestination:"工作區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
     fixedDestination:"分店已有此品項，收貨儲位依分店設定自動帶入。",singleDestination:"分店此品項只有一個存放儲位，系統已自動選擇。",flexibleDestination:"分店尚無此品項，本次請選擇實際存放位置。",needsManagerDestination:"分店已有此品項但有多個儲位，尚未設定固定收貨儲位；請分店主管先完成設定。",fixedBadge:"依分店設定",singleBadge:"自動帶入",flexibleBadge:"分店未建品項",needsManagerBadge:"需主管設定",shipFixed:"已出貨並更新至正確收貨儲位。",
     noItems:"沒有符合條件的品項",
     loading:"正在載入庫存…",
@@ -110,11 +110,10 @@ function sourceOptions(item,language){
 }
 
 function workLocationForItem(item,workLocations=[]){
-  const preferredSuffix=`-work-${item.workArea||"noodles"}`;
-  return workLocations.find((loc)=>String(loc.code||"").endsWith(preferredSuffix))
-    || workLocations.find((loc)=>loc.code==="central-work-use")
-    || workLocations[0]
-    || item.workLocations?.[0]
+  const workArea=String(item.workArea||"").trim();
+  if(!workArea)return null;
+  return workLocations.find((loc)=>String(loc.workArea||"").trim()===workArea)
+    || item.workLocations?.find((loc)=>String(loc.workArea||"").trim()===workArea)
     || null;
 }
 function workStockAt(item,locationId){

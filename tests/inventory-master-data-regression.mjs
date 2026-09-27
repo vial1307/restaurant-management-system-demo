@@ -21,7 +21,7 @@ replaceInventoryMasterSnapshot("branch-a", {
   locations:[
     { code:"branch-a-freezer", site:"branch-a", kind:"storage", sort_order:10, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
     { code:"branch-a-kitchen", site:"branch-a", kind:"storage", sort_order:20, name_zh_tw:"廚房冰箱", name_vi:"Tủ bếp", metadata:{ ui_key:"kitchen", storage_group:"service" } },
-    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", sort_order:30, name_zh_tw:"麵台使用中", name_vi:"Khu mì đang dùng", metadata:{ ui_key:"noodles", work_area:"noodles" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles" } },
   ],
   workAreas:[
     { code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true },
@@ -41,11 +41,51 @@ assert.deepEqual(groups.storage.map((entry) => entry.id), ["large-freezer", "kit
 assert.deepEqual(groups.storage.map((entry) => entry.storageGroup), ["primary", "service"]);
 assert.deepEqual(groups.workAreas.map((entry) => entry.id), ["noodles"]);
 
+assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
+  site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
+  locations:[
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles", storage_group:"service" } },
+  ],
+  workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
+}), /INVENTORY_WORK_LOCATION_STORAGE_GROUP_FORBIDDEN/,
+"work locations must never carry storage classification");
+
+assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
+  site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
+  locations:[
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:99, name_zh_tw:"錯誤名稱", name_vi:"Tên sai", metadata:{ ui_key:"noodles", work_area:"noodles" } },
+  ],
+  workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
+}), /INVENTORY_WORK_LOCATION_PROJECTION_MISMATCH/,
+"work locations must mirror Work Area display master data");
+
 const cloudSource = fs.readFileSync(new URL("../src/inventory-cloud.js", import.meta.url), "utf8");
 for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTRAL_ZONE_CODES", "BRANCH_STORAGE_CODES", "BRANCH_CODE_TO_ZONE"]) {
   assert.equal(cloudSource.includes(legacyName), false, `${legacyName} must not remain a production master-data source`);
 }
 assert.equal(/\bDEFAULT_ITEMS\b/.test(cloudSource), false, "production inventory cloud path must not use DEFAULT_ITEMS fallback");
+assert.doesNotMatch(cloudSource, /WORK_AREAS\[0\]\?\.id/,
+  "inventory hydration/catalog sync must not infer a work area from mutable global UI state");
+assert.doesNotMatch(cloudSource, /\b(?:ZONES|WORK_AREAS|PRIMARY_ZONES)\.splice\(/,
+  "inventory sync must not copy one site's PostgreSQL master data into legacy global arrays");
+assert.doesNotMatch(cloudSource, /import \{[^}]*\b(?:ZONES|WORK_AREAS|PRIMARY_ZONES)\b[^}]*\} from "\.\/store\.js"/,
+  "inventory cloud must not import legacy global storage/work-area arrays");
+assert.doesNotMatch(cloudSource, /bootstrapFuxingInventory|bootstrapYongjiInventory|bootstrapCentralInventory/,
+  "inventory startup must not expose site-specific bootstrap paths");
+assert.doesNotMatch(cloudSource, /reconcileFuxingSnapshot|cloudSyncFuxingCatalogItem|cloudArchiveFuxingItem|fuxingLocationCode|fuxingWorkLocationCode|fuxingItemKey/,
+  "inventory runtime must not expose Fuxing-only compatibility APIs");
+const transferSource = fs.readFileSync(new URL("../src/inventory-transfer-service.js", import.meta.url), "utf8");
+assert.match(transferSource, /workArea:\s*String\(row\.location\.metadata\?\.work_area \|\| ""\)\.trim\(\)/,
+  "operation data must carry PostgreSQL work-area identity on work locations");
+const operationSource = fs.readFileSync(new URL("../src/inventory-operations.js", import.meta.url), "utf8");
+assert.match(operationSource, /function workLocationForItem[\s\S]{0,360}loc\.workArea[\s\S]{0,180}===workArea/,
+  "pick operations must resolve the destination by database work-area identity");
+assert.doesNotMatch(operationSource, /preferredSuffix|central-work-use|item\.workArea\|\|"noodles"|item\.workArea\s*\|\|\s*"noodles"/,
+  "pick operations must not infer work locations from code suffixes, Central legacy 使用中, or a noodles fallback");
+assert.match(operationSource, /workDestination:"Khu làm việc · 工作區"/,
+  "operation UI must describe the destination as the configured work area");
 
 const appSource = fs.readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 assert.doesNotMatch(appSource, /function appStagingLocations|function appWorkLocations|function branchDraftOperationData/,
@@ -60,6 +100,8 @@ assert.equal(appSource.includes('"central-freezer":"央廚冷凍"'), false,
   "Central storage labels must come from database master data");
 assert.match(appSource, /const uiGroups = inventoryUiGroups\(site\);[\s\S]{0,180}uiGroups\.storage[\s\S]{0,100}uiGroups\.workAreas/,
   "branch inventory groups must render from the active site's PostgreSQL master-data snapshot");
+assert.doesNotMatch(appSource, /function workAreaLabel[\s\S]{0,220}\|\| WORK_AREAS\.find/,
+  "inventory work-area labels must not fall back to global source-coded work areas");
 assert.match(appSource, /group\.storageGroup === "primary"/,
   "storage grouping must follow PostgreSQL metadata.storage_group instead of a fixed PRIMARY_ZONES list");
 assert.match(appSource, /inventoryPrimaryStorageIds\(activeInventorySite\(\)\)/,
@@ -87,6 +129,8 @@ assert.doesNotMatch(mobileCompat, /\.setting-control>input\{[^}]*width:96px !imp
   "mobile compatibility layer must not clip database-provided site names to the legacy 96px input");
 assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
   "branch inventory authority must use database-declared inventory_mode");
+assert.match(appSource, /const primary = groups\.filter\(\(group\) => group\.storageGroup === "primary"\);[\s\S]{0,160}const service = groups\.filter\(\(group\) => group\.storageGroup === "service"\);/,
+  "Fuxing/Yongji storage tabs must classify primary/service explicitly from PostgreSQL");
 assert.match(appSource, /function authoritativeBranchRecord[\s\S]{0,700}inventoryBranchSnapshot\(site\)[\s\S]{0,320}inventory:\[\], workInventory:\[\]/,
   "branch dashboard/runtime must use a site-scoped PostgreSQL snapshot or empty inventory, never source-seeded stock");
 
@@ -95,6 +139,22 @@ assert.match(authLayer, /function branchSwitcher[\s\S]{0,700}inventorySites\(\)\
   "warehouse switcher must derive active physical sites from PostgreSQL master data");
 assert.doesNotMatch(authLayer, /data-warehouse="fuxing"[\s\S]{0,240}data-warehouse="yongji"/,
   "warehouse switcher must not hard-code branch buttons");
+assert.doesNotMatch(authLayer, /user\.location === "central" \? "央廚"[\s\S]{0,180}user\.location === "fuxing"/,
+  "authenticated account site labels must come from the PostgreSQL site registry");
+assert.doesNotMatch(authLayer, /領到使用中|Lấy từ kho trung tâm vào 使用中/,
+  "Central pick guidance must not describe the retired generic 使用中 location");
+assert.match(authLayer, /const workAreaId=item\.workArea\|\|centralDefaultWorkArea\(\);[\s\S]{0,900}centralWorkAreaLabel\(workAreaId,language\)/,
+  "Central work inventory must display the PostgreSQL work-area identity instead of a generic work-location label");
+assert.match(authLayer, /renderClass\("primary","主要儲位","Kho tổng · 主要儲位"\)[\s\S]{0,160}renderClass\("service","區域儲位","Kho khu vực · 區域儲位"\)/,
+  "Central storage overview must visibly separate primary and service database storage");
+assert.match(authLayer, /const centralPrimary = centralStorage\.filter\(\(group\)=>group\.storageGroup==="primary"\);[\s\S]{0,220}const centralService = centralStorage\.filter\(\(group\)=>group\.storageGroup==="service"\);/,
+  "Central storage tabs must classify locations explicitly from database storage_group");
+assert.doesNotMatch(authLayer, /data-central-zone="央廚冷凍"/,
+  "Central storage identity must not be a hard-coded display label");
+assert.match(authLayer, /const workAreaId=item\.workArea\|\|centralDefaultWorkArea\(\);[\s\S]{0,900}centralWorkAreaLabel\(workAreaId,language\)/,
+  "Central work inventory must display the PostgreSQL work-area identity instead of a generic work-location label");
+assert.doesNotMatch(authLayer, /data-central-zone="央廚冷凍"/,
+  "Central storage filtering must not hard-code a display label as location identity");
 assert.match(authLayer, /const centralDefaultWorkArea = \(\) => centralWorkAreas\(\)\[0\]\?\.id \|\| "";/,
   "Central work-area defaults must come from PostgreSQL master data");
 assert.match(authLayer, /name="central-unit" list="central-unit-suggestions" required/,
@@ -150,6 +210,14 @@ assert.match(migration, /inventory_mode/);
 assert.match(migration, /ui_key/);
 assert.match(migration, /storage_group/);
 assert.match(migration, /work_area/);
+
+const classificationMigration = fs.readFileSync(new URL("../vps/database/migrations/025_inventory_location_workarea_unification.sql", import.meta.url), "utf8");
+assert.match(classificationMigration, /inventory_location_classification_guard/);
+assert.match(classificationMigration, /sync_work_area_inventory_location/);
+assert.match(classificationMigration, /WORK_AREA_LOCATION_CARDINALITY_INVALID/);
+assert.match(classificationMigration, /WORK_STOCK_AREA_MISMATCH/);
+assert.match(classificationMigration, /central-work-use/);
+assert.match(classificationMigration, /target\.metadata->>'work_area'=i\.work_area/);
 
 const dynamicSiteMigration = fs.readFileSync(new URL("../vps/database/migrations/017_dynamic_site_scope.sql", import.meta.url), "utf8");
 assert.match(dynamicSiteMigration, /drop constraint if exists inventory_locations_site_check/);

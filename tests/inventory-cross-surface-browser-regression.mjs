@@ -32,13 +32,12 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const key=`cross-${stamp}-${site}`, area=`cross-${stamp}`, code=`${site}-${key}`;
       const master=await api(`/api/master-data/${site}`);
       await api('/api/master-data/work-areas',{action:"save",site,code:area,name_vi:area,name_zh_tw:area,active:true,department_code:master.departments.find(d=>d.active)?.code||""});
+      const refreshedMaster=await api(`/api/master-data/${site}`);
+      const workLocation=refreshedMaster.locations.find((entry)=>entry.active!==false&&entry.kind==="work"&&entry.metadata?.work_area===area);
+      assert(workLocation,`${site}: Work Area did not create its synchronized Work Location`);
+      assert.equal(workLocation.metadata?.ui_key,area,`${site}: Work Location ui_key must match Work Area`);
       const {location}=await api('/api/master-data/locations',{action:"save",site,code,kind:"storage",name_vi:key,name_zh_tw:key,active:true,metadata:{ui_key:key,storage_group:"primary"}});
-      const locations=[{code}];
-      if(site!=="central") {
-        const workCode=`${code}-w`;
-        await api('/api/master-data/locations',{action:"save",site,code:workCode,kind:"work",name_vi:area,name_zh_tw:area,active:true,metadata:{ui_key:area,work_area:area}});
-        locations.push({code:workCode});
-      }
+      const locations=[{code},{code:workLocation.code}];
       await api('/api/inventory/catalog/sync',{expectedRevision:"0",item:{key:`${site}:${key}`,catalog_key:key,vi:key,zh:key,unit:"包",work_area:area,locations}});
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);

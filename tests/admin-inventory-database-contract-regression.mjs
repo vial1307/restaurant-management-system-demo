@@ -15,6 +15,16 @@ assert.match(ui,/inventory\/events/);
 assert.match(ui,/deferredSite/);
 assert.match(ui,/applyDeferredSite\(\)/);
 assert.match(ui,/if \(editor \|\| pending \|\| dirty\)[\s\S]{0,120}deferredSite = nextSite/, "realtime site changes must defer active-site replacement while an editor is dirty");
+assert.match(ui,/const derivedWork = locationKind === "work"/, "work locations must be treated as a database-derived projection of work areas");
+assert.match(ui,/workLocationSyncHint/, "Super Admin must explain automatic work-location synchronization");
+assert.match(ui,/missingWorkLocation/, "Super Admin integrity view must detect work areas without work locations");
+assert.match(ui,/orphanWorkLocation/, "Super Admin integrity view must detect orphan work locations");
+assert.match(ui,/invalidStorageGroup/, "Super Admin integrity view must detect unclassified storage");
+assert.match(ui,/workStockMismatch/, "Super Admin integrity view must detect item/work-location mismatches");
+assert.match(ui,/\["primary","service"\]\.includes\(storageGroup\) \? t\(storageGroup\) : t\("unconfigured"\)/,
+  "Super Admin must not display invalid or missing storage classification as primary");
+assert.match(ui,/initial\.metadata\?\.storage_group\|\|"service"/,
+  "new storage locations must follow the database service default until explicitly reclassified");
 for(const [key,pair] of Object.entries(INVENTORY_ADMIN_TEXT))assert(pair.length===2&&pair.every(Boolean),key);
 assert.match(read(".admindev.html"),/admin-inventory-database\.css/);
 assert.match(read("src/admin-panel.js"),/inventoryDatabase\.mount/);

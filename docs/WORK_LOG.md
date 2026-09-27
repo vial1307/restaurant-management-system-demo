@@ -1421,3 +1421,25 @@ The separate read-cutover candidate:
 - Added static/UI and browser regression for exact item/source preselection.
 - No schema/API/permission/stock rewrite.
 
+## 2026-09-27 — Unify storage and work-area model across all inventory sites
+
+- Started from main after Central inventory UI/operator shortcuts were production-verified.
+- Root mismatch: Fuxing/Yongji already had separate 麵/湯/海鮮/肉 work locations, while Central still stored work stock in one legacy `central-work-use / 使用中` location despite having four work-area master rows.
+- Added migration 025 to normalize storage classification, generate/synchronize one work location per active work area, relocate mismatched work stock transactionally, and retire unowned legacy work locations.
+- Added DB/API ownership rule: Work Area controls Work Location; direct work-location mutations are rejected.
+- Updated Super Admin classification/integrity UX and bilingual wording.
+- Removed inventory work-area fallback to global `WORK_AREAS[0]` and site-specific no-op bootstrap wrappers.
+- Added API regression for automatic work-location lifecycle on Central/Fuxing/Yongji and expanded production audit invariants.
+- Next: exact-head migration/API/browser regression, then merge/deploy/audit before any further inventory UI work.
+
+## 2026-09-27 — Inventory classification final hard-code audit
+
+- Continued PR #159 / `refactor/inventory-location-workarea-unification-20260927`.
+- Removed the remaining work-destination inference from operation UI: no `item.workArea || "noodles"`, no code-suffix matching, no `central-work-use` fallback. Work locations now carry and match PostgreSQL `metadata.work_area`.
+- Removed Fuxing-only reconciliation/catalog/location wrapper exports; all three sites use generic site-aware inventory functions.
+- Replaced fixed Central/Fuxing/Yongji account labels with PostgreSQL site-registry labels and removed old generic `使用中` pick guidance.
+- Super Admin now renders invalid/missing storage classification as unconfigured rather than silently calling it primary; new storage follows the DB service default.
+- Updated isolated regression fixtures so Central/Fuxing/Yongji explicitly contain primary/service storage classes; API regression now requires both storage groups and classified active work locations on every site.
+- Added static guards preventing these business hard-codes from returning.
+- No business quantity was invented or rewritten by these frontend/test changes; migration 025 remains the only production data-normalization step and preserves same-item/site totals.
+

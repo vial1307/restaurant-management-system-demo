@@ -50,9 +50,25 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
 
   function locationsView() {
     const areas = locationKind === "areas";
+    const derivedWork = locationKind === "work";
     const rows = areas ? master.workAreas : master.locations.filter((row) => row.kind === locationKind);
-    const list = paginate(rows, (row) => `<tr><td>${titleCell(row)}<small>${esc(row.code)}</small></td><td>${esc(areas ? row.department_code || "—" : row.kind === "storage" ? t(row.metadata?.storage_group === "service" ? "service" : "primary") : label(master.workAreas.find((a) => a.code === row.metadata?.work_area)))}</td><td>${esc(t(row.active?"active":"inactive"))}</td><td>${canMaster(locationKind)?button("master","edit",`data-id="${esc(areas?row.code:row.id)}"`):""}</td></tr>`);
-    return `<nav class="idb-tabs">${["areas","storage","work"].map((key) => button(`kind-${key}`,key==="areas"?"area":key,`aria-pressed="${locationKind===key}"`)).join("")}</nav><p>${esc(t("masterHint"))}</p>${canMaster(locationKind)?button("master","add"):""}${rowsTable(["location",areas?"department":"group","status","action"],list.rows)}${list.footer}`;
+    const list = paginate(rows, (row) => {
+      const action = areas
+        ? (canMaster("areas") ? button("master","edit",`data-id="${esc(row.code)}"`) : "")
+        : derivedWork
+          ? `<span class="sa-pill">${esc(t("synced"))}</span>`
+          : (canMaster(locationKind) ? button("master","edit",`data-id="${esc(row.id)}"`) : "");
+      const storageGroup = String(row.metadata?.storage_group || "").trim();
+      const group = areas
+        ? row.department_code || "—"
+        : row.kind === "storage"
+          ? (["primary","service"].includes(storageGroup) ? t(storageGroup) : t("unconfigured"))
+          : label(master.workAreas.find((area) => area.code === row.metadata?.work_area));
+      return `<tr><td>${titleCell(row)}<small>${esc(row.code)}</small></td><td>${esc(group)}</td><td>${esc(t(row.active?"active":"inactive"))}</td><td>${action}</td></tr>`;
+    });
+    const hint = derivedWork ? t("workLocationSyncHint") : t("masterHint");
+    const addAllowed = !derivedWork && canMaster(locationKind);
+    return `<nav class="idb-tabs">${["areas","storage","work"].map((key) => button(`kind-${key}`,key==="areas"?"area":key,`aria-pressed="${locationKind===key}"`)).join("")}</nav><p>${esc(hint)}</p>${addAllowed?button("master","add"):""}${rowsTable(["location",areas?"department":"group","status","action"],list.rows)}${list.footer}`;
   }
   function stockView() {
     const rows = (snapshot.stock || []).map((row) => ({...row, item:itemById(row.item_id), location:locationById(row.location_id)}));
@@ -69,17 +85,42 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     return `<p>${esc(t("latest"))}</p>${rowsTable(["time","actor","items","action","location","beforeAfter"],list.rows)}${list.footer}`;
   }
   function integrityView() {
-    const groups = { missingStorage:[], missingDefault:[], invalidArea:[], duplicateCatalog:[] };
+    const groups = {
+      missingStorage:[], missingDefault:[], invalidArea:[], duplicateCatalog:[],
+      missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], workStockMismatch:[],
+    };
     const counts = new Map();
+    const activeAreas = (master.workAreas || []).filter((area) => area.active);
+    const activeMasterLocations = (master.locations || []).filter((location) => location.active);
     activeItems().forEach((item) => counts.set(item.catalog_key,(counts.get(item.catalog_key)||0)+1));
     for (const item of activeItems()) {
       const locations = stockFor(item.id).filter((row) => locationById(row.location_id)?.kind === "storage");
       if (!locations.length) groups.missingStorage.push(item);
       if (locations.length>1 && !snapshot.receiveDefaults.some((d) => d.catalog_key===item.catalog_key)) groups.missingDefault.push(item);
-      if (item.work_area && !master.workAreas.some((area) => area.active && area.code===item.work_area)) groups.invalidArea.push(item);
+      if (item.work_area && !activeAreas.some((area) => area.code===item.work_area)) groups.invalidArea.push(item);
       if (counts.get(item.catalog_key)>1) groups.duplicateCatalog.push(item);
     }
-    return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(label(row))} <code>${esc(row.catalog_key)}</code></li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
+    for (const area of activeAreas) {
+      if (!activeMasterLocations.some((location) => location.kind==="work" && location.metadata?.work_area===area.code)) {
+        groups.missingWorkLocation.push(area);
+      }
+    }
+    for (const location of activeMasterLocations) {
+      if (location.kind==="storage" && !["primary","service"].includes(location.metadata?.storage_group)) {
+        groups.invalidStorageGroup.push(location);
+      }
+      if (location.kind==="work" && !activeAreas.some((area) => area.code===location.metadata?.work_area)) {
+        groups.orphanWorkLocation.push(location);
+      }
+    }
+    for (const row of snapshot.stock || []) {
+      const item=itemById(row.item_id), location=locationById(row.location_id);
+      if (item?.active && location?.active && location.kind==="work" && location.metadata?.work_area!==item.work_area) {
+        groups.workStockMismatch.push(item);
+      }
+    }
+    const rowCode = (row) => row?.catalog_key || row?.code || row?.item_key || row?.id || "";
+    return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(label(row))} <code>${esc(rowCode(row))}</code></li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
   }
   function render() {
     if (!host?.isConnected) return;
@@ -181,7 +222,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       initial=(areas?master.workAreas:master.locations).find((m)=>(areas?m.code:m.id)===editor.id)||{};
       html=input("code","code",initial.code||(areas?"":`${site}-`),initial.code?'readonly':'required pattern="[a-z][a-z0-9._-]{1,39}" maxlength="40"')+input("name_vi","nameVi",initial.name_vi||"",'required maxlength="200"')+input("name_zh_tw","nameZh",initial.name_zh_tw||"",'required maxlength="200"')+input("sort_order","sort",initial.sort_order||0,'type="number" step="1"')+select("active","status",option("true",t("active"),String(initial.active!==false))+option("false",t("inactive"),String(initial.active!==false)));
       if(areas)html+=select("department_code","department",option("",t("none"),initial.department_code)+master.departments.filter((d)=>d.active||d.code===initial.department_code).map((d)=>option(d.code,label(d),initial.department_code)).join(""));
-      else if(locationKind==="storage")html+=select("storage_group","group",["primary","service"].map((g)=>option(g,t(g),initial.metadata?.storage_group||"primary")).join(""));
+      else if(locationKind==="storage")html+=select("storage_group","group",["primary","service"].map((g)=>option(g,t(g),initial.metadata?.storage_group||"service")).join(""));
       else html+=select("work_area","area",master.workAreas.filter((a)=>a.active||a.code===initial.metadata?.work_area).map((a)=>option(a.code,label(a),initial.metadata?.work_area)).join(""));
     } else if(type==="attach") {
       title="configure";

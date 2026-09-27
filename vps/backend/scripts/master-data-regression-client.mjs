@@ -39,7 +39,7 @@ async function login(username) {
 await DB.connect();
 try {
   const schema = await DB.query(`select version from public.schema_migrations order by version desc limit 1`);
-  assert.equal(schema.rows[0]?.version, "024");
+  assert.equal(schema.rows[0]?.version, "025");
 
   for (const site of ["central","fuxing","yongji"]) {
     const workAreas = await DB.query(
@@ -51,6 +51,7 @@ try {
 
   const canonicalCodes = [
     "central-freezer","central-fridge","central-four-door","central-chest","central-work-use",
+    "central-work-noodles","central-work-soup","central-work-seafood","central-work-meat",
     "fuxing-large-freezer","fuxing-large-fridge","fuxing-four-door","fuxing-kitchen",
     "fuxing-work-noodles","fuxing-work-soup","fuxing-work-seafood","fuxing-work-meat",
     "yongji-large-freezer","yongji-large-fridge","yongji-four-door","yongji-kitchen",
@@ -61,6 +62,26 @@ try {
     [canonicalCodes]
   );
   assert.equal(canonicalLocations.rowCount, canonicalCodes.length, "canonical location seed incomplete");
+
+  const centralWorkLocations = await DB.query(
+    `select code,active,metadata->>'work_area' as work_area
+     from public.inventory_locations
+     where site='central' and kind='work'
+     order by code`
+  );
+  assert.equal(
+    centralWorkLocations.rows.find((row)=>row.code==="central-work-use")?.active,
+    false,
+    "legacy Central 使用中 location must be retired"
+  );
+  assert.deepEqual(
+    centralWorkLocations.rows
+      .filter((row)=>row.active)
+      .map((row)=>row.work_area)
+      .sort(),
+    ["meat","noodles","seafood","soup"],
+    "Central active work locations must mirror the four database work areas"
+  );
 
   await assert.rejects(
     DB.query(

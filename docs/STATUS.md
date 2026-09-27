@@ -1,5 +1,19 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — unified inventory location/work-area classification, 2026-09-27
+
+- Branch: `refactor/inventory-location-workarea-unification-20260927`.
+- Central/Fuxing/Yongji now target one DB invariant: storage = primary/service; work area = one master row + one synchronized work location.
+- Migration 025 splits Central legacy 使用中 stock by `inventory_items.work_area`, normalizes all sites and installs PostgreSQL guards/triggers.
+- Super Admin treats Work Location as a derived projection of Work Area and audits classification mismatches.
+- Inventory runtime no longer guesses work areas from global UI state.
+- Shared pick/work-area routing now keys directly off PostgreSQL work-area metadata; legacy `noodles`, `central-work-use` and Fuxing-only compatibility paths are removed.
+- Regression now verifies `primary` + `service` storage and classified work locations on Central, Fuxing and Yongji explicitly.
+- Production audit will fail if any active site has an invalid storage group, orphan/missing work location or work-stock mismatch.
+- No production stock rewrite beyond same-item/same-site work-location relocation; total quantity is preserved.
+- Candidate until exact-head CI + merge + production deploy/audit/smoke pass.
+
+
 ## ACTIVE — Central storage-row pick shortcut, 2026-09-27
 
 - Branch: `feat/central-storage-pick-shortcut-20260927`.
