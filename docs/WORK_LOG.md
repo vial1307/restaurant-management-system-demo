@@ -1443,3 +1443,16 @@ The separate read-cutover candidate:
 - Added static guards preventing these business hard-codes from returning.
 - No business quantity was invented or rewritten by these frontend/test changes; migration 025 remains the only production data-normalization step and preserves same-item/site totals.
 
+## 2026-09-27 — Unified inventory location/work-area production verification
+
+- PR #159 merged as `fb7c27cc64963c238ff2b86b999dac2f818f3507`.
+- Exact PR head `0ed9a401ee74de3b48dfc8e74a183f05d6e0adc8` passed Database Schema #236, Master Data/Admin #285, Super Admin Browser #213, Workforce Approval #338, Load Smoke #504 and Deploy #947.
+- Merge Deploy #948 / run `36329813136` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, backup/deploy and production UI smoke.
+- Backup: `kitchen_os_20260927T153508Z.dump`.
+- Production runtime: `release=fb7c27c`; schema `025`; app/database `ok`; `DATA_INTEGRITY_OK`; `PRODUCTION_UI_SMOKE_OK`.
+- Pre-deploy schema 024 audit measured `work_stock_area_mismatch=2` and `inventory_location_classification_violations=7`.
+- Post-deploy Inventory Site Production Audit #215 / run `36330199081` measured `work_stock_area_mismatch=0`, `inventory_location_classification_violations=0`, `inventory_hidden_integrity_violations=0`, stock/receive-default site mismatch 0.
+- Production inventory quantities after migration: Central 81, Fuxing 1805, Yongji 17; migration preserves same-item/site totals while moving work stock to the correct database-declared Work Area.
+- Central UI now separates primary/service storage and shows real database Work Area names; Fuxing/Yongji use the same explicit classification contract.
+- Structural inventory hard-code cleanup is complete for storage/work-area identity. Remaining hard-code audit should focus on separate business domains such as procurement rules/copy, not reintroduce inventory location lists.
+
