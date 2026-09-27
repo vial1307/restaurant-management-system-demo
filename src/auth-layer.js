@@ -189,7 +189,7 @@ function loginScreen(error = "") {
   document.body.classList.add("auth-locked");
   let host = document.querySelector("#auth-layer");
   if (!host) { host = document.createElement("div"); host.id = "auth-layer"; document.body.append(host); }
-  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用管理員、央廚、復興店或永吉店帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">VPS Auth · 帳號與權限由 VPS 管理</div></section></div>`;
+  host.innerHTML = `<div class="auth-shell"><section class="auth-card"><div class="auth-brand"><span>食</span><div><strong>食徒 Kitchen OS</strong><small>內部管理系統</small></div></div><h1>登入</h1><p>請使用系統管理員或已指派據點的帳號登入。</p>${error ? `<div class="auth-error">${esc(error)}</div>` : ""}<form id="auth-login-form"><label>帳號<input name="username" autocomplete="username" required /></label><label>密碼<input type="password" name="password" autocomplete="current-password" required /></label><button type="submit">登入系統</button></form><div class="demo-account-note">VPS Auth · 帳號與權限由 VPS 管理</div></section></div>`;
 
 }
 
@@ -198,7 +198,9 @@ function addLogout(user) {
   if (!top || top.querySelector(".auth-user-chip")) return;
   const chip = document.createElement("div");
   chip.className = "auth-user-chip";
-  chip.innerHTML = `<span><strong>${esc(user.name)}</strong><small>${user.location === "central" ? "央廚" : user.location === "fuxing" ? "復興店" : user.location === "yongji" ? "永吉店" : "Admin"}</small></span><button type="button">登出</button>`;
+  const site = inventorySites().find((entry) => entry.code === user.location);
+  const siteName = site?.name_zh_tw || site?.name_vi || (user.location === "all" ? "Admin" : user.location || "Admin");
+  chip.innerHTML = `<span><strong>${esc(user.name)}</strong><small>${esc(siteName)}</small></span><button type="button">登出</button>`;
   top.prepend(chip);
 }
 
