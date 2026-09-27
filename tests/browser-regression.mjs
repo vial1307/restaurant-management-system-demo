@@ -365,6 +365,22 @@ async function roleDesktop(browser, username, checks) {
     assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation navigation must preserve shared operation-tab behavior");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
     assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
+    await page.locator('[data-central-mode="overview"]').click();
+    await page.locator('[data-central-view="storage"]').waitFor({state:"visible"});
+    const quickPick = page.locator("[data-central-storage-pick]").first();
+    if (await quickPick.count()) {
+      const itemKey = await quickPick.getAttribute("data-item-key");
+      const sourceLocationCode = await quickPick.getAttribute("data-source-location-code");
+      await quickPick.click();
+      await page.locator('[data-central-mode="pick"].active').waitFor({state:"visible"});
+      const focusedPickCard = page.locator(`[data-op-item-key="${itemKey}"]`);
+      await focusedPickCard.waitFor({state:"visible"});
+      assert.equal(await page.locator("[data-op-item]:visible").count(),1,"storage pick shortcut must focus the exact database item");
+      assert.equal(await focusedPickCard.locator('[data-op-source] option:checked').getAttribute("data-code"),sourceLocationCode,"storage pick shortcut must preselect the exact source location");
+      await page.locator("[data-op-search]").fill("");
+      await page.locator('[data-central-mode="overview"]').click();
+      await page.locator('[data-central-view="storage"]').waitFor({state:"visible"});
+    }
     if(checks.manage === true){
       assert((await page.locator("select[data-central-inline-work-area]").count()) > 0,"central overview work-area editors missing");
       assert((await page.locator("select[data-central-inline-zone]").count()) > 0,"central overview storage editors missing");
