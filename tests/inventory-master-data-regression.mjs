@@ -48,6 +48,10 @@ for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTR
 assert.equal(/\bDEFAULT_ITEMS\b/.test(cloudSource), false, "production inventory cloud path must not use DEFAULT_ITEMS fallback");
 assert.doesNotMatch(cloudSource, /WORK_AREAS\[0\]\?\.id/,
   "inventory hydration/catalog sync must not infer a work area from mutable global UI state");
+assert.doesNotMatch(cloudSource, /\b(?:ZONES|WORK_AREAS|PRIMARY_ZONES)\.splice\(/,
+  "inventory sync must not copy one site's PostgreSQL master data into legacy global arrays");
+assert.doesNotMatch(cloudSource, /import \{[^}]*\b(?:ZONES|WORK_AREAS|PRIMARY_ZONES)\b[^}]*\} from "\.\/store\.js"/,
+  "inventory cloud must not import legacy global storage/work-area arrays");
 assert.doesNotMatch(cloudSource, /bootstrapFuxingInventory|bootstrapYongjiInventory|bootstrapCentralInventory/,
   "inventory startup must not expose site-specific bootstrap paths");
 
@@ -64,6 +68,8 @@ assert.equal(appSource.includes('"central-freezer":"央廚冷凍"'), false,
   "Central storage labels must come from database master data");
 assert.match(appSource, /const uiGroups = inventoryUiGroups\(site\);[\s\S]{0,180}uiGroups\.storage[\s\S]{0,100}uiGroups\.workAreas/,
   "branch inventory groups must render from the active site's PostgreSQL master-data snapshot");
+assert.doesNotMatch(appSource, /function workAreaLabel[\s\S]{0,220}\|\| WORK_AREAS\.find/,
+  "inventory work-area labels must not fall back to global source-coded work areas");
 assert.match(appSource, /group\.storageGroup === "primary"/,
   "storage grouping must follow PostgreSQL metadata.storage_group instead of a fixed PRIMARY_ZONES list");
 assert.match(appSource, /inventoryPrimaryStorageIds\(activeInventorySite\(\)\)/,
