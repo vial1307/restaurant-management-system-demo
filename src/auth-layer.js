@@ -315,12 +315,17 @@ function centralPriorityPanel(items, language, operationsEnabled) {
       const stateLabel = severity === 2
         ? (language === "zh" ? "缺貨" : "Hết hàng · 缺貨")
         : (language === "zh" ? "低庫存" : "Sắp thiếu · 低庫存");
-      return `<button type="button" class="central-kitchen-priority-row is-${state}" data-central-priority-zone="${esc(item.zone)}">
-        <span class="central-kitchen-priority-item"><strong>${esc(primary)}</strong><small>${esc(secondary)}</small></span>
-        <span class="central-kitchen-priority-location">${esc(centralZoneLabel(item.zone,language))}</span>
-        <span class="central-kitchen-priority-quantity"><strong>${quantity}</strong><small>/ ${minimum} ${esc(item.unit || "")}</small></span>
-        <span class="tag tag-${state}">${esc(stateLabel)}</span>
-      </button>`;
+      const itemKey=String(item.itemKey||"");
+      const locationCode=centralLocationCode(item.zone);
+      return `<article class="central-kitchen-priority-row is-${state}">
+        <button type="button" class="central-kitchen-priority-detail" data-central-priority-zone="${esc(item.zone)}">
+          <span class="central-kitchen-priority-item"><strong>${esc(primary)}</strong><small>${esc(secondary)}</small></span>
+          <span class="central-kitchen-priority-location">${esc(centralZoneLabel(item.zone,language))}</span>
+          <span class="central-kitchen-priority-quantity"><strong>${quantity}</strong><small>/ ${minimum} ${esc(item.unit || "")}</small></span>
+          <span class="tag tag-${state}">${esc(stateLabel)}</span>
+        </button>
+        ${operationsEnabled && itemKey && locationCode ? `<button type="button" class="central-kitchen-priority-receive" data-central-priority-receive data-item-key="${esc(itemKey)}" data-location-code="${esc(locationCode)}">${language === "zh" ? "進貨" : "Nhập · 進貨"}</button>` : ""}
+      </article>`;
     }).join("")}</div>
     ${attention.length > visible.length ? `<small class="central-kitchen-priority-more">+${attention.length-visible.length} ${language === "zh" ? "筆待處理項目可在下方庫存表查看" : "mục khác xem trong bảng tồn kho bên dưới"}</small>` : ""}
   </section>`;
@@ -443,7 +448,14 @@ function centralPage(user) {
   if (centralSearchInput) applyCentralSearchDom(content, centralSearchInput.value || "");
   if (["in","pick","transfer","ship"].includes(mode) && cloudReady) {
     const host=content.querySelector("[data-inventory-operations]");
-    void mountInventoryOperations(host,{site:"central",mode,language,onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); }});
+    void mountInventoryOperations(host,{
+      site:"central",
+      mode,
+      language,
+      initialItemKey:content.dataset.centralOperationItemKey || "",
+      initialLocationCode:content.dataset.centralOperationLocationCode || "",
+      onUpdated:()=>{ void syncInventoryNow("central",{reloadBranch:false}); },
+    });
   }
   if (cloudReady) void bootstrapCentralInventory(items);
   if (cloudReady && mode === "history" && canViewHistory) {
@@ -675,13 +687,30 @@ function applyCentralSearchDom(content, query) {
 function bindCentral(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
-  content.querySelectorAll("[data-central-mode]").forEach(b => b.onclick = () => { content.dataset.centralMode = b.dataset.centralMode; content.dataset.centralEditor = ""; centralPage(user); });
+  content.querySelectorAll("[data-central-mode]").forEach(b => b.onclick = () => {
+    content.dataset.centralMode = b.dataset.centralMode;
+    content.dataset.centralEditor = "";
+    content.dataset.centralOperationItemKey = "";
+    content.dataset.centralOperationLocationCode = "";
+    centralPage(user);
+  });
+  content.querySelectorAll("[data-central-priority-receive]").forEach((button) => {
+    button.onclick = () => {
+      content.dataset.centralMode = "in";
+      content.dataset.centralEditor = "";
+      content.dataset.centralOperationItemKey = button.dataset.itemKey || "";
+      content.dataset.centralOperationLocationCode = button.dataset.locationCode || "";
+      centralPage(user);
+    };
+  });
   content.querySelectorAll("[data-central-priority-zone]").forEach((button) => {
     button.onclick = () => {
       content.dataset.centralMode = "overview";
       content.dataset.centralInventoryView = "storage";
       content.dataset.centralZone = button.dataset.centralPriorityZone || "all";
       content.dataset.centralSearch = "";
+      content.dataset.centralOperationItemKey = "";
+      content.dataset.centralOperationLocationCode = "";
       centralPage(user);
     };
   });
