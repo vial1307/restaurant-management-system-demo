@@ -1,5 +1,33 @@
 # Kitchen OS — Current Development Handoff
 
+## ACTIVE verification — Fuxing/Yongji Work Area count mismatch in UI, 2026-09-28
+
+User-visible regression report after the schema-026 normalization releases:
+- Central Kitchen appears synchronized correctly.
+- Fuxing/Yongji still need production UI verification because the Work Area tab can show a much smaller count than the Database/audit catalog count.
+- Screenshot evidence shows one branch Work Area view with `16` total displayed items: noodles `14`, soup `0`, seafood `2`, meat `0`.
+- This does **not** match the latest verified PostgreSQL catalog Work Area counts recorded after PR #162:
+  - Fuxing: 76 total = noodles 28 / soup 18 / seafood 21 / meat 9.
+  - Yongji: 72 total = noodles 31 / soup 16 / seafood 17 / meat 8.
+- Do not run another stock/catalog migration until the UI count path is proven wrong. Schema 026 production audits already reported catalog mismatch 0, work-stock mismatch 0 and location-classification violations 0.
+
+Next verification must compare, separately for `fuxing` and `yongji`:
+1. PostgreSQL `inventory_items.work_area` catalog counts.
+2. PostgreSQL stock rows at synchronized Work Locations.
+3. `/api/inventory/:site` snapshot payload: catalog inventory vs `workInventory`.
+4. Website Work Area tab count/filter implementation.
+5. Browser cache/site switching behavior after moving Fuxing ↔ Yongji.
+6. Whether the UI is counting only Work Location stock rows instead of all catalog items assigned to that Work Area.
+
+Acceptance criteria:
+- Storage/Kho tổng and Work Area counts have clearly defined semantics and are consistent across Central/Fuxing/Yongji.
+- Work Area category counts use the same database-declared `inventory_items.work_area` classification unless the UI explicitly labels itself as “stock rows only”.
+- No display-label inference, fixed Fuxing/Yongji mappings, or browser-local fallback may decide Work Area membership.
+- Any correction must preserve PostgreSQL as the only inventory authority and keep site isolation/audit invariants intact.
+
+Current baseline before this investigation: production release `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`, schema `026`; repository `main` head when this task was recorded: `c7477cdb437e00378b63d87c5143f95db6bf251f`.
+
+
 ## Completed release — database-driven inventory replenishment routing, 2026-09-28
 
 PR #164 merged into `main` as `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71` and is verified in production through Deploy Kitchen OS to VPS #959 / run `36336697537`.
