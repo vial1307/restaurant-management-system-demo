@@ -759,11 +759,16 @@ function inventoryGroups(items, groups, key, context, rowRenderer) {
   }).join("");
 }
 
+function inventoryDistinctItemCount(entries) {
+  return new Set((entries || []).map((item) => String(item?.stockKey || item?.id || "")).filter(Boolean)).size;
+}
+
 function inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context) {
   const { language, text } = context;
   const attribute = groupKey === "zone" ? "zone" : "area";
   const tab = (group) => `<button class="filter-tab ${activeGroup === group.id ? "selected" : ""}" data-action="${selectAction}" data-${attribute}="${group.id}">${escapeHtml(group[language])} <span>${entries.filter((item) => item[groupKey] === group.id).length}</span></button>`;
-  const all = `<button class="filter-tab ${activeGroup === "all" ? "selected" : ""}" data-action="${selectAction}" data-${attribute}="all">${escapeHtml(allLabel)} <span>${entries.length}</span></button>`;
+  const allCount = groupKey === "zone" ? inventoryDistinctItemCount(entries) : entries.length;
+  const all = `<button class="filter-tab ${activeGroup === "all" ? "selected" : ""}" data-action="${selectAction}" data-${attribute}="all">${escapeHtml(allLabel)} <span>${allCount}</span></button>`;
 
   if (groupKey !== "zone") return `<div class="zone-tabs work-area-tabs">${all}${groups.map(tab).join("")}</div>`;
 
@@ -945,7 +950,7 @@ function inventory(context) {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
   return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice inventory-history-notice"><span>Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看。Các thao tác nhập/lấy/chuyển/xuất sẽ tự mở ngày hôm nay. · 庫存操作會自動切回今天。</span><button class="secondary-button" data-action="inventory-go-today">Về hôm nay · 回到今天</button></div>` : ""}${opsTabs}${opsGuide}
-    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${entries.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
+    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${inventoryDistinctItemCount(entries)} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
     <div class="filters-row"><p class="inventory-view-description">${escapeHtml(storageView ? text.storageReport : text.workReport)}</p>
