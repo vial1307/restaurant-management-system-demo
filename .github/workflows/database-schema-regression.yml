@@ -10,6 +10,7 @@ on:
       - "vps/backend/scripts/database-core-v2-regression.mjs"
       - "vps/backend/scripts/database-restore-lifecycle-regression.mjs"
       - "vps/backend/scripts/inventory-site-isolation-regression.mjs"
+      - "vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - ".github/workflows/database-schema-regression.yml"
   push:
@@ -68,9 +69,13 @@ jobs:
           node --check vps/backend/scripts/database-core-v2-regression.mjs
           node --check vps/backend/scripts/database-restore-lifecycle-regression.mjs
           node --check vps/backend/scripts/inventory-site-isolation-regression.mjs
+          node --check vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
 
       - name: Apply all migrations to fresh PostgreSQL 16
         run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Verify branch work-area catalog normalization
+        run: node vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
 
       - name: Verify Core v2 constraints and immutable history
         run: node vps/backend/scripts/database-core-v2-regression.mjs
