@@ -1,23 +1,30 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — Central Kitchen operator priority workspace, 2026-09-27
+## Completed release — Central Kitchen operator priority workspace, 2026-09-27
 
-Branch: `redesign/central-kitchen-operator-ui-20260927`.
+PR #154 merged into `main` as `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2` and is verified in production through Deploy Kitchen OS to VPS #900 / run `36291179320`.
 
-Goal: make the 央廚 Overview an operator-facing workspace instead of only an inventory list, while keeping PostgreSQL master data and existing inventory APIs authoritative.
+This release turns the Central Kitchen Overview into a more operational workspace while preserving the same PostgreSQL authority:
+- adds a `待處理 / Cần xử lý` panel only on Central Overview;
+- derives alerts strictly from each PostgreSQL-projected stock row whose current quantity is below its configured minimum;
+- never aggregates quantities across incompatible units;
+- shows item, database-declared storage label, actual/minimum quantity and empty/low state;
+- sorts empty stock before low stock and then by shortage size;
+- shows the first six actionable rows plus a count for remaining rows;
+- clicking an alert returns to storage view and filters the exact database-declared storage location;
+- renders an explicit healthy state when no row is below minimum;
+- exposes quick `進貨入庫` only when the existing edit permission and cloud readiness already allow inventory operations;
+- responsive layout uses two columns on desktop and one column on mobile.
 
-Candidate changes:
-- add a `待處理 / Cần xử lý` panel only on Central Overview;
-- derive alerts strictly from each database stock row where current quantity is below its configured minimum;
-- do not aggregate quantities across different units;
-- show item, database-declared storage label, current/minimum quantity and empty/low status;
-- sort empty stock before low stock, then by shortage size, and show a compact first six alerts;
-- clicking an alert drills into the matching database storage location and returns to the storage inventory view;
-- when no alert exists, render an explicit healthy PostgreSQL-backed state;
-- keep quick `進貨入庫` access only when existing edit permission + cloud readiness allow inventory operations;
-- add responsive two-column desktop / one-column mobile presentation and browser/static regression coverage.
+Verification:
+- exact PR head `5667b411b63190acae7cc7b5a23c32db5e0b5309`: Deploy #899 / run `36290930131` preflight/full regression PASS, Super Admin Browser #168 / run `36290930053` PASS, Workforce Approval #293 / run `36290930009` PASS;
+- merge release `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`: Deploy #900 / run `36291179320` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260927T032703Z.dump`;
+- production audit: `DATA_INTEGRITY_OK`; runtime returned `release=26bfd49`, `schema=024`, app/database `ok`; `PRODUCTION_UI_SMOKE_OK` passed;
+- Inventory Site Production Audit #166 / run `36291520138` PASS; workforce staff/schedule/attendance parity/backfill post-deploy workflows also PASS;
+- no schema migration, permission change, endpoint change or production stock rewrite.
 
-No schema migration, permission change, endpoint change or stock mutation is introduced by this UI stage. Candidate is not production-complete until exact-head CI, merge, Deploy-to-VPS and production UI smoke pass.
+Next Central work: continue operator-facing UI refinement on the database-declared model, especially reducing friction in daily receive/pick/transfer/ship flows without reintroducing mutable business hard-code.
 
 ## Completed release — Central Kitchen inventory UI redesign, 2026-09-27
 
@@ -177,7 +184,7 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Branch of record: `main`
-- Current verified production SHA: `7157d0b5263209b3391ccab57c088668d7902973`
+- Current verified production SHA: `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`
 - Production URL: `https://82.47.180.185.nip.io`
 - Super Admin URL: `https://82.47.180.185.nip.io/.admindev.html#development`
 - Canonical one-link handoff: `https://vial1307.github.io/restaurant-management-system-demo/handoff.html`
@@ -189,9 +196,9 @@ Open `https://82.47.180.185.nip.io/.admindev.html#data` and select a branch. Thi
 
 The current verified production deployment is:
 
-- Workflow: Deploy Kitchen OS to VPS #898
-- Run ID: `36287068079`
-- Tested/deployed commit: `7157d0b5263209b3391ccab57c088668d7902973`
+- Workflow: Deploy Kitchen OS to VPS #900
+- Run ID: `36291179320`
+- Tested/deployed commit: `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`
 - Result: SUCCESS
 - Preflight: PASS
 - API/inventory regression: PASS

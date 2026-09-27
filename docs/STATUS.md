@@ -1,14 +1,18 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Central Kitchen operator priority workspace, 2026-09-27
+## DONE — Central Kitchen operator priority workspace, 2026-09-27
 
-- Branch: `redesign/central-kitchen-operator-ui-20260927`.
-- Central Overview now includes a database-driven `待處理 / Cần xử lý` panel for stock rows below configured minimum.
-- Empty rows are prioritized before low-stock rows; quantities remain item/unit specific and are never summed across incompatible units.
-- Alert rows use PostgreSQL-loaded storage labels and drill into the matching storage filter.
-- Healthy state, operation quick action, responsive desktop/mobile layout and static/browser contracts are included.
-- Existing VPS API/PostgreSQL inventory mutation authority is unchanged.
-- Candidate requires exact-head CI + merge + production deploy/smoke before being marked DONE.
+- PR #154 merged as `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`; Deploy #900 / run `36291179320` is verified in production.
+- Central Overview now contains a database-driven `待處理 / Cần xử lý` panel for stock rows below configured minimum.
+- Quantities remain per item/unit; there is no mixed-unit aggregation.
+- Alert rows use PostgreSQL-loaded storage labels and drill into the exact storage filter.
+- Healthy state and 進貨入庫 quick action follow current data, permission and cloud readiness.
+- Exact PR head `5667b411b63190acae7cc7b5a23c32db5e0b5309` passed Deploy #899, Super Admin Browser #168 and Workforce Approval #293.
+- Production #900 passed full regression, backup/deploy, `DATA_INTEGRITY_OK`, health `release=26bfd49` / schema `024`, and `PRODUCTION_UI_SMOKE_OK`.
+- Backup: `kitchen_os_20260927T032703Z.dump`.
+- Inventory Site Production Audit #166 and post-deploy workforce verification all PASS.
+- No schema migration, permission change, endpoint change or stock rewrite.
+- NEXT: continue Central daily-operation UX refinement on database-declared master data.
 
 ## DONE — Central Kitchen inventory UI redesign, 2026-09-27
 
@@ -91,8 +95,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #898 / run `36287068079`.
-- Verified production SHA: `7157d0b5263209b3391ccab57c088668d7902973`.
+- Verified production release: Deploy Kitchen OS to VPS #900 / run `36291179320`.
+- Verified production SHA: `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
