@@ -274,19 +274,19 @@ create trigger work_areas_archive_guard
 before update of active on public.work_areas
 for each row execute function public.work_area_archive_guard();
 
--- Location metadata itself must be valid database master data.
+-- Location metadata itself must be valid database master data. Validate
+-- after the existing inventory_locations_ui_metadata_defaults BEFORE trigger
+-- has had a chance to derive ui_key/storage_group/work_area.
 create or replace function public.inventory_location_master_parity_guard()
 returns trigger
 language plpgsql
-as $$
+as $
 declare
   location_work_area text;
   storage_group text;
 begin
-  new.metadata := coalesce(new.metadata,'{}'::jsonb);
-
-  if new.kind='storage' then
-    storage_group := nullif(btrim(new.metadata->>'storage_group'),'');
+  if new.kind='storage' and new.active=true then
+    storage_group := nullif(btrim(coalesce(new.metadata,'{}'::jsonb)->>'storage_group'),'');
     if storage_group is null or storage_group not in ('primary','service') then
       raise exception using
         errcode='23514',
@@ -294,7 +294,7 @@ begin
         detail=format('site=%s code=%s storage_group=%s',new.site,new.code,coalesce(storage_group,''));
     end if;
   elsif new.kind='work' and new.active=true then
-    location_work_area := nullif(btrim(new.metadata->>'work_area'),'');
+    location_work_area := nullif(btrim(coalesce(new.metadata,'{}'::jsonb)->>'work_area'),'');
     if location_work_area is null or not exists (
       select 1
       from public.work_areas w
@@ -309,13 +309,13 @@ begin
     end if;
   end if;
 
-  return new;
+  return null;
 end;
-$$;
+$;
 
 drop trigger if exists inventory_locations_master_parity_guard on public.inventory_locations;
 create trigger inventory_locations_master_parity_guard
-before insert or update of site,kind,active,metadata on public.inventory_locations
+after insert or update of site,kind,active,metadata on public.inventory_locations
 for each row execute function public.inventory_location_master_parity_guard();
 
 -- A work-stock row and its item work area must agree at transaction commit.
