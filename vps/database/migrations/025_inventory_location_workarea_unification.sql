@@ -280,11 +280,11 @@ returns trigger
 language plpgsql
 as $$
 declare
-  location_id uuid;
+  target_location_id uuid;
   protected_rows integer;
 begin
   select l.id
-  into location_id
+  into target_location_id
   from public.inventory_locations l
   where l.site=new.site_code
     and l.kind='work'
@@ -298,7 +298,7 @@ begin
   limit 1;
 
   if new.active then
-    if location_id is null then
+    if target_location_id is null then
       insert into public.inventory_locations(
         code,name_zh_tw,name_vi,site,kind,sort_order,active,metadata
       ) values(
@@ -310,7 +310,7 @@ begin
           'managed_by_work_area',true
         )
       )
-      returning id into location_id;
+      returning id into target_location_id;
     else
       update public.inventory_locations
       set name_zh_tw=new.name_zh_tw,
@@ -325,13 +325,13 @@ begin
                         'managed_by_work_area',true
                       ),
           updated_at=now()
-      where id=location_id;
+      where id=target_location_id;
     end if;
-  elsif location_id is not null then
+  elsif target_location_id is not null then
     select count(*)::int
     into protected_rows
     from public.inventory_stock
-    where location_id=location_id
+    where inventory_stock.location_id=target_location_id
       and (quantity>0 or minimum_quantity>0);
 
     if protected_rows>0 then
@@ -340,7 +340,7 @@ begin
 
     update public.inventory_locations
     set active=false,updated_at=now()
-    where id=location_id;
+    where id=target_location_id;
   end if;
 
   return new;
