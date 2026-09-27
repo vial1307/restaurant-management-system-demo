@@ -16,6 +16,10 @@ for(const site of ["central","fuxing","yongji"]) {
   const createdArea=(await post("/api/master-data/work-areas",area)).workArea;
   assert.equal((await post("/api/master-data/work-areas",area,409)).error,"MASTER_DATA_ALREADY_EXISTS");
   let areaMaster=await get(`/api/master-data/${site}?includeInactive=true`);
+  const storageGroups=new Set(areaMaster.locations.filter((l)=>l.active&&l.kind==="storage").map((l)=>l.metadata?.storage_group));
+  assert(storageGroups.has("primary"),`${site} must expose at least one primary/Kho tổng storage location`);
+  assert(storageGroups.has("service"),`${site} must expose at least one service/Kho khu vực storage location`);
+  assert(areaMaster.locations.filter((l)=>l.active&&l.kind==="work").every((l)=>l.metadata?.work_area),`${site} active work locations must carry database work_area identity`);
   let autoWorkLocation=areaMaster.locations.find((l)=>l.active&&l.kind==="work"&&l.metadata?.work_area===area.code);
   assert(autoWorkLocation,`${site} work area did not create its work location`);
   assert.equal(autoWorkLocation.metadata?.ui_key,area.code);
