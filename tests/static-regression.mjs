@@ -153,6 +153,8 @@ assert.match(authLayer, /function centralPage[\s\S]{0,900}const historical = fal
 assert.doesNotMatch(authLayer, /function centralPage[\s\S]{0,900}const historical = !isCurrentBranchInventoryDate\(\)/, "central inventory must not inherit the branch historical-date lock");
 assert.match(authLayer, /const operationsEnabled = editGranted && cloudReady;/, "central operation tabs must stay available whenever permission and VPS are ready");
 assert.match(authLayer, /if \(!document\.querySelector\("\[data-central-kitchen-shell\]"\)\) centralPage\(user\);/, "Central auth observer must detect the redesigned shell and avoid rerender loops");
+assert.match(app, /shitu:inventory-cloud-updated[\s\S]{0,180}document\.querySelector\("\[data-central-kitchen-shell\]"\)/, "branch inventory update listener must not rerender the redesigned Central shell");
+assert.match(app, /shitu:inventory-cloud-status[\s\S]{0,220}!document\.querySelector\("\[data-central-kitchen-shell\]"\)/, "branch cloud-status listener must not rerender the redesigned Central shell");
 assert.match(authLayer, /shitu:inventory-cloud-status[\s\S]{0,420}preserveInventoryEditor\(document\.querySelector\('\[data-central-editor-form\]'\)\)/, "Central cloud-status refresh must preserve dirty editor drafts");
 assert.match(authLayer, /const canManageCatalog = catalogManageVisible && canManageCentralCatalog\(\);/, "central management must not be locked by service date");
 assert(app.includes("data-save-item"), "branch product editor must expose an explicit save button");
