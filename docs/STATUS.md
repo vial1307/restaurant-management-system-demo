@@ -1,13 +1,17 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Central Kitchen inventory UI redesign, 2026-09-27
+## DONE — Central Kitchen inventory UI redesign, 2026-09-27
 
-Branch: `redesign/central-kitchen-inventory-ui-20260927`.
-
-The verified database/API inventory authority is unchanged. This stage replaces the fragmented legacy 央廚 presentation with a dedicated responsive shell: database-derived site/storage/work-area summaries, function navigation, storage/work overview cards and separated master-data management. Daily operation controllers and PostgreSQL mutation paths remain unchanged.
-
-No schema migration or stock rewrite. Candidate remains unverified until exact-head regression + merge + production deploy/smoke pass.
-
+- PR #152 merged as `7157d0b5263209b3391ccab57c088668d7902973`; Deploy #898 / run `36287068079` is verified in production.
+- Central now has a dedicated responsive inventory shell with database-derived site identity, storage/work-area structure and four meaningful KPIs.
+- Overview / 入庫 / 領貨 / 轉撥 / 出貨 / 管理 / 紀錄 remain backed by the existing VPS API/PostgreSQL inventory authority.
+- CI caught and fixed legacy `.central-heading` lifecycle guards that could rerender the redesigned shell and erase dirty Central editor state. All Central/branch render guards now key off `[data-central-kitchen-shell]`.
+- Super Admin peer edits preserve unsaved Central drafts and surface the stale-edit warning instead of overwriting the form.
+- Exact PR head `df64c415950acccb3741cc43e75052710a1c3618` passed Deploy #897 and Super Admin Browser #167 plus workforce diagnostics.
+- Production #898 passed full regression, backup/deploy, `DATA_INTEGRITY_OK`, health `release=7157d0b` / schema `024`, and `PRODUCTION_UI_SMOKE_OK`.
+- Backup: `kitchen_os_20260927T020142Z.dump`.
+- No schema migration, permission change, endpoint change or stock rewrite.
+- NEXT: continue Central Kitchen operator-UI refinement on database-declared master data; keep backend/frontend free of mutable restaurant hard-code.
 
 ## DONE — inventory UI master-data cutover, 2026-09-27
 
@@ -77,8 +81,8 @@ Open the Live Handoff page first. It determines the latest open PR, branch/head 
 
 - Repository: `vial1307/restaurant-management-system-demo`
 - Runtime authority: Browser/UI -> VPS API -> PostgreSQL.
-- Verified production release: Deploy Kitchen OS to VPS #885 / run `36270568342`.
-- Verified production SHA: `b1447b727e310b7a3095f5782c0a933916ef6234`.
+- Verified production release: Deploy Kitchen OS to VPS #898 / run `36287068079`.
+- Verified production SHA: `7157d0b5263209b3391ccab57c088668d7902973`.
 - Production schema: `024`.
 - Production UI smoke: PASS.
 - GitHub Pages #937: PASS (PR #138 source).
