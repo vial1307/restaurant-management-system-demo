@@ -62,7 +62,9 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       const group = areas
         ? row.department_code || "—"
         : row.kind === "storage"
-          ? (["primary","service"].includes(storageGroup) ? t(storageGroup) : t("unconfigured"))
+          ? (["primary","service"].includes(storageGroup)
+              ? `${t(storageGroup)}${row.metadata?.factory_replenishment === true ? ` · ${t("factoryReplenishment")}` : ""}`
+              : t("unconfigured"))
           : label(master.workAreas.find((area) => area.code === row.metadata?.work_area));
       return `<tr><td>${titleCell(row)}<small>${esc(row.code)}</small></td><td>${esc(group)}</td><td>${esc(t(row.active?"active":"inactive"))}</td><td>${action}</td></tr>`;
     });
@@ -237,7 +239,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       initial=(areas?master.workAreas:master.locations).find((m)=>(areas?m.code:m.id)===editor.id)||{};
       html=input("code","code",initial.code||(areas?"":`${site}-`),initial.code?'readonly':'required pattern="[a-z][a-z0-9._-]{1,39}" maxlength="40"')+input("name_vi","nameVi",initial.name_vi||"",'required maxlength="200"')+input("name_zh_tw","nameZh",initial.name_zh_tw||"",'required maxlength="200"')+input("sort_order","sort",initial.sort_order||0,'type="number" step="1"')+select("active","status",option("true",t("active"),String(initial.active!==false))+option("false",t("inactive"),String(initial.active!==false)));
       if(areas)html+=select("department_code","department",option("",t("none"),initial.department_code)+master.departments.filter((d)=>d.active||d.code===initial.department_code).map((d)=>option(d.code,label(d),initial.department_code)).join(""));
-      else if(locationKind==="storage")html+=select("storage_group","group",["primary","service"].map((g)=>option(g,t(g),initial.metadata?.storage_group||"service")).join(""));
+      else if(locationKind==="storage")html+=select("storage_group","group",["primary","service"].map((g)=>option(g,t(g),initial.metadata?.storage_group||"service")).join(""))+`<label class="sa-check wide"><input type="checkbox" name="factory_replenishment" ${initial.metadata?.factory_replenishment===true?"checked":""}><span>${esc(t("factoryReplenishment"))}</span></label><p class="wide">${esc(t("factoryReplenishmentHint"))}</p>`;
       else html+=select("work_area","area",master.workAreas.filter((a)=>a.active||a.code===initial.metadata?.work_area).map((a)=>option(a.code,label(a),initial.metadata?.work_area)).join(""));
     } else if(type==="attach") {
       title="configure";
@@ -258,6 +260,19 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(type==="item"&&row&&hasWork(row.id))container.querySelector('[name="work_area"]').disabled=true;
     if(type==="item"&&row)container.querySelector('[name="catalog_key"]').readOnly=true;
     if(type==="item"&&row&&hasWork(row.id))container.querySelector('[name="storage_only"]').disabled=true;
+    if(type==="master"&&locationKind==="storage"){
+      const groupSelect=container.querySelector('[name="storage_group"]');
+      const factoryInput=container.querySelector('[name="factory_replenishment"]');
+      const syncFactoryAvailability=()=>{
+        const primary=groupSelect?.value==="primary";
+        if(factoryInput){
+          if(!primary)factoryInput.checked=false;
+          factoryInput.disabled=!primary;
+        }
+      };
+      groupSelect?.addEventListener("change",syncFactoryAvailability);
+      syncFactoryAvailability();
+    }
     // A work location's association is an identity, not a safe metadata rename.
     if(type==="master"&&locationKind==="work"&&initial.id)container.querySelector('[name="work_area"]').disabled=true;
     const form=container.querySelector("form");
@@ -279,7 +294,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
         path=`/api/master-data/${areas?"work-areas":"locations"}`;
         body={action:"save",site,code:value("code"),name_vi:value("name_vi"),name_zh_tw:value("name_zh_tw"),sort_order:Number(value("sort_order")),active:value("active")==="true",metadata:{...initial.metadata},...(initial.code?{expectedUpdatedAt:initial.updated_at}:{createOnly:true})};
         if(areas)body.department_code=value("department_code");
-        else {body.id=initial.id;body.kind=locationKind;body.metadata.ui_key=initial.metadata?.ui_key||body.code.slice(site.length+1);if(locationKind==="storage")body.metadata.storage_group=value("storage_group");else body.metadata.work_area=initial.metadata?.work_area||value("work_area");}
+        else {body.id=initial.id;body.kind=locationKind;body.metadata.ui_key=initial.metadata?.ui_key||body.code.slice(site.length+1);if(locationKind==="storage"){body.metadata.storage_group=value("storage_group");body.metadata.factory_replenishment=fd.has("factory_replenishment");}else body.metadata.work_area=initial.metadata?.work_area||value("work_area");}
         if(initial.active&&body.active===false&&!window.confirm(t("archiveConfirm")))return;
       } else {
         if(!canEdit())throw new Error(t("forbidden"));
