@@ -100,7 +100,7 @@ function stockAt(item,locationId){
   return item.locations.find((loc)=>loc.id===locationId)?.quantity ?? 0;
 }
 function locationOptions(locations,language,selected=""){
-  return locations.map((loc)=>`<option value="${esc(loc.id)}" ${loc.id===selected?"selected":""}>${esc(locationLabel(loc,language))}</option>`).join("");
+  return locations.map((loc)=>`<option value="${esc(loc.id)}" data-code="${esc(loc.code||"")}" ${loc.id===selected?"selected":""}>${esc(locationLabel(loc,language))}</option>`).join("");
 }
 function sourceOptions(item,language){
   return item.locations
@@ -137,7 +137,7 @@ function overviewCard(item,language,t){
     .map((loc)=>`<span class="op-location-pill op-location-pill-use"><small>${esc(language==="zh"?loc.zh:`${loc.vi||loc.zh} · ${loc.zh}`)}</small><strong>${Number(loc.quantity||0)} ${esc(item.unit)}</strong></span>`)
     .join("");
   const physicalTotal=Number(item.total||0)+Number(item.workTotal||0);
-  return `<article class="inventory-op-card inventory-overview-card" data-op-item="${esc(item.id)}">
+  return `<article class="inventory-op-card inventory-overview-card" data-op-item="${esc(item.id)}" data-op-item-key="${esc(item.itemKey||"")}">
     <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi||"")}</small></div><span><small>${esc(t.current)}</small><strong>${physicalTotal} ${esc(item.unit)}</strong></span></div>
     <div class="op-location-list">${storageLocations+activeLocations||'<span class="op-location-pill"><small>—</small><strong>0</strong></span>'}</div>
   </article>`;
@@ -195,7 +195,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const transferBalance = mode==="transfer" && firstSource && firstDestination
     ? `<div class="op-transfer-balance" data-op-transfer-balance="${esc(item.id)}"><span>${esc(locationLabel({name_zh_tw:firstSource.zh,name_vi:firstSource.vi},language))} <strong>${Number(firstSource.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(firstDestination,language))} <strong>${Number(stockAt(item,firstDestination.id))||0}</strong></span></div>`
     : "";
-  return `<article class="inventory-op-card" data-op-item="${esc(item.id)}">
+  return `<article class="inventory-op-card" data-op-item="${esc(item.id)}" data-op-item-key="${esc(item.itemKey||"")}">
     <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small></div><span><small>${esc(t.current)}</small><strong data-op-current="${esc(item.id)}">${currentQuantity} ${esc(item.unit)}</strong></span></div>
     <div class="op-select-grid">${controls}</div>
     ${transferBalance}
@@ -209,9 +209,12 @@ function applyOperationSearch(host,state) {
 
   const query = input.value || "";
   state.search = query;
+  const exactFocus = Boolean(state.focusItemKey && query === state.focusSearch);
   let visible = 0;
   host.querySelectorAll("[data-op-item]").forEach((card) => {
-    const show = searchMatches(card.textContent || "", query);
+    const show = exactFocus
+      ? card.dataset.opItemKey === state.focusItemKey
+      : searchMatches(card.textContent || "", query);
     card.hidden = !show;
     if (show) visible += 1;
   });
@@ -223,12 +226,41 @@ function applyOperationSearch(host,state) {
   if (empty) empty.hidden = !query || visible > 0;
 }
 
+function applyInitialOperationFocus(host,state){
+  const itemKey=String(state.initialItemKey||"").trim();
+  if(!itemKey)return;
+  const item=state.data?.items.find((entry)=>entry.itemKey===itemKey);
+  if(!item)return;
+
+  state.focusItemKey=itemKey;
+  state.focusSearch=state.language==="zh" ? item.zh : (item.vi||item.zh);
+  state.search=state.focusSearch;
+  const input=host.querySelector("[data-op-search]");
+  if(input)input.value=state.focusSearch;
+
+  const card=host.querySelector(`[data-op-item-key="${CSS.escape(itemKey)}"]`);
+  const locationCode=String(state.initialLocationCode||"").trim();
+  if(card&&locationCode){
+    const location=state.data?.locations.find((entry)=>entry.code===locationCode);
+    const destination=card.querySelector("[data-op-destination]");
+    if(location&&destination&&[...destination.options].some((option)=>option.value===location.id)){
+      destination.value=location.id;
+    }
+  }
+}
+
 function bindOperationSearch(host,state) {
   const input = host.querySelector("[data-op-search]");
   if (!input) return;
 
   const apply = (event) => {
     if (event?.isComposing) return;
+    if(state.focusItemKey && input.value !== state.focusSearch){
+      state.focusItemKey="";
+      state.focusSearch="";
+      state.initialItemKey="";
+      state.initialLocationCode="";
+    }
     applyOperationSearch(host,state);
   };
 
@@ -252,6 +284,7 @@ async function doRender(host,state){
     host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
     restoreOperationSelections(host,state);
     bind(host,state);
+    applyInitialOperationFocus(host,state);
     bindOperationSearch(host,state);
   }catch(error){
     host.innerHTML=`<div class="inventory-cloud-notice">${esc(t.cloudRequired)}<small>${esc(error?.message||"")}</small></div>`;
@@ -560,12 +593,14 @@ export async function mountInventoryOperations(host,{
   mode="in",
   language="vi",
   onUpdated,
+  initialItemKey="",
+  initialLocationCode="",
 }={}){
   if(!host||!site)return;
   if(activeMount?.stopWatch){
     try{await activeMount.stopWatch();}catch{}
   }
-  const state={host,site,mode,language,onUpdated,stopWatch:null,search:""};
+  const state={host,site,mode,language,onUpdated,stopWatch:null,search:"",initialItemKey,initialLocationCode,focusItemKey:"",focusSearch:""};
   activeMount=state;
   await doRender(host,state);
   if(activeMount!==state || !host.isConnected) return;
