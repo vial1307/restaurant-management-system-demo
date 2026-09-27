@@ -633,7 +633,7 @@ function dashboard(context) {
 }
 
 function storageSources(item, record, destination = "work") {
-  return inventorySources(record, item, destination);
+  return inventorySources(record, item, destination, inventoryStorageGroups(activeInventorySite()));
 }
 
 function workRestockTransferPlan(item, record) {

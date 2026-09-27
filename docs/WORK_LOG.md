@@ -1480,3 +1480,12 @@ The separate read-cutover candidate:
   - Yongji: noodles 31, soup 16, seafood 17, meat 8 (72 total).
 - Next: port replenishment source routing away from legacy location IDs onto database `storage_group` + sort order on top of schema 026.
 
+## 2026-09-28 — Port replenishment routing to schema 026 main
+
+- Started from verified production release `22383cdbd8828f1d1934ffdc77925b9220ebf3d3` plus docs closure `50b7d03f224aae8355afc0a8997c3d4f0df9a34c`.
+- Fresh branch: `refactor/inventory-source-routing-masterdata-v2-20260928`; stale PR #161 is intentionally not merged because it is behind schema-026 work.
+- Removed `SOURCE_PRIORITY` and destination checks tied to `large-fridge / large-freezer / four-door / kitchen`.
+- Routing now consumes the active site's PostgreSQL storage `storage_group` and `sort_order`.
+- Added arbitrary-ID regression for Work Area, service-storage and primary-storage replenishment.
+- No schema migration or stock rewrite.
+
