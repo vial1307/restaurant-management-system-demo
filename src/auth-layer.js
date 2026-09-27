@@ -1064,6 +1064,7 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;
   if (!location.hash.startsWith("#inventory") || !document.querySelector("[data-central-kitchen-shell]")) return;
+  if (preserveInventoryEditor(document.querySelector('[data-central-editor-form]'))) return;
   const user = session();
   if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
 });
