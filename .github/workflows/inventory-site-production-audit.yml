@@ -162,6 +162,47 @@ jobs:
               where s.item_id=i.id and l.active=true and l.kind='storage'
             );
 
+          select 'active_storage_invalid_group|' || count(*)
+          from public.inventory_locations l
+          where l.active=true
+            and l.kind='storage'
+            and (
+              l.metadata->>'storage_group' not in ('primary','service')
+              or coalesce(nullif(btrim(l.metadata->>'work_area'),''),'')<>''
+            );
+
+          select 'active_work_location_without_area|' || count(*)
+          from public.inventory_locations l
+          left join public.work_areas w
+            on w.site_code=l.site
+           and w.code=l.metadata->>'work_area'
+           and w.active=true
+          where l.active=true
+            and l.kind='work'
+            and w.code is null;
+
+          select 'active_work_area_without_location|' || count(*)
+          from (
+            select w.site_code,w.code
+            from public.work_areas w
+            left join public.inventory_locations l
+              on l.site=w.site_code
+             and l.kind='work'
+             and l.active=true
+             and l.metadata->>'work_area'=w.code
+            where w.active=true
+            group by w.site_code,w.code
+            having count(l.id)<>1
+          ) broken;
+
+          select 'work_stock_area_mismatch|' || count(*)
+          from public.inventory_stock s
+          join public.inventory_items i on i.id=s.item_id
+          join public.inventory_locations l on l.id=s.location_id
+          where l.active=true
+            and l.kind='work'
+            and l.metadata->>'work_area'<>i.work_area;
+
           select 'detail_duplicate_catalog|' ||
                  split_part(item_key,':',1) || '|' || catalog_key || '|count|' || count(*)
           from public.inventory_items
@@ -204,6 +245,57 @@ jobs:
           SQL
           )"
           echo "inventory_site_integrity_violations=${result}"
+          test "$result" = "0"
+
+      - name: Enforce unified storage and work-area classification
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
+          result="$("${SSH[@]}" 'cd /opt/kitchen-os && set -a && source .env && set +a && docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' <<'SQL'
+          select
+            (select count(*)
+             from public.inventory_locations l
+             where l.active=true
+               and l.kind='storage'
+               and (
+                 l.metadata->>'storage_group' not in ('primary','service')
+                 or coalesce(nullif(btrim(l.metadata->>'work_area'),''),'')<>''
+               ))
+            +
+            (select count(*)
+             from public.inventory_locations l
+             left join public.work_areas w
+               on w.site_code=l.site
+              and w.code=l.metadata->>'work_area'
+              and w.active=true
+             where l.active=true
+               and l.kind='work'
+               and w.code is null)
+            +
+            (select count(*)
+             from (
+               select w.site_code,w.code
+               from public.work_areas w
+               left join public.inventory_locations l
+                 on l.site=w.site_code
+                and l.kind='work'
+                and l.active=true
+                and l.metadata->>'work_area'=w.code
+               where w.active=true
+               group by w.site_code,w.code
+               having count(l.id)<>1
+             ) broken)
+            +
+            (select count(*)
+             from public.inventory_stock s
+             join public.inventory_items i on i.id=s.item_id
+             join public.inventory_locations l on l.id=s.location_id
+             where l.active=true
+               and l.kind='work'
+               and l.metadata->>'work_area'<>i.work_area);
+          SQL
+          )"
+          echo "inventory_location_classification_violations=${result}"
           test "$result" = "0"
 
       - name: Enforce zero hidden inventory after deploy
