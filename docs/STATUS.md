@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Central storage-row pick shortcut, 2026-09-27
+
+- Branch: `feat/central-storage-pick-shortcut-20260927`.
+- Positive-stock Central storage rows can deep-link into 領貨 with exact database item/source focus.
+- Shared operation controller remains the only write UI; VPS API/PostgreSQL remain authoritative.
+- No schema, endpoint, permission or production stock changes.
+- Candidate until exact-head regression + merge + production deploy/smoke pass.
+
+
 ## DONE — Central priority receive shortcut, 2026-09-27
 
 - PR #156 merged as `07d42a30eab8932507c3ccdd54f92f6a8f69a853`; Deploy #903 / run `36301227833` is verified in production.

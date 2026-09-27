@@ -1411,3 +1411,13 @@ The separate read-cutover candidate:
 - Stage complete: low-stock priority rows can open 進貨 focused on the exact PostgreSQL item/location without introducing frontend business authority.
 - Next: reduce steps in 領貨 / 轉撥 / 出貨 using the same database-keyed preselection pattern where useful.
 
+## 2026-09-27 — Central operator UX: storage row → 領貨
+
+- Started from production-complete receive shortcut release #903 / `07d42a30eab8932507c3ccdd54f92f6a8f69a853` plus docs closure on main.
+- Added optional database source-location focus to the shared inventory operation controller.
+- Central storage rows with positive stock now expose a compact 領貨 shortcut for authorized online operators.
+- Shortcut filters the exact item and preselects the exact PostgreSQL-declared source storage code.
+- Manual search/mode navigation clears shortcut state; transaction behavior remains unchanged.
+- Added static/UI and browser regression for exact item/source preselection.
+- No schema/API/permission/stock rewrite.
+

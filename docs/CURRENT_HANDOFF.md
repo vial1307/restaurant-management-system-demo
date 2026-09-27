@@ -1,5 +1,22 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — Central storage-row pick shortcut, 2026-09-27
+
+Branch: `feat/central-storage-pick-shortcut-20260927`.
+
+Goal: reduce Central `領貨` steps without changing inventory authority. A storage row with positive quantity can open the shared Pick controller focused on the exact database item and exact source storage location.
+
+Implemented:
+- authorized/online Central storage rows with stock > 0 expose a compact `領貨` action;
+- shortcut carries stable database item key + source location code, never display labels;
+- shared operation controller accepts optional initial source location and selects the matching source option by database location code;
+- focused search still isolates the exact item; manual search clears item/source deep-link state;
+- manual mode changes and overview drill-down clear operation focus to prevent stale preselection;
+- no API/schema/permission/stock semantics change.
+
+Candidate is not production-complete until exact-head CI, merge, production deploy/health and UI smoke pass.
+
+
 ## Completed release — Central priority receive shortcut, 2026-09-27
 
 PR #156 merged into `main` as `07d42a30eab8932507c3ccdd54f92f6a8f69a853` and is verified in production through Deploy Kitchen OS to VPS #903 / run `36301227833`.
