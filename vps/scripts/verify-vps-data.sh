@@ -95,30 +95,58 @@ check_positive "Yongji locations exist" "select count(*) from public.inventory_l
 check_positive "Central locations exist" "select count(*) from public.inventory_locations where site='central' and active=true"
 check_positive "operational work areas exist" "select count(*) from public.work_areas where active=true"
 
-check_zero "missing canonical operational location records" "
-  with expected(code) as (
-    values
-      ('central-freezer'),('central-fridge'),('central-four-door'),('central-chest'),('central-work-use'),
-      ('fuxing-large-freezer'),('fuxing-large-fridge'),('fuxing-four-door'),('fuxing-kitchen'),
-      ('fuxing-work-noodles'),('fuxing-work-soup'),('fuxing-work-seafood'),('fuxing-work-meat'),
-      ('yongji-large-freezer'),('yongji-large-fridge'),('yongji-four-door'),('yongji-kitchen'),
-      ('yongji-work-noodles'),('yongji-work-soup'),('yongji-work-seafood'),('yongji-work-meat')
-  )
-  select count(*) from expected e
-  left join public.inventory_locations l on l.code=e.code
-  where l.id is null
+check_zero "active inventory sites without storage locations" "
+  select count(*)
+  from public.sites site
+  where site.active=true
+    and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+    and not exists (
+      select 1
+      from public.inventory_locations location
+      where location.site=site.code
+        and location.active=true
+        and location.kind='storage'
+    )
 "
-check_zero "missing canonical work-area records" "
-  with expected(site_code,code) as (
-    values
-      ('central','noodles'),('central','soup'),('central','seafood'),('central','meat'),
-      ('fuxing','noodles'),('fuxing','soup'),('fuxing','seafood'),('fuxing','meat'),
-      ('yongji','noodles'),('yongji','soup'),('yongji','seafood'),('yongji','meat')
-  )
-  select count(*) from expected e
-  left join public.work_areas w
-    on w.site_code=e.site_code and w.code=e.code
-  where w.code is null
+check_zero "active work areas missing active work locations" "
+  select count(*)
+  from public.work_areas area
+  join public.sites site
+    on site.code=area.site_code
+   and site.active=true
+   and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+  where area.active=true
+    and not exists (
+      select 1
+      from public.inventory_locations location
+      where location.site=area.site_code
+        and location.active=true
+        and location.kind='work'
+        and btrim(coalesce(location.metadata->>'work_area',''))=area.code
+    )
+"
+check_zero "active work locations without active work-area master data" "
+  select count(*)
+  from public.inventory_locations location
+  where location.active=true
+    and location.kind='work'
+    and not exists (
+      select 1
+      from public.work_areas area
+      where area.site_code=location.site
+        and area.active=true
+        and area.code=btrim(coalesce(location.metadata->>'work_area',''))
+    )
+"
+check_zero "duplicate active work-location mappings" "
+  select count(*)
+  from (
+    select location.site,btrim(coalesce(location.metadata->>'work_area','')) as work_area
+    from public.inventory_locations location
+    where location.active=true and location.kind='work'
+    group by location.site,btrim(coalesce(location.metadata->>'work_area',''))
+    having count(*)>1
+  ) duplicates
 "
 check_zero "active inventory items missing active work-area master data" "
   select count(*)
@@ -135,6 +163,33 @@ check_zero "active inventory items missing active work-area master data" "
 check_zero "invalid work-area master data labels" "
   select count(*) from public.work_areas
   where trim(name_vi)='' or trim(name_zh_tw)=''
+"
+check_zero "protected work stock outside item work area" "
+  select count(*)
+  from public.inventory_stock stock
+  join public.inventory_items item on item.id=stock.item_id
+  join public.inventory_locations location on location.id=stock.location_id
+  where location.kind='work'
+    and (stock.quantity>0 or stock.minimum_quantity>0)
+    and (
+      location.site<>split_part(item.item_key,':',1)
+      or btrim(coalesce(location.metadata->>'work_area',''))<>item.work_area
+    )
+"
+check_zero "cross-site inventory work-area variants" "
+  select count(*)
+  from (
+    select i.catalog_key
+    from public.inventory_items i
+    join public.sites site
+      on site.code=split_part(i.item_key,':',1)
+     and site.active=true
+     and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+    where i.active=true
+    group by i.catalog_key
+    having count(distinct split_part(i.item_key,':',1))>1
+       and count(distinct i.work_area)>1
+  ) variants
 "
 
 check_zero "negative inventory quantities" "select count(*) from public.inventory_stock where quantity<0"
@@ -310,13 +365,12 @@ operational_variants="$(scalar "
     having count(distinct split_part(item_key,':',1)) > 1
        and (
          count(distinct unit) > 1
-         or count(distinct work_area) > 1
          or count(distinct storage_only) > 1
        )
   ) q
 ")"
-echo "INFO: cross-site inventory operational variants: ${operational_variants}"
-warn_nonzero "branch multi-location items missing fixed receive default" "
+echo "INFO: cross-site site-owned unit/storage variants: ${operational_variants}"
+check_zero "branch multi-location items missing fixed receive default" "
   with configured as (
     select
       i.id,
@@ -363,6 +417,22 @@ warn_nonzero "active inventory items without configured storage" "
 "
 
 
+echo "=== Inventory master topology ==="
+"${psql_base[@]}" -c "
+select
+  site.code as site,
+  count(distinct location.id) filter (where location.active=true and location.kind='storage') as storage_locations,
+  count(distinct area.code) filter (where area.active=true) as work_areas,
+  count(distinct location.id) filter (where location.active=true and location.kind='work') as work_locations
+from public.sites site
+left join public.inventory_locations location on location.site=site.code
+left join public.work_areas area on area.site_code=site.code
+where site.active=true
+  and coalesce(site.metadata->>'inventory_mode','') in ('central','branch')
+group by site.code
+order by site.code;
+"
+
 echo "=== Inventory catalog synchronization detail ==="
 echo "--- Identity name drift ---"
 "${psql_base[@]}" -c "
@@ -392,7 +462,7 @@ order by catalog_key
 limit 100;
 "
 
-echo "--- Operational variants (informational) ---"
+echo "--- Site-owned unit/storage variants (informational) ---"
 "${psql_base[@]}" -c "
 with variants as (
   select
@@ -439,7 +509,6 @@ with variant_keys as (
        count(distinct name_vi) > 1
        or count(distinct name_zh_tw) > 1
        or count(distinct unit) > 1
-       or count(distinct work_area) > 1
        or count(distinct storage_only) > 1
      )
 )
@@ -518,8 +587,8 @@ limit 80;
 "
 
 schema="$(scalar "select coalesce(max(version),'000') from public.schema_migrations")"
-if [[ "${schema}" < "024" ]]; then
-  echo "ERROR: schema version ${schema} is older than 024"
+if [[ "${schema}" < "025" ]]; then
+  echo "ERROR: schema version ${schema} is older than 025"
   errors=$((errors+1))
 else
   echo "OK: schema version ${schema}"
@@ -528,6 +597,7 @@ fi
 inventory_site_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_site_guard','inventory_stock_site_guard','inventory_receive_defaults_site_guard')")"
 inventory_archive_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_items_archive_guard','inventory_stock_active_item_guard')")"
 inventory_location_integrity_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_locations_archive_guard','inventory_stock_active_location_guard','inventory_receive_defaults_active_location_guard')")"
+inventory_work_area_parity_triggers="$(scalar "select count(distinct trigger_name) from information_schema.triggers where trigger_schema='public' and trigger_name in ('inventory_locations_work_area_guard','inventory_stock_work_area_guard','inventory_items_work_area_stock_guard')")"
 if [[ "${inventory_site_triggers}" != "3" ]]; then
   echo "ERROR: expected 3 inventory site-isolation triggers, found ${inventory_site_triggers}"
   errors=$((errors+1))
@@ -547,6 +617,13 @@ if [[ "${inventory_location_integrity_triggers}" != "3" ]]; then
   errors=$((errors+1))
 else
   echo "OK: inventory location-integrity triggers = 3"
+fi
+
+if [[ "${inventory_work_area_parity_triggers}" != "3" ]]; then
+  echo "ERROR: expected 3 inventory work-area parity triggers, found ${inventory_work_area_parity_triggers}"
+  errors=$((errors+1))
+else
+  echo "OK: inventory work-area parity triggers = 3"
 fi
 
 revision_columns="$(scalar "select count(*) from information_schema.columns where table_schema='public' and column_name='revision' and table_name in ('system_announcements','media_assets','menu_items','inventory_items','sop_documents')")"
