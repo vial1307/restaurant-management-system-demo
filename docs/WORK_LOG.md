@@ -261,6 +261,7 @@ Verified:
 This makes `3a3392133483c6575a63d61a04d085a2d50df692` the verified production milestone, replacing the old schema-020 production baseline.
 
 ### Capacity audit
+
 Run `35377327695` succeeded. Observed host values included 2 vCPU, Ubuntu 22.04.5 LTS, 49 GB root disk with ~44 GB available, ~38 MB Kitchen OS footprint, ~15 MB backup directory and 72 backup files at audit time.
 
 ### Follow-up started
@@ -761,6 +762,7 @@ Observed read-only capacity snapshot:
 User requested that Super Admin GitHub & Handoff update the current development chain/fix directly from VPS/GitHub and provide one link that another developer or a future chat can use to continue.
 
 Created branch:
+
 - `feat/live-github-handoff-20260920`.
 
 Implementation candidate:
@@ -1009,6 +1011,7 @@ Created continuation branch:
 - `fix/inventory-roundtrip-performance-20260921`;
 - prerequisite catalog-audit PR #131 merged as `35ec19d3c89f43313a6d6895db446a6c7d5a5ea9` and PR #132 is based on that merge;
 - production remains Deploy #796 / `21d376295b6194e48bfaa599fc6c5424256a6196`, schema 024.
+
 Confirmed defects:
 
 - every rapid branch/central `+ / -` action updated the store or page and triggered a full render, then cloud synchronization triggered another full inventory fetch/render;
@@ -1375,3 +1378,4 @@ The separate read-cutover candidate:
 - Added `tests/central-kitchen-ui-regression.mjs` and wired it into static preflight.
 - No schema migration, stock rewrite, permission change or transaction endpoint change.
 - Next: open PR, run exact-head static/API/PostgreSQL/browser/full-device regression, fix only redesign regressions, then deploy and verify production.
+
