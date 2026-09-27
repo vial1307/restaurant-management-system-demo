@@ -155,16 +155,18 @@ try {
   await Promise.all([first, second]);
   assert.deepEqual(inventoryRequests, ["fuxing", "yongji"], "queued cross-site sync did not run after the active sync completed");
 
-  const { WORK_AREAS } = await import("../src/store.js");
+  const { inventoryUiGroups } = await import("../src/inventory-master-data.js");
   const { invalidateVpsMasterDataCache } = await import("../src/vps-api.js");
-  assert.equal(WORK_AREAS[0].vi,"fuxing: Khu mì","destination read must not replace active site's options");
+  assert.equal(inventoryUiGroups("fuxing").workAreas[0].vi,"fuxing: Khu mì","Fuxing master data must remain site-scoped");
+  assert.equal(inventoryUiGroups("yongji").workAreas[0].vi,"yongji: Khu mì","destination read must not replace another site's options");
   notifications.length=0;
   await syncInventoryNow("fuxing");
   assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,0,"unchanged fallback poll must not repaint");
   workLabel="Khu đã đổi tên";
   invalidateVpsMasterDataCache("fuxing");
   await syncInventoryNow("fuxing");
-  assert.equal(WORK_AREAS[0].vi,"fuxing: Khu đã đổi tên");
+  assert.equal(inventoryUiGroups("fuxing").workAreas[0].vi,"fuxing: Khu đã đổi tên");
+  assert.equal(inventoryUiGroups("yongji").workAreas[0].vi,"yongji: Khu mì","Fuxing refresh must not overwrite Yongji master data");
   assert.equal(notifications.filter(e=>e.type==="shitu:inventory-cloud-updated").length,1,"master-only fallback refresh must repaint once without a stock mutation");
   notifications.length=0;
   await syncInventoryNow("fuxing",{force:true});
