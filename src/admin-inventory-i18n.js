@@ -40,6 +40,7 @@ export const INVENTORY_ADMIN_TEXT = {
   orphanWorkLocation:["Vị trí làm việc không thuộc khu làm việc đang hoạt động","使用位置未連結啟用中的工作區"],
   invalidStorageGroup:["Kho chưa phân loại Kho tổng / Kho khu vực","儲位尚未分類為總倉／區域庫"],
   workStockMismatch:["Tồn tại khu làm việc không khớp nguyên liệu","工作區庫存與食材工作區不一致"],
+  crossSiteWorkArea:["Khu làm việc khác Central cho cùng mã nguyên liệu","同一共用品項與央廚工作區不一致"],
   synced:["Tự đồng bộ","自動同步"],
   time:["Thời gian","時間"], actor:["Người thao tác","操作者"], action:["Thao tác","操作"],
   beforeAfter:["Trước → sau","變更前 → 後"], latest:["Tối đa 250 giao dịch gần nhất; nhật ký cấu hình nằm trong Logs & Reports.","最多顯示最近 250 筆異動；設定紀錄請見日誌報表。"],
