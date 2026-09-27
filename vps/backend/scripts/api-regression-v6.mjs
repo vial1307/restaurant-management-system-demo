@@ -63,6 +63,36 @@ assert.deepEqual(
   new Set([fxFreezer.code,fxFour.code,fxWorkMeat.code])
 );`;
 
+const oldUnconfiguredDestinationAssertion = \`const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
+  method:"POST",cookie:employee.cookie,
+  body:{itemId:tofuFx.id,sourceLocationId:fxFreezer.id,destinationLocationId:yjFour.id,quantity:1}
+});
+assert.equal(unconfiguredDestination.response.status,409);
+assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");\`;
+assert(source.includes(oldUnconfiguredDestinationAssertion), "legacy unconfigured-destination fixture changed; update v6 adapter explicitly");
+
+const databaseUnconfiguredDestinationAssertion = \`const unconfiguredCatalogKey="unconfigured-destination-regression";
+const unconfiguredSource=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:admin.cookie,
+  body:{item:{key:"fuxing:unconfigured-destination-regression",catalog_key:unconfiguredCatalogKey,
+    zh:"未設定收貨測試",vi:"Kiểm thử chưa cấu hình nơi nhận",unit:"包",work_area:"noodles",
+    storage_only:false,locations:[{code:fxFreezer.code}]}}
+});
+assert.equal(unconfiguredSource.response.status,200);
+const unconfiguredTarget=await request("/api/inventory/catalog/sync",{
+  method:"POST",cookie:admin.cookie,
+  body:{item:{key:"yongji:unconfigured-destination-regression",catalog_key:unconfiguredCatalogKey,
+    zh:"未設定收貨測試",vi:"Kiểm thử chưa cấu hình nơi nhận",unit:"包",work_area:"noodles",
+    storage_only:false,locations:[]}}
+});
+assert.equal(unconfiguredTarget.response.status,200);
+const unconfiguredDestination = await request("/api/inventory/direct-transfer",{
+  method:"POST",cookie:employee.cookie,
+  body:{itemId:unconfiguredSource.data.item.id,sourceLocationId:fxFreezer.id,destinationLocationId:yjFour.id,quantity:1}
+});
+assert.equal(unconfiguredDestination.response.status,409);
+assert.equal(unconfiguredDestination.data.error,"DESTINATION_STORAGE_CONFIGURATION_REQUIRED");\`;
+
 const oldSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""}]},`;
 assert(source.includes(oldSharedStaffFixture), "legacy workforce fixture changed; update scoped workforce injection explicitly");
 const scopedSharedStaffFixture = `shared:{staff:[{id:"staff-a",name:"A",role:"employee",area:"noodles",hourlyRate:200,active:true,pin:""},{id:"staff-employee",name:"employeefx",role:"employee",area:"soup",hourlyRate:220,active:true,pin:""},{id:"staff-parttime",name:"parttimefx",role:"parttime",area:"seafood",hourlyRate:225,active:true,pin:""}]},`;
@@ -80,7 +110,8 @@ const migrated = source
   .replace(oldEmployeeStateRegression, scopedEmployeeStateRegression)
   .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression)
   .replace(oldCatalogAuditStockAssertion, branchCatalogWorkProjectionAssertion)
-  .replace(oldCatalogAuditLocationAssertions, branchCatalogAuditLocationAssertions);
+  .replace(oldCatalogAuditLocationAssertions, branchCatalogAuditLocationAssertions)
+  .replace(oldUnconfiguredDestinationAssertion, databaseUnconfiguredDestinationAssertion);
 
 await import(`data:text/javascript;base64,${Buffer.from(migrated).toString("base64")}`);
 await import("./catalog-stocktake-regression-client.mjs");
