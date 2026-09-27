@@ -1,5 +1,17 @@
 # Kitchen OS Work Log
 
+## 2026-09-27 — Central Kitchen operator priority workspace candidate
+
+- Started from verified production release `7157d0b5263209b3391ccab57c088668d7902973` / Deploy #898.
+- Branch: `redesign/central-kitchen-operator-ui-20260927`.
+- Added an Overview-only priority panel generated from current PostgreSQL-projected stock rows below their database minimums.
+- No cross-unit total is calculated. Each alert retains its own unit, actual quantity, minimum and database storage label.
+- Empty stock sorts before low stock; the first six actionable rows are shown with a count for remaining rows.
+- Alert click returns to storage view and filters the exact database-declared storage location.
+- Added a healthy state and permission/cloud-gated direct link to 進貨入庫.
+- Added responsive CSS and static/browser regression coverage.
+- No schema, endpoint, permission or stock-data change. Exact-head CI/PR verification pending.
+
 ## 2026-09-27 — Central Kitchen inventory UI redesign production verification
 
 - PR #152 exact head `df64c415950acccb3741cc43e75052710a1c3618` passed Deploy #897 / run `36286847264`, Super Admin Browser #167 / run `36286847257` and the related workforce diagnostics.
