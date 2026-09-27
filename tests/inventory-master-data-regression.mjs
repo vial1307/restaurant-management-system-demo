@@ -74,6 +74,18 @@ assert.doesNotMatch(cloudSource, /import \{[^}]*\b(?:ZONES|WORK_AREAS|PRIMARY_ZO
   "inventory cloud must not import legacy global storage/work-area arrays");
 assert.doesNotMatch(cloudSource, /bootstrapFuxingInventory|bootstrapYongjiInventory|bootstrapCentralInventory/,
   "inventory startup must not expose site-specific bootstrap paths");
+assert.doesNotMatch(cloudSource, /reconcileFuxingSnapshot|cloudSyncFuxingCatalogItem|cloudArchiveFuxingItem|fuxingLocationCode|fuxingWorkLocationCode|fuxingItemKey/,
+  "inventory runtime must not expose Fuxing-only compatibility APIs");
+const transferSource = fs.readFileSync(new URL("../src/inventory-transfer-service.js", import.meta.url), "utf8");
+assert.match(transferSource, /workArea:\s*String\(row\.location\.metadata\?\.work_area \|\| ""\)\.trim\(\)/,
+  "operation data must carry PostgreSQL work-area identity on work locations");
+const operationSource = fs.readFileSync(new URL("../src/inventory-operations.js", import.meta.url), "utf8");
+assert.match(operationSource, /function workLocationForItem[\s\S]{0,360}loc\.workArea[\s\S]{0,180}===workArea/,
+  "pick operations must resolve the destination by database work-area identity");
+assert.doesNotMatch(operationSource, /preferredSuffix|central-work-use|item\.workArea\|\|"noodles"|item\.workArea\s*\|\|\s*"noodles"/,
+  "pick operations must not infer work locations from code suffixes, Central legacy 使用中, or a noodles fallback");
+assert.match(operationSource, /workDestination:"Khu làm việc · 工作區"/,
+  "operation UI must describe the destination as the configured work area");
 
 const appSource = fs.readFileSync(new URL("../src/app.js", import.meta.url), "utf8");
 assert.doesNotMatch(appSource, /function appStagingLocations|function appWorkLocations|function branchDraftOperationData/,
@@ -125,6 +137,10 @@ assert.match(authLayer, /function branchSwitcher[\s\S]{0,700}inventorySites\(\)\
   "warehouse switcher must derive active physical sites from PostgreSQL master data");
 assert.doesNotMatch(authLayer, /data-warehouse="fuxing"[\s\S]{0,240}data-warehouse="yongji"/,
   "warehouse switcher must not hard-code branch buttons");
+assert.doesNotMatch(authLayer, /user\.location === "central" \? "央廚"[\s\S]{0,180}user\.location === "fuxing"/,
+  "authenticated account site labels must come from the PostgreSQL site registry");
+assert.doesNotMatch(authLayer, /領到使用中|Lấy từ kho trung tâm vào 使用中/,
+  "Central pick guidance must not describe the retired generic 使用中 location");
 assert.match(authLayer, /const centralDefaultWorkArea = \(\) => centralWorkAreas\(\)\[0\]\?\.id \|\| "";/,
   "Central work-area defaults must come from PostgreSQL master data");
 assert.match(authLayer, /name="central-unit" list="central-unit-suggestions" required/,
