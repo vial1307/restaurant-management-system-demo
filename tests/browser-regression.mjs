@@ -340,8 +340,9 @@ async function roleDesktop(browser, username, checks) {
     await selectToday(page);
     await page.locator('[data-central-mode="in"]').waitFor({state:"visible"});
 
-    assert.equal(await page.locator(".inventory-summary").count(),1,"central inventory summary must match branch layout");
-    assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation tabs must match branch layout");
+    assert.equal(await page.locator(".central-kitchen-kpis").count(),1,"central inventory KPI summary missing");
+    assert.equal(await page.locator(".central-kitchen-kpis > article").count(),4,"central inventory KPI summary must expose four database-driven indicators");
+    assert.equal(await page.locator(".branch-ops-tabs").count(),1,"central operation navigation must preserve shared operation-tab behavior");
     assert.equal(await page.locator(".inventory-view-switch").count(),1,"central overview view switch missing");
     assert((await page.locator(".inventory-table.storage-table .central-row").count()) > 0,"central storage overview cards missing");
     if(checks.manage === true){
