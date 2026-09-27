@@ -87,7 +87,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   function integrityView() {
     const groups = {
       missingStorage:[], missingDefault:[], invalidArea:[], duplicateCatalog:[],
-      missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], workStockMismatch:[], crossSiteWorkArea:[],
+      missingWorkStock:[], missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], workStockMismatch:[], crossSiteWorkArea:[],
     };
     const counts = new Map();
     const activeAreas = (master.workAreas || []).filter((area) => area.active);
@@ -98,6 +98,13 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       if (!locations.length) groups.missingStorage.push(item);
       if (locations.length>1 && !snapshot.receiveDefaults.some((d) => d.catalog_key===item.catalog_key)) groups.missingDefault.push(item);
       if (item.work_area && !activeAreas.some((area) => area.code===item.work_area)) groups.invalidArea.push(item);
+      if (item.work_area && activeAreas.some((area) => area.code===item.work_area)) {
+        const projected = stockFor(item.id).some((row) => {
+          const location = locationById(row.location_id);
+          return location?.active && location.kind==="work" && location.metadata?.work_area===item.work_area;
+        });
+        if (!projected) groups.missingWorkStock.push(item);
+      }
       if (counts.get(item.catalog_key)>1) groups.duplicateCatalog.push(item);
     }
     for (const area of activeAreas) {
