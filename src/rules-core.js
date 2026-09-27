@@ -77,7 +77,7 @@ function plannedProcurementDemand(product, coverage) {
   }, 0);
 }
 
-export function calculateProcurementPlan(date, record, settings = {}) {
+export function calculateProcurementPlan(date, record, settings = {}, storageGroups = []) {
   const saved = record?.procurement ?? {};
   const planned = saved.planned ?? {};
   const incoming = saved.incoming ?? {};
@@ -103,17 +103,18 @@ export function calculateProcurementPlan(date, record, settings = {}) {
   });
 
   const factory = [];
-  const freezer = new Map();
+  const factoryZones = factoryReplenishmentStorageIds(storageGroups);
+  const factoryStocks = new Map();
   for (const item of record?.inventory ?? []) {
-    if (item.zone !== "large-freezer") continue;
+    if (!factoryZones.has(String(item.zone || ""))) continue;
     const stockKey = item.stockKey ?? item.id;
-    const existing = freezer.get(stockKey);
+    const existing = factoryStocks.get(stockKey);
     if (existing) {
       existing.current += clampNumber(item.quantity);
       existing.target = Math.max(existing.target, clampNumber(item.minimum));
       continue;
     }
-    freezer.set(stockKey, {
+    factoryStocks.set(stockKey, {
       id: `factory-${stockKey}`,
       stockKey,
       category: "factory",
@@ -126,7 +127,7 @@ export function calculateProcurementPlan(date, record, settings = {}) {
       target: clampNumber(item.minimum),
     });
   }
-  for (const item of freezer.values()) {
+  for (const item of factoryStocks.values()) {
     const incomingUnits = clampNumber(incoming[item.id]);
     const shortage = Math.max(0, item.target - item.current - incomingUnits);
     const orderUnits = coverages.factory.orderable ? Math.ceil(shortage) : 0;
@@ -169,15 +170,32 @@ export function inventoryRestock(item) {
   return Math.max(0, clampNumber(item.minimum) - clampNumber(item.quantity));
 }
 
-export function inventorySources(record, item, destination = "work", storageGroups = []) {
-  const stockKey = item.stockKey ?? item.id;
-  const routing = new Map((Array.isArray(storageGroups) ? storageGroups : []).map((group, index) => [
+function inventoryStorageRouting(storageGroups = []) {
+  return new Map((Array.isArray(storageGroups) ? storageGroups : []).map((group, index) => [
     String(group?.id || ""),
     {
       storageGroup:String(group?.storageGroup || ""),
+      factoryReplenishment:group?.factoryReplenishment === true,
       sortOrder:Number.isFinite(Number(group?.sortOrder)) ? Number(group.sortOrder) : index,
     },
   ]).filter(([id]) => id));
+}
+
+function factoryReplenishmentStorageIds(storageGroups = []) {
+  return new Set([...inventoryStorageRouting(storageGroups).entries()]
+    .filter(([, meta]) => meta.factoryReplenishment)
+    .map(([id]) => id));
+}
+
+function inventoryStorageRank(zone, routing) {
+  const meta = routing.get(String(zone || ""));
+  const groupRank = meta?.storageGroup === "primary" ? 0 : meta?.storageGroup === "service" ? 1 : 9;
+  return [groupRank, Number(meta?.sortOrder ?? 9999)];
+}
+
+export function inventorySources(record, item, destination = "work", storageGroups = []) {
+  const stockKey = item.stockKey ?? item.id;
+  const routing = inventoryStorageRouting(storageGroups);
   const destinationMeta = routing.get(String(destination || ""));
   const hasRouting = routing.size > 0;
 
@@ -205,8 +223,9 @@ export function inventorySources(record, item, destination = "work", storageGrou
     });
 }
 
-export function summarizeReserveInventory(record) {
+export function summarizeReserveInventory(record, storageGroups = []) {
   const grouped = new Map();
+  const routing = inventoryStorageRouting(storageGroups);
 
   for (const item of record.inventory ?? []) {
     const stockKey = item.stockKey ?? item.id;
@@ -228,7 +247,11 @@ export function summarizeReserveInventory(record) {
 
     existing.quantity += clampNumber(item.quantity);
     if (!existing.zones.includes(item.zone)) existing.zones.push(item.zone);
-    if (minimum > existing.minimum || (minimum === existing.minimum && existing.zone === "kitchen" && item.zone !== "kitchen")) {
+    const [itemGroupRank,itemSortRank] = inventoryStorageRank(item.zone,routing);
+    const [existingGroupRank,existingSortRank] = inventoryStorageRank(existing.zone,routing);
+    const preferred = itemGroupRank < existingGroupRank
+      || (itemGroupRank === existingGroupRank && itemSortRank < existingSortRank);
+    if (minimum > existing.minimum || (minimum === existing.minimum && preferred)) {
       existing.minimum = minimum;
       existing.zone = item.zone;
       existing.label = item.label;
@@ -240,26 +263,27 @@ export function summarizeReserveInventory(record) {
   return [...grouped.values()];
 }
 
-export function buildInventoryAlerts(record) {
-  const reserves = summarizeReserveInventory(record);
+export function buildInventoryAlerts(record, storageGroups = []) {
+  const reserves = summarizeReserveInventory(record, storageGroups);
+  const factoryZones = factoryReplenishmentStorageIds(storageGroups);
   const workAlerts = (record.workInventory ?? record.inventory ?? [])
     .filter((item) => inventoryStatus(item) !== "ok")
     .map((item) => {
       const reserve = reserves.find((entry) => entry.stockKey === (item.stockKey ?? item.id));
       return { ...item, kind: "work", available: reserve?.quantity ?? 0 };
     });
-  const freezerStocks = new Map();
+  const factoryStocks = new Map();
 
   for (const item of record.inventory ?? []) {
-    if (item.zone !== "large-freezer" || clampNumber(item.minimum) <= 0) continue;
+    if (!factoryZones.has(String(item.zone || "")) || clampNumber(item.minimum) <= 0) continue;
     const stockKey = item.stockKey ?? item.id;
-    const existing = freezerStocks.get(stockKey);
+    const existing = factoryStocks.get(stockKey);
     if (existing) {
       existing.quantity += clampNumber(item.quantity);
       existing.minimum = Math.max(existing.minimum, clampNumber(item.minimum));
       continue;
     }
-    freezerStocks.set(stockKey, {
+    factoryStocks.set(stockKey, {
       ...item,
       id: `reserve-${stockKey}`,
       stockKey,
@@ -269,11 +293,11 @@ export function buildInventoryAlerts(record) {
     });
   }
 
-  const reserveAlerts = [...freezerStocks.values()].filter((item) => item.quantity === 0);
+  const reserveAlerts = [...factoryStocks.values()].filter((item) => item.quantity === 0);
   const storageAlerts = (record.inventory ?? [])
-    .filter((item) => item.zone !== "large-freezer" && inventoryRestock(item) > 0)
+    .filter((item) => !factoryZones.has(String(item.zone || "")) && inventoryRestock(item) > 0)
     .map((item) => {
-      const sources = inventorySources(record, item, item.zone);
+      const sources = inventorySources(record, item, item.zone, storageGroups);
       return {
         ...item,
         kind: "storage",
@@ -293,8 +317,9 @@ export function buildInventoryAlerts(record) {
   });
 }
 
-export function buildGeneratedTasks(state, date) {
+export function buildGeneratedTasks(state, date, storageGroups = []) {
   const record = state.records[date];
+  const factoryZones = factoryReplenishmentStorageIds(storageGroups);
   const reservations = calculateReservations(record.reservation, state.settings.reservationBuffer);
   const rice = calculateRice(date, record.riceRemaining, state.settings);
   const tasks = [];
@@ -315,10 +340,10 @@ export function buildGeneratedTasks(state, date) {
   for (const item of record.workInventory ?? record.inventory) {
     const needed = inventoryRestock(item);
     if (needed > 0) {
-      const sources = inventorySources(record, item);
+      const sources = inventorySources(record, item, "work", storageGroups);
       const source = sources[0];
       const available = sources.reduce((total, entry) => total + clampNumber(entry.quantity), 0);
-      const freezerStocks = record.inventory.filter((entry) => entry.stockKey === item.stockKey && entry.zone === "large-freezer");
+      const factoryStocks = record.inventory.filter((entry) => entry.stockKey === item.stockKey && factoryZones.has(String(entry.zone || "")));
       tasks.push({
         id: `inventory-${item.id}`,
         kind: available > 0 ? "inventory" : "inventory-blocked",
@@ -330,7 +355,7 @@ export function buildGeneratedTasks(state, date) {
         amount: available > 0 ? Math.min(needed, available) : needed,
         needed,
         available,
-        awaitingFactory: freezerStocks.length > 0 && freezerStocks.every((entry) => clampNumber(entry.quantity) === 0),
+        awaitingFactory: factoryStocks.length > 0 && factoryStocks.every((entry) => clampNumber(entry.quantity) === 0),
         unit: item.unit,
         priority: inventoryStatus(item) === "empty" || available === 0 ? "high" : "medium",
       });
@@ -338,11 +363,11 @@ export function buildGeneratedTasks(state, date) {
   }
 
   for (const item of record.inventory) {
-    if (item.zone === "large-freezer") continue;
+    if (factoryZones.has(String(item.zone || ""))) continue;
     const needed = inventoryRestock(item);
     if (needed <= 0) continue;
 
-    const sources = inventorySources(record, item, item.zone);
+    const sources = inventorySources(record, item, item.zone, storageGroups);
     const source = sources[0];
     const available = sources.reduce((total, entry) => total + clampNumber(entry.quantity), 0);
 
@@ -364,7 +389,7 @@ export function buildGeneratedTasks(state, date) {
     });
   }
 
-  for (const reserve of buildInventoryAlerts(record).filter((item) => item.kind === "reserve")) {
+  for (const reserve of buildInventoryAlerts(record, storageGroups).filter((item) => item.kind === "reserve")) {
     const needed = inventoryRestock(reserve);
 
     tasks.push({
