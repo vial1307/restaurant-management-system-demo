@@ -90,6 +90,21 @@ for(const site of ["central","fuxing","yongji"]) {
   const withSpare=await get(`/api/inventory/${site}`);
   assert(withSpare.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===savedLocation.id));
   assert(withSpare.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===spare.id));
+  // Super Admin metadata-only edits intentionally omit item.locations. The
+  // backend-created work projection must not turn that into a location-prune
+  // request or remove zero-valued storage associations.
+  const {locations:_explicitLocations,...metadataOnlyItem}=item;
+  savedItem=(await post("/api/inventory/catalog/sync",{
+    expectedRevision:String(savedItem.revision),
+    guardWorkArea:true,
+    item:{...metadataOnlyItem,vi:`Metadata ${site}`},
+  })).item;
+  item.vi=savedItem.name_vi;
+  const afterMetadataOnly=await get(`/api/inventory/${site}`);
+  assert(afterMetadataOnly.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===savedLocation.id),
+    `${site}: metadata-only edit pruned primary storage`);
+  assert(afterMetadataOnly.stock.some((s)=>s.item_id===savedItem.id&&s.location_id===spare.id),
+    `${site}: metadata-only edit pruned secondary storage`);
   await post("/api/master-data/locations",{action:"archive",site,id:savedLocation.id,expectedUpdatedAt:renamedLocation.updated_at},409);
   await post("/api/inventory/catalog/archive",{itemKey:item.key,expectedRevision:String(savedItem.revision)},409);
   const tx=await get(`/api/inventory/${site}/transactions?limit=250`);
