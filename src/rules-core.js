@@ -169,30 +169,39 @@ export function inventoryRestock(item) {
   return Math.max(0, clampNumber(item.minimum) - clampNumber(item.quantity));
 }
 
-const SOURCE_PRIORITY = {
-  "large-fridge": 0,
-  "large-freezer": 1,
-  "four-door": 2,
-  kitchen: 3,
-};
-
-export function inventorySources(record, item, destination = "work") {
+export function inventorySources(record, item, destination = "work", storageGroups = []) {
   const stockKey = item.stockKey ?? item.id;
-  const eligibleZones = destination === "large-fridge"
-    ? ["large-freezer"]
-    : destination === "four-door" || destination === "kitchen"
-      ? ["large-fridge", "large-freezer"]
-      : null;
+  const routing = new Map((Array.isArray(storageGroups) ? storageGroups : []).map((group, index) => [
+    String(group?.id || ""),
+    {
+      storageGroup:String(group?.storageGroup || ""),
+      sortOrder:Number.isFinite(Number(group?.sortOrder)) ? Number(group.sortOrder) : index,
+    },
+  ]).filter(([id]) => id));
+  const destinationMeta = routing.get(String(destination || ""));
+  const hasRouting = routing.size > 0;
 
   return (record.inventory ?? [])
     .filter((entry) => {
       if ((entry.stockKey ?? entry.id) !== stockKey || clampNumber(entry.quantity) <= 0) return false;
       if (entry.id === item.id || entry.zone === destination) return false;
-      return !eligibleZones || eligibleZones.includes(entry.zone);
+      if (!hasRouting) return true;
+
+      const sourceMeta = routing.get(String(entry.zone || ""));
+      if (!sourceMeta) return false;
+      if (destinationMeta?.storageGroup === "service") return sourceMeta.storageGroup === "primary";
+      if (destinationMeta?.storageGroup === "primary") return sourceMeta.storageGroup === "primary";
+      return ["primary", "service"].includes(sourceMeta.storageGroup);
     })
     .sort((left, right) => {
-      const priority = (SOURCE_PRIORITY[left.zone] ?? 9) - (SOURCE_PRIORITY[right.zone] ?? 9);
-      return priority || clampNumber(right.quantity) - clampNumber(left.quantity);
+      const leftMeta = routing.get(String(left.zone || ""));
+      const rightMeta = routing.get(String(right.zone || ""));
+      const leftGroup = leftMeta?.storageGroup === "primary" ? 0 : leftMeta?.storageGroup === "service" ? 1 : 9;
+      const rightGroup = rightMeta?.storageGroup === "primary" ? 0 : rightMeta?.storageGroup === "service" ? 1 : 9;
+      const groupPriority = leftGroup - rightGroup;
+      if (groupPriority) return groupPriority;
+      const orderPriority = Number(leftMeta?.sortOrder ?? 9999) - Number(rightMeta?.sortOrder ?? 9999);
+      return orderPriority || clampNumber(right.quantity) - clampNumber(left.quantity);
     });
 }
 
