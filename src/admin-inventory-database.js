@@ -13,7 +13,7 @@ const PAGE_SIZE = 25;
 export function createInventoryDatabase({ request = apiRequest } = {}) {
   let host, sites = [], me, source, poll, timer, generation = 0;
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
-  let snapshot = null, master = null, history = [], editor = null, pending = false, loading = false, dirty = false;
+  let snapshot = null, master = null, history = [], catalogAudit = null, editor = null, pending = false, loading = false, dirty = false;
   let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
   let deferredSite = null;
   const canEdit = () => Boolean(me?.permissions?.inventory?.edit);
@@ -87,7 +87,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   function integrityView() {
     const groups = {
       missingStorage:[], missingDefault:[], invalidArea:[], duplicateCatalog:[],
-      missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], workStockMismatch:[],
+      missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], workStockMismatch:[], crossSiteWorkArea:[],
     };
     const counts = new Map();
     const activeAreas = (master.workAreas || []).filter((area) => area.active);
@@ -119,6 +119,18 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
         groups.workStockMismatch.push(item);
       }
     }
+    for (const mismatch of catalogAudit?.workAreaMismatchesWithCentral || []) {
+      for (const row of mismatch.branchItems || []) {
+        if (row.site !== site) continue;
+        groups.crossSiteWorkArea.push({
+          catalog_key:mismatch.catalogKey,
+          name_vi:row.nameVi,
+          name_zh_tw:row.nameZhTw,
+          work_area:row.workArea,
+          central_work_area:mismatch.centralWorkArea,
+        });
+      }
+    }
     const rowCode = (row) => row?.catalog_key || row?.code || row?.item_key || row?.id || "";
     return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(label(row))} <code>${esc(rowCode(row))}</code></li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
   }
@@ -134,7 +146,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(loading)host.querySelectorAll('[data-idb-action]').forEach((node)=>{node.disabled=true;});
     host.querySelector('[name="site"]').onchange = (event) => {
       if (!canLeave()) { event.target.value=site; return; }
-      site=event.target.value; snapshot=master=null; history=[]; q=""; page=1; editor=null; message=""; void load();
+      site=event.target.value; snapshot=master=null; history=[]; catalogAudit=null; q=""; page=1; editor=null; message=""; void load();
     };
     host.querySelector("[data-idb-search]")?.addEventListener("submit",(event)=>{event.preventDefault();if(!canLeave())return;q=String(new FormData(event.target).get("q")||"");page=1;editor=null;render();});
     host.querySelectorAll("[data-idb-action]").forEach((node)=>node.addEventListener("click",()=>void action(node.dataset)));
@@ -160,15 +172,17 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     const seq=++generation, targetSite=site, targetTab=tab;
     if(!quiet){loading=true;render();}
     try {
-      const [nextMaster,nextSnapshot,nextHistory] = await Promise.all([
+      const [nextMaster,nextSnapshot,nextHistory,nextCatalogAudit] = await Promise.all([
         request(`/api/master-data/${encodeURIComponent(targetSite)}?includeInactive=true`),
         request(`/api/inventory/${encodeURIComponent(targetSite)}?includeInactive=true`),
         targetTab==="history"?request(`/api/inventory/${encodeURIComponent(targetSite)}/transactions?limit=250`):Promise.resolve(null),
+        targetTab==="integrity"&&me?.role==="admin"?request("/api/admin/super/inventory-catalog-audit"):Promise.resolve(null),
       ]);
       if(seq!==generation||!host)return false;
       if(quiet&&(editor||pending)){markRemote();return false;}
-      const changed=JSON.stringify([master,snapshot,history])!==JSON.stringify([nextMaster,nextSnapshot,nextHistory?.transactions||history]);
-      master=nextMaster;snapshot=nextSnapshot;if(nextHistory)history=nextHistory.transactions||[];
+      const nextAudit=nextCatalogAudit||catalogAudit;
+      const changed=JSON.stringify([master,snapshot,history,catalogAudit])!==JSON.stringify([nextMaster,nextSnapshot,nextHistory?.transactions||history,nextAudit]);
+      master=nextMaster;snapshot=nextSnapshot;if(nextHistory)history=nextHistory.transactions||[];if(nextCatalogAudit)catalogAudit=nextCatalogAudit;
       remote=false;loading=false;if(changed||!quiet)render();
       if(refreshQueued){refreshQueued=false;sync();}return true;
     } catch(error) {
@@ -186,7 +200,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     site = deferredSite;
     deferredSite = null;
     if (site !== previousSite) {
-      snapshot=master=null;history=[];q="";page=1;editor=null;message="";
+      snapshot=master=null;history=[];catalogAudit=null;q="";page=1;editor=null;message="";
       return true;
     }
     return false;
