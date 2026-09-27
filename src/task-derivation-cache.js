@@ -2,11 +2,12 @@ function recordFor(state, date) {
   return state?.records?.[date] ?? {};
 }
 
-export function taskDerivationFingerprint(state, date) {
+export function taskDerivationFingerprint(state, date, derivationContext = null) {
   const record = recordFor(state, date);
   const settings = state?.settings ?? {};
 
   return JSON.stringify({
+    derivationContext,
     date: String(date ?? ""),
     reservation: record.reservation ?? null,
     riceRemaining: record.riceRemaining ?? null,
@@ -38,11 +39,11 @@ export function createTaskDerivationCache({ deriveTasks, summarizeProgress } = {
   let progressKey = null;
   let cachedProgress = null;
 
-  function tasks(state, date) {
-    const nextKey = taskDerivationFingerprint(state, date);
+  function tasks(state, date, derivationContext = null) {
+    const nextKey = taskDerivationFingerprint(state, date, derivationContext);
     if (taskKey === nextKey && cachedTasks !== null) return cachedTasks;
 
-    const nextTasks = deriveTasks(state, date);
+    const nextTasks = deriveTasks(state, date, derivationContext);
     taskKey = nextKey;
     cachedTasks = nextTasks;
     progressKey = null;
@@ -50,8 +51,8 @@ export function createTaskDerivationCache({ deriveTasks, summarizeProgress } = {
     return cachedTasks;
   }
 
-  function progress(state, date) {
-    const currentTasks = tasks(state, date);
+  function progress(state, date, derivationContext = null) {
+    const currentTasks = tasks(state, date, derivationContext);
     const completedTasks = recordFor(state, date).completedTasks ?? {};
     const nextKey = `${taskKey}\u001e${completedTaskFingerprint(completedTasks)}`;
     if (progressKey === nextKey && cachedProgress !== null) return cachedProgress;
