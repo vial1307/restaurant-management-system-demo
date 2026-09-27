@@ -17,7 +17,7 @@ import {
   vpsRelocateStorage,
   vpsRelocateWorkArea,
 } from "./vps-api.js";
-import { PRIMARY_ZONES, STORAGE_KEY, WORK_AREAS, ZONES, stockKeyFor } from "./store.js";
+import { STORAGE_KEY, stockKeyFor } from "./store.js";
 import {
   firstInventorySite,
   inventoryLocationByCode,
@@ -154,20 +154,10 @@ async function ensureSiteRegistry({ force = false } = {}) {
 
 function syncUiMasterData(site, snapshot) {
   replaceInventoryMasterSnapshot(site, snapshot);
-  // Shipment reads fetch multiple sites; only the active site owns the UI.
-  if (site !== currentSite()) return;
-  const groups = inventoryUiGroups(site);
-  ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
-    id:entry.id,
-    zh:entry.zh,
-    vi:entry.vi,
-    code:entry.code,
-    storageGroup:entry.storageGroup,
-  })));
-  WORK_AREAS.splice(0, WORK_AREAS.length, ...groups.workAreas);
-  PRIMARY_ZONES.splice(0, PRIMARY_ZONES.length, ...groups.storage
-    .filter((entry) => entry.storageGroup === "primary")
-    .map((entry) => entry.id));
+}
+
+function defaultInventoryWorkArea(site = currentSite()) {
+  return inventoryUiGroups(site).workAreas[0]?.id || "";
 }
 
 export function isCurrentBranchInventoryDate() {
@@ -494,7 +484,7 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
-        work_area: entry.workArea || WORK_AREAS[0]?.id || "",
+        work_area: entry.workArea || defaultInventoryWorkArea(site),
         storage_only: Boolean(entry.storageOnly),
         locations: [],
       });
@@ -520,7 +510,7 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
     const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
     const item = grouped.get(stockKey);
     if (!item) continue;
-    const area = entry.workArea || item.work_area || WORK_AREAS[0]?.id || "";
+    const area = entry.workArea || item.work_area || defaultInventoryWorkArea(site);
     const code = branchWorkLocationCode(site, area);
     if (!code) continue;
     item.locations.push({
@@ -546,7 +536,7 @@ function buildCentralCatalog(items) {
         zh:entry.zh || baseId,
         vi:entry.vi || entry.zh || baseId,
         unit:entry.unit || "個",
-        work_area:entry.workArea || entry.work_area || WORK_AREAS[0]?.id || "",
+        work_area:entry.workArea || entry.work_area || defaultInventoryWorkArea("central"),
         storage_only:true,
         locations:[],
       });
@@ -765,7 +755,7 @@ function applyCentral(rows) {
       zh:row.item.name_zh_tw,
       vi:row.item.name_vi,
       unit:row.item.unit,
-      workArea:row.item.work_area || WORK_AREAS[0]?.id || "",
+      workArea:row.item.work_area || defaultInventoryWorkArea("central"),
       zone,
       qty:Number(row.quantity)||0,
       minimum:Number(row.minimum_quantity)||0,
@@ -814,7 +804,7 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
-        workArea:row.item.work_area||WORK_AREAS[0]?.id||"",
+        workArea:row.item.work_area||defaultInventoryWorkArea(site),
         storageOnly:Boolean(row.item.storage_only),
         zone,
         quantity:Number(row.quantity)||0,
@@ -832,7 +822,7 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
-        workArea:area||row.item.work_area||WORK_AREAS[0]?.id||"",
+        workArea:area||row.item.work_area||defaultInventoryWorkArea(site),
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
         cloudItemId:row.item.id,
