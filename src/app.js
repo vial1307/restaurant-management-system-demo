@@ -423,8 +423,7 @@ function zoneLabel(id, language, site = activeInventorySite()) {
 }
 
 function workAreaLabel(id, language, site = activeInventorySite()) {
-  const area = inventoryWorkAreaGroups(site).find((item) => item.id === id)
-    || WORK_AREAS.find((item) => item.id === id);
+  const area = inventoryWorkAreaGroups(site).find((item) => item.id === id);
   return area ? area[language] : id;
 }
 
