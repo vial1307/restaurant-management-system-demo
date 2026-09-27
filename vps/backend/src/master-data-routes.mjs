@@ -180,6 +180,36 @@ function validateDisplayNames(nameVi, nameZhTw) {
   }
 }
 
+async function validateLocationMetadata(client, site, kind, metadata) {
+  const next = { ...object(metadata) };
+  if (kind === "storage") {
+    const group = text(next.storage_group);
+    if (!["primary", "service"].includes(group)) {
+      throw Object.assign(new Error("INVENTORY_STORAGE_GROUP_INVALID"), { statusCode: 400 });
+    }
+    delete next.work_area;
+    return next;
+  }
+
+  const workArea = text(next.work_area);
+  if (!workArea) {
+    throw Object.assign(new Error("INVENTORY_WORK_LOCATION_AREA_REQUIRED"), { statusCode: 400 });
+  }
+  const found = await client.query(
+    `select 1
+     from public.work_areas
+     where site_code=$1 and code=$2 and active=true
+     limit 1`,
+    [site, workArea]
+  );
+  if (!found.rowCount) {
+    throw Object.assign(new Error("INVENTORY_WORK_LOCATION_AREA_INVALID"), { statusCode: 409 });
+  }
+  next.work_area = workArea;
+  delete next.storage_group;
+  return next;
+}
+
 function assertFreshMaster(current, body) {
   if (body?.createOnly && current) throw Object.assign(new Error("MASTER_DATA_ALREADY_EXISTS"), { statusCode:409 });
   if (body?.expectedUpdatedAt !== undefined &&
@@ -261,11 +291,12 @@ export async function registerMasterDataRoutes(app) {
         const kind = text(request.body?.kind || "storage");
         const sortOrder = integer(request.body?.sort_order ?? request.body?.sortOrder, 0);
         const active = bool(request.body?.active, true);
-        const metadata = object(request.body?.metadata);
+        const rawMetadata = object(request.body?.metadata);
         validateDisplayNames(nameVi, nameZhTw);
         if (!LOCATION_KINDS.has(kind)) {
           throw Object.assign(new Error("INVALID_LOCATION_KIND"), { statusCode: 400 });
         }
+        const metadata = await validateLocationMetadata(client, site, kind, rawMetadata);
 
         if (!id) {
           if (!CODE_RE.test(code) || !code.startsWith(`${site}-`)) {
