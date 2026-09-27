@@ -148,6 +148,8 @@ jobs:
           test -f vps/backend/scripts/api-regression-v6.mjs
           test -f vps/backend/scripts/inventory-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
+          test -f vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
+          test -f vps/database/migrations/026_branch_catalog_workarea_sync.sql
           test -f tests/inventory-archive-integrity-contract-regression.mjs
           test -f tests/inventory-location-archive-integrity-contract-regression.mjs
           test -f tests/workforce-approval-browser-regression.mjs
@@ -210,6 +212,9 @@ jobs:
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs
+
+      - name: Branch work-area catalog sync database regression
+        run: node vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
 
       - name: Inventory archive integrity database regression
         run: node vps/backend/scripts/inventory-archive-integrity-regression.mjs
