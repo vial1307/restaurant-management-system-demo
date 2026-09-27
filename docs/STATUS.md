@@ -1,14 +1,14 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — database-driven replenishment source routing, 2026-09-28
+## DONE — database-driven inventory replenishment routing, 2026-09-28
 
-- Branch: `refactor/inventory-source-routing-masterdata-v2-20260928`.
-- Removes legacy storage-ID routing from inventory replenishment hints.
-- Uses PostgreSQL `storage_group=primary|service` + storage `sort_order`.
-- Work Area routing is database-classified; service storage sources from primary; primary storage stays within primary.
-- No schema/API/permission/stock mutation change.
-- Replaces stale PR #161 on top of production schema 026.
-
+- PR #164 merged as `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`; Deploy #959 / run `36336697537` is verified in production.
+- Replenishment routing now uses PostgreSQL `storage_group=primary|service` plus storage `sort_order`; legacy storage IDs are no longer routing rules.
+- Exact head `b3d66d2d4407dfd55df182ed113754814c9401eb` passed Super Admin Browser #222, Workforce #347 and Deploy #958.
+- Merge run #959 had one unrelated mobile-admin timeout on the first full-device attempt; failed-job rerun passed before deployment.
+- Backup: `kitchen_os_20260927T173001Z.dump`; health `release=e1d26b2`, schema `026`, app/database `ok`; `DATA_INTEGRITY_OK`; production UI smoke PASS; Inventory Site Audit #228 PASS.
+- Stale PR #161 closed as superseded.
+- NEXT: migrate procurement/factory warehouse rules away from `large-freezer` and then retire legacy store inventory defaults separately.
 
 ## DONE — Fuxing/Yongji catalog work-area normalization, 2026-09-28
 

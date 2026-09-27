@@ -1,22 +1,29 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — database-driven replenishment source routing, 2026-09-28
+## Completed release — database-driven inventory replenishment routing, 2026-09-28
 
-Branch: `refactor/inventory-source-routing-masterdata-v2-20260928`.
+PR #164 merged into `main` as `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71` and is verified in production through Deploy Kitchen OS to VPS #959 / run `36336697537`.
 
-Goal: remove the last inventory replenishment routing rules tied to legacy storage IDs while preserving the schema 026 Central/Fuxing/Yongji classification model.
+This release removes the remaining inventory replenishment source-routing dependency on legacy storage IDs:
+- `inventoryUiGroups(site).storage` exposes PostgreSQL `storage_group` and `sort_order`;
+- `inventorySources()` no longer contains `SOURCE_PRIORITY` or `large-fridge / large-freezer / four-door / kitchen` routing tables;
+- Work Area replenishment uses database-classified storage and database sort order;
+- service/Kho khu vực can source only from primary/Kho tổng storage;
+- primary-storage replenishment remains inside primary storage;
+- Website passes the active site's master-data storage groups into routing;
+- regression uses arbitrary storage IDs, proving storage rename/addition does not require a frontend routing edit.
 
-Implemented:
-- `inventoryUiGroups(site).storage` exposes PostgreSQL `sort_order` together with `storage_group`;
-- `inventorySources()` no longer contains `large-fridge / large-freezer / four-door / kitchen` source-routing tables;
-- Work Area replenishment accepts database-classified storage and sorts primary before service using database sort order;
-- service/Kho khu vực replenishment can source only from primary/Kho tổng storage;
-- primary storage replenishment stays inside primary storage;
-- Website supplies the active site's PostgreSQL storage groups to routing;
-- regression uses arbitrary storage IDs, proving rename/add-location changes do not require frontend routing edits.
+Verification:
+- exact PR head `b3d66d2d4407dfd55df182ed113754814c9401eb`: Super Admin Browser #222, Workforce Approval #347, Deploy preflight/full regression #958 all PASS;
+- merge release `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`: Deploy #959 first regression attempt hit an unrelated mobile-admin permission timeout; failed-job rerun passed PostgreSQL/API/concurrency/browser/full-device regression before deploy continued;
+- deploy, health and production UI smoke then PASS;
+- backup: `kitchen_os_20260927T173001Z.dump`;
+- runtime: `release=e1d26b2`, schema `026`, app/database `ok`, `DATA_INTEGRITY_OK`, `PRODUCTION_UI_SMOKE_OK`;
+- Inventory Site Production Audit #228 / run `36337257733` PASS;
+- no schema migration and no production stock rewrite;
+- stale PR #161 was closed as superseded by #164.
 
-No schema migration, quantity rewrite, permission change or inventory transaction API change. Procurement/factory ordering remains a separate domain. Candidate replaces stale PR #161, which was based on pre-schema-026 main.
-
+Next warehouse hard-code work: move the separate procurement/factory rules that still identify `large-freezer` in `rules-core.js` onto database storage classification/master data. Legacy default inventory constants in `store-core.js` are no longer production inventory authority and should be retired separately without breaking SOP/skills/offline defaults.
 
 ## Completed release — Fuxing/Yongji catalog work-area normalization, 2026-09-28
 

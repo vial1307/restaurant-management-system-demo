@@ -1489,3 +1489,14 @@ The separate read-cutover candidate:
 - Added arbitrary-ID regression for Work Area, service-storage and primary-storage replenishment.
 - No schema migration or stock rewrite.
 
+## 2026-09-28 — Database-driven replenishment routing production verification
+
+- PR #164 merged as `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`.
+- Exact head `b3d66d2d4407dfd55df182ed113754814c9401eb`: Super Admin Browser #222, Workforce Approval #347 and Deploy #958 all PASS.
+- Merge Deploy #959 / run `36336697537`: first full-device attempt hit an unrelated admin permission timeout; `rerun_failed_workflow_run_jobs` reran only the failed regression and it passed completely before deploy.
+- Backup: `kitchen_os_20260927T173001Z.dump`; runtime `release=e1d26b2`, schema `026`, app/database `ok`; `DATA_INTEGRITY_OK`; `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #228 / run `36337257733` PASS.
+- `SOURCE_PRIORITY` and fixed storage IDs are no longer inventory replenishment routing authority.
+- Stale PR #161 closed as superseded.
+- Next: treat procurement/factory stock-selection rules and legacy store defaults as separate hard-code cleanup stages.
+
