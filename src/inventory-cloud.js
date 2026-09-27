@@ -17,7 +17,7 @@ import {
   vpsRelocateStorage,
   vpsRelocateWorkArea,
 } from "./vps-api.js";
-import { PRIMARY_ZONES, STORAGE_KEY, WORK_AREAS, ZONES, stockKeyFor } from "./store.js";
+import { STORAGE_KEY, stockKeyFor } from "./store.js";
 import {
   firstInventorySite,
   inventoryLocationByCode,
@@ -26,7 +26,6 @@ import {
   inventoryMasterSnapshot,
   inventorySiteForLocationCode,
   inventorySites,
-  inventoryUiGroups,
   inventoryWorkLocation,
   isBranchInventorySite,
   isKnownInventorySite,
@@ -153,21 +152,10 @@ async function ensureSiteRegistry({ force = false } = {}) {
 }
 
 function syncUiMasterData(site, snapshot) {
+  // Inventory master data stays site-scoped. Do not copy a site's storage/work
+  // classification into legacy global arrays because switching sites would leak
+  // one branch's structure into another branch or into non-inventory modules.
   replaceInventoryMasterSnapshot(site, snapshot);
-  // Shipment reads fetch multiple sites; only the active site owns the UI.
-  if (site !== currentSite()) return;
-  const groups = inventoryUiGroups(site);
-  ZONES.splice(0, ZONES.length, ...groups.storage.map((entry) => ({
-    id:entry.id,
-    zh:entry.zh,
-    vi:entry.vi,
-    code:entry.code,
-    storageGroup:entry.storageGroup,
-  })));
-  WORK_AREAS.splice(0, WORK_AREAS.length, ...groups.workAreas);
-  PRIMARY_ZONES.splice(0, PRIMARY_ZONES.length, ...groups.storage
-    .filter((entry) => entry.storageGroup === "primary")
-    .map((entry) => entry.id));
 }
 
 export function isCurrentBranchInventoryDate() {
