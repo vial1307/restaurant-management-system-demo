@@ -34,15 +34,52 @@ function normalizedWorkArea(row) {
   };
 }
 
-function assertMasterSnapshotReady(site, locations) {
+function assertMasterSnapshotReady(site, locations, workAreas) {
   const mode = String(site?.metadata?.inventory_mode || "");
   if (!site?.code || !["central","branch"].includes(mode)) {
     throw new Error("INVENTORY_MASTER_DATA_NOT_READY");
   }
-  const invalidLocation = locations.find((location) =>
-    location.active !== false && !String(location.metadata?.ui_key || "").trim()
+
+  const activeAreas = new Set(
+    workAreas
+      .filter((area) => area.active !== false)
+      .map((area) => String(area.code || ""))
+      .filter(Boolean)
   );
-  if (invalidLocation) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+  const workLocationCounts = new Map();
+
+  for (const location of locations.filter((row) => row.active !== false)) {
+    const uiKey = String(location.metadata?.ui_key || "").trim();
+    if (!uiKey) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+
+    if (location.kind === "storage") {
+      const group = String(location.metadata?.storage_group || "").trim();
+      if (!["primary","service"].includes(group)) {
+        throw new Error("INVENTORY_STORAGE_GROUP_REQUIRED");
+      }
+      if (String(location.metadata?.work_area || "").trim()) {
+        throw new Error("INVENTORY_STORAGE_WORK_AREA_FORBIDDEN");
+      }
+      continue;
+    }
+
+    if (location.kind === "work") {
+      const area = String(location.metadata?.work_area || "").trim();
+      if (!area || !activeAreas.has(area)) {
+        throw new Error("INVENTORY_WORK_LOCATION_AREA_REQUIRED");
+      }
+      if (uiKey !== area) {
+        throw new Error("INVENTORY_WORK_LOCATION_UI_KEY_MISMATCH");
+      }
+      workLocationCounts.set(area, (workLocationCounts.get(area) || 0) + 1);
+    }
+  }
+
+  for (const area of activeAreas) {
+    if (workLocationCounts.get(area) !== 1) {
+      throw new Error("INVENTORY_WORK_AREA_LOCATION_CARDINALITY");
+    }
+  }
 }
 
 export function replaceInventorySites(rows = []) {
@@ -100,7 +137,7 @@ export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
   const workAreas = (Array.isArray(snapshot.workAreas) ? snapshot.workAreas : [])
     .map(normalizedWorkArea)
     .filter(Boolean);
-  assertMasterSnapshotReady(site, locations);
+  assertMasterSnapshotReady(site, locations, workAreas);
   sites.set(code, site);
   const next = { site, locations, workAreas };
   snapshots.set(code, next);
@@ -134,7 +171,7 @@ export function inventoryLocationWorkArea(location) {
 }
 
 export function inventoryStorageGroup(location) {
-  return String(location?.metadata?.storage_group || "service").trim() || "service";
+  return String(location?.metadata?.storage_group || "").trim();
 }
 
 export function inventoryLocationByCode(code) {
@@ -155,7 +192,7 @@ export function inventoryLocationByUiKey(siteCode, uiKey, kind = "storage") {
 export function inventoryWorkLocation(siteCode, workArea) {
   const wanted = String(workArea || "");
   return inventoryLocations(siteCode, "work").find((location) =>
-    inventoryLocationWorkArea(location) === wanted || inventoryLocationUiKey(location) === wanted
+    inventoryLocationWorkArea(location) === wanted
   ) || null;
 }
 
