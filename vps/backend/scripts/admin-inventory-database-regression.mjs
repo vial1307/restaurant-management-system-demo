@@ -44,6 +44,28 @@ for(const site of ["central","fuxing","yongji"]) {
   assert.equal((await post("/api/inventory/catalog/sync",{item,expectedRevision:firstRevision},409)).error,"INVENTORY_STALE");
   assert.equal((await post("/api/inventory/catalog/sync",{item:{...item,catalog_key:"different-key"},expectedRevision:String(savedItem.revision)},409)).error,"CATALOG_KEY_IMMUTABLE");
   item.vi=savedItem.name_vi;
+
+  if(site!=="central") {
+    const reserveSuffix=`${suffix}-reserve`;
+    const reserveItem={
+      key:`${site}:${reserveSuffix}`,
+      catalog_key:reserveSuffix,
+      vi:`Nguyên liệu dự trữ ${site}`,
+      zh:`${site}儲備食材`,
+      unit:"包",
+      work_area:area.code,
+      storage_only:true,
+      locations:[{code:location.code}],
+    };
+    const reserveSaved=(await post("/api/inventory/catalog/sync",{item:reserveItem,expectedRevision:"0",guardWorkArea:true})).item;
+    const reserveSnapshot=await get(`/api/inventory/${site}`);
+    assert(
+      reserveSnapshot.stock.some((row)=>row.item_id===reserveSaved.id&&row.location_id===autoWorkLocation.id),
+      `${site} storage_only item must still be projected into its 工作區`
+    );
+    await post("/api/inventory/catalog/archive",{itemKey:reserveItem.key,expectedRevision:String(reserveSaved.revision)});
+  }
+
   const pair={itemId:savedItem.id,locationId:savedLocation.id,note:suffix};
   await post("/api/inventory/set-quantity",{...pair,quantity:3.125,expectedQuantity:0});
   assert.equal((await post("/api/inventory/set-quantity",{...pair,quantity:99,expectedQuantity:0},409)).error,"INVENTORY_STALE");
