@@ -149,8 +149,9 @@ for (const mode of ["overview", "in", "pick", "transfer", "ship", "manage", "his
 }
 assert(app.includes('data-manage-adjust="true"'), "branch management must expose quantity controls");
 assert(authLayer.includes('data-central-manage-adjust="true"'), "central management must expose quantity controls");
-assert.match(authLayer, /function centralPage[\s\S]{0,900}const historical = false;/, "central inventory must remain live across service dates");
-assert.doesNotMatch(authLayer, /function centralPage[\s\S]{0,900}const historical = !isCurrentBranchInventoryDate\(\)/, "central inventory must not inherit the branch historical-date lock");
+const centralPageSource = authLayer.slice(authLayer.indexOf("function centralPage"), authLayer.indexOf("function centralStockStatus"));
+assert(centralPageSource.includes("function centralPage"), "centralPage source block missing");
+assert.doesNotMatch(centralPageSource, /isCurrentBranchInventoryDate\(/, "central inventory must remain live across service dates and must not inherit branch date locks");
 assert.match(authLayer, /const operationsEnabled = editGranted && cloudReady;/, "central operation tabs must stay available whenever permission and VPS are ready");
 assert.match(authLayer, /if \(!document\.querySelector\("\[data-central-kitchen-shell\]"\)\) centralPage\(user\);/, "Central auth observer must detect the redesigned shell and avoid rerender loops");
 assert.match(app, /shitu:inventory-cloud-updated[\s\S]{0,180}document\.querySelector\("\[data-central-kitchen-shell\]"\)/, "branch inventory update listener must not rerender the redesigned Central shell");
