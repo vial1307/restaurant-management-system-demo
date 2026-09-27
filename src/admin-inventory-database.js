@@ -58,10 +58,11 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
         : derivedWork
           ? `<span class="sa-pill">${esc(t("synced"))}</span>`
           : (canMaster(locationKind) ? button("master","edit",`data-id="${esc(row.id)}"`) : "");
+      const storageGroup = String(row.metadata?.storage_group || "").trim();
       const group = areas
         ? row.department_code || "—"
         : row.kind === "storage"
-          ? t(row.metadata?.storage_group === "service" ? "service" : "primary")
+          ? (["primary","service"].includes(storageGroup) ? t(storageGroup) : t("unconfigured"))
           : label(master.workAreas.find((area) => area.code === row.metadata?.work_area));
       return `<tr><td>${titleCell(row)}<small>${esc(row.code)}</small></td><td>${esc(group)}</td><td>${esc(t(row.active?"active":"inactive"))}</td><td>${action}</td></tr>`;
     });
@@ -221,7 +222,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       initial=(areas?master.workAreas:master.locations).find((m)=>(areas?m.code:m.id)===editor.id)||{};
       html=input("code","code",initial.code||(areas?"":`${site}-`),initial.code?'readonly':'required pattern="[a-z][a-z0-9._-]{1,39}" maxlength="40"')+input("name_vi","nameVi",initial.name_vi||"",'required maxlength="200"')+input("name_zh_tw","nameZh",initial.name_zh_tw||"",'required maxlength="200"')+input("sort_order","sort",initial.sort_order||0,'type="number" step="1"')+select("active","status",option("true",t("active"),String(initial.active!==false))+option("false",t("inactive"),String(initial.active!==false)));
       if(areas)html+=select("department_code","department",option("",t("none"),initial.department_code)+master.departments.filter((d)=>d.active||d.code===initial.department_code).map((d)=>option(d.code,label(d),initial.department_code)).join(""));
-      else if(locationKind==="storage")html+=select("storage_group","group",["primary","service"].map((g)=>option(g,t(g),initial.metadata?.storage_group||"primary")).join(""));
+      else if(locationKind==="storage")html+=select("storage_group","group",["primary","service"].map((g)=>option(g,t(g),initial.metadata?.storage_group||"service")).join(""));
       else html+=select("work_area","area",master.workAreas.filter((a)=>a.active||a.code===initial.metadata?.work_area).map((a)=>option(a.code,label(a),initial.metadata?.work_area)).join(""));
     } else if(type==="attach") {
       title="configure";
