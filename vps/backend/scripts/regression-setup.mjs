@@ -144,7 +144,6 @@ try {
   for (const entry of [
     ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm","central","storage",10],
     ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm","central","storage",20],
-    ["central-work-use","使用中","Đang sử dụng","central","work",90],
     ["fuxing-freezer","大冷凍","Tủ đông lớn","fuxing","storage",10],
     ["fuxing-four","四門冰箱","Tủ lạnh 4 cánh","fuxing","storage",20],
     ["fuxing-work-noodles","麵區","Khu mì","fuxing","work",90],
