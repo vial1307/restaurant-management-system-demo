@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — database-driven inventory replenishment routing, 2026-09-27
+
+- Branch: `refactor/inventory-source-routing-masterdata-20260927`.
+- Removes legacy storage-ID routing from inventory replenishment hints.
+- Uses PostgreSQL `storage_group=primary|service` plus storage `sort_order`.
+- Work Area: database storage sources; service storage: primary sources only; primary storage: primary sources only.
+- No schema/API/permission/stock mutation change.
+- Procurement/factory hard-code is out of scope and will be handled separately.
+
+
 ## DONE — unified inventory location/work-area classification, 2026-09-27
 
 - PR #159 merged as `fb7c27cc64963c238ff2b86b999dac2f818f3507`; Deploy #948 / run `36329813136` is verified in production.
