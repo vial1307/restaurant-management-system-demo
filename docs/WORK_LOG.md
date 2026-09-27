@@ -1401,3 +1401,13 @@ The separate read-cutover candidate:
 - Added static/UI and Chromium browser regression for exact item/location preselection.
 - No schema/API/permission/stock rewrite.
 
+## 2026-09-27 — Central priority receive shortcut production verification
+
+- PR #156 merged to `main` as `07d42a30eab8932507c3ccdd54f92f6a8f69a853`.
+- Exact PR head `bdbaffcb737a8d5350a26ff9fd51babb3bbad66b` passed Deploy #902 / run `36300779804`, Super Admin Browser #170 / run `36300779802`, and Workforce Approval #295 / run `36300779803`.
+- Merge Deploy #903 / run `36301227833` passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, server backup/deploy and production UI smoke.
+- Backup: `kitchen_os_20260927T065418Z.dump`.
+- Production: `DATA_INTEGRITY_OK`; `release=07d42a3`; schema `024`; app/database `ok`; `PRODUCTION_UI_SMOKE_OK`.
+- Stage complete: low-stock priority rows can open 進貨 focused on the exact PostgreSQL item/location without introducing frontend business authority.
+- Next: reduce steps in 領貨 / 轉撥 / 出貨 using the same database-keyed preselection pattern where useful.
+
