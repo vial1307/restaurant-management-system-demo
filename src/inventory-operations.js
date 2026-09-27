@@ -247,6 +247,19 @@ function applyInitialOperationFocus(host,state){
       destination.value=location.id;
     }
   }
+
+  const sourceLocationCode=String(state.initialSourceLocationCode||"").trim();
+  if(card&&sourceLocationCode){
+    const sourceLocation=item.locations.find((entry)=>entry.code===sourceLocationCode);
+    const source=card.querySelector("[data-op-source]");
+    if(sourceLocation&&source&&[...source.options].some((option)=>option.value===sourceLocation.id)){
+      source.value=sourceLocation.id;
+      operationSelections(state).sources[item.id]=sourceLocation.id;
+      const current=card.querySelector(`[data-op-current="${CSS.escape(item.id)}"]`);
+      if(current) current.textContent=`${Number(sourceLocation.quantity)||0} ${item.unit}`;
+      refreshTransferBalance(host,state,item.id);
+    }
+  }
 }
 
 function bindOperationSearch(host,state) {
@@ -260,6 +273,7 @@ function bindOperationSearch(host,state) {
       state.focusSearch="";
       state.initialItemKey="";
       state.initialLocationCode="";
+      state.initialSourceLocationCode="";
     }
     applyOperationSearch(host,state);
   };
@@ -595,12 +609,13 @@ export async function mountInventoryOperations(host,{
   onUpdated,
   initialItemKey="",
   initialLocationCode="",
+  initialSourceLocationCode="",
 }={}){
   if(!host||!site)return;
   if(activeMount?.stopWatch){
     try{await activeMount.stopWatch();}catch{}
   }
-  const state={host,site,mode,language,onUpdated,stopWatch:null,search:"",initialItemKey,initialLocationCode,focusItemKey:"",focusSearch:""};
+  const state={host,site,mode,language,onUpdated,stopWatch:null,search:"",initialItemKey,initialLocationCode,initialSourceLocationCode,focusItemKey:"",focusSearch:""};
   activeMount=state;
   await doRender(host,state);
   if(activeMount!==state || !host.isConnected) return;
