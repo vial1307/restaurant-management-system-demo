@@ -1,13 +1,15 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Fuxing/Yongji work-area catalog normalization, 2026-09-28
+## DONE — Fuxing/Yongji catalog work-area normalization, 2026-09-28
 
-Branch: `fix/branch-workarea-catalog-sync-20260928`.
-
-Migration 026 normalizes branch `inventory_items.work_area` from the matching active Central `catalog_key`, relocates work stock transactionally without changing quantity, and audits each correction. Super Admin Integrity and the production inventory audit now expose Central-to-branch work-area drift explicitly.
-
-No heuristic classification, no frontend quantity rewrite, no site-name hard-code. Status remains candidate until exact-head CI + production deploy/audit pass.
-
+- PR #162 merged as `22383cdbd8828f1d1934ffdc77925b9220ebf3d3`; Deploy #957 / run `36335664061` is verified in production.
+- PostgreSQL schema is now `026`.
+- Legacy branch item `work_area` drift is normalized from the active Central item with the same stable `catalog_key`; no label heuristic and no fixed site-name list.
+- Existing work stock is moved transactionally to the corrected Work Location without changing total quantity.
+- Pre-deploy: Central↔branch catalog mismatch 16. Post-deploy audit #225: mismatch 0, work-stock mismatch 0, location classification violations 0, hidden violations 0.
+- Final item counts: Central 41; Fuxing 76 (28 noodles / 18 soup / 21 seafood / 9 meat); Yongji 72 (31 noodles / 16 soup / 17 seafood / 8 meat).
+- Backup: `kitchen_os_20260927T171034Z.dump`; health `release=22383cd`, schema `026`, app/database `ok`; production UI smoke PASS.
+- NEXT: remove remaining replenishment routing tied to legacy storage IDs by using PostgreSQL `storage_group` + sort order.
 
 ## DONE — unified inventory location/work-area classification, 2026-09-27
 

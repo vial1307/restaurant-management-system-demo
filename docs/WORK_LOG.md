@@ -1467,3 +1467,16 @@ The separate read-cutover candidate:
 - No item-name inference and no hard-coded Fuxing/Yongji item mapping.
 - Next: exact-head CI, then deploy and confirm Fuxing/Yongji counts after migration/audit.
 
+## 2026-09-28 — Branch work-area normalization production verification
+
+- PR #162 merged to `main` as `22383cdbd8828f1d1934ffdc77925b9220ebf3d3`.
+- Deploy #957 / run `36335664061` passed merge-commit preflight, schema/API/concurrency/browser/full-device regression, backup/deploy and production UI smoke.
+- Backup: `kitchen_os_20260927T171034Z.dump`; runtime `release=22383cd`, schema `026`, app/database `ok`; `DATA_INTEGRITY_OK`; `PRODUCTION_UI_SMOKE_OK`.
+- Before migration: `catalog_work_area_mismatch_with_central=16`.
+- After migration, Inventory Site Production Audit #225 / run `36336041005` PASS with catalog mismatch 0, work-stock mismatch 0, location classification violations 0, hidden/site-isolation violations 0.
+- Final Work Area item counts:
+  - Central: noodles 38, soup 1, seafood 2 (41 total).
+  - Fuxing: noodles 28, soup 18, seafood 21, meat 9 (76 total).
+  - Yongji: noodles 31, soup 16, seafood 17, meat 8 (72 total).
+- Next: port replenishment source routing away from legacy location IDs onto database `storage_group` + sort order on top of schema 026.
+

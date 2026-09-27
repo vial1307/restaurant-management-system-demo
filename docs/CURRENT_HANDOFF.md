@@ -1,26 +1,40 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — Fuxing/Yongji catalog work-area normalization, 2026-09-28
+## Completed release — Fuxing/Yongji catalog work-area normalization, 2026-09-28
 
-Branch: `fix/branch-workarea-catalog-sync-20260928`.
+PR #162 merged into `main` as `22383cdbd8828f1d1934ffdc77925b9220ebf3d3` and is verified in production through Deploy Kitchen OS to VPS #957 / run `36335664061`.
 
-Observed production symptom: branch Work Area counts can be internally consistent with Work Locations but operationally wrong (for example most items classified as 麵區) because migration 025 intentionally preserves each `inventory_items.work_area`. Central is already classified correctly.
+Root cause fixed:
+- schema 025 had already synchronized Work Area ↔ Work Location structure, but it intentionally preserved legacy `inventory_items.work_area`;
+- Fuxing/Yongji could therefore be structurally valid while shared ingredients still belonged to the wrong business Work Area;
+- pre-deploy production audit #224 measured `catalog_work_area_mismatch_with_central=16` even though `work_stock_area_mismatch=0`.
 
-This candidate:
-- adds schema migration 026 to use the active Central item with the same `catalog_key` as the canonical work-area source for branch items;
-- targets every database-declared `inventory_mode=branch` site, not hard-coded Fuxing/Yongji lists;
-- refuses partial synchronization if the target branch Work Area / synchronized Work Location does not exist;
-- moves existing branch work stock to the corrected Work Location in one transaction, preserving total quantity and the larger minimum;
-- writes one audit log per corrected item;
-- verifies no Central/branch catalog work-area mismatch and no work-stock/location mismatch remains;
-- extends Super Admin catalog audit and Database Integrity with a dedicated cross-site work-area drift section;
-- extends the production inventory audit so future drift is visible and blocks a deployment audit;
-- adds a PostgreSQL regression that intentionally creates a wrong branch classification, reruns migration 026, and proves item area, stock location, quantity, minimum and audit log are correct.
+Migration 026:
+- derives the canonical Work Area from the active Central item with the same stable `catalog_key`;
+- targets every PostgreSQL site declared as `inventory_mode=branch`, not fixed Fuxing/Yongji names;
+- refuses partial correction when the target Work Area or synchronized Work Location is missing;
+- relocates existing work stock transactionally to the corrected Work Location while preserving total quantity and the larger minimum;
+- writes a system audit record for each corrected branch item;
+- leaves branch-only catalog identities site-owned and never uses display-name heuristics.
 
-No label/name heuristic is used. Branch-only catalog identities remain site-owned. No frontend inventory quantity logic is changed.
+Verified production Work Area item counts after normalization:
+- Central: noodles 38, soup 1, seafood 2 = 41 items;
+- Fuxing: noodles 28, soup 18, seafood 21, meat 9 = 76 items;
+- Yongji: noodles 31, soup 16, seafood 17, meat 8 = 72 items.
 
-Candidate is not production-complete until Database Schema, Deploy preflight/full regression, Super Admin Browser and production deploy/audit pass.
+Production verification:
+- exact PR head `2deadd5275df481b711bec519a15a2ca40c2a63f`: Database Schema #244, Master Data/Admin #293, Super Admin Browser #221, Load Smoke #512 and Deploy preflight/full regression #956 all PASS;
+- merge release `22383cdbd8828f1d1934ffdc77925b9220ebf3d3`: Deploy #957 passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260927T171034Z.dump`;
+- runtime: `release=22383cd`, schema `026`, app/database `ok`, `DATA_INTEGRITY_OK`, `PRODUCTION_UI_SMOKE_OK`;
+- post-deploy Inventory Site Production Audit #225 / run `36336041005` PASS:
+  - `catalog_work_area_mismatch_with_central=0`;
+  - `work_stock_area_mismatch=0`;
+  - `inventory_location_classification_violations=0`;
+  - `inventory_hidden_integrity_violations=0`;
+  - `stock_site_mismatch=0`, `receive_default_site_mismatch=0`, `unknown_item_site=0`.
 
+Next inventory work: port the remaining replenishment source-routing cleanup to current `main` so Work Area/service replenishment uses database `storage_group` + sort order instead of legacy storage IDs. Procurement/factory ordering remains a separate domain.
 
 ## Completed release — unified storage/work-area model for Central, Fuxing and Yongji, 2026-09-27
 
