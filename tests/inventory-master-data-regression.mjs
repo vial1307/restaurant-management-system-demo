@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { inventorySources } from "../src/rules-core.js";
 import {
   firstInventorySite,
   inventoryLocationByUiKey,
@@ -40,6 +41,37 @@ const groups = inventoryUiGroups("branch-a");
 assert.deepEqual(groups.storage.map((entry) => entry.id), ["large-freezer", "kitchen"]);
 assert.deepEqual(groups.storage.map((entry) => entry.storageGroup), ["primary", "service"]);
 assert.deepEqual(groups.workAreas.map((entry) => entry.id), ["noodles"]);
+assert.deepEqual(groups.storage.map((entry) => entry.sortOrder), [10, 20]);
+
+const routingGroups = [
+  { id:"reserve-alpha", storageGroup:"primary", sortOrder:10 },
+  { id:"reserve-gamma", storageGroup:"primary", sortOrder:30 },
+  { id:"service-beta", storageGroup:"service", sortOrder:20 },
+];
+const routingRecord = {
+  inventory:[
+    { id:"alpha", stockKey:"ingredient-x", zone:"reserve-alpha", quantity:2 },
+    { id:"gamma", stockKey:"ingredient-x", zone:"reserve-gamma", quantity:9 },
+    { id:"beta", stockKey:"ingredient-x", zone:"service-beta", quantity:6 },
+    { id:"other", stockKey:"ingredient-y", zone:"reserve-alpha", quantity:99 },
+  ],
+};
+const workItem = { id:"work-x", stockKey:"ingredient-x", quantity:0 };
+assert.deepEqual(
+  inventorySources(routingRecord, workItem, "work", routingGroups).map((entry) => entry.zone),
+  ["reserve-alpha", "reserve-gamma", "service-beta"],
+  "work-area replenishment must follow database storage class + sort order instead of legacy zone names",
+);
+assert.deepEqual(
+  inventorySources(routingRecord, { id:"beta", stockKey:"ingredient-x" }, "service-beta", routingGroups).map((entry) => entry.zone),
+  ["reserve-alpha", "reserve-gamma"],
+  "service storage must source only from database-classified primary storage",
+);
+assert.deepEqual(
+  inventorySources(routingRecord, { id:"alpha", stockKey:"ingredient-x" }, "reserve-alpha", routingGroups).map((entry) => entry.zone),
+  ["reserve-gamma"],
+  "primary storage replenishment must stay within database-classified primary storage",
+);
 
 assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
   site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
@@ -227,3 +259,8 @@ assert.match(dynamicSiteMigration, /APP_USER_SITE_NOT_FOUND/);
 assert.match(dynamicSiteMigration, /from public\.sites/);
 
 console.log("INVENTORY_MASTER_DATA_REGRESSION_OK");
+
+
+const rulesSource = fs.readFileSync(new URL("../src/rules-core.js", import.meta.url), "utf8");
+assert.doesNotMatch(rulesSource, /const SOURCE_PRIORITY|destination === "large-fridge"|destination === "four-door"|\["large-fridge", "large-freezer"\]/,
+  "inventory replenishment routing must not restore legacy location-id hard-code");
