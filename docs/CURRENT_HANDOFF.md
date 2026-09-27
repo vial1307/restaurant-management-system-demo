@@ -1,33 +1,37 @@
 # Kitchen OS — Current Development Handoff
 
-## Active candidate — unified storage/work-area model for Central, Fuxing and Yongji, 2026-09-27
+## Completed release — unified storage/work-area model for Central, Fuxing and Yongji, 2026-09-27
 
-Branch: `refactor/inventory-location-workarea-unification-20260927`.
+PR #159 merged into `main` as `fb7c27cc64963c238ff2b86b999dac2f818f3507` and is verified in production through Deploy Kitchen OS to VPS #948 / run `36329813136`.
 
-Goal: make all three inventory sites use the same PostgreSQL classification model. Storage and work-area identity must come from Database master data, never labels, per-site JS lists or mutable global UI fallback.
+This release makes all three inventory sites use the same PostgreSQL classification model:
+- every active storage location is explicitly classified by Database metadata as `primary` (Kho tổng / 主要儲位) or `service` (Kho khu vực / 區域儲位);
+- every active Work Area owns exactly one synchronized active Work Location; the Work Location carries the same work-area identity, labels and sort order;
+- Central legacy `central-work-use / 使用中` is retired. Existing work stock is moved transactionally to the item's declared PostgreSQL work area without changing same-item/site quantity;
+- Fuxing and Yongji work locations and work stock use the same invariant; mismatched work stock is relocated to the item's declared work area;
+- Work Area create/rename/order/activate/archive automatically synchronizes its Work Location through PostgreSQL trigger logic;
+- direct mutation of a work-owned Work Location is rejected by the master-data API; Super Admin edits Work Areas instead;
+- Super Admin distinguishes Storage and Work Area clearly and reports missing/orphan work locations, invalid storage groups and work-stock mismatches;
+- Central, Fuxing and Yongji Website views all derive storage/work-area identity from PostgreSQL master data;
+- Central now visibly separates `primary` vs `service` storage and shows the real database Work Area instead of generic `使用中`;
+- Fuxing/Yongji storage grouping requires explicit `storage_group="primary"` / `"service"`; unknown values are not silently treated as service;
+- browser tests no longer use display labels such as `央廚冷凍` as location identity.
 
-Implemented:
-- migration `025_inventory_location_workarea_unification.sql` normalizes storage locations to `primary/service`, enforces work-location → work-area identity and gives every active work area exactly one active work location;
-- Central's legacy generic `central-work-use / 使用中` stock is transactionally moved to the item's database-declared work area (麵/湯/海鮮/肉) and the generic location is retired once empty;
-- ambiguous active Central items still classified as `work_area='use'` stop the migration with their item keys instead of being silently guessed;
-- Fuxing/Yongji existing work locations are normalized under the same invariant; any mismatched work stock is relocated to the item's declared work area without changing total quantity;
-- PostgreSQL trigger makes Work Area the owner of its Work Location: create/rename/order/activate/archive stays synchronized automatically;
-- direct work-location mutation through the master-data API is rejected with `WORK_LOCATION_MANAGED_BY_WORK_AREA`;
-- Super Admin Work Location view is read-only/synchronized; edits happen in Work Area, while storage locations remain directly editable and classified as Kho tổng/primary or Kho khu vực/service;
-- Super Admin integrity now reports missing/orphan work locations, invalid storage groups and work-stock mismatches;
-- frontend master-data hydration rejects an unclassified/incomplete site snapshot instead of inferring a fallback;
-- inventory cloud no longer defaults missing work areas from global `WORK_AREAS[0]`, and obsolete site-specific bootstrap wrappers were removed;
-- shared inventory operations now resolve the pick destination strictly from PostgreSQL `location.metadata.work_area`; the old `noodles` suffix guess and `central-work-use` fallback are removed;
-- Fuxing-only reconciliation/catalog/location compatibility APIs were removed so Central/Fuxing/Yongji all use the same generic site-aware inventory functions;
-- account/site labels and pick guidance no longer hard-code Central/Fuxing/Yongji names or the retired generic `使用中` work location;
-- Super Admin no longer presents missing/invalid storage classification as `primary`; new storage follows the DB `service` default until reclassified;
-- regression fixtures now model `primary`/`service` storage explicitly, and API regression requires Central/Fuxing/Yongji each to expose both storage classes plus classified active work locations;
-- production inventory audit now enforces classification/cardinality/work-stock invariants across every active site.
+Production normalization evidence:
+- before Deploy #948 on schema 024: `work_stock_area_mismatch=2`, `inventory_location_classification_violations=7`;
+- after migration 025: `work_stock_area_mismatch=0`, `inventory_location_classification_violations=0`;
+- site isolation remains clean: `stock_site_mismatch=0`, `receive_default_site_mismatch=0`, `unknown_item_site=0`;
+- hidden inventory violations remain 0;
+- audited inventory totals after normalization: Central 81, Fuxing 1805, Yongji 17. Migration only changes work-location classification/routing for the same item/site and preserves quantity.
 
-No inventory quantity is invented. The migration only moves existing work stock between work locations for the same item/site and preserves quantity; no schema authority moves back to browser storage.
+Verification:
+- exact PR head `0ed9a401ee74de3b48dfc8e74a183f05d6e0adc8`: Database Schema #236, Master Data/Admin #285, Super Admin Browser #213, Workforce Approval #338, Load Smoke #504 and Deploy preflight/full regression #947 all PASS;
+- merge release `fb7c27cc64963c238ff2b86b999dac2f818f3507`: Deploy #948 passed preflight, PostgreSQL/API/concurrency/browser/full-device regression, backup/deploy and production UI smoke;
+- backup: `kitchen_os_20260927T153508Z.dump`;
+- runtime: `release=fb7c27c`, schema `025`, app/database `ok`, `DATA_INTEGRITY_OK`, `PRODUCTION_UI_SMOKE_OK`;
+- post-deploy Inventory Site Production Audit #215 / run `36330199081` PASS with unified classification violations = 0 and hidden inventory violations = 0.
 
-Candidate is not production-complete until exact-head CI, PostgreSQL migration/API regression, merge, VPS backup/deploy, production classification audit, health and UI smoke pass.
-
+Next inventory work: continue auditing remaining non-structural restaurant hard-code (especially procurement rules/copy) separately. Storage locations and Work Areas must remain PostgreSQL master data and must never return to per-site frontend lists.
 
 ## Active candidate — Central storage-row pick shortcut, 2026-09-27
 
