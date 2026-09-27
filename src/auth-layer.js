@@ -280,6 +280,52 @@ function centralModeNavigation({ mode, language, operationsEnabled, catalogManag
   </nav>`;
 }
 
+function centralPriorityPanel(items, language, operationsEnabled) {
+  const attention = items
+    .filter((item) => Number(item.qty || 0) < Number(item.minimum || 0))
+    .map((item) => {
+      const quantity = Number(item.qty || 0);
+      const minimum = Number(item.minimum || 0);
+      return {
+        item,
+        quantity,
+        minimum,
+        deficit: Math.max(0, minimum - quantity),
+        severity: quantity <= 0 ? 2 : 1,
+      };
+    })
+    .sort((a,b) => b.severity - a.severity || b.deficit - a.deficit || String(a.item.zh || "").localeCompare(String(b.item.zh || ""),"zh-Hant"));
+  const visible = attention.slice(0,6);
+  const title = language === "zh" ? "待處理" : "Cần xử lý · 待處理";
+  const subtitle = language === "zh"
+    ? "依 Database 安全庫存即時整理，不跨單位加總。"
+    : "Tự động theo định mức trong Database; không cộng gộp khác đơn vị.";
+  if (!attention.length) {
+    return `<section class="central-kitchen-priority is-clear" data-central-priority>
+      <header><div><span>LIVE PRIORITY</span><h2>${esc(title)}</h2><p>${esc(subtitle)}</p></div><strong class="central-kitchen-priority-count">0</strong></header>
+      <div class="central-kitchen-priority-clear"><span aria-hidden="true">✓</span><div><strong>${language === "zh" ? "目前沒有低於安全庫存的儲位" : "Hiện không có vị trí dưới định mức"}</strong><small>${language === "zh" ? "庫存狀態以 PostgreSQL 即時資料為準。" : "Trạng thái lấy từ dữ liệu PostgreSQL hiện tại."}</small></div></div>
+    </section>`;
+  }
+  return `<section class="central-kitchen-priority" data-central-priority>
+    <header><div><span>LIVE PRIORITY</span><h2>${esc(title)}</h2><p>${esc(subtitle)}</p></div><div class="central-kitchen-priority-head-actions"><strong class="central-kitchen-priority-count" data-central-priority-count>${attention.length}</strong>${operationsEnabled ? `<button type="button" class="secondary-button central-kitchen-priority-action" data-central-mode="in">${language === "zh" ? "進貨入庫" : "Nhập kho · 進貨"}</button>` : ""}</div></header>
+    <div class="central-kitchen-priority-list">${visible.map(({item,quantity,minimum,severity}) => {
+      const primary = language === "zh" ? item.zh : (item.vi || item.zh);
+      const secondary = language === "zh" ? (item.vi || "") : item.zh;
+      const state = severity === 2 ? "empty" : "low";
+      const stateLabel = severity === 2
+        ? (language === "zh" ? "缺貨" : "Hết hàng · 缺貨")
+        : (language === "zh" ? "低庫存" : "Sắp thiếu · 低庫存");
+      return `<button type="button" class="central-kitchen-priority-row is-${state}" data-central-priority-zone="${esc(item.zone)}">
+        <span class="central-kitchen-priority-item"><strong>${esc(primary)}</strong><small>${esc(secondary)}</small></span>
+        <span class="central-kitchen-priority-location">${esc(centralZoneLabel(item.zone,language))}</span>
+        <span class="central-kitchen-priority-quantity"><strong>${quantity}</strong><small>/ ${minimum} ${esc(item.unit || "")}</small></span>
+        <span class="tag tag-${state}">${esc(stateLabel)}</span>
+      </button>`;
+    }).join("")}</div>
+    ${attention.length > visible.length ? `<small class="central-kitchen-priority-more">+${attention.length-visible.length} ${language === "zh" ? "筆待處理項目可在下方庫存表查看" : "mục khác xem trong bảng tồn kho bên dưới"}</small>` : ""}
+  </section>`;
+}
+
 function centralPage(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
@@ -373,6 +419,8 @@ function centralPage(user) {
       <article class="${lowCount ? "is-warning" : ""}"><span>${language === "zh" ? "需補貨" : "Cần bổ sung"}</span><strong data-central-stat-low>${lowCount}</strong><small>${emptyCount} ${language === "zh" ? "個儲位已歸零" : "vị trí đã hết"}</small></article>
       <article><span>${language === "zh" ? "工作區" : "Khu làm việc"}</span><strong data-central-stat-workareas>${workAreaCount}</strong><small>${language === "zh" ? "由 Database 設定" : "cấu hình từ Database"}</small></article>
     </section>
+
+    ${mode === "overview" ? centralPriorityPanel(items, language, operationsEnabled) : ""}
 
     ${modeNav}
 
@@ -628,6 +676,15 @@ function bindCentral(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
   content.querySelectorAll("[data-central-mode]").forEach(b => b.onclick = () => { content.dataset.centralMode = b.dataset.centralMode; content.dataset.centralEditor = ""; centralPage(user); });
+  content.querySelectorAll("[data-central-priority-zone]").forEach((button) => {
+    button.onclick = () => {
+      content.dataset.centralMode = "overview";
+      content.dataset.centralInventoryView = "storage";
+      content.dataset.centralZone = button.dataset.centralPriorityZone || "all";
+      content.dataset.centralSearch = "";
+      centralPage(user);
+    };
+  });
   content.querySelectorAll("[data-central-zone]").forEach(b => b.onclick = () => { content.dataset.centralZone = b.dataset.centralZone; centralPage(user); });
   content.querySelectorAll("[data-central-view]").forEach(b => b.onclick = () => { content.dataset.centralInventoryView = b.dataset.centralView; centralPage(user); });
   const search = content.querySelector("[data-central-search]");

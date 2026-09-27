@@ -1,5 +1,24 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — Central Kitchen operator priority workspace, 2026-09-27
+
+Branch: `redesign/central-kitchen-operator-ui-20260927`.
+
+Goal: make the 央廚 Overview an operator-facing workspace instead of only an inventory list, while keeping PostgreSQL master data and existing inventory APIs authoritative.
+
+Candidate changes:
+- add a `待處理 / Cần xử lý` panel only on Central Overview;
+- derive alerts strictly from each database stock row where current quantity is below its configured minimum;
+- do not aggregate quantities across different units;
+- show item, database-declared storage label, current/minimum quantity and empty/low status;
+- sort empty stock before low stock, then by shortage size, and show a compact first six alerts;
+- clicking an alert drills into the matching database storage location and returns to the storage inventory view;
+- when no alert exists, render an explicit healthy PostgreSQL-backed state;
+- keep quick `進貨入庫` access only when existing edit permission + cloud readiness allow inventory operations;
+- add responsive two-column desktop / one-column mobile presentation and browser/static regression coverage.
+
+No schema migration, permission change, endpoint change or stock mutation is introduced by this UI stage. Candidate is not production-complete until exact-head CI, merge, Deploy-to-VPS and production UI smoke pass.
+
 ## Completed release — Central Kitchen inventory UI redesign, 2026-09-27
 
 PR #152 merged into `main` as `7157d0b5263209b3391ccab57c088668d7902973` and is verified in production through Deploy Kitchen OS to VPS #898 / run `36287068079`.
