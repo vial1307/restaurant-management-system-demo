@@ -98,6 +98,79 @@
 .central-kitchen-kpis strong{font-size:24px;line-height:1.05;font-variant-numeric:tabular-nums}
 .central-kitchen-kpis small{color:#8a9692;font-size:9.5px;line-height:1.35}
 
+.central-kitchen-priority{
+  display:grid;
+  gap:10px;
+  padding:15px;
+  border:1px solid #e5ddd0;
+  border-radius:14px;
+  background:linear-gradient(145deg,#fffdf9,#fff 72%);
+  box-shadow:0 5px 20px rgb(58 46 28 / 4%);
+}
+.central-kitchen-priority>header{
+  display:flex;
+  min-width:0;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.central-kitchen-priority>header>div:first-child{display:grid;min-width:0;gap:2px}
+.central-kitchen-priority>header span{color:#9a6a2b;font-size:9px;font-weight:850;letter-spacing:.11em}
+.central-kitchen-priority>header h2{margin:0;font-size:16px}
+.central-kitchen-priority>header p{margin:2px 0 0;color:#7d786f;font-size:10px;line-height:1.45}
+.central-kitchen-priority-head-actions{display:flex;flex:0 0 auto;align-items:center;gap:8px}
+.central-kitchen-priority-count{
+  display:grid;
+  min-width:34px;
+  height:34px;
+  place-items:center;
+  padding:0 8px;
+  border-radius:10px;
+  background:#fff4df;
+  color:#9b5d12;
+  font-size:17px;
+  font-variant-numeric:tabular-nums;
+}
+.central-kitchen-priority-action{min-height:34px;padding:7px 10px}
+.central-kitchen-priority-list{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+}
+.central-kitchen-priority-row{
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(88px,.8fr) auto auto;
+  min-width:0;
+  align-items:center;
+  gap:8px;
+  padding:9px 10px;
+  border:1px solid #ece7de;
+  border-radius:11px;
+  background:#fff;
+  color:#34443f;
+  text-align:left;
+  cursor:pointer;
+}
+.central-kitchen-priority-row:hover{border-color:#dcc9aa;background:#fffaf2}
+.central-kitchen-priority-row.is-empty{border-color:#ead4d1;background:#fffafa}
+.central-kitchen-priority-item{display:grid;min-width:0;gap:1px}
+.central-kitchen-priority-item strong,
+.central-kitchen-priority-item small,
+.central-kitchen-priority-location{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.central-kitchen-priority-item strong{font-size:11px}
+.central-kitchen-priority-item small{color:#89938f;font-size:8.5px}
+.central-kitchen-priority-location{color:#677873;font-size:9px}
+.central-kitchen-priority-quantity{display:flex;align-items:baseline;justify-content:flex-end;gap:3px;white-space:nowrap}
+.central-kitchen-priority-quantity strong{font-size:14px;font-variant-numeric:tabular-nums}
+.central-kitchen-priority-quantity small{color:#7d8985;font-size:8.5px}
+.central-kitchen-priority-more{color:#8b8174;font-size:9px}
+.central-kitchen-priority-clear{display:flex;align-items:center;gap:10px;padding:11px;border-radius:11px;background:#f3faf6}
+.central-kitchen-priority-clear>span{display:grid;width:30px;height:30px;flex:0 0 auto;place-items:center;border-radius:999px;background:#def2e7;color:#187257;font-size:16px}
+.central-kitchen-priority-clear>div{display:grid;gap:2px}
+.central-kitchen-priority-clear strong{font-size:11px}
+.central-kitchen-priority-clear small{color:#71817c;font-size:9px}
+.central-kitchen-priority.is-clear{border-color:#dce9e2;background:#fbfefc}
+
 .central-kitchen-modebar.central-tabs{
   display:grid;
   grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
@@ -294,6 +367,14 @@ button.central-kitchen-location-card{cursor:pointer}
   .central-kitchen-kpis{gap:6px}
   .central-kitchen-kpis article{padding:10px}
   .central-kitchen-kpis strong{font-size:21px}
+  .central-kitchen-priority{padding:11px}
+  .central-kitchen-priority>header{align-items:stretch;flex-direction:column}
+  .central-kitchen-priority-head-actions{justify-content:space-between}
+  .central-kitchen-priority-list{grid-template-columns:1fr}
+  .central-kitchen-priority-row{grid-template-columns:minmax(0,1fr) auto}
+  .central-kitchen-priority-location{grid-column:1}
+  .central-kitchen-priority-quantity{grid-column:2;grid-row:1}
+  .central-kitchen-priority-row .tag{grid-column:2;grid-row:2;justify-self:end}
   .central-kitchen-modebar.central-tabs{
     display:flex;
     width:100%;
