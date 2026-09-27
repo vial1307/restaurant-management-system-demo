@@ -34,15 +34,34 @@ function normalizedWorkArea(row) {
   };
 }
 
-function assertMasterSnapshotReady(site, locations) {
+function assertMasterSnapshotReady(site, locations, workAreas) {
   const mode = String(site?.metadata?.inventory_mode || "");
   if (!site?.code || !["central","branch"].includes(mode)) {
     throw new Error("INVENTORY_MASTER_DATA_NOT_READY");
   }
-  const invalidLocation = locations.find((location) =>
-    location.active !== false && !String(location.metadata?.ui_key || "").trim()
+
+  const activeLocations = locations.filter((location) => location.active !== false);
+  const invalidLocation = activeLocations.find((location) =>
+    !String(location.metadata?.ui_key || "").trim()
   );
   if (invalidLocation) throw new Error("INVENTORY_LOCATION_UI_KEY_REQUIRED");
+
+  const activeAreas = workAreas.filter((area) => area.active !== false);
+  const areaCodes = new Set(activeAreas.map((area) => String(area.code || "").trim()).filter(Boolean));
+  const workLocations = activeLocations.filter((location) => location.kind === "work");
+
+  const invalidWorkLocation = workLocations.find((location) => {
+    const area = String(location.metadata?.work_area || "").trim();
+    return !area || !areaCodes.has(area);
+  });
+  if (invalidWorkLocation) throw new Error("INVENTORY_WORK_LOCATION_AREA_INVALID");
+
+  const mappedAreas = new Set(
+    workLocations.map((location) => String(location.metadata?.work_area || "").trim()).filter(Boolean)
+  );
+  if (activeAreas.some((area) => !mappedAreas.has(String(area.code || "").trim()))) {
+    throw new Error("INVENTORY_WORK_LOCATION_MISSING");
+  }
 }
 
 export function replaceInventorySites(rows = []) {
@@ -100,7 +119,7 @@ export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
   const workAreas = (Array.isArray(snapshot.workAreas) ? snapshot.workAreas : [])
     .map(normalizedWorkArea)
     .filter(Boolean);
-  assertMasterSnapshotReady(site, locations);
+  assertMasterSnapshotReady(site, locations, workAreas);
   sites.set(code, site);
   const next = { site, locations, workAreas };
   snapshots.set(code, next);
