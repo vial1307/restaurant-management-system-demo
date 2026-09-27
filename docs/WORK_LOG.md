@@ -1392,3 +1392,12 @@ The separate read-cutover candidate:
 - No schema migration, stock rewrite, permission change or transaction endpoint change.
 - Next: open PR, run exact-head static/API/PostgreSQL/browser/full-device regression, fix only redesign regressions, then deploy and verify production.
 
+## 2026-09-27 — Central operator UX: priority → receive shortcut
+
+- Started from verified production #900 / `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2` plus docs-only closure on main.
+- Added database-keyed deep-link support to the shared inventory operation controller.
+- Central priority shortages now offer a per-row 進貨 shortcut that focuses the exact item and preselects the shortage location.
+- Manual search clears focus; all writes continue through existing VPS API/PostgreSQL paths.
+- Added static/UI and Chromium browser regression for exact item/location preselection.
+- No schema/API/permission/stock rewrite.
+

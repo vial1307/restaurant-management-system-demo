@@ -1,5 +1,14 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Central priority receive shortcut, 2026-09-27
+
+- Branch: `feat/central-priority-receive-shortcut-20260927`.
+- Low-stock priority rows can deep-link into 進貨 with exact database item/location focus.
+- Shared operation controller remains the only write UI and all mutations still use VPS API/PostgreSQL.
+- No schema, endpoint, permission or production stock changes.
+- Candidate until exact-head regression + merge + production deploy/smoke pass.
+
+
 ## DONE — Central Kitchen operator priority workspace, 2026-09-27
 
 - PR #154 merged as `26bfd49c6f5ba7586dcc2bdc411569f69d14acd2`; Deploy #900 / run `36291179320` is verified in production.
