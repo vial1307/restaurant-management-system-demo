@@ -1421,3 +1421,14 @@ The separate read-cutover candidate:
 - Added static/UI and browser regression for exact item/source preselection.
 - No schema/API/permission/stock rewrite.
 
+## 2026-09-27 — Unify storage and work-area model across all inventory sites
+
+- Started from main after Central inventory UI/operator shortcuts were production-verified.
+- Root mismatch: Fuxing/Yongji already had separate 麵/湯/海鮮/肉 work locations, while Central still stored work stock in one legacy `central-work-use / 使用中` location despite having four work-area master rows.
+- Added migration 025 to normalize storage classification, generate/synchronize one work location per active work area, relocate mismatched work stock transactionally, and retire unowned legacy work locations.
+- Added DB/API ownership rule: Work Area controls Work Location; direct work-location mutations are rejected.
+- Updated Super Admin classification/integrity UX and bilingual wording.
+- Removed inventory work-area fallback to global `WORK_AREAS[0]` and site-specific no-op bootstrap wrappers.
+- Added API regression for automatic work-location lifecycle on Central/Fuxing/Yongji and expanded production audit invariants.
+- Next: exact-head migration/API/browser regression, then merge/deploy/audit before any further inventory UI work.
+
