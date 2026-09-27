@@ -142,16 +142,19 @@ try {
 
   const locations = {};
   for (const entry of [
-    ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm","central","storage",10],
-    ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm","central","storage",20],
-    ["fuxing-freezer","大冷凍","Tủ đông lớn","fuxing","storage",10],
-    ["fuxing-four","四門冰箱","Tủ lạnh 4 cánh","fuxing","storage",20],
-    ["yongji-freezer","大冷凍","Tủ đông lớn","yongji","storage",10],
-    ["yongji-four","四門冰箱","Tủ lạnh 4 cánh","yongji","storage",20]
+    ["central-freezer","央廚冷凍","Tủ đông bếp trung tâm","central","storage",10,"primary"],
+    ["central-fridge","央廚冷藏","Tủ mát bếp trung tâm","central","storage",20,"primary"],
+    ["central-four","央廚4門","Tủ lạnh 4 cánh bếp trung tâm","central","storage",30,"service"],
+    ["fuxing-freezer","大冷凍","Tủ đông lớn","fuxing","storage",10,"primary"],
+    ["fuxing-four","四門冰箱","Tủ lạnh 4 cánh","fuxing","storage",20,"service"],
+    ["yongji-freezer","大冷凍","Tủ đông lớn","yongji","storage",10,"primary"],
+    ["yongji-four","四門冰箱","Tủ lạnh 4 cánh","yongji","storage",20,"service"]
   ]) {
+    const metadata={ui_key:entry[0].replace(`${entry[3]}-`,""),storage_group:entry[6]};
+    const args=entry.slice(0,6);
     const { rows } = await client.query(
-      `insert into public.inventory_locations(code,name_zh_tw,name_vi,site,kind,sort_order,active)
-       values($1,$2,$3,$4,$5,$6,true)
+      `insert into public.inventory_locations(code,name_zh_tw,name_vi,site,kind,sort_order,active,metadata)
+       values($1,$2,$3,$4,$5,$6,true,$7::jsonb)
        on conflict(code) do update set
          name_zh_tw=excluded.name_zh_tw,
          name_vi=excluded.name_vi,
@@ -159,9 +162,10 @@ try {
          kind=excluded.kind,
          sort_order=excluded.sort_order,
          active=true,
+         metadata=excluded.metadata,
          updated_at=now()
        returning *`,
-      entry
+      [...args,JSON.stringify(metadata)]
     );
     locations[entry[0]] = rows[0];
   }
