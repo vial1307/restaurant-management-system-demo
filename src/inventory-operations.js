@@ -3,8 +3,6 @@ import {
   cloudAdjustQuantity,
   cloudTransferInventory,
   getInventoryReceiveDefaults,
-  getSiteInventoryRows,
-  getSiteLocations,
   inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
@@ -16,6 +14,7 @@ import {
   siteLabel,
   watchInventoryTransfers,
 } from "./inventory-transfer-service.js";
+import { inventoryLocationUiKey, inventoryLocationWorkArea } from "./inventory-master-data.js";
 
 const TEXT = {
   vi: {
@@ -58,6 +57,13 @@ const TEXT = {
     sameLocation:"Kho nguồn và kho đích phải khác nhau. · 來源與目的儲位不可相同。",
     failed:"Không thể cập nhật dữ liệu cloud. · 雲端庫存更新失敗。",
     transferNo:"Phiếu · 單號",
+    sourceReady:"Có tồn nguồn · 有來源庫存",
+    receiveReady:"Đã đặt kho nhận · 已設收貨儲位",
+    storagePlaces:"Vị trí kho · 儲位",
+    workPlaces:"Khu sử dụng · 使用區",
+    stockOnly:"Chỉ có tồn · 僅顯示有庫存",
+    showAll:"Hiện tất cả · 顯示全部",
+    itemsLabel:"Mặt hàng · 品項",
   },
   zh: {
     in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
@@ -70,6 +76,7 @@ const TEXT = {
     cloudRequired:"請先連線庫存資料庫。",editRequired:"此帳號僅能查看庫存。",
     success:"庫存已更新",insufficient:"操作數量超過現有數量。",sameLocation:"來源與目的儲位不可相同。",
     failed:"雲端庫存更新失敗。",transferNo:"單號",
+    sourceReady:"有來源庫存",receiveReady:"已設收貨儲位",storagePlaces:"儲位",workPlaces:"使用區",stockOnly:"僅顯示有庫存",showAll:"顯示全部",itemsLabel:"品項",
   },
 };
 
@@ -93,29 +100,63 @@ function errorText(error,t){
   if(/INVENTORY_EDIT_NOT_ALLOWED/.test(code)) return t.editRequired;
   return t.failed;
 }
-function storageRows(item){
-  return item.locations.filter((loc)=>Number(loc.quantity)>=0);
-}
 function stockAt(item,locationId){
   return item.locations.find((loc)=>loc.id===locationId)?.quantity ?? 0;
 }
 function locationOptions(locations,language,selected=""){
   return locations.map((loc)=>`<option value="${esc(loc.id)}" ${loc.id===selected?"selected":""}>${esc(locationLabel(loc,language))}</option>`).join("");
 }
-function sourceOptions(item,language){
-  return item.locations
+function preferredStorageSource(item){
+  return [...(item.locations||[])]
     .filter((loc)=>Number(loc.quantity)>0)
+    .sort((a,b)=>Number(b.quantity||0)-Number(a.quantity||0) || String(a.zh||"").localeCompare(String(b.zh||""),"zh-Hant"))[0] || null;
+}
+function sourceOptions(item,language){
+  return [...(item.locations||[])]
+    .filter((loc)=>Number(loc.quantity)>0)
+    .sort((a,b)=>Number(b.quantity||0)-Number(a.quantity||0) || String(a.zh||"").localeCompare(String(b.zh||""),"zh-Hant"))
     .map((loc)=>`<option value="${esc(loc.id)}" data-code="${esc(loc.code)}">${esc(locationLabel({name_zh_tw:loc.zh,name_vi:loc.vi},language))} · ${loc.quantity} ${esc(item.unit)}</option>`)
     .join("");
 }
 
 function workLocationForItem(item,workLocations=[]){
-  const preferredSuffix=`-work-${item.workArea||"noodles"}`;
-  return workLocations.find((loc)=>String(loc.code||"").endsWith(preferredSuffix))
-    || workLocations.find((loc)=>loc.code==="central-work-use")
-    || workLocations[0]
-    || item.workLocations?.[0]
+  const wanted=String(item?.workArea||"").trim();
+  if(!wanted) return workLocations.length===1 ? workLocations[0] : null;
+  return workLocations.find((loc)=>
+    inventoryLocationWorkArea(loc)===wanted || inventoryLocationUiKey(loc)===wanted
+  ) || null;
+}
+function inboundDestinationForItem(item,site,locations,receiveDefaults=[]){
+  const catalogKey=String(item?.catalogKey||item?.catalog_key||"").trim();
+  const configured=catalogKey
+    ? receiveDefaults.find((entry)=>entry.site===site && entry.catalogKey===catalogKey && entry.locationCode)
+    : null;
+  return locations.find((location)=>location.code===configured?.locationCode)
+    || locations.find((location)=>item.locations?.some((stored)=>stored.id===location.id))
+    || locations[0]
     || null;
+}
+function sourceReadyCount(items=[]){
+  return items.filter((item)=>Boolean(preferredStorageSource(item))).length;
+}
+function centralOperationSummary(data,mode,language){
+  const t=langText(language);
+  const total=data.items.length;
+  const sourceReady=sourceReadyCount(data.items);
+  const receiveReady=mode==="in"
+    ? data.items.filter((item)=>Boolean(inboundDestinationForItem(item,data.site,data.locations,data.receiveDefaults||[]))).length
+    : 0;
+  const secondary=mode==="in"
+    ? {label:t.receiveReady,value:receiveReady}
+    : {label:t.sourceReady,value:sourceReady};
+  const tertiary=mode==="pick"
+    ? {label:t.workPlaces,value:data.workLocations.length}
+    : {label:t.storagePlaces,value:data.locations.length};
+  return `<section class="central-ops-summary" data-central-ops-summary>
+    <div><span>${esc(t.itemsLabel)}</span><strong>${total}</strong></div>
+    <div><span>${esc(secondary.label)}</span><strong>${secondary.value}</strong></div>
+    <div><span>${esc(tertiary.label)}</span><strong>${tertiary.value}</strong></div>
+  </section>`;
 }
 function workStockAt(item,locationId){
   return item.workLocations?.find((loc)=>loc.id===locationId)?.quantity ?? 0;
@@ -143,8 +184,8 @@ function overviewCard(item,language,t){
   </article>`;
 }
 
-function itemCard(item,mode,locations,site,language,t,allLocations=locations,workLocations=[]){
-  const positiveSource=item.locations.find((loc)=>Number(loc.quantity)>0);
+function itemCard(item,mode,locations,site,language,t,allLocations=locations,workLocations=[],receiveDefaults=[]){
+  const positiveSource=preferredStorageSource(item);
   const firstSource=positiveSource || item.locations[0];
   const firstDestination=locations.find((loc)=>loc.id!==firstSource?.id) || locations[0];
   const currentLocationId=["pick","transfer","ship"].includes(mode)
@@ -158,7 +199,8 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const otherSites=INVENTORY_SITES.filter((entry)=>entry.id!==site);
   const sourceSelect = `<label><span>${esc(t.from)}</span><select data-op-source="${esc(item.id)}">${sourceOptions(item,language)}</select></label>`;
   const destinationSelect = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,firstDestination?.id)}</select></label>`;
-  const inboundDestination = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,item.locations[0]?.id || locations[0]?.id)}</select></label>`;
+  const inboundLocation=inboundDestinationForItem(item,site,locations,receiveDefaults);
+  const inboundDestination = `<label><span>${esc(t.destination)}</span><select data-op-destination="${esc(item.id)}">${locationOptions(locations,language,inboundLocation?.id)}</select></label>`;
   const workDestination = workLocation
     ? `<label><span>${esc(t.workDestination)}</span><select data-op-work-destination="${esc(item.id)}"><option value="${esc(workLocation.id)}" data-code="${esc(workLocation.code)}">${esc(locationLabel(workLocation,language))}</option></select></label>`
     : `<label><span>${esc(t.workDestination)}</span><span class="inventory-readonly-field">—</span></label>`;
@@ -195,7 +237,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const transferBalance = mode==="transfer" && firstSource && firstDestination
     ? `<div class="op-transfer-balance" data-op-transfer-balance="${esc(item.id)}"><span>${esc(locationLabel({name_zh_tw:firstSource.zh,name_vi:firstSource.vi},language))} <strong>${Number(firstSource.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(firstDestination,language))} <strong>${Number(stockAt(item,firstDestination.id))||0}</strong></span></div>`
     : "";
-  return `<article class="inventory-op-card" data-op-item="${esc(item.id)}">
+  return `<article class="inventory-op-card" data-op-item="${esc(item.id)}" data-op-has-source="${positiveSource?"true":"false"}">
     <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small></div><span><small>${esc(t.current)}</small><strong data-op-current="${esc(item.id)}">${currentQuantity} ${esc(item.unit)}</strong></span></div>
     <div class="op-select-grid">${controls}</div>
     ${transferBalance}
@@ -211,7 +253,9 @@ function applyOperationSearch(host,state) {
   state.search = query;
   let visible = 0;
   host.querySelectorAll("[data-op-item]").forEach((card) => {
-    const show = searchMatches(card.textContent || "", query);
+    const matchesText = searchMatches(card.textContent || "", query);
+    const matchesStock = !state.stockOnly || card.dataset.opHasSource==="true";
+    const show = matchesText && matchesStock;
     card.hidden = !show;
     if (show) visible += 1;
   });
@@ -221,6 +265,23 @@ function applyOperationSearch(host,state) {
 
   const empty = host.querySelector("[data-op-search-empty]");
   if (empty) empty.hidden = !query || visible > 0;
+}
+
+function bindStockFilter(host,state) {
+  const button=host.querySelector("[data-op-stock-filter]");
+  if(!button)return;
+  const update=()=>{
+    const t=langText(state.language);
+    button.setAttribute("aria-pressed",state.stockOnly?"true":"false");
+    button.classList.toggle("active",Boolean(state.stockOnly));
+    button.textContent=state.stockOnly?t.showAll:t.stockOnly;
+  };
+  button.onclick=()=>{
+    state.stockOnly=!state.stockOnly;
+    update();
+    applyOperationSearch(host,state);
+  };
+  update();
 }
 
 function bindOperationSearch(host,state) {
@@ -245,13 +306,22 @@ async function doRender(host,state){
   try{
     const data=await loadSiteOperationData(site,{includeDestinations:mode==="ship"});
     if (inventoryCloudState()==="migration-needed") throw new Error("SCHEMA_MIGRATION_REQUIRED");
+    if(mode==="in"){
+      const catalogKeys=[...new Set(data.items.map((item)=>item.catalogKey).filter(Boolean))];
+      data.receiveDefaults=await getInventoryReceiveDefaults({sites:[site],catalogKeys});
+    }
     state.data=data;
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
-      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[]));
-    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
+      : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[],data.receiveDefaults||[]));
+    const centralSummary=site==="central" ? centralOperationSummary(data,mode,language) : "";
+    const stockFilter=site==="central" && ["pick","transfer","ship"].includes(mode)
+      ? `<button type="button" class="op-stock-filter ${state.stockOnly?"active":""}" data-op-stock-filter aria-pressed="${state.stockOnly?"true":"false"}">${esc(state.stockOnly?t.showAll:t.stockOnly)}</button>`
+      : "";
+    host.innerHTML=`<section class="inventory-ops-shell" data-op-site="${esc(site)}" data-op-mode="${esc(mode)}">${centralSummary}<div class="inventory-ops-toolbar"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label>${stockFilter}<span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
     restoreOperationSelections(host,state);
     bind(host,state);
+    bindStockFilter(host,state);
     bindOperationSearch(host,state);
   }catch(error){
     host.innerHTML=`<div class="inventory-cloud-notice">${esc(t.cloudRequired)}<small>${esc(error?.message||"")}</small></div>`;
@@ -565,7 +635,7 @@ export async function mountInventoryOperations(host,{
   if(activeMount?.stopWatch){
     try{await activeMount.stopWatch();}catch{}
   }
-  const state={host,site,mode,language,onUpdated,stopWatch:null,search:""};
+  const state={host,site,mode,language,onUpdated,stopWatch:null,search:"",stockOnly:false};
   activeMount=state;
   await doRender(host,state);
   if(activeMount!==state || !host.isConnected) return;
