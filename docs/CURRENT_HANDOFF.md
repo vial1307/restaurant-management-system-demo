@@ -1,5 +1,24 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — database-driven inventory replenishment source routing, 2026-09-27
+
+Branch: `refactor/inventory-source-routing-masterdata-20260927`.
+
+Goal: remove the remaining storage-location ID hard-code from inventory replenishment suggestions after schema 025 unified Central/Fuxing/Yongji classification.
+
+Implemented:
+- `inventoryUiGroups(site).storage` now exposes PostgreSQL `sort_order` together with `storage_group`;
+- `inventorySources()` no longer contains `large-fridge / large-freezer / four-door / kitchen` routing tables;
+- Work Area replenishment accepts database-classified storage and orders primary before service using master-data sort order;
+- service/Kho khu vực replenishment sources only from primary/Kho tổng storage;
+- primary storage replenishment stays within primary storage;
+- when no master-data routing is supplied, fallback is neutral (other matching stock rows), never a legacy location-name rule;
+- Website passes the current site's database storage groups into source routing;
+- regression uses arbitrary storage IDs to prove routing is classification-driven.
+
+No schema migration, quantity rewrite, permission change or inventory transaction API change. Procurement/factory ordering rules remain a separate domain and are intentionally not changed in this PR.
+
+
 ## Completed release — unified storage/work-area model for Central, Fuxing and Yongji, 2026-09-27
 
 PR #159 merged into `main` as `fb7c27cc64963c238ff2b86b999dac2f818f3507` and is verified in production through Deploy Kitchen OS to VPS #948 / run `36329813136`.
