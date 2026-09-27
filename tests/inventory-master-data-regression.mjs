@@ -129,6 +129,8 @@ assert.doesNotMatch(mobileCompat, /\.setting-control>input\{[^}]*width:96px !imp
   "mobile compatibility layer must not clip database-provided site names to the legacy 96px input");
 assert.doesNotMatch(appSource, /\["fuxing", "yongji"\]\.includes\(site\)/,
   "branch inventory authority must use database-declared inventory_mode");
+assert.match(appSource, /const primary = groups\.filter\(\(group\) => group\.storageGroup === "primary"\);[\s\S]{0,160}const service = groups\.filter\(\(group\) => group\.storageGroup === "service"\);/,
+  "Fuxing/Yongji storage tabs must classify primary/service explicitly from PostgreSQL");
 assert.match(appSource, /function authoritativeBranchRecord[\s\S]{0,700}inventoryBranchSnapshot\(site\)[\s\S]{0,320}inventory:\[\], workInventory:\[\]/,
   "branch dashboard/runtime must use a site-scoped PostgreSQL snapshot or empty inventory, never source-seeded stock");
 
@@ -141,6 +143,14 @@ assert.doesNotMatch(authLayer, /user\.location === "central" \? "央廚"[\s\S]{0
   "authenticated account site labels must come from the PostgreSQL site registry");
 assert.doesNotMatch(authLayer, /領到使用中|Lấy từ kho trung tâm vào 使用中/,
   "Central pick guidance must not describe the retired generic 使用中 location");
+assert.match(authLayer, /const workAreaId=item\.workArea\|\|centralDefaultWorkArea\(\);[\s\S]{0,900}centralWorkAreaLabel\(workAreaId,language\)/,
+  "Central work inventory must display the PostgreSQL work-area identity instead of a generic work-location label");
+assert.match(authLayer, /renderClass\("primary","主要儲位","Kho tổng · 主要儲位"\)[\s\S]{0,160}renderClass\("service","區域儲位","Kho khu vực · 區域儲位"\)/,
+  "Central storage overview must visibly separate primary and service database storage");
+assert.match(authLayer, /const centralPrimary = centralStorage\.filter\(\(group\)=>group\.storageGroup==="primary"\);[\s\S]{0,220}const centralService = centralStorage\.filter\(\(group\)=>group\.storageGroup==="service"\);/,
+  "Central storage tabs must classify locations explicitly from database storage_group");
+assert.doesNotMatch(authLayer, /data-central-zone="央廚冷凍"/,
+  "Central storage identity must not be a hard-coded display label");
 assert.match(authLayer, /const workAreaId=item\.workArea\|\|centralDefaultWorkArea\(\);[\s\S]{0,900}centralWorkAreaLabel\(workAreaId,language\)/,
   "Central work inventory must display the PostgreSQL work-area identity instead of a generic work-location label");
 assert.doesNotMatch(authLayer, /data-central-zone="央廚冷凍"/,
