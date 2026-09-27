@@ -1456,3 +1456,12 @@ The separate read-cutover candidate:
 - Central UI now separates primary/service storage and shows real database Work Area names; Fuxing/Yongji use the same explicit classification contract.
 - Structural inventory hard-code cleanup is complete for storage/work-area identity. Remaining hard-code audit should focus on separate business domains such as procurement rules/copy, not reintroduce inventory location lists.
 
+## 2026-09-27 — Remove legacy storage-ID source routing
+
+- Started from production schema 025 / release `fb7c27c`.
+- Branch: `refactor/inventory-source-routing-masterdata-20260927`.
+- Replaced `SOURCE_PRIORITY` and destination checks tied to `large-fridge / large-freezer / four-door / kitchen` with site master-data `storage_group` + `sort_order`.
+- Website now supplies the active site's PostgreSQL storage groups to the pure routing function.
+- Added arbitrary-ID regression proving service storage sources only from primary and Work Area source ordering is database-driven.
+- No procurement supplier/factory logic changed in this stage.
+
