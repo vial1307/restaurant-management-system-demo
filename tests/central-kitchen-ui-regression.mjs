@@ -22,6 +22,12 @@ assert.match(auth, /centralZones\(\)\.map\(\(zone\) =>[\s\S]{0,700}data-central-
   "Central storage overview cards must be generated from database-declared locations");
 assert.match(auth, /centralWorkAreas\(\)\.map\(\(area\) =>[\s\S]{0,700}centralWorkAreaLabel/,
   "Central work-area overview cards must be generated from database-declared work areas");
+assert.match(auth, /function centralPriorityPanel\(items, language, operationsEnabled\)[\s\S]{0,900}Number\(item\.qty \|\| 0\) < Number\(item\.minimum \|\| 0\)/,
+  "Central priority panel must derive low-stock work from database quantities/minimums");
+assert.match(auth, /data-central-priority-zone=[^\n]+centralZoneLabel\(item\.zone,language\)/,
+  "Central priority rows must use database-declared location labels");
+assert.match(auth, /data-central-priority-zone[\s\S]{0,900}centralInventoryView = "storage"[\s\S]{0,260}centralZone = button\.dataset\.centralPriorityZone/,
+  "Central priority rows must drill into the selected database storage location");
 assert.match(auth, /mountInventoryOperations\(host,\{site:"central",mode,language/,
   "Central redesign must preserve the existing authoritative operation controller");
 assert.match(auth, /cloudRelocateStorage\(/,
@@ -43,6 +49,10 @@ assert.match(css, /@media\(max-width:620px\)[\s\S]{0,2400}\.central-kitchen-mode
   "Central mobile mode navigation must remain touch-scrollable");
 assert.match(css, /@media\(max-width:620px\)[\s\S]{0,3200}\.central-kitchen-location-grid\{[\s\S]{0,120}repeat\(2,minmax\(0,1fr\)\)/,
   "Central mobile location cards must remain compact without horizontal overflow");
+assert.match(css, /\.central-kitchen-priority-list\{[\s\S]{0,150}repeat\(2,minmax\(0,1fr\)\)/,
+  "Central priority panel must use a compact desktop grid");
+assert.match(css, /@media\(max-width:620px\)[\s\S]{0,1800}\.central-kitchen-priority-list\{grid-template-columns:1fr\}/,
+  "Central priority panel must collapse to one column on mobile");
 assert.doesNotMatch(css, /min-width:\s*(?:[4-9]\d\d|\d{4,})px/,
   "Central dedicated UI must not introduce a fixed desktop minimum width");
 
