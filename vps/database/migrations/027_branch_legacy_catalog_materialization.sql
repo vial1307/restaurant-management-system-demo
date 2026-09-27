@@ -347,6 +347,87 @@ begin
 end;
 $branch_work_stock_guard$;
 
+-- Keep the invariant after this one-time migration as well. This is important
+-- for Super Admin/direct SQL/API edits: branch catalog identity and 工作區
+-- projection cannot silently diverge again.
+create or replace function public.sync_branch_inventory_item_work_projection()
+returns trigger
+language plpgsql
+as $branch_item_work_projection$
+declare
+  v_site text;
+  v_mode text;
+  v_target uuid;
+  v_protected integer;
+begin
+  v_site := split_part(new.item_key,':',1);
+
+  select coalesce(s.metadata->>'inventory_mode','')
+  into v_mode
+  from public.sites s
+  where s.code=v_site;
+
+  if coalesce(v_mode,'')<>'branch' or new.active=false then
+    return new;
+  end if;
+
+  select l.id
+  into v_target
+  from public.inventory_locations l
+  where l.site=v_site
+    and l.kind='work'
+    and l.active=true
+    and l.metadata->>'work_area'=new.work_area
+  order by l.sort_order,l.code
+  limit 1;
+
+  if v_target is null then
+    raise exception 'BRANCH_WORK_LOCATION_NOT_FOUND:%:%',v_site,new.work_area;
+  end if;
+
+  if tg_op='UPDATE' and old.work_area is distinct from new.work_area then
+    select count(*)::int
+    into v_protected
+    from public.inventory_stock st
+    join public.inventory_locations l on l.id=st.location_id
+    where st.item_id=new.id
+      and l.site=v_site
+      and l.kind='work'
+      and l.id<>v_target
+      and (st.quantity>0 or st.minimum_quantity>0);
+
+    if v_protected>0 then
+      raise exception 'BRANCH_WORK_AREA_HAS_PROTECTED_STOCK:%',new.item_key;
+    end if;
+
+    delete from public.inventory_stock st
+    using public.inventory_locations l
+    where st.location_id=l.id
+      and st.item_id=new.id
+      and l.site=v_site
+      and l.kind='work'
+      and l.id<>v_target
+      and st.quantity=0
+      and st.minimum_quantity=0;
+  end if;
+
+  insert into public.inventory_stock(
+    item_id,location_id,quantity,minimum_quantity,updated_at
+  ) values(
+    new.id,v_target,0,0,now()
+  )
+  on conflict(item_id,location_id) do nothing;
+
+  return new;
+end;
+$branch_item_work_projection$;
+
+drop trigger if exists inventory_items_sync_branch_work_projection on public.inventory_items;
+create trigger inventory_items_sync_branch_work_projection
+after insert or update of item_key,work_area,active
+on public.inventory_items
+for each row execute function public.sync_branch_inventory_item_work_projection();
+
 -- Every branch must now contain every historical catalog identity. Storage rows
 -- are allowed to remain unconfigured only when that branch intentionally does not
 -- expose the corresponding legacy ui_key; Super Admin Integrity will show it.
