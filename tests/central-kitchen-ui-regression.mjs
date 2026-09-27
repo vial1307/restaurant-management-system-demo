@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const auth = fs.readFileSync(new URL("../src/auth-layer.js", import.meta.url), "utf8");
+const ops = fs.readFileSync(new URL("../src/inventory-operations.js", import.meta.url), "utf8");
 const css = fs.readFileSync(new URL("../src/central-kitchen-ui.css", import.meta.url), "utf8");
 const index = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const vpsEntry = fs.readFileSync(new URL("../vps-entry.html", import.meta.url), "utf8");
@@ -34,6 +35,14 @@ assert.match(auth, /centralOperationItemKey = button\.dataset\.itemKey[\s\S]{0,1
   "Central receive shortcut must carry the exact database item/location into the operation controller");
 assert.match(auth, /mountInventoryOperations\(host,\{[\s\S]{0,260}initialItemKey:content\.dataset\.centralOperationItemKey[\s\S]{0,180}initialLocationCode:content\.dataset\.centralOperationLocationCode/,
   "Central operation mount must pass priority deep-link focus into the authoritative controller");
+assert.match(auth, /data-central-storage-pick[\s\S]{0,260}data-item-key=[\s\S]{0,220}data-source-location-code=/,
+  "Central storage rows must expose database-keyed pick shortcuts");
+assert.match(auth, /centralMode = "pick"[\s\S]{0,220}centralOperationItemKey = button\.dataset\.itemKey[\s\S]{0,180}centralOperationSourceLocationCode = button\.dataset\.sourceLocationCode/,
+  "Central pick shortcut must carry exact database item/source into the operation controller");
+assert.match(auth, /initialSourceLocationCode:content\.dataset\.centralOperationSourceLocationCode/,
+  "Central operation mount must pass the selected source location");
+assert.match(ops, /const sourceLocationCode=String\(state\.initialSourceLocationCode\|\|""\)[\s\S]{0,520}source\.value=sourceLocation\.id/,
+  "shared operation controller must preselect a source by database location code");
 assert.match(auth, /mountInventoryOperations\(host,\{[\s\S]{0,220}site:"central",[\s\S]{0,120}\bmode,[\s\S]{0,120}\blanguage,/,
   "Central redesign must preserve the existing authoritative operation controller");
 assert.match(auth, /cloudRelocateStorage\(/,
