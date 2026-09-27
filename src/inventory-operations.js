@@ -110,11 +110,10 @@ function sourceOptions(item,language){
 }
 
 function workLocationForItem(item,workLocations=[]){
-  const preferredSuffix=`-work-${item.workArea||"noodles"}`;
-  return workLocations.find((loc)=>String(loc.code||"").endsWith(preferredSuffix))
-    || workLocations.find((loc)=>loc.code==="central-work-use")
-    || workLocations[0]
-    || item.workLocations?.[0]
+  const workArea=String(item.workArea||"").trim();
+  if(!workArea)return null;
+  return workLocations.find((loc)=>String(loc.workArea||"").trim()===workArea)
+    || item.workLocations?.find((loc)=>String(loc.workArea||"").trim()===workArea)
     || null;
 }
 function workStockAt(item,locationId){
