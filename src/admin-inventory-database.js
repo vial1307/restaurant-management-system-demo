@@ -69,17 +69,60 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     return `<p>${esc(t("latest"))}</p>${rowsTable(["time","actor","items","action","location","beforeAfter"],list.rows)}${list.footer}`;
   }
   function integrityView() {
-    const groups = { missingStorage:[], missingDefault:[], invalidArea:[], duplicateCatalog:[] };
+    const entry = (vi, zh, code) => ({ vi:String(vi || "—"), zh:String(zh || ""), code:String(code || "") });
+    const groups = {
+      missingStorage:[],
+      missingDefault:[],
+      invalidArea:[],
+      missingWorkLocation:[],
+      invalidWorkLocation:[],
+      workStockMismatch:[],
+      duplicateCatalog:[],
+    };
     const counts = new Map();
+    const activeAreas = (master.workAreas || []).filter((area) => area.active);
+    const activeAreaCodes = new Set(activeAreas.map((area) => area.code));
+    const activeWorkLocations = activeLocations().filter((location) => location.kind === "work");
+
     activeItems().forEach((item) => counts.set(item.catalog_key,(counts.get(item.catalog_key)||0)+1));
     for (const item of activeItems()) {
       const locations = stockFor(item.id).filter((row) => locationById(row.location_id)?.kind === "storage");
-      if (!locations.length) groups.missingStorage.push(item);
-      if (locations.length>1 && !snapshot.receiveDefaults.some((d) => d.catalog_key===item.catalog_key)) groups.missingDefault.push(item);
-      if (item.work_area && !master.workAreas.some((area) => area.active && area.code===item.work_area)) groups.invalidArea.push(item);
-      if (counts.get(item.catalog_key)>1) groups.duplicateCatalog.push(item);
+      if (!locations.length) groups.missingStorage.push(entry(item.name_vi,item.name_zh_tw,item.catalog_key));
+      if (locations.length>1 && !snapshot.receiveDefaults.some((d) => d.catalog_key===item.catalog_key)) {
+        groups.missingDefault.push(entry(item.name_vi,item.name_zh_tw,item.catalog_key));
+      }
+      if (item.work_area && !activeAreaCodes.has(item.work_area)) {
+        groups.invalidArea.push(entry(item.name_vi,item.name_zh_tw,`${item.catalog_key} → ${item.work_area}`));
+      }
+      if (counts.get(item.catalog_key)>1) groups.duplicateCatalog.push(entry(item.name_vi,item.name_zh_tw,item.catalog_key));
     }
-    return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(label(row))} <code>${esc(row.catalog_key)}</code></li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
+
+    for (const area of activeAreas) {
+      if (!activeWorkLocations.some((location) => location.metadata?.work_area === area.code)) {
+        groups.missingWorkLocation.push(entry(area.name_vi,area.name_zh_tw,area.code));
+      }
+    }
+    for (const location of activeWorkLocations) {
+      const areaCode=String(location.metadata?.work_area || "").trim();
+      if (!areaCode || !activeAreaCodes.has(areaCode)) {
+        groups.invalidWorkLocation.push(entry(location.name_vi,location.name_zh_tw,`${location.code} → ${areaCode || "∅"}`));
+      }
+    }
+    for (const stock of snapshot.stock || []) {
+      const item=itemById(stock.item_id), location=locationById(stock.location_id);
+      if (!item?.active || !location?.active || location.kind!=="work") continue;
+      if (Number(stock.quantity||0)<=0 && Number(stock.minimum_quantity||0)<=0) continue;
+      const locationArea=String(location.metadata?.work_area || "").trim();
+      if (locationArea!==String(item.work_area || "").trim()) {
+        groups.workStockMismatch.push(entry(
+          item.name_vi,
+          item.name_zh_tw,
+          `${item.catalog_key}: ${location.code}(${locationArea || "∅"}) ≠ ${item.work_area || "∅"}`
+        ));
+      }
+    }
+
+    return `<p>${esc(t("auditHint"))}</p><div class="idb-checks">${Object.entries(groups).map(([key,items]) => `<section><h3>${esc(t(key))} <span class="sa-pill">${items.length}</span></h3>${items.length?`<ul>${items.map((row)=>`<li>${esc(row.vi)}${row.zh?` · ${esc(row.zh)}`:""} <code>${esc(row.code)}</code></li>`).join("")}</ul>`:"✓"}</section>`).join("")}</div>`;
   }
   function render() {
     if (!host?.isConnected) return;
