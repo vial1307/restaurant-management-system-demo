@@ -65,6 +65,18 @@ jobs:
           group by l.site
           order by l.site;
 
+          select 'work_area|' || split_part(i.item_key,':',1)
+                 || '|' || i.work_area
+                 || '|items|' || count(*)
+          from public.inventory_items i
+          join public.sites st
+            on st.code=split_part(i.item_key,':',1)
+           and st.active=true
+           and coalesce(st.metadata->>'inventory_mode','') in ('central','branch')
+          where i.active=true
+          group by split_part(i.item_key,':',1),i.work_area
+          order by split_part(i.item_key,':',1),i.work_area;
+
           select 'stock_site_mismatch|' || count(*)
           from public.inventory_stock s
           join public.inventory_items i on i.id=s.item_id
