@@ -1500,3 +1500,17 @@ The separate read-cutover candidate:
 - Stale PR #161 closed as superseded.
 - Next: treat procurement/factory stock-selection rules and legacy store defaults as separate hard-code cleanup stages.
 
+## 2026-09-28 — Fuxing/Yongji Work Area count regression reported from production UI
+
+- User screenshot/report: Central looks synchronized, while the remaining two branches still appear inconsistent between Storage/Kho tổng and Work Area.
+- Observed Work Area UI count on one branch: total 16; noodles 14; soup 0; seafood 2; meat 0.
+- Verified DB/audit baseline from PR #162 remains: Fuxing 76 total (28/18/21/9) and Yongji 72 total (31/16/17/8), with catalog work-area mismatch 0 and work-stock mismatch 0.
+- Because UI count and DB audit disagree, next work is diagnostic first, not another migration:
+  1. inspect Fuxing and Yongji `inventory_items.work_area`;
+  2. inspect synchronized Work Location stock rows;
+  3. compare `/api/inventory/fuxing` and `/api/inventory/yongji` payloads;
+  4. trace Website Work Area count/filter code and site switching/cache;
+  5. confirm whether the current UI counts catalog items or only work-stock rows.
+- Do not change stock quantities during diagnosis. Preserve PostgreSQL authority, site isolation and audit trail.
+- Baseline production release: `e1d26b2cbc80cfb9b39fc24e7aafbdbdbebecb71`, schema `026`; main head at task capture: `c7477cdb437e00378b63d87c5143f95db6bf251f`.
+
