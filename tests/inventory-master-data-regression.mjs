@@ -141,6 +141,10 @@ assert.doesNotMatch(authLayer, /user\.location === "central" \? "央廚"[\s\S]{0
   "authenticated account site labels must come from the PostgreSQL site registry");
 assert.doesNotMatch(authLayer, /領到使用中|Lấy từ kho trung tâm vào 使用中/,
   "Central pick guidance must not describe the retired generic 使用中 location");
+assert.match(authLayer, /const workAreaId=item\.workArea\|\|centralDefaultWorkArea\(\);[\s\S]{0,900}centralWorkAreaLabel\(workAreaId,language\)/,
+  "Central work inventory must display the PostgreSQL work-area identity instead of a generic work-location label");
+assert.doesNotMatch(authLayer, /data-central-zone="央廚冷凍"/,
+  "Central storage filtering must not hard-code a display label as location identity");
 assert.match(authLayer, /const centralDefaultWorkArea = \(\) => centralWorkAreas\(\)\[0\]\?\.id \|\| "";/,
   "Central work-area defaults must come from PostgreSQL master data");
 assert.match(authLayer, /name="central-unit" list="central-unit-suggestions" required/,
