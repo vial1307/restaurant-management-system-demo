@@ -36,6 +36,12 @@ assert.match(workforce, /name="clockOut"/, "manager time editor must edit actual
 assert.match(workforce, /name="breakMinutes"/, "manager time editor must edit break time");
 assert.match(workforce, /name="hourlyRate"/, "manager time editor must edit hourly rate used for payroll");
 assert.match(workforce, /vpsSaveBusinessState\(site, \{ attendance:module \}, \{ attendance:expected \}\)/, "time corrections must be confirmed by VPS with module revision guard");
+assert.match(workforce, /import \{ activeInventorySite \} from "\.\/inventory-cloud\.js";/, "workforce site scope must reuse the database-backed active inventory site resolver");
+assert.match(workforce, /function activeSite\(\) \{\s*return activeInventorySite\(\);\s*\}/, "workforce business-state writes must follow the database-backed active site");
+assert.doesNotMatch(workforce, /\["central", "fuxing", "yongji"\]/, "workforce runtime must not keep a closed list of site codes");
+assert.doesNotMatch(workforce, /return "fuxing"/, "workforce runtime must not invent Fuxing as a browser-side default site");
+assert.match(workforce, /shitu:active-site-changed/, "workforce UI must reconcile when the database-backed active site changes");
+assert.match(workforce, /shitu:inventory-sites-changed/, "workforce UI must reconcile when the database site registry changes");
 assert.match(workforce, /invalidRange/, "time editor must reject clock-out before clock-in");
 assert.match(workforce, /data-action="schedule-add"/, "non-manager schedule-management controls must be role guarded");
 assert.match(workforce, /data-action="attendance-edit"/, "non-manager attendance correction controls must be role guarded");
