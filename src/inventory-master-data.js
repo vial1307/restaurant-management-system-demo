@@ -60,6 +60,10 @@ function assertMasterSnapshotReady(site, locations, workAreas) {
       if (!["primary","service"].includes(group)) {
         throw new Error("INVENTORY_STORAGE_GROUP_REQUIRED");
       }
+      const replenishmentPolicy = String(location.metadata?.replenishment_policy || "").trim();
+      if (!["internal","factory"].includes(replenishmentPolicy)) {
+        throw new Error("INVENTORY_REPLENISHMENT_POLICY_REQUIRED");
+      }
       if (String(location.metadata?.work_area || "").trim()) {
         throw new Error("INVENTORY_STORAGE_WORK_AREA_FORBIDDEN");
       }
@@ -76,6 +80,9 @@ function assertMasterSnapshotReady(site, locations, workAreas) {
     }
     if (String(location.metadata?.storage_group || "").trim()) {
       throw new Error("INVENTORY_WORK_LOCATION_STORAGE_GROUP_FORBIDDEN");
+    }
+    if (String(location.metadata?.replenishment_policy || "").trim()) {
+      throw new Error("INVENTORY_WORK_LOCATION_REPLENISHMENT_POLICY_FORBIDDEN");
     }
     if (
       String(location.name_vi || "") !== String(areaRow.name_vi || "")
@@ -186,6 +193,10 @@ export function inventoryStorageGroup(location) {
   return String(location?.metadata?.storage_group || "").trim();
 }
 
+export function inventoryReplenishmentPolicy(location) {
+  return String(location?.metadata?.replenishment_policy || "").trim();
+}
+
 export function inventoryLocationByCode(code) {
   const wanted = String(code || "");
   if (!wanted) return null;
@@ -219,6 +230,7 @@ export function inventoryUiGroups(siteCode) {
     vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
     code:location.code,
     storageGroup:inventoryStorageGroup(location),
+    replenishmentPolicy:inventoryReplenishmentPolicy(location),
     sortOrder:Number(location.sort_order || 0),
   }));
   const workAreas = inventoryWorkAreas(siteCode).map((area) => ({
