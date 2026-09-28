@@ -1,5 +1,22 @@
 # Kitchen OS Work Log
 
+## 2026-09-29 — Workforce site-registry production closure and Business State follow-up
+
+- PR #173 removed the browser-side `central / fuxing / yongji` allowlist from Workforce attendance/payroll and Schedule Rules, reusing the database-backed active site resolver.
+- Exact PR head passed Workforce Schedule Rules #155 and Workforce Approval #387. Deploy preflight #1003 initially hit the known transient admin-mobile permission-state timeout; failed-job rerun passed unchanged.
+- PR #173 merged as `0696efeb550e9aeac17b5b05170ba0f2fd465025`.
+- Main Deploy #1004 / run `36459634291` first hit a transient WebKit access-control page error during full-device certification; the unchanged failed-job rerun passed every regression, then deployment and production UI smoke completed successfully.
+- Production backup: `kitchen_os_20260928T175029Z.dump`; release `0696efe`; schema `029`; `DATA_INTEGRITY_OK`; Web/API/Super Admin healthy.
+- Inventory Site Production Audit #279 / run `36461155597` PASS. Counts: Central 41 / Fuxing 78 / Yongji 75; Work Area 38/1/2, 30/18/21/9, 33/17/17/8 respectively; all site, location classification, Work Area, manifest and hidden-inventory violation counters are 0.
+- Continued hard-code audit found the same closed physical-site list still in `src/business-state-sync.js`, including a hard-coded all-scope fallback to Fuxing.
+- Started branch `refactor/business-state-site-registry-20260929`:
+  - Business State now accepts any authenticated assigned site code and any database-generated warehouse button target;
+  - removed the Fuxing fallback;
+  - Inventory site registry now initializes/corrects the all-scope active site from active PostgreSQL sites and emits the existing active-site change event when it must correct scope;
+  - `firstInventorySite()` excludes inactive sites;
+  - regression uses arbitrary `branch-new` to prove no frontend allowlist is required.
+- No migration or data rewrite in this candidate. Exact-head CI/deploy still pending at this log point.
+
 ## 2026-09-29 — Inventory branch count parity and schema-029 closure
 
 - Continued from the schema-028 replenishment-policy candidate and fixed all regression fixtures/adapters that still expected schema 027 or omitted the new database replenishment metadata.
