@@ -1,5 +1,27 @@
 # Kitchen OS Work Log
 
+## 2026-09-28 — DB-authority fallback cleanup production verification
+
+- Scope was limited to the three requested cleanup items: Work Area name inference, legacy Inventory defaults, and frontend Role permission fallback.
+- Created branch `refactor/db-authority-fallback-cleanup-20260928` and PR #169.
+- Removed `inferWorkArea()` and every product-name heuristic. Hydration preserves explicit database Work Area only; missing values remain empty.
+- Removed browser inventory master/default constants from `store-core.js`: `DEFAULT_ITEMS`, `LARGE_FREEZER_SHEET_ITEMS`, `STOCK_KEYS`, `WORK_AREAS`, `ZONES`, `PRIMARY_ZONES`.
+- New local records now contain empty inventory/work stock until PostgreSQL hydration. Browser code cannot derive Work Area stock from storage rows.
+- Updated App/Management Work Area selectors to consume the active site's PostgreSQL-loaded master-data resolver.
+- Removed frontend `ACCOUNT_ROLE_DEFAULTS`; non-admin permission normalization is fail-closed and preserves only explicit authenticated session grants.
+- Retired local staff `ROLE_PERMISSIONS` as a capability source. Compatibility `roleCan()` now fails closed; store/UI business actions use authenticated account permissions.
+- CI exposed two tests that still depended on retired source authority:
+  - branch legacy-catalog contract expected the deleted JavaScript manifest; changed it to validate migration/schema 027 as the historical manifest;
+  - scalar no-op test expected a default inventory row; changed it to seed an explicit DB-shaped test fixture.
+- Static authority gates were added so deleted frontend inventory/permission fallbacks cannot silently return.
+- Exact PR head `496eb6a49b29fe51d7f78121b5a81dc0912a154b` passed Super Admin Browser #247, Workforce Approval #372, Workforce Schedule Rules #154 and Deploy #985.
+- PR #169 squash-merged as `53a5cc2f5f8088b1eb602b21330066ae51093c2a`.
+- Merge Deploy #986 / run `36398702734` first failed only on the known transient admin-mobile permission-state timeout in full-device certification. The failed jobs were rerun unchanged; preflight, PostgreSQL/API/concurrency, desktop/mobile, full-device, deploy and production smoke all passed.
+- Production backup: `kitchen_os_20260928T085014Z.dump`.
+- Production verification: `DATA_INTEGRITY_OK`; health `release=53a5cc2`, schema `027`, app/database `ok`; production permission-modal smoke PASS.
+- No schema migration and no production quantity/minimum rewrite in this stage.
+- Next cleanup: procurement/factory policy in `rules-core.js` remains separate and still needs removal of legacy warehouse assumptions.
+
 ## 2026-09-27 — Central Kitchen operator priority workspace production verification
 
 - PR #154 exact head `5667b411b63190acae7cc7b5a23c32db5e0b5309` passed Deploy #899 / run `36290930131`, Super Admin Browser #168 / run `36290930053` and Workforce Approval #293 / run `36290930009`.
