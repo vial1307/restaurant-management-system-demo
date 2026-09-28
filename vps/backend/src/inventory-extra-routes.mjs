@@ -15,6 +15,18 @@ function requireCatalogManager(user, site, reply) {
   return requireInventory(user, site, "edit", reply);
 }
 
+function catalogWorkAreaConflict(error) {
+  const message=String(error?.message || "");
+  for (const code of [
+    "BRANCH_CATALOG_WORK_AREA_MISMATCH",
+    "CENTRAL_CATALOG_WORK_AREA_BRANCH_CONFLICT",
+    "CENTRAL_CATALOG_WORK_AREA_AMBIGUOUS",
+  ]) {
+    if (message === code || message.startsWith(code + ":")) return code;
+  }
+  return "";
+}
+
 async function canManageReceiveDefault(user, site) {
   return siteAllowed(user, site) && hasPermission(user, "inventory", "edit");
 }
@@ -717,6 +729,8 @@ export async function registerInventoryExtraRoutes(app) {
       });
       return result;
     } catch (error) {
+      const workAreaConflict = catalogWorkAreaConflict(error);
+      if (workAreaConflict) return reply.code(409).send({ error:workAreaConflict });
       if (error?.code === "23505") return reply.code(409).send({ error:"CATALOG_CONFLICT" });
       if (error?.message === "LOCATION_HAS_STOCK") {
         return reply.code(409).send({
@@ -1207,6 +1221,8 @@ export async function registerInventoryExtraRoutes(app) {
       return data;
     } catch (error) {
       if (error.alreadySent) return;
+      const workAreaConflict = catalogWorkAreaConflict(error);
+      if (workAreaConflict) return reply.code(409).send({ error:workAreaConflict });
       return reply.code(error.statusCode || 500).send({ error:error.message || "WORK_AREA_RELOCATION_FAILED" });
     }
   });
