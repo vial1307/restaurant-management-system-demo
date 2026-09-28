@@ -1956,10 +1956,10 @@ window.addEventListener("shitu:inventory-sites-changed", () => {
   renderWhenAuthorized();
 });
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
+  if (route() === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
   const site = activeInventorySite();
   if (event.detail?.site && event.detail.site !== site) return;
   taskDerivationCache.clear();
-  if (route() === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
   if (route() === "inventory" && view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
   renderWhenAuthorized();
 });
