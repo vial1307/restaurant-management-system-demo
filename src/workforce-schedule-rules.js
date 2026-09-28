@@ -1,10 +1,10 @@
 import { accountCan, currentAccountSession } from "./account-permissions.js";
 import { qualifiedAreas } from "./operations.js";
 import { effectiveSchedulesForDate } from "./workforce-effective-schedule-core.js";
+import { activeInventorySite } from "./inventory-cloud.js";
 import { apiRequest } from "./vps-api.js";
 
 const STATE_KEY = "shitu-kitchen-os-v1";
-const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const SHIFT_IDS = ["morning", "evening", "full"];
 const REQUIRED_AREAS = ["noodles", "soup", "seafood", "meat"];
 const DEFAULTS = {
@@ -63,13 +63,7 @@ function loadLocalState() {
 }
 
 function activeSite() {
-  const session = currentAccountSession();
-  if (["central", "fuxing", "yongji"].includes(session?.location)) return session.location;
-  if (session?.location === "all") {
-    const saved = localStorage.getItem(ACTIVE_SITE_KEY);
-    return ["central", "fuxing", "yongji"].includes(saved) ? saved : "fuxing";
-  }
-  return "";
+  return activeInventorySite();
 }
 
 function managerAccount() {
@@ -374,6 +368,8 @@ document.addEventListener("change", (event) => {
 window.addEventListener("hashchange", queueDecorate);
 window.addEventListener("shitu:accounts-synced", () => { cacheRevision = -1; queueDecorate(); });
 window.addEventListener("shitu:business-state-updated", () => { cacheRevision = -1; queueDecorate(); });
+window.addEventListener("shitu:active-site-changed", () => { cacheRevision = -1; queueDecorate(); });
+window.addEventListener("shitu:inventory-sites-changed", () => { cacheRevision = -1; queueDecorate(); });
 const observer = new MutationObserver((mutations) => {
   if (mutations.some(mutationNeedsDecoration)) queueDecorate();
 });
