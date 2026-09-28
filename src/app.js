@@ -2,7 +2,7 @@ import { mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
 import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
-import { accountCan as accountCanPermission, currentAccountSession, signedInAdmin } from "./account-permissions.js";
+import { accountCan as accountCanPermission, currentAccountSession } from "./account-permissions.js";
 import {
   buildGeneratedTasks,
   buildInventoryAlerts,
@@ -19,13 +19,13 @@ import {
   shiftMonth,
   summarizeReserveInventory,
 } from "./rules.js";
-import { createStore, WORK_AREAS } from "./store.js";
+import { createStore } from "./store.js";
 import {
   inventorySite,
   inventoryUiGroups,
   isBranchInventorySite,
 } from "./inventory-master-data.js";
-import { assessShiftCapacity, currentStaff, roleCan, roleLabel } from "./operations.js";
+import { assessShiftCapacity, currentStaff, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
 import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
@@ -79,10 +79,10 @@ const view = {
   calendarOpen: false,
   calendarMonth: null,
   calendarYear: null,
-  sopArea: "noodles",
+  sopArea: "",
   menuFilter: "all",
   menuStaff: "all",
-  skillsArea: "noodles",
+  skillsArea: "",
   skillsPanel: "overview",
   skillsStaffId: null,
   sopSelected: "sop-handmade-noodles",
@@ -407,6 +407,28 @@ function inventoryPrimaryStorageIds(site = activeInventorySite()) {
   return inventoryStorageGroups(site)
     .filter((group) => group.storageGroup === "primary")
     .map((group) => group.id);
+}
+
+function operationalWorkAreas(state = store.getState(), site = activeInventorySite()) {
+  const databaseAreas = site ? inventoryWorkAreaGroups(site) : [];
+  if (databaseAreas.length) return databaseAreas;
+
+  // Before master-data hydration, only reuse explicit business-state identities.
+  // Never infer an area from an ingredient/menu name or a source-coded area list.
+  const ids = new Set();
+  for (const sop of state?.operations?.sops || []) {
+    const id = String(sop?.area || "").trim();
+    if (id) ids.add(id);
+  }
+  for (const record of state?.operations?.trainingRecords || []) {
+    const id = String(record?.area || "").trim();
+    if (id) ids.add(id);
+  }
+  for (const member of state?.operations?.staff || []) {
+    const id = String(member?.area || "").trim();
+    if (id && !["service","cashier"].includes(id)) ids.add(id);
+  }
+  return [...ids].map((id) => ({ id, zh:id, vi:id }));
 }
 
 function inventoryUnitSuggestions(record, current = "") {
@@ -1078,8 +1100,8 @@ function preparationPage(context) {
     return view.taskFilter === "all" || (view.taskFilter === "open" && !done) || (view.taskFilter === "done" && done);
   });
   const filters = [{ id: "all", label: text.allTasks, count: progress.total }, { id: "open", label: text.openTasks, count: progress.pending }, { id: "done", label: text.doneTasks, count: progress.done }];
-  const canAssign = signedInAdmin() || roleCan(currentStaff(state).role, "tasks:assign");
-  const assignmentFields = canAssign ? `<div class="task-assignment-grid"><label><span>${language === "zh" ? "數量" : "Số lượng"}</span><input name="quantity" type="number" min="0" value="1" /></label><label><span>${language === "zh" ? "工作區" : "Khu vực"}</span><select name="area"><option value="">—</option>${WORK_AREAS.map((area) => `<option value="${area.id}">${escapeHtml(area[language])}</option>`).join("")}</select></label><label><span>${language === "zh" ? "指派給" : "Phân cho"}</span><select name="assigneeId"><option value="">${language === "zh" ? "整個區域" : "Cả khu vực"}</option>${state.operations.staff.filter((member) => member.active).map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.name)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "完成期限" : "Hạn hoàn thành"}</span><input name="dueAt" type="datetime-local" value="${state.selectedDate}T17:00" /></label></div>` : "";
+  const canAssign = accountCan("preparation", "edit");
+  const assignmentFields = canAssign ? `<div class="task-assignment-grid"><label><span>${language === "zh" ? "數量" : "Số lượng"}</span><input name="quantity" type="number" min="0" value="1" /></label><label><span>${language === "zh" ? "工作區" : "Khu vực"}</span><select name="area"><option value="">—</option>${operationalWorkAreas(state).map((area) => `<option value="${area.id}">${escapeHtml(area[language])}</option>`).join("")}</select></label><label><span>${language === "zh" ? "指派給" : "Phân cho"}</span><select name="assigneeId"><option value="">${language === "zh" ? "整個區域" : "Cả khu vực"}</option>${state.operations.staff.filter((member) => member.active).map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.name)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "完成期限" : "Hạn hoàn thành"}</span><input name="dueAt" type="datetime-local" value="${state.selectedDate}T17:00" /></label></div>` : "";
   return `${heading(text.preparation, text.preparationSubtitle)}<section class="preparation-layout"><article class="card task-progress-card"><div><span>${escapeHtml(text.completed)}</span><strong>${progress.done}/${progress.total}</strong><small>${progress.percentage}%</small></div><div class="wide-progress"><span style="width:${progress.percentage}%"></span></div></article>
     <article class="card tasks-card"><div class="task-filters">${filters.map((filter) => `<button class="filter-tab ${view.taskFilter === filter.id ? "selected" : ""}" data-action="select-task-filter" data-filter="${filter.id}">${escapeHtml(filter.label)} <span>${filter.count}</span></button>`).join("")}</div>${filtered.length ? filtered.map((task) => taskRow(task, context)).join("") : `<p class="empty-state">${escapeHtml(text.noTasks)}</p>`}<form class="add-task-form expanded-task-form" data-form="add-task"><input required name="title" placeholder="${escapeHtml(text.taskPlaceholder)}" />${assignmentFields}<button class="primary-button" type="submit">${icon("plus")}<span>${escapeHtml(text.addTask)}</span></button></form></article></section>`;
 }
@@ -1259,7 +1281,7 @@ function selectServiceDate(date) {
   }
 }
 
-const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render });
+const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render, workAreas: operationalWorkAreas });
 
 root.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
@@ -1899,9 +1921,9 @@ window.addEventListener("hashchange", () => {
   const [, query = ""] = hash.split("?");
   const params = new URLSearchParams(query);
   const area = params.get("zone");
-  if (route() === "sop" && WORK_AREAS.some((entry) => entry.id === area)) { view.sopArea = area; view.sopSelected = null; }
+  if (route() === "sop" && operationalWorkAreas().some((entry) => entry.id === area)) { view.sopArea = area; view.sopSelected = null; }
   if (route() === "sop" && params.get("sop")) view.sopSelected = params.get("sop");
-  if (route() === "skills" && WORK_AREAS.some((entry) => entry.id === area)) view.skillsArea = area;
+  if (route() === "skills" && operationalWorkAreas().some((entry) => entry.id === area)) view.skillsArea = area;
   if (route() === "skills" && ["overview", "catalog", "assessment"].includes(params.get("panel"))) view.skillsPanel = params.get("panel");
   renderWhenAuthorized();
 });
