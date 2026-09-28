@@ -37,7 +37,7 @@ export function calculateRice(date, remaining, settings) {
   );
 }
 
-export function buildGeneratedTasks(state, date, storageGroups = []) {
+export function buildGeneratedTasks(state, date, storageGroups = null) {
   return cachedDuringSearch(
     "buildGeneratedTasks",
     [state, date, storageGroups],
@@ -45,7 +45,7 @@ export function buildGeneratedTasks(state, date, storageGroups = []) {
   );
 }
 
-export function summarizeReserveInventory(record, storageGroups = []) {
+export function summarizeReserveInventory(record, storageGroups = null) {
   return cachedDuringSearch(
     "summarizeReserveInventory",
     [record, storageGroups],
@@ -53,14 +53,14 @@ export function summarizeReserveInventory(record, storageGroups = []) {
   );
 }
 
-export function buildInventoryAlerts(record, storageGroups = []) {
+export function buildInventoryAlerts(record, storageGroups = null) {
   return cachedDuringSearch(
     "buildInventoryAlerts",
     [record, storageGroups],
     () => core.buildInventoryAlerts(record, storageGroups),
   );
 }
-export function calculateProcurementPlan(date, record, settings = {}, storageGroups = []) {
+export function calculateProcurementPlan(date, record, settings = {}, storageGroups = null) {
   return cachedDuringSearch(
     "calculateProcurementPlan",
     [date, record, settings, storageGroups],
