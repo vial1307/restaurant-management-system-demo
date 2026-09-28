@@ -22,6 +22,7 @@ export const INVENTORY_ADMIN_TEXT = {
   discard:["Bỏ nội dung chưa lưu?","放棄尚未儲存的內容？"],
   storageOnly:["Chỉ lưu kho","僅倉儲"], sort:["Thứ tự hiển thị","顯示順序"],
   group:["Phân loại kho","儲藏分類"], primary:["Kho tổng / dự trữ chính","總倉／主要儲備"], service:["Kho khu vực / tủ sử dụng","區域庫／現場冰箱"],
+  replenishmentPolicy:["Nguồn bổ sung","補貨來源"], internal:["Bổ sung nội bộ","內部補貨"], factory:["Gọi xưởng","工廠叫貨"],
   department:["Bộ phận","部門"], none:["Chưa chọn","尚未選擇"],
   quantity:["Số lượng thực tế","實際數量"], minimum:["Định mức tại vị trí","位置安全量"],
   note:["Lý do / ghi chú","原因／備註"], location:["Vị trí","位置"],
@@ -40,6 +41,7 @@ export const INVENTORY_ADMIN_TEXT = {
   missingWorkLocation:["Khu làm việc chưa có vị trí tồn kho tương ứng","工作區缺少對應庫存位置"],
   orphanWorkLocation:["Vị trí làm việc không thuộc khu làm việc đang hoạt động","使用位置未連結啟用中的工作區"],
   invalidStorageGroup:["Kho chưa phân loại Kho tổng / Kho khu vực","儲位尚未分類為總倉／區域庫"],
+  invalidReplenishmentPolicy:["Kho chưa cấu hình nguồn bổ sung","儲位尚未設定補貨來源"],
   workStockMismatch:["Tồn tại khu làm việc không khớp nguyên liệu","工作區庫存與食材工作區不一致"],
   crossSiteWorkArea:["Khu làm việc khác Central cho cùng mã nguyên liệu","同一共用品項與央廚工作區不一致"],
   synced:["Tự đồng bộ","自動同步"],
@@ -48,7 +50,7 @@ export const INVENTORY_ADMIN_TEXT = {
   forbidden:["Bạn chưa có quyền thực hiện thao tác này.","您尚無權執行此操作。"],
   all:["Tất cả","全部"], previous:["Trước","上一頁"], next:["Sau","下一頁"],
   more:["Thêm","更多"], unconfigured:["Chưa cấu hình nơi cất","尚未設定儲位"],
-  masterHint:["Kho lưu trữ được phân loại thành Kho tổng hoặc Kho khu vực. Khu làm việc là master riêng và Database tự tạo vị trí sử dụng tương ứng.","儲藏位置分為總倉或區域庫；工作區為獨立主資料，資料庫會自動建立對應使用位置。"],
+  masterHint:["Kho lưu trữ được phân loại thành Kho tổng hoặc Kho khu vực và cấu hình nguồn bổ sung nội bộ/xưởng. Khu làm việc là master riêng và Database tự tạo vị trí sử dụng tương ứng.","儲藏位置需設定總倉／區域庫與內部補貨／工廠叫貨來源；工作區為獨立主資料，資料庫會自動建立對應使用位置。"],
   workLocationSyncHint:["Danh sách này được Database tự tạo từ Khu làm việc. Muốn đổi tên, thứ tự hoặc trạng thái hãy chỉnh ở tab Khu làm việc.","此清單由資料庫依工作區自動建立；名稱、順序與狀態請在「工作區」分頁修改。"],
 };
 export const inventoryAdminText = (key) => INVENTORY_ADMIN_TEXT[key]?.join(" · ") || key;

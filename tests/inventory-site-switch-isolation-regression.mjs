@@ -83,8 +83,8 @@ function master(site){
   return {
     site:sites.find((row)=>row.code===site),
     locations:[
-      {id:`${site}-loc-freezer`,code:`${site}-large-freezer`,site,kind:"storage",sort_order:10,active:true,name_zh_tw:"大冷凍",name_vi:"Tủ đông lớn",metadata:{ui_key:"large-freezer",storage_group:"primary"}},
-      {id:`${site}-loc-four`,code:`${site}-four-door`,site,kind:"storage",sort_order:20,active:true,name_zh_tw:"四門冰箱",name_vi:"Tủ 4 cánh",metadata:{ui_key:"four-door",storage_group:"service"}},
+      {id:`${site}-loc-freezer`,code:`${site}-large-freezer`,site,kind:"storage",sort_order:10,active:true,name_zh_tw:"大冷凍",name_vi:"Tủ đông lớn",metadata:{ui_key:"large-freezer",storage_group:"primary",replenishment_policy:"factory"}},
+      {id:`${site}-loc-four`,code:`${site}-four-door`,site,kind:"storage",sort_order:20,active:true,name_zh_tw:"四門冰箱",name_vi:"Tủ 4 cánh",metadata:{ui_key:"four-door",storage_group:"service",replenishment_policy:"internal"}},
       {id:`${site}-work-noodles-id`,code:`${site}-work-noodles`,site,kind:"work",sort_order:10,active:true,name_zh_tw:"麵區",name_vi:"Khu mì",metadata:{ui_key:"noodles",work_area:"noodles",managed_by_work_area:true}},
     ],
     workAreas:[{code:"noodles",site_code:site,name_zh_tw:"麵區",name_vi:"Khu mì",sort_order:10,active:true,metadata:{}}],

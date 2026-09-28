@@ -24,8 +24,18 @@ assert.match(ui,/workStockMismatch/, "Super Admin integrity view must detect ite
 assert.match(ui,/missingWorkStock/, "Super Admin integrity view must detect active products missing their work-area projection");
 assert.match(ui,/\["primary","service"\]\.includes\(storageGroup\) \? t\(storageGroup\) : t\("unconfigured"\)/,
   "Super Admin must not display invalid or missing storage classification as primary");
+assert.match(ui,/\["internal","factory"\]\.includes\(replenishmentPolicy\) \? t\(replenishmentPolicy\) : t\("unconfigured"\)/,
+  "Super Admin must expose the database replenishment policy instead of inferring it from a location name");
+assert.match(ui,/select\("replenishment_policy","replenishmentPolicy"/,
+  "storage editor must expose replenishment policy");
+assert.match(ui,/body\.metadata\.replenishment_policy=value\("replenishment_policy"\)/,
+  "storage editor must persist replenishment policy through the master-data API");
+assert.match(ui,/invalidReplenishmentPolicy/,
+  "Super Admin integrity must detect missing or invalid replenishment policy");
 assert.match(ui,/initial\.metadata\?\.storage_group\|\|"service"/,
   "new storage locations must follow the database service default until explicitly reclassified");
+assert.match(ui,/initial\.metadata\?\.replenishment_policy\|\|"internal"/,
+  "new storage locations must explicitly default to internal replenishment in the editor");
 for(const [key,pair] of Object.entries(INVENTORY_ADMIN_TEXT))assert(pair.length===2&&pair.every(Boolean),key);
 assert.match(read(".admindev.html"),/admin-inventory-database\.css/);
 assert.match(read("src/admin-panel.js"),/inventoryDatabase\.mount/);

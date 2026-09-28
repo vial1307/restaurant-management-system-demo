@@ -20,8 +20,8 @@ replaceInventorySites([
 replaceInventoryMasterSnapshot("branch-a", {
   site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
   locations:[
-    { code:"branch-a-freezer", site:"branch-a", kind:"storage", sort_order:10, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
-    { code:"branch-a-kitchen", site:"branch-a", kind:"storage", sort_order:20, name_zh_tw:"廚房冰箱", name_vi:"Tủ bếp", metadata:{ ui_key:"kitchen", storage_group:"service" } },
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", sort_order:10, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary", replenishment_policy:"factory" } },
+    { code:"branch-a-kitchen", site:"branch-a", kind:"storage", sort_order:20, name_zh_tw:"廚房冰箱", name_vi:"Tủ bếp", metadata:{ ui_key:"kitchen", storage_group:"service", replenishment_policy:"internal" } },
     { code:"branch-a-work-noodles", site:"branch-a", kind:"work", sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles" } },
   ],
   workAreas:[
@@ -40,6 +40,7 @@ assert.equal(inventoryLocationUiKey(inventoryLocationByUiKey("branch-a", "kitche
 const groups = inventoryUiGroups("branch-a");
 assert.deepEqual(groups.storage.map((entry) => entry.id), ["large-freezer", "kitchen"]);
 assert.deepEqual(groups.storage.map((entry) => entry.storageGroup), ["primary", "service"]);
+assert.deepEqual(groups.storage.map((entry) => entry.replenishmentPolicy), ["factory", "internal"]);
 assert.deepEqual(groups.workAreas.map((entry) => entry.id), ["noodles"]);
 assert.deepEqual(groups.storage.map((entry) => entry.sortOrder), [10, 20]);
 
@@ -76,7 +77,7 @@ assert.deepEqual(
 assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
   site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
   locations:[
-    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary", replenishment_policy:"factory" } },
     { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles", storage_group:"service" } },
   ],
   workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
@@ -86,12 +87,22 @@ assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
 assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
   site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
   locations:[
-    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary" } },
+    { code:"branch-a-freezer", site:"branch-a", kind:"storage", active:true, name_zh_tw:"大冷凍", name_vi:"Tủ đông lớn", metadata:{ ui_key:"large-freezer", storage_group:"primary", replenishment_policy:"factory" } },
     { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:99, name_zh_tw:"錯誤名稱", name_vi:"Tên sai", metadata:{ ui_key:"noodles", work_area:"noodles" } },
   ],
   workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
 }), /INVENTORY_WORK_LOCATION_PROJECTION_MISMATCH/,
 "work locations must mirror Work Area display master data");
+
+assert.throws(() => replaceInventoryMasterSnapshot("branch-a", {
+  site:{ code:"branch-a", metadata:{ inventory_mode:"branch" } },
+  locations:[
+    { code:"branch-a-storage", site:"branch-a", kind:"storage", active:true, name_zh_tw:"儲位", name_vi:"Kho", metadata:{ ui_key:"storage-a", storage_group:"primary" } },
+    { code:"branch-a-work-noodles", site:"branch-a", kind:"work", active:true, sort_order:10, name_zh_tw:"麵", name_vi:"Mì", metadata:{ ui_key:"noodles", work_area:"noodles" } },
+  ],
+  workAreas:[{ code:"noodles", name_zh_tw:"麵", name_vi:"Mì", sort_order:10, active:true }],
+}), /INVENTORY_REPLENISHMENT_POLICY_REQUIRED/,
+"storage locations must carry an explicit database replenishment policy");
 
 const cloudSource = fs.readFileSync(new URL("../src/inventory-cloud.js", import.meta.url), "utf8");
 for (const legacyName of ["FUXING_STORAGE_CODES", "YONGJI_STORAGE_CODES", "CENTRAL_ZONE_CODES", "BRANCH_STORAGE_CODES", "BRANCH_CODE_TO_ZONE"]) {

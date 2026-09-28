@@ -106,7 +106,7 @@ Object.defineProperty(globalThis, "CustomEvent", { configurable: true, value: Te
 
 const site = { code: "fuxing", name_vi: "Fuxing", name_zh_tw: "復興店", sort_order: 20, metadata: { inventory_mode: "branch" } };
 const locations = [
-  { id: "loc-freezer", code: "fuxing-large-freezer", site: "fuxing", kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary" } },
+  { id: "loc-freezer", code: "fuxing-large-freezer", site: "fuxing", kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary", replenishment_policy: "factory" } },
   { id: "loc-work-noodles", code: "fuxing-work-noodles", site: "fuxing", kind: "work", sort_order: 10, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles", managed_by_work_area: true } },
 ];
 const workAreas = [

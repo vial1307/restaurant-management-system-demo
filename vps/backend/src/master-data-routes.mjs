@@ -180,6 +180,18 @@ function validateDisplayNames(nameVi, nameZhTw) {
   }
 }
 
+function validateLocationMetadata(kind, metadata) {
+  if (kind !== "storage") return;
+  const storageGroup = text(metadata?.storage_group);
+  if (storageGroup && !["primary","service"].includes(storageGroup)) {
+    throw Object.assign(new Error("INVALID_STORAGE_GROUP"), { statusCode: 400 });
+  }
+  const replenishmentPolicy = text(metadata?.replenishment_policy);
+  if (replenishmentPolicy && !["internal","factory"].includes(replenishmentPolicy)) {
+    throw Object.assign(new Error("INVALID_REPLENISHMENT_POLICY"), { statusCode: 400 });
+  }
+}
+
 function assertFreshMaster(current, body) {
   if (body?.createOnly && current) throw Object.assign(new Error("MASTER_DATA_ALREADY_EXISTS"), { statusCode:409 });
   if (body?.expectedUpdatedAt !== undefined &&
@@ -269,6 +281,7 @@ export async function registerMasterDataRoutes(app) {
         if (!LOCATION_KINDS.has(kind)) {
           throw Object.assign(new Error("INVALID_LOCATION_KIND"), { statusCode: 400 });
         }
+        validateLocationMetadata(kind, metadata);
 
         if (!id) {
           if (kind === "work") {

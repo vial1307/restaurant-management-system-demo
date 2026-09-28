@@ -137,6 +137,19 @@ check_zero "invalid work-area master data labels" "
   where trim(name_vi)='' or trim(name_zh_tw)=''
 "
 
+check_zero "storage locations missing valid replenishment policy" "
+  select count(*)
+  from public.inventory_locations
+  where kind='storage'
+    and coalesce(metadata->>'replenishment_policy','') not in ('internal','factory')
+"
+check_zero "work locations carrying storage replenishment policy" "
+  select count(*)
+  from public.inventory_locations
+  where kind='work'
+    and metadata ? 'replenishment_policy'
+"
+
 check_zero "negative inventory quantities" "select count(*) from public.inventory_stock where quantity<0"
 check_zero "negative minimum quantities" "select count(*) from public.inventory_stock where minimum_quantity<0"
 check_zero "inactive inventory items with positive quantity" "

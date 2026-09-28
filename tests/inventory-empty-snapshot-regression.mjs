@@ -79,7 +79,7 @@ function masterData(site) {
     return {
       site: sites[0],
       locations: [
-        { code: "central-freezer", site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "央廚冷凍", name_vi: "Tủ đông bếp trung tâm", metadata: { ui_key: "央廚冷凍", storage_group: "primary" } },
+        { code: "central-freezer", site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "央廚冷凍", name_vi: "Tủ đông bếp trung tâm", metadata: { ui_key: "央廚冷凍", storage_group: "primary", replenishment_policy: "internal" } },
         { code: "central-work-noodles", site, kind: "work", sort_order: 10, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles", managed_by_work_area: true } },
       ],
       workAreas: [
@@ -90,7 +90,7 @@ function masterData(site) {
   return {
     site: sites[1],
     locations: [
-      { code: "fuxing-large-freezer", site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary" } },
+      { code: "fuxing-large-freezer", site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary", replenishment_policy: "factory" } },
       { code: "fuxing-work-noodles", site, kind: "work", sort_order: 10, active: true, name_zh_tw: "麵區", name_vi: "Khu mì", metadata: { ui_key: "noodles", work_area: "noodles", managed_by_work_area: true } },
     ],
     workAreas: [

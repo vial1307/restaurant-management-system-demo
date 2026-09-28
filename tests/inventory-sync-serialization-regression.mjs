@@ -78,7 +78,7 @@ function masterData(site) {
   return {
     site: sites.find((entry) => entry.code === site),
     locations: [
-      { code: `${site}-large-freezer`, site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary" } },
+      { code: `${site}-large-freezer`, site, kind: "storage", sort_order: 10, active: true, name_zh_tw: "大冷凍", name_vi: "Tủ đông lớn", metadata: { ui_key: "large-freezer", storage_group: "primary", replenishment_policy: "factory" } },
       { code: `${site}-work-noodles`, site, kind: "work", sort_order: 10, active: true, name_zh_tw: "麵區", name_vi: `${site}: ${workLabel}`, metadata: { ui_key: "noodles", work_area: "noodles" } },
     ],
     workAreas: [

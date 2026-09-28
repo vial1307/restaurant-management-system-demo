@@ -5,11 +5,13 @@ const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 const helper = await readFile(new URL("../src/task-derivation-cache.js", import.meta.url), "utf8");
 
 assert.match(app, /import \{ createTaskDerivationCache \} from "\.\/task-derivation-cache\.js";/, "app must import the task derivation cache helper");
-assert.match(app, /const taskDerivationCache = createTaskDerivationCache\(\{[\s\S]*deriveTasks:[\s\S]*buildGeneratedTasks\(state, date\)[\s\S]*record\.customTasks[\s\S]*summarizeProgress:[\s\S]*completionSummary/s, "app must create one shared task/progress cache using the existing derivation functions");
+assert.match(app, /const taskDerivationCache = createTaskDerivationCache\(\{[\s\S]*deriveTasks:[\s\S]*buildGeneratedTasks\(state, date, inventoryStorageGroups\(activeInventorySite\(\)\)\)[\s\S]*record\.customTasks[\s\S]*summarizeProgress:[\s\S]*completionSummary/s, "app must create one shared task/progress cache using database-backed replenishment master data");
 assert.match(app, /tasks:\(\) => taskDerivationCache\.tasks\(state, state\.selectedDate\)/, "currentContext tasks getter must read through the cross-render task cache");
 assert.match(app, /progress:\(\) => taskDerivationCache\.progress\(state, state\.selectedDate\)/, "currentContext progress getter must read through the cross-render progress cache");
 assert.doesNotMatch(app, /tasks:\(\) => \[\.\.\.buildGeneratedTasks\(state, state\.selectedDate\), \.\.\.record\.customTasks\]/, "currentContext must not directly rebuild tasks on every render");
 assert.doesNotMatch(app, /progress:\(\) => completionSummary\(context\.tasks, record\.completedTasks\)/, "currentContext must not directly resummarize progress on every render");
+assert.match(app, /shitu:inventory-cloud-updated[\s\S]{0,320}taskDerivationCache\.clear\(\)/, "inventory/master-data refresh must invalidate task derivations that depend on database replenishment policy");
+assert.match(app, /shitu:active-site-changed[\s\S]{0,180}taskDerivationCache\.clear\(\)/, "site changes must invalidate task derivations before using another site's storage policy");
 
 assert.match(helper, /export function taskDerivationFingerprint\(/, "helper must expose the deterministic task dependency fingerprint for regression coverage");
 assert.match(helper, /record\.reservation/, "fingerprint must include reservation input");
