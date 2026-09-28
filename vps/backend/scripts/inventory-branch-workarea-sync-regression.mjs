@@ -18,13 +18,16 @@ const branchItemKey="fuxing:workarea-sync-regression";
 
 await client.connect();
 let projectionTriggerDisabled=false;
+let canonicalGuardDisabled=false;
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"028","schema 028 must be active");
+  assert.equal(schema.rows[0]?.version,"029","schema 029 must be active");
 
   // This regression deliberately replays migration 026. In production 026 ran
   // before migration 027 installed the branch work-projection trigger, so
   // disable only that newer trigger while reconstructing the historical state.
+  await client.query("alter table public.inventory_items disable trigger inventory_items_catalog_work_area_guard");
+  canonicalGuardDisabled=true;
   await client.query("alter table public.inventory_items disable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=true;
 
@@ -111,6 +114,22 @@ try {
   );
   assert.equal(audit.rows[0].count,1,"branch work-area correction was not audit logged");
 
+  await client.query("alter table public.inventory_items enable trigger inventory_items_catalog_work_area_guard");
+  canonicalGuardDisabled=false;
+  await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
+  projectionTriggerDisabled=false;
+
+  await assert.rejects(
+    client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[branchItemKey]),
+    /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
+    "branch shared catalog must not drift from Central after schema 029"
+  );
+  await assert.rejects(
+    client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[centralItemKey]),
+    /CENTRAL_CATALOG_WORK_AREA_BRANCH_CONFLICT/,
+    "Central shared catalog must not move independently of active branches"
+  );
+
   await client.query(
     "delete from public.inventory_stock where item_id in (select id from public.inventory_items where catalog_key=$1)",
     [catalogKey]
@@ -120,6 +139,11 @@ try {
 
   console.log("INVENTORY_BRANCH_WORKAREA_SYNC_REGRESSION_OK");
 } finally {
+  if(canonicalGuardDisabled) {
+    try {
+      await client.query("alter table public.inventory_items enable trigger inventory_items_catalog_work_area_guard");
+    } catch {}
+  }
   if(projectionTriggerDisabled) {
     try {
       await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
