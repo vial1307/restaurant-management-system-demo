@@ -1,5 +1,40 @@
 # Kitchen OS — Current Development Handoff
 
+## Current production baseline — inventory parity closed on schema 029, 2026-09-29
+
+Verified production release:
+- merge/release SHA: `5b932369be9e9fa449bbef12a16f35eb7bbfcc43`;
+- Deploy Kitchen OS to VPS #1002 / run `36455428140`: PASS;
+- server backup: `kitchen_os_20260928T170927Z.dump`;
+- PostgreSQL schema: `029`;
+- `DATA_INTEGRITY_OK`;
+- Web/API/Super Admin edge: healthy;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #275 / run `36456386470`: PASS.
+
+The user-reported branch Storage/Kho tổng vs Work Area count mismatch is now closed at the database/runtime level:
+- Central: 41 active products; Work Area counts 38 noodles / 1 soup / 2 seafood = 41;
+- Fuxing: 78 active products; Work Area counts 30 noodles / 18 soup / 21 seafood / 9 meat = 78;
+- Yongji: 75 active products; Work Area counts 33 noodles / 17 soup / 17 seafood / 8 meat = 75;
+- every active branch item has a matching Work Location row;
+- work-stock classification drift = 0;
+- Central↔branch shared-catalog Work Area drift = 0;
+- Fuxing and Yongji both contain all 75 historical branch catalog identities (missing 0).
+
+Important distinction: Fuxing total 78 and Yongji total 75 do not need to be numerically equal. Fuxing currently has three additional active catalog identities beyond the complete 75-item historical branch manifest. The invariant is that each site's Storage/catalog product set and Work Area projection agree, not that different branches must have identical product catalogs.
+
+Latest integrity enforcement:
+- schema 028 stores replenishment policy in PostgreSQL location metadata (`internal|factory`), removing factory-order routing dependence on mutable warehouse names/IDs;
+- schema 029 repairs any existing shared-catalog Work Area drift transactionally and blocks future branch/Central divergence at the database boundary;
+- API surfaces these invariant conflicts as HTTP 409;
+- pre-deploy data verification and post-deploy Production Audit both enforce the same storage/work-area/replenishment classification.
+
+Continuation rule:
+1. Treat release `5b93236` / schema `029` as the verified production baseline.
+2. Do not rewrite quantities/minimums merely to make branch product totals equal.
+3. New shared catalog Work Area changes must be coordinated across Central and branches rather than bypassing schema 029.
+4. Continue hard-code cleanup only where a remaining runtime business rule is still source-coded; PostgreSQL remains the authority for inventory sites, storage groups, work areas and replenishment policy.
+
 ## Completed release — DB-authoritative Work Area / inventory defaults / frontend permissions, 2026-09-28
 
 PR #169 merged into `main` as `53a5cc2f5f8088b1eb602b21330066ae51093c2a` and is verified in production through Deploy Kitchen OS to VPS #986 / run `36398702734` (attempt 2).
