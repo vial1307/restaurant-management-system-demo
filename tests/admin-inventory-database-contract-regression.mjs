@@ -26,7 +26,7 @@ assert.match(ui,/\["primary","service"\]\.includes\(storageGroup\) \? t\(storage
   "Super Admin must not display invalid or missing storage classification as primary");
 assert.match(ui,/\["internal","factory"\]\.includes\(replenishmentPolicy\) \? t\(replenishmentPolicy\) : t\("unconfigured"\)/,
   "Super Admin must expose the database replenishment policy instead of inferring it from a location name");
-assert.match(ui,/name="replenishment_policy"/,
+assert.match(ui,/select\("replenishment_policy","replenishmentPolicy"/,
   "storage editor must expose replenishment policy");
 assert.match(ui,/body\.metadata\.replenishment_policy=value\("replenishment_policy"\)/,
   "storage editor must persist replenishment policy through the master-data API");
