@@ -2,7 +2,6 @@ import { tr, currentLocale } from './locales.js';
 import { apiRequest, isVpsApiConfigured, vpsInventorySites, vpsListUsers } from './vps-api.js';
 import {
   ACCOUNT_MODULES,
-  ACCOUNT_ROLE_DEFAULTS,
   isAdminAccount,
   normalizeAccountPermissions,
 } from './account-permissions.js';
@@ -91,12 +90,16 @@ async function refreshAccountsFromCloud(){
 function roleScope(role){ return String(roleRecord(role)?.scope_policy || ''); }
 function rolePermissions(role){
   const fromDatabase = roleRecord(role)?.permissions;
-  if(fromDatabase && typeof fromDatabase==='object') return clone(fromDatabase);
-  return clone(ACCOUNT_ROLE_DEFAULTS[role] || ACCOUNT_ROLE_DEFAULTS.employee || {});
+  if(fromDatabase && typeof fromDatabase==='object') return normalizeAccountPermissions(role, fromDatabase);
+  return normalizeAccountPermissions(role, {});
 }
 function roleChoices(){
   if(accountMaster.roles.length) return accountMaster.roles;
-  return Object.keys(ACCOUNT_ROLE_DEFAULTS).map((code)=>({ code, name_vi:label(code), name_zh_tw:label(code), scope_policy:'' }));
+  const localCodes=[...new Set([
+    ...loadAccounts().map((row)=>String(row.role||"")),
+    String(session()?.accountRole||""),
+  ].filter(Boolean))];
+  return localCodes.map((code)=>({ code, name_vi:label(code), name_zh_tw:label(code), scope_policy:'' }));
 }
 function siteChoicesForRole(role, current=''){
   const scope=roleScope(role);
