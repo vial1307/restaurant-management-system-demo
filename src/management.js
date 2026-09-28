@@ -1,8 +1,7 @@
-import { assessShiftCapacity, attendanceTotals, calculateAttendance, currentStaff, DEPARTMENTS, excelWorkbook, learningFor, qualifiedAreas, roleCan, roleLabel, schedulesForDate, STAFFING_SHIFTS, STAFF_ROLES } from "./operations.js";
+import { assessShiftCapacity, attendanceTotals, calculateAttendance, currentStaff, DEPARTMENTS, excelWorkbook, learningFor, qualifiedAreas, roleLabel, schedulesForDate, STAFFING_SHIFTS, STAFF_ROLES } from "./operations.js";
 import { qrSvg } from "./qr.js";
-import { WORK_AREAS, ZONES } from "./store.js";
 import { assessEmployeeSkills, CUSTOM_SKILL_GROUP, flatSkillCatalog, latestSkillRatings, SKILL_GROUPS, skillProfileSummary } from "./skills.js";
-import { signedInAdmin } from "./account-permissions.js";
+import { accountCanBusinessAction, currentAccountSession } from "./account-permissions.js";
 
 function isoClock(value, language = "vi") {
   if (!value) return "—";
@@ -27,7 +26,7 @@ function elapsed(seconds) {
   return `${String(Math.floor(count / 60)).padStart(2, "0")}:${String(count % 60).padStart(2, "0")}`;
 }
 
-function makeDraft(area = "noodles") {
+function makeDraft(area = "") {
   return { id: globalThis.crypto?.randomUUID?.() ?? `sop-${Date.now()}`, area, label: "", labelVi: "", cookSeconds: 0, dineContainer: "", takeawayContainer: "", dineNote: "", takeawayNote: "", plating: "", utensils: [], steps: [], photos: [] };
 }
 
@@ -35,9 +34,14 @@ function clone(value) {
   return structuredClone(value);
 }
 
-export function createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render }) {
-  function permitted(state, permission) {
-    return signedInAdmin() || roleCan(currentStaff(state)?.role, permission);
+export function createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render, workAreas }) {
+  function configuredAreas(state) {
+    const rows = typeof workAreas === "function" ? workAreas(state) : [];
+    return Array.isArray(rows) ? rows.filter((area) => area?.id) : [];
+  }
+
+  function permitted(_state, permission) {
+    return accountCanBusinessAction(currentAccountSession(), permission);
   }
 
   function employeeLabel(state, id) {
@@ -45,7 +49,8 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
   }
 
   function areaTabs(context, count = false) {
-    return `<div class="zone-tabs management-area-tabs">${WORK_AREAS.map((area) => `<button class="filter-tab ${view.sopArea === area.id ? "selected" : ""}" data-action="sop-area" data-area="${area.id}">${escapeHtml(area[context.language])}${count ? ` <span>${context.state.operations.sops.filter((sop) => sop.area === area.id).length}</span>` : ""}</button>`).join("")}</div>`;
+    const state = context.state;
+    return `<div class="zone-tabs management-area-tabs">${configuredAreas(state).map((area) => `<button class="filter-tab ${view.sopArea === area.id ? "selected" : ""}" data-action="sop-area" data-area="${area.id}">${escapeHtml(area[context.language] || area.id)}${count ? ` <span>${context.state.operations.sops.filter((sop) => sop.area === area.id).length}</span>` : ""}</button>`).join("")}</div>`;
   }
 
   function sectionTabs(context) {
@@ -133,9 +138,9 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
   }
 
   function sopEditor(context) {
-    const { language, text } = context;
+    const { state, language, text } = context;
     const draft = view.sopDraft;
-    return `<article class="card sop-editor-card"><div class="sop-editor-heading"><h2>${escapeHtml(view.sopCreating ? text.addSop : text.editSop)}</h2><button class="icon-button" data-action="sop-cancel">${icon("close")}</button></div><form data-form="save-sop"><div class="management-form-grid"><label class="management-field"><span>${escapeHtml(text.workstation)}</span><select name="area">${WORK_AREAS.map((area) => `<option value="${area.id}" ${draft.area === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label>${draftField(text.cookingTime, "cookSeconds", draft.cookSeconds, { type: "number" })}${draftField(text.nameChinese, "label", draft.label, { required: true })}${draftField(text.nameVietnamese, "labelVi", draft.labelVi, { required: true })}${draftField(text.dineContainer, "dineContainer", draft.dineContainer)}${draftField(text.takeawayContainer, "takeawayContainer", draft.takeawayContainer)}${draftField(text.dineNote, "dineNote", draft.dineNote)}${draftField(text.takeawayNote, "takeawayNote", draft.takeawayNote)}${draftField(text.plating, "plating", draft.plating, { textarea: true, full: true })}</div><div class="editor-block"><div class="editor-block-heading"><strong>${escapeHtml(text.utensils)}</strong><button class="secondary-button" type="button" data-action="sop-add-utensil">${icon("plus")}${escapeHtml(text.addUtensil)}</button></div>${draft.utensils.map((utensil, index) => `<div class="utensil-edit-row">${draftField(text.utensilName, `utensilName:${index}`, utensil.name)}${draftField(text.capacityCc, `utensilCc:${index}`, utensil.cc, { type: "number" })}${draftField(text.scoopCount, `utensilCount:${index}`, utensil.count, { type: "number" })}<button class="inventory-action-button delete-action" type="button" data-action="sop-remove-utensil" data-index="${index}">${icon("trash")}</button></div>`).join("")}</div>${draftField(`${text.steps} · ${text.oneStepPerLine}`, "steps", draft.steps.join("\n"), { textarea: true, full: true, rows: 5 })}<div class="editor-block"><div class="editor-block-heading"><strong>${escapeHtml(text.actualPhotos)}</strong></div>${photoGallery(draft.photos, true)}<label class="management-field"><span>${escapeHtml(text.uploadPhoto)}</span><input type="file" accept="image/*" multiple data-field="sop-photos"/></label></div><div class="editor-submit-row"><button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)} · ${escapeHtml(text.pendingApproval)}</button><button class="secondary-button" type="button" data-action="sop-cancel">${escapeHtml(text.cancel)}</button></div></form></article>`;
+    return `<article class="card sop-editor-card"><div class="sop-editor-heading"><h2>${escapeHtml(view.sopCreating ? text.addSop : text.editSop)}</h2><button class="icon-button" data-action="sop-cancel">${icon("close")}</button></div><form data-form="save-sop"><div class="management-form-grid"><label class="management-field"><span>${escapeHtml(text.workstation)}</span><select name="area">${configuredAreas(state).map((area) => `<option value="${area.id}" ${draft.area === area.id ? "selected" : ""}>${escapeHtml(area[language] || area.id)}</option>`).join("")}</select></label>${draftField(text.cookingTime, "cookSeconds", draft.cookSeconds, { type: "number" })}${draftField(text.nameChinese, "label", draft.label, { required: true })}${draftField(text.nameVietnamese, "labelVi", draft.labelVi, { required: true })}${draftField(text.dineContainer, "dineContainer", draft.dineContainer)}${draftField(text.takeawayContainer, "takeawayContainer", draft.takeawayContainer)}${draftField(text.dineNote, "dineNote", draft.dineNote)}${draftField(text.takeawayNote, "takeawayNote", draft.takeawayNote)}${draftField(text.plating, "plating", draft.plating, { textarea: true, full: true })}</div><div class="editor-block"><div class="editor-block-heading"><strong>${escapeHtml(text.utensils)}</strong><button class="secondary-button" type="button" data-action="sop-add-utensil">${icon("plus")}${escapeHtml(text.addUtensil)}</button></div>${draft.utensils.map((utensil, index) => `<div class="utensil-edit-row">${draftField(text.utensilName, `utensilName:${index}`, utensil.name)}${draftField(text.capacityCc, `utensilCc:${index}`, utensil.cc, { type: "number" })}${draftField(text.scoopCount, `utensilCount:${index}`, utensil.count, { type: "number" })}<button class="inventory-action-button delete-action" type="button" data-action="sop-remove-utensil" data-index="${index}">${icon("trash")}</button></div>`).join("")}</div>${draftField(`${text.steps} · ${text.oneStepPerLine}`, "steps", draft.steps.join("\n"), { textarea: true, full: true, rows: 5 })}<div class="editor-block"><div class="editor-block-heading"><strong>${escapeHtml(text.actualPhotos)}</strong></div>${photoGallery(draft.photos, true)}<label class="management-field"><span>${escapeHtml(text.uploadPhoto)}</span><input type="file" accept="image/*" multiple data-field="sop-photos"/></label></div><div class="editor-submit-row"><button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)} · ${escapeHtml(text.pendingApproval)}</button><button class="secondary-button" type="button" data-action="sop-cancel">${escapeHtml(text.cancel)}</button></div></form></article>`;
   }
 
   function trainingPanel(context) {
@@ -165,6 +170,11 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
 
   function sopPage(context) {
     const { state, text } = context;
+    const areas = configuredAreas(state);
+    if (!areas.some((area) => area.id === view.sopArea)) {
+      view.sopArea = areas[0]?.id || "";
+      view.sopSelected = null;
+    }
     const canEdit = permitted(state, "sop:edit");
     const actions = `<div class="page-actions"><button class="secondary-button" data-action="sop-qr">${icon("qr")}${escapeHtml(text.stationQr)}</button>${canEdit ? `<button class="primary-button" data-action="sop-add">${icon("plus")}${escapeHtml(text.addSop)}</button>` : ""}</div>`;
     const sops = state.operations.sops.filter((sop) => sop.area === view.sopArea && (canEdit || sop.revision > 0));
@@ -505,11 +515,11 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     const categoryCopy = { menu: copy.categoryMenu, station: copy.categoryStation, external: copy.categoryExternal };
     const catalog = flatSkillCatalog(state.operations.customSkills);
     const canEvaluate = permitted(state, "skills:evaluate");
-    const areaCards = WORK_AREAS.map((area) => {
+    const areaCards = configuredAreas(state).map((area) => {
       const result = assessEmployeeSkills(state.operations, staffId, area.id);
       const level = result.approval?.level || result.suggestedLevel || "—";
       const profile = skillProfileSummary(state.operations, area.id);
-      return `<article class="competency-area-card"><span>${escapeHtml(area[language])}</span><strong>${escapeHtml(level)}</strong><small>${result.total ? `${result.coverage}% · ${result.observed}/${result.total}` : escapeHtml(copy.noAssessment)}</small><div class="wide-progress"><span style="width:${result.coverage}%"></span></div><a href="#skills?zone=${escapeHtml(area.id)}&panel=assessment">${escapeHtml(language === "zh" ? `查看 ${profile.active} 項細節` : `Xem ${profile.active} kỹ năng chi tiết`)}</a></article>`;
+      return `<article class="competency-area-card"><span>${escapeHtml(area[language] || area.id)}</span><strong>${escapeHtml(level)}</strong><small>${result.total ? `${result.coverage}% · ${result.observed}/${result.total}` : escapeHtml(copy.noAssessment)}</small><div class="wide-progress"><span style="width:${result.coverage}%"></span></div><a href="#skills?zone=${escapeHtml(area.id)}&panel=assessment">${escapeHtml(language === "zh" ? `查看 ${profile.active} 項細節` : `Xem ${profile.active} kỹ năng chi tiết`)}</a></article>`;
     }).join("");
     const trainingRows = (state.operations.trainingRecords || []).map((record) => {
       const skill = catalog.find((entry) => entry.id === record.skillId);
@@ -526,14 +536,16 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
 
   function skillsPage(context) {
     const { state, language } = context;
+    const areas = configuredAreas(state);
+    if (!areas.some((area) => area.id === view.skillsArea)) view.skillsArea = areas[0]?.id || "";
     const copy = skillCopy(language);
     const canManage = permitted(state, "skills:manage");
     const panel = ["overview", "catalog", "assessment"].includes(view.skillsPanel) ? view.skillsPanel : "overview";
     const actions = panel === "catalog" && canManage ? `<button class="primary-button" data-action="skill-add">${icon("plus")}${escapeHtml(copy.add)}</button>` : "";
     const panelTabs = `<div class="inventory-view-switch skills-panel-switch"><button class="inventory-view-button ${panel === "overview" ? "selected" : ""}" data-action="skills-panel" data-panel="overview">${escapeHtml(copy.overviewTab)}</button><button class="inventory-view-button ${panel === "catalog" ? "selected" : ""}" data-action="skills-panel" data-panel="catalog">${escapeHtml(copy.standardsTab)}</button><button class="inventory-view-button ${panel === "assessment" ? "selected" : ""}" data-action="skills-panel" data-panel="assessment">${escapeHtml(copy.assessmentTab)}</button></div>`;
-    const areaTabs = `<div class="zone-tabs management-area-tabs">${WORK_AREAS.map((area) => {
+    const areaTabs = `<div class="zone-tabs management-area-tabs">${configuredAreas(state).map((area) => {
       const areaSummary = skillProfileSummary(state.operations, area.id);
-      return `<button class="filter-tab ${view.skillsArea === area.id ? "selected" : ""}" data-action="skills-area" data-area="${area.id}">${escapeHtml(area[language])} <span>${areaSummary.active}</span></button>`;
+      return `<button class="filter-tab ${view.skillsArea === area.id ? "selected" : ""}" data-action="skills-area" data-area="${area.id}">${escapeHtml(area[language] || area.id)} <span>${areaSummary.active}</span></button>`;
     }).join("")}</div>`;
     const content = panel === "overview" ? competencyOverviewPanel(context, copy) : panel === "catalog" ? skillsCatalogPanel(context, copy) : skillAssessmentPanel(context, copy);
     return `${heading(copy.title, copy.subtitle, actions)}${panelTabs}${panel === "overview" ? "" : areaTabs}${content}`;
@@ -692,14 +704,16 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
   function managementModal(context) {
     const { state, text, language } = context;
     if (view.managementModal === "qr") {
-      const area = WORK_AREAS.find((item) => item.id === view.sopArea) || WORK_AREAS[0];
+      const areas = configuredAreas(state);
+      const area = areas.find((item) => item.id === view.sopArea) || areas[0];
+      if (!area) return "";
       const origin = window.location.origin || "https://kitchen.example";
       const pathname = window.location.pathname || "/";
       const url = `${origin}${pathname}#sop?zone=${area.id}`;
       let markup = "";
       try { markup = qrSvg(url, `${area.zh} QR`); }
       catch { markup = `<p class="helper-text">${escapeHtml(url)}</p>`; }
-      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card qr-modal" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(text.stationQr)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><div class="station-qr-content">${markup}<strong>${escapeHtml(area.zh)} · ${escapeHtml(area.vi)}</strong><small>${escapeHtml(url)}</small><button class="primary-button" data-action="qr-print">${icon("print")}${escapeHtml(text.printQr)}</button></div></section></div>`;
+      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card qr-modal" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(text.stationQr)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><div class="station-qr-content">${markup}<strong>${escapeHtml(area.zh || area.id)} · ${escapeHtml(area.vi || area.id)}</strong><small>${escapeHtml(url)}</small><button class="primary-button" data-action="qr-print">${icon("print")}${escapeHtml(text.printQr)}</button></div></section></div>`;
     }
     if (view.managementModal === "skill") {
       const copy = skillCopy(language);
@@ -707,7 +721,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     }
     if (view.managementModal === "staff") {
       const member = state.operations.staff.find((item) => item.id === view.editingStaffId);
-      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(member ? text.editStaff : text.addStaff)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-staff">${draftField(text.staffName, "name", member?.name || "", { required: true })}<label class="management-field"><span>${escapeHtml(text.role)}</span><select name="role">${STAFF_ROLES.map((role) => `<option value="${role.id}" ${(member?.role || "parttime") === role.id ? "selected" : ""}>${escapeHtml(role[language])}</option>`).join("")}</select></label><label class="management-field"><span>${escapeHtml(text.workstation)}</span><select name="area">${WORK_AREAS.map((area) => `<option value="${area.id}" ${(member?.area || view.sopArea) === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label>${draftField(text.hourlyRate, "hourlyRate", member?.hourlyRate ?? 230, { type: "number" })}${draftField(text.accessPin, "pin", member?.pin || "", { type: "password" })}<button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)}</button></form></section></div>`;
+      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card" role="dialog" aria-modal="true"><div class="card-heading"><h2>${escapeHtml(member ? text.editStaff : text.addStaff)}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-staff">${draftField(text.staffName, "name", member?.name || "", { required: true })}<label class="management-field"><span>${escapeHtml(text.role)}</span><select name="role">${STAFF_ROLES.map((role) => `<option value="${role.id}" ${(member?.role || "parttime") === role.id ? "selected" : ""}>${escapeHtml(role[language])}</option>`).join("")}</select></label><label class="management-field"><span>${escapeHtml(text.workstation)}</span><select name="area">${configuredAreas(state).map((area) => `<option value="${area.id}" ${(member?.area || view.sopArea) === area.id ? "selected" : ""}>${escapeHtml(area[language] || area.id)}</option>`).join("")}</select></label>${draftField(text.hourlyRate, "hourlyRate", member?.hourlyRate ?? 230, { type: "number" })}${draftField(text.accessPin, "pin", member?.pin || "", { type: "password" })}<button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)}</button></form></section></div>`;
     }
     if (view.managementModal === "switch") {
       const member = state.operations.staff.find((item) => item.id === view.switchStaffId);
@@ -724,13 +738,13 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       const entry = state.operations.schedules.find((item) => item.id === view.editingScheduleId);
       const date = entry?.date || state.selectedDate;
       const shift = STAFFING_SHIFTS.find((item) => item.id === (entry?.shift || view.scheduleShift)) || STAFFING_SHIFTS[1];
-      const insideAreas = WORK_AREAS.map((area) => `<option value="inside:${area.id}" ${(entry?.department || "inside") === "inside" && (entry?.area || "noodles") === area.id ? "selected" : ""}>內場 · ${escapeHtml(area[language])}</option>`).join("");
+      const insideAreas = configuredAreas(state).map((area) => `<option value="inside:${area.id}" ${(entry?.department || "inside") === "inside" && (entry?.area || configuredAreas(state)[0]?.id || "") === area.id ? "selected" : ""}>內場 · ${escapeHtml(area[language] || area.id)}</option>`).join("");
       const outsideAreas = [`<option value="outside:service" ${entry?.department === "outside" && entry?.area === "service" ? "selected" : ""}>外場 · ${language === "zh" ? "服務" : "Phục vụ"}</option>`, `<option value="outside:cashier" ${entry?.department === "outside" && entry?.area === "cashier" ? "selected" : ""}>外場 · ${language === "zh" ? "收銀" : "Thu ngân"}</option>`].join("");
       return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card schedule-modal" role="dialog" aria-modal="true"><div class="card-heading"><h2>${entry ? (language === "zh" ? "編輯排班" : "Chỉnh sửa ca") : (language === "zh" ? "新增排班" : "Xếp thêm người")}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-schedule"><label class="management-field"><span>${escapeHtml(text.staffName)}</span><select name="staffId">${state.operations.staff.filter((member) => member.active).map((member) => `<option value="${escapeHtml(member.id)}" ${(entry?.staffId || state.operations.activeStaffId) === member.id ? "selected" : ""}>${escapeHtml(member.name)} · ${escapeHtml(roleLabel(member.role, language))}</option>`).join("")}</select></label><label class="management-field"><span>${language === "zh" ? "工作位置" : "Bộ phận / khu cố định"}</span><select name="placement">${insideAreas}${outsideAreas}</select></label><label class="management-field"><span>${language === "zh" ? "套用方式" : "Áp dụng lịch"}</span><select name="applyMode"><option value="day" ${entry?.applyMode !== "month" ? "selected" : ""}>${language === "zh" ? "僅此日期" : "Chỉ ngày đã chọn"}</option><option value="month" ${entry?.applyMode === "month" ? "selected" : ""}>${language === "zh" ? "本月固定每週此日" : "Cố định ngày này hằng tuần trong tháng"}</option></select></label>${draftField(language === "zh" ? "日期" : "Ngày áp dụng", "date", date, { type: "date", required: true })}<label class="management-field"><span>${language === "zh" ? "班別" : "Ca làm"}</span><select name="shift">${STAFFING_SHIFTS.map((item) => `<option value="${item.id}" ${(entry?.shift || shift.id) === item.id ? "selected" : ""}>${escapeHtml(item[language])}${item.start ? ` · ${item.start}–${item.end}` : ""}</option>`).join("")}</select></label><div class="management-form-grid">${draftField(language === "zh" ? "開始" : "Bắt đầu", "start", entry?.start || shift.start, { type: "time" })}${draftField(language === "zh" ? "結束" : "Kết thúc", "end", entry?.end || shift.end, { type: "time" })}</div>${draftField(text.checkNote, "note", entry?.note || "")}<p class="helper-text">${language === "zh" ? "儲存前會依已學 SOP 檢查人員能力。" : "Hệ thống sẽ đánh giá lại năng lực SOP sau khi lưu."}</p><button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)}</button></form></section></div>`;
     }
     if (view.managementModal === "job") {
       const job = state.operations.jobCatalog.find((item) => item.id === view.editingJobId);
-      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card" role="dialog" aria-modal="true"><div class="card-heading"><h2>${job ? (language === "zh" ? "編輯工作範本" : "Sửa mẫu công việc") : (language === "zh" ? "新增工作範本" : "Tạo mẫu công việc")}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-job"><label class="management-field"><span>${language === "zh" ? "部門" : "Bộ phận"}</span><select name="department"><option value="inside" ${job?.department !== "outside" ? "selected" : ""}>內場 · ${language === "zh" ? "內場" : "Trong bếp"}</option><option value="outside" ${job?.department === "outside" ? "selected" : ""}>外場 · ${language === "zh" ? "外場" : "Ngoài sảnh"}</option></select></label><label class="management-field"><span>${language === "zh" ? "位置 / 分類" : "Vị trí / phân loại"}</span><select name="area">${WORK_AREAS.map((area) => `<option value="${area.id}" ${job?.area === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}<option value="service" ${job?.area === "service" ? "selected" : ""}>${language === "zh" ? "服務" : "Phục vụ"}</option><option value="cashier" ${job?.area === "cashier" ? "selected" : ""}>${language === "zh" ? "收銀" : "Thu ngân"}</option></select></label>${draftField(text.nameChinese, "label", job?.label || "", { required: true })}${draftField(text.nameVietnamese, "labelVi", job?.labelVi || "", { required: true })}<label class="management-field"><span>${language === "zh" ? "連結 SOP 區域" : "Liên kết khu SOP"}</span><select name="sopArea"><option value="">—</option>${WORK_AREAS.map((area) => `<option value="${area.id}" ${job?.sopArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select></label><label class="management-field"><span>${language === "zh" ? "完成證據" : "Bằng chứng hoàn thành"}</span><select name="evidence"><option value="check" ${job?.evidence === "check" ? "selected" : ""}>${language === "zh" ? "勾選" : "Xác nhận"}</option><option value="photo" ${job?.evidence === "photo" ? "selected" : ""}>${language === "zh" ? "照片" : "Ảnh"}</option><option value="approval" ${job?.evidence === "approval" ? "selected" : ""}>${language === "zh" ? "主管核准" : "Quản lý duyệt"}</option></select></label><button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)}</button></form></section></div>`;
+      return `<div class="modal-backdrop" data-action="management-close"><section class="modal-card" role="dialog" aria-modal="true"><div class="card-heading"><h2>${job ? (language === "zh" ? "編輯工作範本" : "Sửa mẫu công việc") : (language === "zh" ? "新增工作範本" : "Tạo mẫu công việc")}</h2><button class="icon-button" data-action="management-close">${icon("close")}</button></div><form data-form="save-job"><label class="management-field"><span>${language === "zh" ? "部門" : "Bộ phận"}</span><select name="department"><option value="inside" ${job?.department !== "outside" ? "selected" : ""}>內場 · ${language === "zh" ? "內場" : "Trong bếp"}</option><option value="outside" ${job?.department === "outside" ? "selected" : ""}>外場 · ${language === "zh" ? "外場" : "Ngoài sảnh"}</option></select></label><label class="management-field"><span>${language === "zh" ? "位置 / 分類" : "Vị trí / phân loại"}</span><select name="area">${configuredAreas(state).map((area) => `<option value="${area.id}" ${job?.area === area.id ? "selected" : ""}>${escapeHtml(area[language] || area.id)}</option>`).join("")}<option value="service" ${job?.area === "service" ? "selected" : ""}>${language === "zh" ? "服務" : "Phục vụ"}</option><option value="cashier" ${job?.area === "cashier" ? "selected" : ""}>${language === "zh" ? "收銀" : "Thu ngân"}</option></select></label>${draftField(text.nameChinese, "label", job?.label || "", { required: true })}${draftField(text.nameVietnamese, "labelVi", job?.labelVi || "", { required: true })}<label class="management-field"><span>${language === "zh" ? "連結 SOP 區域" : "Liên kết khu SOP"}</span><select name="sopArea"><option value="">—</option>${configuredAreas(state).map((area) => `<option value="${area.id}" ${job?.sopArea === area.id ? "selected" : ""}>${escapeHtml(area[language] || area.id)}</option>`).join("")}</select></label><label class="management-field"><span>${language === "zh" ? "完成證據" : "Bằng chứng hoàn thành"}</span><select name="evidence"><option value="check" ${job?.evidence === "check" ? "selected" : ""}>${language === "zh" ? "勾選" : "Xác nhận"}</option><option value="photo" ${job?.evidence === "photo" ? "selected" : ""}>${language === "zh" ? "照片" : "Ảnh"}</option><option value="approval" ${job?.evidence === "approval" ? "selected" : ""}>${language === "zh" ? "主管核准" : "Quản lý duyệt"}</option></select></label><button class="primary-button" type="submit">${icon("check")}${escapeHtml(text.save)}</button></form></section></div>`;
     }
     return "";
   }
@@ -890,7 +904,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       return true;
     }
     if (kind === "save-staff") {
-      const member = { id: view.editingStaffId || undefined, name: String(data.get("name") || ""), role: String(data.get("role") || "parttime"), area: String(data.get("area") || "noodles"), hourlyRate: Number(data.get("hourlyRate") || 0), pin: String(data.get("pin") || "") };
+      const member = { id: view.editingStaffId || undefined, name: String(data.get("name") || ""), role: String(data.get("role") || "parttime"), area: String(data.get("area") || ""), hourlyRate: Number(data.get("hourlyRate") || 0), pin: String(data.get("pin") || "") };
       view.managementModal = null;
       view.editingStaffId = null;
       store.saveStaff(member);
@@ -918,7 +932,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
       return true;
     }
     if (kind === "save-schedule") {
-      const [department, area] = String(data.get("placement") || "inside:noodles").split(":");
+      const [department, area] = String(data.get("placement") || "inside:").split(":");
       const date = String(data.get("date") || store.getState().selectedDate);
       const entry = {
         id: view.editingScheduleId || undefined,

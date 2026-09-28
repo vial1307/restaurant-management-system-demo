@@ -8,12 +8,9 @@ export const STAFF_ROLES = [
   { id: "parttime", vi: "Part-time", zh: "兼職" },
 ];
 
-const ROLE_PERMISSIONS = {
-  manager: ["sop:edit", "sop:approve", "sop:delete", "skills:manage", "skills:evaluate", "skills:approve", "staff:manage", "attendance:manage", "reports:export", "checks:record", "schedule:manage", "jobs:manage", "tasks:assign"],
-  supervisor: ["sop:edit", "skills:evaluate", "attendance:manage", "reports:export", "checks:record"],
-  employee: ["checks:record"],
-  parttime: ["checks:record"],
-};
+// Account/module permissions are authoritative from the authenticated Database
+// session. Staff role names are descriptive business data and must never grant
+// frontend capabilities by themselves.
 
 const PERMANENT_MANAGER_ID = "staff-manager";
 const OPERATIONS_MANAGER_RECOVERY_VERSION = 1;
@@ -364,8 +361,10 @@ export function currentStaff(state) {
   return state.operations.staff.find((item) => item.id === state.operations.activeStaffId) || state.operations.staff[0];
 }
 
-export function roleCan(role, permission) {
-  return Boolean(ROLE_PERMISSIONS[role]?.includes(permission));
+export function roleCan(_role, _permission) {
+  // Deprecated compatibility API. Fail closed so a source-coded staff role can
+  // never bypass Database-backed account permissions.
+  return false;
 }
 
 export function roleLabel(role, language = "vi") {
