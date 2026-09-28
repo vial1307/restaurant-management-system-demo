@@ -26,7 +26,7 @@ function normalizeStorageLocations(item = {}) {
     locations.set(zone, {
       zone,
       quantity: clampNumber(location.quantity),
-      minimum: clampNumber(location.minimum, 1),
+      minimum: clampNumber(location.minimum),
     });
   }
 
@@ -450,7 +450,7 @@ export function createStore(storage = globalThis.localStorage) {
       return update((draft) => {
         const record = draft.records[draft.selectedDate];
         const item = record.inventory.find((entry) => entry.id === id);
-        if (!item || item.zone === "large-freezer") return;
+        if (!item) return;
 
         let remaining = Math.max(0, clampNumber(item.minimum) - clampNumber(item.quantity));
         for (const source of inventorySources(record, item, item.zone)) {
@@ -471,14 +471,15 @@ export function createStore(storage = globalThis.localStorage) {
         if (!locations.length) return;
 
         const workArea = String(item.workArea || "").trim();
-        if (!workArea) return;
+        const unit = String(item.unit || "").trim();
+        if (!workArea || !unit) return;
         const stockKey = `stock-${identifier}`;
         createdStockKey = stockKey;
         const shared = {
           stockKey,
           label: item.label,
           labelVi: item.labelVi,
-          unit: item.unit || "盒",
+          unit,
           workArea,
           catalogKey: item.catalogKey || "",
           receiveZone: item.receiveZone || "",
@@ -500,7 +501,7 @@ export function createStore(storage = globalThis.localStorage) {
           labelVi: storageItem.labelVi,
           workArea: storageItem.workArea,
           quantity: 0,
-          minimum: clampNumber(item.workMinimum ?? storageItem.minimum),
+          minimum: clampNumber(item.workMinimum),
           unit: storageItem.unit,
         });
       });
