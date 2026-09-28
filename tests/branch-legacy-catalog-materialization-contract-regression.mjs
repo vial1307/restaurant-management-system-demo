@@ -17,30 +17,8 @@ function section(source,start,end) {
   return source.slice(from,to);
 }
 
-function ids(source) {
-  return [...source.matchAll(/\{\s*id:\s*"([^"]+)"/g)].map((match)=>match[1]);
-}
-
-const freezerIds=ids(section(store,"const LARGE_FREEZER_SHEET_ITEMS","export const DEFAULT_ITEMS"));
-const defaultIds=ids(section(store,"export const DEFAULT_ITEMS","const STOCK_KEYS"));
-assert.equal(freezerIds.length,58,"legacy large-freezer catalog row count changed; migration 027 manifest must be reviewed");
-assert.equal(defaultIds.length,19,"legacy default catalog row count changed; migration 027 manifest must be reviewed");
-assert.equal(freezerIds.length+defaultIds.length,77);
-
-const canonicalSuffix=(id)=>{
-  if(["tofu-kitchen","tofu-large"].includes(id)) return "tofu";
-  if(["duck-tongue-kitchen","duck-tongue-large"].includes(id)) return "duck-tongue";
-  if(["duck-wing-kitchen","duck-wing-large"].includes(id)) return "duck-wing";
-  if(id==="duck-intestine-kitchen") return "duck-intestine-box";
-  if(id==="duck-intestine-large") return "duck-intestine";
-  if(id==="oxtail-rice") return "oxtail-rice-box";
-  if(id==="oxtail-rice-freezer") return "oxtail-rice";
-  return id;
-};
-
-const expected=new Set([...defaultIds,...freezerIds].map(canonicalSuffix));
-expected.add("freezer-sous-vide-chicken");
-assert.equal(expected.size,75,"canonical legacy branch catalog identity count changed");
+assert.doesNotMatch(store,/DEFAULT_ITEMS|LARGE_FREEZER_SHEET_ITEMS|STOCK_KEYS|inferWorkArea|export const ZONES|export const WORK_AREAS/,
+  "schema 027, not browser source constants, must remain the historical branch catalog authority");
 
 const catalogSection=section(
   migration,
@@ -51,8 +29,12 @@ const migratedIds=new Set(
   [...catalogSection.matchAll(/\('([^']+)'\s*,/g)].map((match)=>match[1])
 );
 assert.equal(migratedIds.size,75,"migration 027 catalog identity count");
-assert.deepEqual([...migratedIds].sort(),[...expected].sort(),
-  "migration 027 must materialize every legacy branch product identity");
+for (const requiredId of [
+  "tofu","duck-tongue","duck-wing","duck-intestine","oxtail-rice",
+  "freezer-sous-vide-chicken","freezer-lobster","frozen-noodles"
+]) {
+  assert(migratedIds.has(requiredId),`schema 027 is missing canonical legacy identity ${requiredId}`);
+}
 
 assert.match(migration,/metadata->>'inventory_mode',''\)='branch'/,
   "branch discovery must come from PostgreSQL site master data");
