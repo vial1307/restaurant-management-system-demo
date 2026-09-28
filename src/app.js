@@ -62,7 +62,7 @@ attachBusinessStateSync(store);
 const taskDerivationCache = createTaskDerivationCache({
   deriveTasks: (state, date) => {
     const record = state.records[date];
-    return [...buildGeneratedTasks(state, date), ...(record.customTasks ?? [])];
+    return [...buildGeneratedTasks(state, date, inventoryStorageGroups(activeInventorySite())), ...(record.customTasks ?? [])];
   },
   summarizeProgress: completionSummary,
 });
@@ -526,13 +526,14 @@ function currentContext() {
   const language = state.settings.language;
   const text = translate(language);
   const context = { state, record, language, text };
+  const storageGroups = inventoryStorageGroups(activeInventorySite());
   return defineLazyDerivedProperties(context, {
     reservations:() => calculateReservations(record.reservation, state.settings.reservationBuffer),
     rice:() => calculateRice(state.selectedDate, record.riceRemaining, state.settings),
     tasks:() => taskDerivationCache.tasks(state, state.selectedDate),
     progress:() => taskDerivationCache.progress(state, state.selectedDate),
-    reserves:() => summarizeReserveInventory(record),
-    alerts:() => buildInventoryAlerts(record),
+    reserves:() => summarizeReserveInventory(record, storageGroups),
+    alerts:() => buildInventoryAlerts(record, storageGroups),
     workAlerts:() => context.alerts.filter((item) => item.kind === "work"),
     reserveAlerts:() => context.alerts.filter((item) => item.kind === "reserve" || item.kind === "storage"),
     capacity:() => assessShiftCapacity(state, state.selectedDate, "evening"),
@@ -852,7 +853,7 @@ function inventory(context) {
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
-  const draftAlerts = effectiveRecord === record ? null : buildInventoryAlerts(effectiveRecord);
+  const draftAlerts = effectiveRecord === record ? null : buildInventoryAlerts(effectiveRecord, inventoryStorageGroups(site));
   const activeAlerts = draftAlerts
     ? draftAlerts.filter((item)=>storageView ? item.kind !== "work" : item.kind === "work")
     : storageView ? reserveAlerts : workAlerts;
@@ -1042,14 +1043,14 @@ function procurementSection(title, subtitle, lines, context, category, coverage,
 
 function procurementPage(context) {
   const { state, record, language } = context;
-  const plan = calculateProcurementPlan(state.selectedDate, record, state.settings);
+  const plan = calculateProcurementPlan(state.selectedDate, record, state.settings, inventoryStorageGroups(activeInventorySite()));
   const noodles = plan.lines.filter((line) => line.category === "noodles");
   const vegetables = plan.lines.filter((line) => line.category === "vegetables");
   const totalOrders = [...plan.lines, ...plan.factory].filter((line) => line.orderUnits > 0).length;
   const title = language === "zh" ? "叫貨中心" : "Trung tâm gọi hàng";
   const subtitle = language === "zh" ? "依交貨範圍、現有庫存與待到貨量計算建議叫貨。" : "Tính lượng cần gọi từ lịch cung ứng, tồn hiện tại và hàng đang chờ giao.";
   const schedule = `<div class="procurement-schedule"><div><span>${language === "zh" ? "計算方式" : "Cách tính"}</span><strong>${language === "zh" ? "需求 − 現有 − 待到貨" : "Nhu cầu − tồn − đang giao"}</strong></div><div><span>${language === "zh" ? "需叫貨品項" : "Mặt hàng cần gọi"}</span><strong>${totalOrders}</strong></div><div><span>${language === "zh" ? "週五規則" : "Quy tắc thứ Sáu"}</span><strong>${language === "zh" ? "涵蓋週六＋週日" : "Bao phủ T7 + Chủ nhật"}</strong></div></div>`;
-  return `${heading(title, subtitle, `<a class="secondary-button" href="#inventory">${icon("inventory")}${language === "zh" ? "更新庫存" : "Cập nhật tồn kho"}</a>`)}${schedule}<div class="procurement-stack">${procurementSection(language === "zh" ? "麵區叫貨" : "Gọi hàng khu mì", language === "zh" ? "粗麵 5斤/包、細麵 2.5斤/包、冷凍麵 30片/箱；週末需求預設 3 箱，再扣現有庫存。" : "Mì to 5 cân/bao, mì nhỏ 2,5 cân/bao, mì đông lạnh 30 miếng/thùng; nhu cầu cuối tuần mặc định 3 thùng rồi mới trừ tồn.", noodles, context, "noodles", plan.coverages.noodles)}${procurementSection(language === "zh" ? "蔬菜叫貨" : "Gọi rau", language === "zh" ? "顆白菜平日 4斤、假日每日 6斤，每包 2斤；高麗菜依顆數輸入。" : "Cải thìa ngày thường 4 cân, cuối tuần 6 cân/ngày, mỗi bao 2 cân; bắp cải nhập theo cây.", vegetables, context, "vegetables", plan.coverages.vegetables)}${procurementSection(language === "zh" ? "工廠叫貨" : "Gọi hàng xưởng", language === "zh" ? "依大冷凍現有量補到各品項的庫存標準；休息日請依工廠實際排程設定。" : "Dựa trên tồn tủ đông lớn để bổ sung đến định mức; hãy đặt ngày nghỉ theo lịch thực tế của xưởng.", plan.factory, context, "factory", plan.coverages.factory, true)}</div>`;
+  return `${heading(title, subtitle, `<a class="secondary-button" href="#inventory">${icon("inventory")}${language === "zh" ? "更新庫存" : "Cập nhật tồn kho"}</a>`)}${schedule}<div class="procurement-stack">${procurementSection(language === "zh" ? "麵區叫貨" : "Gọi hàng khu mì", language === "zh" ? "粗麵 5斤/包、細麵 2.5斤/包、冷凍麵 30片/箱；週末需求預設 3 箱，再扣現有庫存。" : "Mì to 5 cân/bao, mì nhỏ 2,5 cân/bao, mì đông lạnh 30 miếng/thùng; nhu cầu cuối tuần mặc định 3 thùng rồi mới trừ tồn.", noodles, context, "noodles", plan.coverages.noodles)}${procurementSection(language === "zh" ? "蔬菜叫貨" : "Gọi rau", language === "zh" ? "顆白菜平日 4斤、假日每日 6斤，每包 2斤；高麗菜依顆數輸入。" : "Cải thìa ngày thường 4 cân, cuối tuần 6 cân/ngày, mỗi bao 2 cân; bắp cải nhập theo cây.", vegetables, context, "vegetables", plan.coverages.vegetables)}${procurementSection(language === "zh" ? "工廠叫貨" : "Gọi hàng xưởng", language === "zh" ? "依 Database 設定為「工廠叫貨」的儲位庫存補到各品項標準；休息日請依工廠實際排程設定。" : "Dựa trên tồn tại các vị trí được Database đặt là “Gọi xưởng” để bổ sung đến định mức; hãy đặt ngày nghỉ theo lịch thực tế của xưởng.", plan.factory, context, "factory", plan.coverages.factory, true)}</div>`;
 }
 
 function taskLabel(task, context) {
@@ -1946,12 +1947,19 @@ window.addEventListener("online", () => { if (store.getState().operations.pendin
 window.addEventListener("shitu:auth-synced", renderWhenAuthorized);
 window.addEventListener("shitu:auth-expired", renderWhenAuthorized);
 window.addEventListener("shitu:vps-auth-ready", renderWhenAuthorized);
-window.addEventListener("shitu:active-site-changed", renderWhenAuthorized);
-window.addEventListener("shitu:inventory-sites-changed", renderWhenAuthorized);
+window.addEventListener("shitu:active-site-changed", () => {
+  taskDerivationCache.clear();
+  renderWhenAuthorized();
+});
+window.addEventListener("shitu:inventory-sites-changed", () => {
+  taskDerivationCache.clear();
+  renderWhenAuthorized();
+});
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (route() !== "inventory" || document.querySelector("[data-central-kitchen-shell]")) return;
   const site = activeInventorySite();
   if (!event.detail?.site || event.detail.site === site) {
+    taskDerivationCache.clear();
     if (view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
     renderWhenAuthorized();
   }
