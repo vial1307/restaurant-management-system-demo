@@ -1,5 +1,48 @@
 # Kitchen OS — Current Development Handoff
 
+## Completed release — DB-authoritative Work Area / inventory defaults / frontend permissions, 2026-09-28
+
+PR #169 merged into `main` as `53a5cc2f5f8088b1eb602b21330066ae51093c2a` and is verified in production through Deploy Kitchen OS to VPS #986 / run `36398702734` (attempt 2).
+
+This release completes the three cleanup items requested before continuing broader hard-code removal:
+
+- **Work Area recognition by product name removed.**
+  - `inferWorkArea()` is gone.
+  - Browser hydration never parses Chinese/Vietnamese product labels to guess `noodles / soup / seafood / meat`.
+  - If a row has no database Work Area, it remains unconfigured instead of silently defaulting to `noodles`.
+  - Website/Management Work Area choices now come from the active site's PostgreSQL-loaded master data resolver.
+
+- **Legacy Inventory defaults retired from runtime authority.**
+  - `DEFAULT_ITEMS`, `LARGE_FREEZER_SHEET_ITEMS`, `STOCK_KEYS`, `WORK_AREAS`, `ZONES` and `PRIMARY_ZONES` were removed from `store-core.js`.
+  - A new browser record starts with empty `inventory` / `workInventory` and waits for VPS/PostgreSQL hydration.
+  - Browser storage rows can no longer synthesize Work Area stock; `buildWorkInventory()` intentionally returns an empty projection.
+  - Historical branch catalog authority is now schema 027, not JavaScript constants. The schema-027 regression still verifies all 75 canonical legacy branch identities.
+
+- **Frontend Role permission fallback removed.**
+  - `ACCOUNT_ROLE_DEFAULTS` is removed from the frontend permission path and account editor.
+  - Non-admin permissions are fail-closed unless the authenticated VPS/PostgreSQL session explicitly grants the module/action.
+  - Legacy staff `ROLE_PERMISSIONS` no longer grants browser capabilities; compatibility `roleCan()` returns false.
+  - Granular SOP / Skills / Attendance / Schedule / Task mutations now check the authenticated account permission projection instead of the local staff role name.
+  - Admin remains the explicit full-access system role, consistent with the VPS permission normalizer.
+
+Regression/contract updates:
+- inventory hydration proves a name such as `海鮮牛肉湯` cannot infer a Work Area;
+- explicit empty/missing Work Area stock remains empty rather than being synthesized;
+- scalar/no-op inventory tests seed an explicit DB-shaped fixture instead of relying on retired defaults;
+- legacy catalog materialization tests read the schema-027 manifest, not deleted browser constants;
+- static gates reject reintroduction of source-coded inventory master data or frontend role grants.
+
+Verification:
+- exact PR head `496eb6a49b29fe51d7f78121b5a81dc0912a154b`: Super Admin Browser #247, Workforce Approval #372, Workforce Schedule Rules #154 and Deploy #985 all PASS;
+- merge production run #986 first hit the known transient admin-mobile permission-state timeout in full-device certification; the unchanged failed-job rerun passed all PostgreSQL/API/concurrency/browser/full-device checks;
+- deployment, release/health check and production UI smoke then PASS;
+- backup: `kitchen_os_20260928T085014Z.dump`;
+- production health: `release=53a5cc2`, schema `027`, app/database `ok`;
+- `DATA_INTEGRITY_OK` and production permission-modal smoke PASS;
+- no new database migration and no production stock rewrite.
+
+Next hard-code cleanup is separate: procurement/factory business rules in `rules-core.js` still contain legacy warehouse assumptions and should be converted to database-defined policy/classification without reintroducing browser-side inventory authority.
+
 ## Completed release — branch catalog materialization + Work Area projection, 2026-09-28
 
 PR #167 merged into `main` as `7ae8d3fcbff9ceb9e3ddb1171985728a01b9b0c7` and is verified in production through Deploy Kitchen OS to VPS #981 / run `36344197565`.
