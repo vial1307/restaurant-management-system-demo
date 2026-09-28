@@ -43,6 +43,12 @@ assert.match(policy, /const \{ rules:_managerRules, \.\.\.scheduleForSelfService
 
 assert.match(ui, /\["admin", "manager"\]\.includes\(role\)/, "UI rule editor must be manager/admin only");
 assert.match(ui, /accountCan\(session, "schedule", "edit"\)/, "UI rule editor must require schedule edit permission");
+assert.match(ui, /import \{ activeInventorySite \} from "\.\/inventory-cloud\.js";/, "schedule rules must reuse the database-backed active site resolver");
+assert.match(ui, /function activeSite\(\) \{\s*return activeInventorySite\(\);\s*\}/, "schedule rule reads/writes must follow the database-backed active site");
+assert.doesNotMatch(ui, /\["central", "fuxing", "yongji"\]/, "schedule-rule runtime must not keep a closed list of site codes");
+assert.doesNotMatch(ui, /return "fuxing"/, "schedule-rule runtime must not invent Fuxing as a browser-side default site");
+assert.match(ui, /shitu:active-site-changed/, "schedule rule cache must invalidate when the active database site changes");
+assert.match(ui, /shitu:inventory-sites-changed/, "schedule rule cache must invalidate when the database site registry changes");
 assert.match(ui, /import \{ effectiveSchedulesForDate \} from "\.\/workforce-effective-schedule-core\.js";/, "capacity overlay must use the shared effective-schedule resolver");
 assert.match(ui, /effectiveSchedulesForDate\(state\?\.operations \|\| \{\}, date, shift\)/, "capacity overlay must count approved leave/override effects instead of raw stored schedules");
 assert.match(ui, /qualifiedAreas\(state\.operations, entry\.staffId\)/, "fixed-area coverage must retain SOP qualification check");

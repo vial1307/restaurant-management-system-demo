@@ -1,9 +1,9 @@
 import { accountCan, currentAccountSession } from "./account-permissions.js";
 import { calculateAttendance } from "./operations.js";
+import { activeInventorySite } from "./inventory-cloud.js";
 import { vpsBusinessState, vpsSaveBusinessState } from "./vps-api.js";
 
 const STATE_KEY = "shitu-kitchen-os-v1";
-const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
 const WORKFORCE_ROLES = new Set(["admin", "manager"]);
 let payrollMonth = "";
 let renderPending = false;
@@ -108,13 +108,7 @@ function panelFromHash() {
 }
 
 function activeSite() {
-  const session = currentAccountSession();
-  if (["central", "fuxing", "yongji"].includes(session?.location)) return session.location;
-  if (session?.location === "all") {
-    const value = localStorage.getItem(ACTIVE_SITE_KEY);
-    return ["central", "fuxing", "yongji"].includes(value) ? value : "fuxing";
-  }
-  return "";
+  return activeInventorySite();
 }
 
 function esc(value) {
@@ -513,6 +507,8 @@ document.addEventListener("change", (event) => {
 
 window.addEventListener("hashchange", requestDecorate);
 window.addEventListener("shitu:accounts-synced", requestDecorate);
+window.addEventListener("shitu:active-site-changed", requestDecorate);
+window.addEventListener("shitu:inventory-sites-changed", requestDecorate);
 const observer = new MutationObserver(requestDecorate);
 observer.observe(document.documentElement, { childList:true, subtree:true });
 requestDecorate();
