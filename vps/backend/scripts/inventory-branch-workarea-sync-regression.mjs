@@ -20,7 +20,7 @@ await client.connect();
 let projectionTriggerDisabled=false;
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"027","schema 027 must be active");
+  assert.equal(schema.rows[0]?.version,"028","schema 028 must be active");
 
   // This regression deliberately replays migration 026. In production 026 ran
   // before migration 027 installed the branch work-projection trigger, so
