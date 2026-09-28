@@ -1,5 +1,45 @@
 # Kitchen OS Work Log
 
+## 2026-09-29 — Inventory branch count parity and schema-029 closure
+
+- Continued from the schema-028 replenishment-policy candidate and fixed all regression fixtures/adapters that still expected schema 027 or omitted the new database replenishment metadata.
+- PR #170 exact head passed schema, master-data/Super Admin, load, workforce, browser, preflight, API, concurrency and full-device gates; it was squash-merged as `2fc31adba5c2f11e61915b4f2d428ea4bfbb6d62`.
+- Deploy #1000 / run `36452810695` applied migration 028 after backup `kitchen_os_20260928T164711Z.dump`, verified storage replenishment policy classification, returned `DATA_INTEGRITY_OK`, and served release `2fc31ad` with production UI smoke PASS.
+- The post-deploy Production Audit then exposed one real Work Area drift: Yongji `川麻湯包` = `soup`, Central canonical catalog = `noodles`. This was a persistence invariant gap, not a quantity problem.
+- Built PR #171 with migration 029. It:
+  - repairs existing shared Central↔branch Work Area drift transactionally;
+  - merges work-location quantity into the canonical destination without changing total Work Area quantity and preserves the larger minimum;
+  - records a system audit entry;
+  - installs a database guard blocking future shared-catalog divergence;
+  - maps guard conflicts to HTTP 409;
+  - extends pre-deploy and production audit checks to the new invariant and schema-028 replenishment policy.
+- PR #171 CI passed on exact head and squash-merged as `5b932369be9e9fa449bbef12a16f35eb7bbfcc43`.
+- Deploy #1002 / run `36455428140` PASS:
+  - backup `kitchen_os_20260928T170927Z.dump`;
+  - applied `029_catalog_workarea_invariant.sql`;
+  - API healthy;
+  - `OK: branch catalog work-area mismatch with Central`;
+  - schema 029;
+  - `DATA_INTEGRITY_OK`;
+  - Web/API/Super Admin edge healthy;
+  - release `5b93236`;
+  - production UI smoke PASS.
+- Post-deploy Inventory Site Production Audit #275 / run `36456386470` PASS:
+  - Central: 41 items, quantity 81; Work Area 38 noodles / 1 soup / 2 seafood;
+  - Fuxing: 78 items, quantity 1807; Work Area 30 noodles / 18 soup / 21 seafood / 9 meat;
+  - Yongji: 75 items, quantity 17; Work Area 33 noodles / 17 soup / 17 seafood / 8 meat;
+  - stock-site mismatch 0;
+  - receive-default site mismatch 0;
+  - active item without storage rows 0;
+  - invalid storage group/replenishment policy 0;
+  - active Work Area without location 0;
+  - work-stock area mismatch 0;
+  - active branch item without Work row 0;
+  - Central↔branch catalog Work Area mismatch 0;
+  - legacy branch manifest missing 0 for both Fuxing and Yongji;
+  - site/classification/materialization/hidden-integrity enforcement all 0.
+- Result: the original branch Storage vs Work Area item-count gap is closed. Fuxing 78 vs Yongji 75 is a catalog-content difference, not a projection mismatch; both branches fully contain the 75-item historical manifest.
+
 ## 2026-09-28 — DB-authority fallback cleanup production verification
 
 - Scope was limited to the three requested cleanup items: Work Area name inference, legacy Inventory defaults, and frontend Role permission fallback.
