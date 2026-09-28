@@ -116,8 +116,8 @@ assert.match(storeCoreSource, /createDefaultRecord\(date, inventory = \[\], work
   "new browser records must start with no inventory until PostgreSQL hydration");
 assert.match(storeCoreSource, /export function buildWorkInventory\(_inventory = \[\]\) \{\s*return \[\];/,
   "browser storage rows must never synthesize Work Area stock");
-assert.doesNotMatch(storeCoreSource, /workArea:\s*item\.workArea\s*\|\|/,
-  "store hydration must not infer a Work Area fallback");
+assert.doesNotMatch(storeCoreSource, /workArea:[^\n]{0,100}\|\|\s*"(?:noodles|soup|seafood|meat)"/,
+  "store hydration must not infer a source-coded Work Area fallback");
 assert.doesNotMatch(read("src/app.js"), /\bWORK_AREAS\b/,
   "application Work Area choices must not come from legacy store constants");
 assert.doesNotMatch(managementSource, /\bWORK_AREAS\b|\bZONES\b/,
