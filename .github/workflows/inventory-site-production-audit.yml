@@ -174,13 +174,23 @@ jobs:
               where s.item_id=i.id and l.active=true and l.kind='storage'
             );
 
-          select 'active_storage_invalid_group|' || count(*)
+          select 'active_storage_invalid_group_or_policy|' || count(*)
           from public.inventory_locations l
           where l.active=true
             and l.kind='storage'
             and (
               l.metadata->>'storage_group' not in ('primary','service')
+              or l.metadata->>'replenishment_policy' not in ('internal','factory')
               or coalesce(nullif(btrim(l.metadata->>'work_area'),''),'')<>''
+            );
+
+          select 'active_work_location_storage_policy|' || count(*)
+          from public.inventory_locations l
+          where l.active=true
+            and l.kind='work'
+            and (
+              coalesce(nullif(btrim(l.metadata->>'storage_group'),''),'')<>''
+              or l.metadata ? 'replenishment_policy'
             );
 
           select 'active_work_location_without_area|' || count(*)
@@ -378,7 +388,17 @@ jobs:
                and l.kind='storage'
                and (
                  l.metadata->>'storage_group' not in ('primary','service')
+                 or l.metadata->>'replenishment_policy' not in ('internal','factory')
                  or coalesce(nullif(btrim(l.metadata->>'work_area'),''),'')<>''
+               ))
+            +
+            (select count(*)
+             from public.inventory_locations l
+             where l.active=true
+               and l.kind='work'
+               and (
+                 coalesce(nullif(btrim(l.metadata->>'storage_group'),''),'')<>''
+                 or l.metadata ? 'replenishment_policy'
                ))
             +
             (select count(*)
