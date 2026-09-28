@@ -117,7 +117,7 @@ assert.match(storeCoreSource, /export function buildWorkInventory\(_inventory = 
   "browser storage rows must never synthesize Work Area stock");
 assert.doesNotMatch(storeCoreSource, /workArea:\s*item\.workArea\s*\|\|/,
   "store hydration must not infer a Work Area fallback");
-assert.doesNotMatch(app, /\bWORK_AREAS\b/,
+assert.doesNotMatch(read("src/app.js"), /\bWORK_AREAS\b/,
   "application Work Area choices must not come from legacy store constants");
 assert.doesNotMatch(managementSource, /\bWORK_AREAS\b|\bZONES\b/,
   "management Work Area choices must use the database-backed resolver");
