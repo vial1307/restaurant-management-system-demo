@@ -278,6 +278,18 @@ assert.match(branchWorkAreaSyncMigration, /system_inventory_catalog_work_area_sy
 assert.match(branchWorkAreaSyncMigration, /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
   "migration must stop if Central/branch classification remains divergent");
 
+const catalogWorkAreaInvariantMigration = fs.readFileSync(new URL("../vps/database/migrations/029_catalog_workarea_invariant.sql", import.meta.url), "utf8");
+assert.match(catalogWorkAreaInvariantMigration, /inventory_items_catalog_work_area_guard/,
+  "schema 029 must enforce shared catalog Work Area parity after migration");
+assert.match(catalogWorkAreaInvariantMigration, /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
+  "branch shared catalog drift must be rejected");
+assert.match(catalogWorkAreaInvariantMigration, /CENTRAL_CATALOG_WORK_AREA_BRANCH_CONFLICT/,
+  "Central shared catalog must not move independently of active branches");
+assert.match(catalogWorkAreaInvariantMigration, /system_inventory_catalog_work_area_repair/,
+  "schema 029 must audit any production drift repaired during migration");
+assert.match(catalogWorkAreaInvariantMigration, /BRANCH_WORK_AREA_REPAIR_QUANTITY_CHANGED/,
+  "schema 029 must prove Work Area repair preserves quantity");
+
 const legacyBranchCatalogMigration = fs.readFileSync(new URL("../vps/database/migrations/027_branch_legacy_catalog_materialization.sql", import.meta.url), "utf8");
 assert.match(legacyBranchCatalogMigration, /legacy_branch_catalog/,
   "legacy branch product identities must be materialized in PostgreSQL");
