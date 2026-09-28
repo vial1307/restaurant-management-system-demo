@@ -56,6 +56,31 @@ try {
   const initial = store.getState();
   const initialRecord = initial.records[initial.selectedDate];
 
+  // Production inventory arrives from PostgreSQL after authentication. Seed an
+  // explicit DB-shaped storage/work pair so this scalar no-op test does not
+  // depend on retired browser inventory defaults.
+  initialRecord.inventory.push({
+    id:"db-storage-probe",
+    stockKey:"db-probe",
+    label:"DB Probe",
+    labelVi:"DB Probe",
+    quantity:3,
+    minimum:2,
+    unit:"包",
+    zone:"db-storage",
+    workArea:"db-area",
+  });
+  initialRecord.workInventory.push({
+    id:"db-work-probe",
+    stockKey:"db-probe",
+    label:"DB Probe",
+    labelVi:"DB Probe",
+    quantity:1,
+    minimum:1,
+    unit:"包",
+    workArea:"db-area",
+  });
+
   assertRealChange("real rice change", () => store.updateRice(initialRecord.riceRemaining + 1));
   const rice = store.getState().records[store.getState().selectedDate].riceRemaining;
   assertNoop("same normalized rice", () => store.updateRice(String(rice)));
@@ -79,12 +104,12 @@ try {
   assertNoop("invalid procurement order date", () => store.updateProcurementOrderDate("noodles", "not-a-date"));
 
   const inventoryItem = record.inventory.find((item) => item && item.id);
-  assert.ok(inventoryItem, "default inventory item is required for scalar no-op regression");
+  assert.ok(inventoryItem, "explicit database inventory fixture is required for scalar no-op regression");
   assertNoop("same normalized inventory quantity", () => store.updateItem(inventoryItem.id, "quantity", String(inventoryItem.quantity)));
   assertNoop("missing inventory item", () => store.updateItem("missing-inventory-item", "quantity", 1));
 
   const workItem = record.workInventory.find((item) => item && item.id);
-  assert.ok(workItem, "default work inventory item is required for scalar no-op regression");
+  assert.ok(workItem, "explicit database work inventory fixture is required for scalar no-op regression");
   assertNoop("same normalized work quantity", () => store.updateWorkItem(workItem.id, "quantity", String(workItem.quantity)));
   assertNoop("missing work inventory item", () => store.updateWorkItem("missing-work-item", "quantity", 1));
 
