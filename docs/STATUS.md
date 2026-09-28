@@ -1,5 +1,23 @@
 # Kitchen OS Engineering Status
 
+## DONE — branch inventory count parity + Work Area invariant, 2026-09-29
+
+- PR #170 merged as `2fc31adba5c2f11e61915b4f2d428ea4bfbb6d62`, moving replenishment/factory-vs-internal routing into PostgreSQL storage metadata (`replenishment_policy=internal|factory`) and Super Admin instead of runtime warehouse-name assumptions.
+- Deploy #1000 / run `36452810695` passed full regression, backup/deploy, `DATA_INTEGRITY_OK`, health and production UI smoke on schema `028`.
+- Post-deploy Audit #272 correctly found one remaining Central↔branch Work Area drift: Yongji `川麻湯包` was `soup` while the unique active Central catalog authority was `noodles`.
+- PR #171 merged as `5b932369be9e9fa449bbef12a16f35eb7bbfcc43`; schema `029` transactionally repaired the drift without changing total Work Area quantity, preserves the larger minimum, writes a system audit row, and adds a PostgreSQL guard so shared Central/branch catalog Work Areas cannot silently diverge again.
+- Deploy #1002 / run `36455428140` PASS. Backup: `kitchen_os_20260928T170927Z.dump`; runtime `release=5b93236`, schema `029`; `DATA_INTEGRITY_OK`; Web/API/Super Admin healthy; production UI smoke PASS.
+- Inventory Site Production Audit #275 / run `36456386470` PASS:
+  - Central: 41 active products = noodles 38 / soup 1 / seafood 2;
+  - Fuxing: 78 active products = noodles 30 / soup 18 / seafood 21 / meat 9;
+  - Yongji: 75 active products = noodles 33 / soup 17 / seafood 17 / meat 8;
+  - each branch Work Area sum now exactly equals its active product total;
+  - `active_branch_item_without_work_row=0`, `work_stock_area_mismatch=0`, `catalog_work_area_mismatch_with_central=0`;
+  - Fuxing/Yongji legacy manifests both expected 75 / missing 0;
+  - site-isolation, location classification, legacy-materialization and hidden-inventory violation counts all 0.
+- Fuxing having 78 while Yongji has 75 is not the old Storage-vs-Work-Area bug: both contain the complete 75-item legacy manifest, while Fuxing currently has three additional active catalog identities. Do not force the two branches to have identical totals unless business requirements explicitly say those three Fuxing-only items must also exist at Yongji.
+- NEXT: continue remaining hard-code audit only where a business rule is still source-coded; keep PostgreSQL storage/work-area/replenishment policy as the runtime authority.
+
 ## DONE — DB-authoritative Work Area / inventory defaults / frontend permissions, 2026-09-28
 
 - PR #169 merged as `53a5cc2f5f8088b1eb602b21330066ae51093c2a`; production Deploy #986 / run `36398702734` completed successfully after an unchanged rerun of one transient full-device admin-mobile timeout.
