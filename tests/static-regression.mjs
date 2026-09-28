@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   ACCOUNT_MODULES,
+  accountCan,
+  accountCanBusinessAction,
   fullAccountPermissions,
   normalizeAccountPermissions,
 } from "../src/account-permissions.js";
@@ -58,6 +60,67 @@ for (const key of ACCOUNT_MODULES) {
   assert.equal(normalizedAdmin[key]?.view, true, `admin must view ${key}`);
   assert.equal(normalizedAdmin[key]?.edit, true, `admin must edit ${key}`);
 }
+
+const failClosedManager = normalizeAccountPermissions("manager", null);
+for (const key of ACCOUNT_MODULES) {
+  assert.equal(failClosedManager[key]?.view, false, `missing DB permission must not grant manager view on ${key}`);
+  assert.equal(failClosedManager[key]?.edit, false, `missing DB permission must not grant manager edit on ${key}`);
+}
+const partialManager = normalizeAccountPermissions("manager", {
+  inventory:{ view:true, edit:true },
+  sop:{ view:true, edit:false },
+});
+assert.equal(partialManager.inventory.view, true);
+assert.equal(partialManager.inventory.edit, true);
+assert.equal(partialManager.sop.view, true);
+assert.equal(partialManager.sop.edit, false);
+assert.equal(partialManager.dashboard.view, false, "unspecified modules must remain denied");
+assert.equal(accountCan({ accountRole:"manager", permissions:{} }, "inventory", "view"), false,
+  "role name alone must not grant frontend permissions");
+assert.equal(accountCan({ accountRole:"manager", permissions:{inventory:{view:true,edit:false}} }, "inventory", "view"), true);
+assert.equal(accountCan({ accountRole:"manager", permissions:{inventory:{view:true,edit:false}} }, "inventory", "edit"), false);
+assert.equal(accountCanBusinessAction({ accountRole:"manager", permissions:{sop:{view:true,edit:true}} }, "sop:edit"), true);
+assert.equal(accountCanBusinessAction({ accountRole:"manager", permissions:{} }, "sop:edit"), false);
+
+const accountPermissionsSource = read("src/account-permissions.js");
+const accountAdminSource = read("src/account-admin.js");
+const operationsSource = read("src/operations.js");
+const storeCoreSource = read("src/store-core.js");
+const managementSource = read("src/management.js");
+
+assert.doesNotMatch(accountPermissionsSource, /ACCOUNT_ROLE_DEFAULTS/,
+  "frontend permissions must not contain source-coded role grants");
+assert.doesNotMatch(accountAdminSource, /ACCOUNT_ROLE_DEFAULTS/,
+  "account editor must not restore source-coded role permission templates");
+assert.doesNotMatch(operationsSource, /ROLE_PERMISSIONS/,
+  "staff role names must not grant browser capabilities");
+assert.match(operationsSource, /export function roleCan\(_role, _permission\)[\s\S]{0,180}return false/,
+  "legacy granular roleCan compatibility must fail closed");
+
+for (const marker of [
+  "DEFAULT_ITEMS",
+  "LARGE_FREEZER_SHEET_ITEMS",
+  "STOCK_KEYS",
+  "inferWorkArea",
+  "export const WORK_AREAS",
+  "export const ZONES",
+  "export const PRIMARY_ZONES",
+]) {
+  assert.equal(storeCoreSource.includes(marker), false,
+    `store-core must not retain legacy inventory master data: ${marker}`);
+}
+assert.doesNotMatch(storeCoreSource, /"large-freezer"|"large-fridge"|"four-door"/,
+  "store-core must not depend on legacy storage location identities");
+assert.match(storeCoreSource, /createDefaultRecord\(date, inventory = \[\], workInventory = \[\]\)/,
+  "new browser records must start with no inventory until PostgreSQL hydration");
+assert.match(storeCoreSource, /export function buildWorkInventory\(_inventory = \[\]\) \{\s*return \[\];/,
+  "browser storage rows must never synthesize Work Area stock");
+assert.doesNotMatch(storeCoreSource, /workArea:\s*item\.workArea\s*\|\|/,
+  "store hydration must not infer a Work Area fallback");
+assert.doesNotMatch(app, /\bWORK_AREAS\b/,
+  "application Work Area choices must not come from legacy store constants");
+assert.doesNotMatch(managementSource, /\bWORK_AREAS\b|\bZONES\b/,
+  "management Work Area choices must use the database-backed resolver");
 
 const app = read("src/app.js");
 const routeMatch = app.match(/const ROUTES\s*=\s*\[([^\]]+)\]/);
