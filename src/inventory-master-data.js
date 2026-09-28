@@ -124,6 +124,11 @@ export function isKnownInventorySite(code) {
   return sites.has(String(code || ""));
 }
 
+export function isActiveInventorySite(code) {
+  const site = inventorySite(code);
+  return Boolean(site && site.active !== false);
+}
+
 export function inventoryMode(code) {
   return String(inventorySite(code)?.metadata?.inventory_mode || "");
 }
@@ -133,7 +138,9 @@ export function isBranchInventorySite(code) {
 }
 
 export function firstInventorySite(mode = "") {
-  return inventorySites().find((site) => !mode || inventoryMode(site.code) === mode)?.code || "";
+  return inventorySites().find((site) =>
+    site.active !== false && (!mode || inventoryMode(site.code) === mode)
+  )?.code || "";
 }
 
 export function replaceInventoryMasterSnapshot(siteCode, snapshot = {}) {
