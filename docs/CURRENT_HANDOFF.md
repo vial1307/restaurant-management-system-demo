@@ -1,5 +1,47 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — database-declared Business State site scope, 2026-09-29
+
+Verified production baseline:
+- release `0696efeb550e9aeac17b5b05170ba0f2fd465025`;
+- Deploy Kitchen OS to VPS #1004 / run `36459634291`, attempt 2: PASS;
+- backup `kitchen_os_20260928T175029Z.dump`;
+- schema `029`;
+- `DATA_INTEGRITY_OK`;
+- Web/API/Super Admin healthy;
+- production UI smoke PASS;
+- Inventory Site Production Audit #279 / run `36461155597`: PASS.
+
+The preceding PR #173 removed the closed Central/Fuxing/Yongji list from Workforce and Schedule Rules. Production audit #279 still confirms:
+- Central 41 active products, Fuxing 78, Yongji 75;
+- Work Area counts sum exactly to each site's active catalog;
+- `stock_site_mismatch=0`;
+- `active_storage_invalid_group_or_policy=0`;
+- `work_stock_area_mismatch=0`;
+- `active_branch_item_without_work_row=0`;
+- `catalog_work_area_mismatch_with_central=0`;
+- both 75-item branch legacy manifests missing 0;
+- site/classification/materialization/hidden-integrity violation totals all 0.
+
+Current branch:
+- `refactor/business-state-site-registry-20260929`
+- schema change: none.
+
+Defect now being removed:
+- `src/business-state-sync.js` still contained a browser-side allowlist of `central / fuxing / yongji`;
+- an all-scope user with no valid saved site was silently forced to `fuxing`;
+- a newly created database site could therefore be visible to the inventory switcher but blocked from shared Business State persistence until source code changed.
+
+Candidate invariant:
+1. server-assigned account site codes are accepted without a frontend physical-site allowlist;
+2. all-scope Business State uses the same active-site key owned by the PostgreSQL-backed Inventory site registry;
+3. the registry initializes or corrects that active site to the first active database site when the saved value is missing/inactive;
+4. inactive sites can remain in administrative master data but cannot become an operational default;
+5. warehouse switching still saves pending source-site Business State before changing scope;
+6. regression proves an arbitrary future database site code can pass the same guarded switching flow.
+
+Do not add another source-coded site list as a workaround. Site existence/activation remains PostgreSQL master data.
+
 ## Current production baseline — inventory parity closed on schema 029, 2026-09-29
 
 Verified production release:
