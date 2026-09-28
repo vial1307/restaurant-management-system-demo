@@ -8,12 +8,14 @@ import {
   inventorySiteForLocationCode,
   inventoryUiGroups,
   inventoryWorkLocation,
+  isActiveInventorySite,
   isBranchInventorySite,
   replaceInventoryMasterSnapshot,
   replaceInventorySites,
 } from "../src/inventory-master-data.js";
 
 replaceInventorySites([
+  { code:"archived-branch", active:false, sort_order:1, metadata:{ inventory_mode:"branch" } },
   { code:"central", sort_order:10, metadata:{ inventory_mode:"central" } },
   { code:"branch-a", sort_order:20, metadata:{ inventory_mode:"branch" } },
 ]);
@@ -31,6 +33,8 @@ replaceInventoryMasterSnapshot("branch-a", {
 
 assert.equal(firstInventorySite(), "central");
 assert.equal(firstInventorySite("branch"), "branch-a");
+assert.equal(isActiveInventorySite("archived-branch"), false, "inactive database sites must not become operational defaults");
+assert.equal(isActiveInventorySite("branch-a"), true, "active database site must remain selectable");
 assert.equal(isBranchInventorySite("branch-a"), true);
 assert.equal(inventoryLocationByUiKey("branch-a", "large-freezer")?.code, "branch-a-freezer");
 assert.equal(inventoryWorkLocation("branch-a", "noodles")?.code, "branch-a-work-noodles");

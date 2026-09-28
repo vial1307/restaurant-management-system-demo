@@ -27,6 +27,7 @@ import {
   inventorySiteForLocationCode,
   inventorySites,
   inventoryWorkLocation,
+  isActiveInventorySite,
   isBranchInventorySite,
   isKnownInventorySite,
   replaceInventoryMasterSnapshot,
@@ -142,6 +143,19 @@ async function ensureSiteRegistry({ force = false } = {}) {
       const next = replaceInventorySites(result?.sites || []);
       siteRegistryLoaded = true;
       siteRegistryUserId = userId;
+
+      const currentSession = session();
+      if (currentSession?.location === "all") {
+        const previousSite = String(localStorage.getItem(ACTIVE_SITE_KEY) || "");
+        const nextSite = isActiveInventorySite(previousSite) ? previousSite : firstInventorySite();
+        if (nextSite) localStorage.setItem(ACTIVE_SITE_KEY, nextSite);
+        else localStorage.removeItem(ACTIVE_SITE_KEY);
+        if (nextSite !== previousSite) {
+          window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
+            detail:{ site:nextSite, previousSite, reason:"site-registry", hydrated:false },
+          }));
+        }
+      }
       return next;
     })
     .finally(() => {
@@ -226,10 +240,10 @@ export function activeInventorySite() {
   if (!s) return "";
   if (s.location !== "all") {
     const assignedSite = String(s.location || "");
-    return !siteRegistryLoaded || isKnownInventorySite(assignedSite) ? assignedSite : "";
+    return !siteRegistryLoaded || isActiveInventorySite(assignedSite) ? assignedSite : "";
   }
   const saved = localStorage.getItem(ACTIVE_SITE_KEY) || "";
-  if (isKnownInventorySite(saved)) return saved;
+  if (isActiveInventorySite(saved)) return saved;
   return firstInventorySite();
 }
 

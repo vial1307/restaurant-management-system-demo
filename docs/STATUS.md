@@ -1,5 +1,17 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — business-state dynamic site registry, 2026-09-29
+
+- Verified production baseline before this candidate: PR #173 merged as `0696efeb550e9aeac17b5b05170ba0f2fd465025`; Deploy #1004 / run `36459634291` attempt 2 PASS; schema remains `029`; backup `kitchen_os_20260928T175029Z.dump`; production UI smoke PASS; Inventory Site Audit #279 PASS.
+- PR #173 removed the closed `central / fuxing / yongji` list from Workforce attendance/payroll and Schedule Rules; both now follow the database-backed active inventory site.
+- Current branch: `refactor/business-state-site-registry-20260929`.
+- Remaining defect found by the next hard-code audit: `business-state-sync.js` still accepted only Central/Fuxing/Yongji and silently defaulted all-scope admins to Fuxing.
+- Candidate removes that closed list, lets any server-assigned/database-declared site use the same guarded persistence path, and makes the Inventory site registry initialize/correct the all-scope active site from active PostgreSQL sites.
+- Inactive database sites are excluded from operational default-site selection.
+- Regression includes an arbitrary future site code (`branch-new`) to prove business-state save-before-switch no longer requires a frontend code change.
+- No schema migration, permission change or business/inventory data rewrite.
+- NEXT: exact-head CI, then merge/deploy and rerun production Inventory Site Audit before continuing the remaining hard-code audit.
+
 ## DONE — branch inventory count parity + Work Area invariant, 2026-09-29
 
 - PR #170 merged as `2fc31adba5c2f11e61915b4f2d428ea4bfbb6d62`, moving replenishment/factory-vs-internal routing into PostgreSQL storage metadata (`replenishment_policy=internal|factory`) and Super Admin instead of runtime warehouse-name assumptions.

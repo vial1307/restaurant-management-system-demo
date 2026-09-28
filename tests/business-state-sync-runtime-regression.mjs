@@ -4,6 +4,9 @@ import path from "node:path";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const source = fs.readFileSync(path.join(ROOT, "src/business-state-sync.js"), "utf8");
+assert.doesNotMatch(source, /\["central",\s*"fuxing",\s*"yongji"\]/, "business-state sync must not keep a closed physical-site list");
+assert.doesNotMatch(source, /return\s+\["central",\s*"fuxing",\s*"yongji"\][\s\S]{0,120}"fuxing"/, "business-state sync must not invent Fuxing as an admin fallback");
+assert.match(source, /if \(location !== "all"\) return location;[\s\S]{0,160}ACTIVE_SITE_KEY/, "business-state sync must accept any server-assigned site and use the shared active-site key for all-scope users");
 const importLine = 'import { isVpsApiConfigured, vpsBusinessState, vpsSaveBusinessState } from "./vps-api.js";';
 const injected = source.replace(importLine, `
 const isVpsApiConfigured = () => true;
@@ -364,6 +367,24 @@ await delay(20);
 assert.equal(acceptedWarehouseClicks, 1, "warehouse switch continued after a newer local edit appeared");
 assert.equal(storage.get(ACTIVE_SITE_KEY), "yongji", "newer local edit did not keep the current warehouse selected");
 assert.equal(state.settings.reservationBuffer, 15, "newer local edit was lost while warehouse switch save completed");
+
+// A database-declared future branch must use the same guarded save-before-switch path
+// without requiring a source-code site allowlist.
+let dynamicSwitchSource = "";
+globalThis.__testVpsSaveBusinessState = async (site) => {
+  saveCalls += 1;
+  dynamicSwitchSource = site;
+  return { revision: 12 };
+};
+globalThis.__testVpsBusinessState = async () => {
+  readCalls += 1;
+  return { revision: 12, modules: { settings: { reservationBuffer: 15 } } };
+};
+emitWarehouseClick("branch-new");
+await delay(20);
+assert.equal(dynamicSwitchSource, "yongji", "dynamic site switch did not save the current source site first");
+assert.equal(acceptedWarehouseClicks, 2, "database-declared site code was blocked by a browser-side allowlist");
+assert.equal(storage.get(ACTIVE_SITE_KEY), "branch-new", "dynamic database site did not become the active business-state scope");
 
 // Keep the subscriber reachable so the test also verifies attach/cleanup wiring.
 assert.equal(typeof subscriber, "function");

@@ -23,13 +23,10 @@ function sameJson(a, b) {
 }
 
 function currentSite() {
-  const user = readSession();
-  if (["central", "fuxing", "yongji"].includes(user?.location)) return user.location;
-  if (user?.location === "all") {
-    const saved = localStorage.getItem(ACTIVE_SITE_KEY);
-    return ["central", "fuxing", "yongji"].includes(saved) ? saved : "fuxing";
-  }
-  return "";
+  const location = String(readSession()?.location || "").trim();
+  if (!location) return "";
+  if (location !== "all") return location;
+  return String(localStorage.getItem(ACTIVE_SITE_KEY) || "").trim();
 }
 
 function hasBusinessEdit() {
@@ -699,7 +696,7 @@ export function attachBusinessStateSync(store) {
     const targetSite = String(button?.dataset?.warehouse || "");
     const sourceSite = currentSite();
     const user = readSession();
-    if (!button || user?.location !== "all" || !["central", "fuxing", "yongji"].includes(targetSite) || !sourceSite || targetSite === sourceSite) return;
+    if (!button || user?.location !== "all" || !targetSite || !sourceSite || targetSite === sourceSite) return;
     event.preventDefault?.();
     event.stopImmediatePropagation?.();
     if (siteSwitchPending) return;
