@@ -1,5 +1,19 @@
 # Kitchen OS Engineering Status
 
+## DONE — DB-authoritative Work Area / inventory defaults / frontend permissions, 2026-09-28
+
+- PR #169 merged as `53a5cc2f5f8088b1eb602b21330066ae51093c2a`; production Deploy #986 / run `36398702734` completed successfully after an unchanged rerun of one transient full-device admin-mobile timeout.
+- Work Area inference by product name is removed. Missing Work Area data stays unconfigured; no Chinese/Vietnamese label parsing and no implicit `noodles` fallback.
+- Browser inventory defaults/master lists were removed from `store-core.js`: no `DEFAULT_ITEMS`, `LARGE_FREEZER_SHEET_ITEMS`, `STOCK_KEYS`, `WORK_AREAS`, `ZONES` or `PRIMARY_ZONES`.
+- New browser state starts with empty inventory/work stock until PostgreSQL hydration. Storage rows no longer synthesize Work Area stock.
+- Schema 027 is the historical legacy branch-catalog authority; its 75 canonical identities remain regression-verified.
+- Frontend permissions are fail-closed for all non-admin accounts. Explicit authenticated DB/session permissions are the only grants; source-coded `ACCOUNT_ROLE_DEFAULTS` and staff `ROLE_PERMISSIONS` no longer grant capabilities.
+- SOP/Skills/Attendance/Schedule/Task action guards use authenticated account permissions instead of staff role names.
+- Exact PR head `496eb6a49b29fe51d7f78121b5a81dc0912a154b` passed Super Admin Browser #247, Workforce Approval #372, Workforce Schedule Rules #154 and Deploy #985.
+- Production backup: `kitchen_os_20260928T085014Z.dump`; health `release=53a5cc2`, schema `027`, app/database `ok`; `DATA_INTEGRITY_OK`; production UI smoke PASS.
+- No migration and no production stock rewrite.
+- NEXT: migrate procurement/factory business rules in `rules-core.js` away from remaining legacy warehouse assumptions.
+
 ## DONE — branch catalog + Work Area projection production verification, 2026-09-28
 
 - PR #167 merged as `7ae8d3fcbff9ceb9e3ddb1171985728a01b9b0c7`; Deploy #981 / run `36344197565` passed preflight, PostgreSQL/API/Super Admin/browser/full-device regression, deploy, health/release check and production UI smoke.
