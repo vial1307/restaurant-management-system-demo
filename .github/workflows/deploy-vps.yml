@@ -153,6 +153,7 @@ jobs:
           test -f vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
           test -f vps/backend/scripts/inventory-workarea-relocation-regression-client.mjs
+          test -f vps/backend/scripts/inventory-mutation-hardening-regression-client.mjs
           test -f vps/database/migrations/026_branch_catalog_workarea_sync.sql
           test -f vps/database/migrations/027_branch_legacy_catalog_materialization.sql
           test -f vps/database/migrations/030_inventory_shared_workarea_atomicity.sql
@@ -242,6 +243,9 @@ jobs:
 
       - name: Shared catalog Work Area API regression
         run: node vps/backend/scripts/inventory-workarea-relocation-regression-client.mjs
+
+      - name: Inventory mutation hardening API regression
+        run: node vps/backend/scripts/inventory-mutation-hardening-regression-client.mjs
 
       - name: API role and inventory regression
         run: node vps/backend/scripts/api-regression-v6.mjs
