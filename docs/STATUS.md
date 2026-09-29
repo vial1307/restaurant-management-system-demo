@@ -1,5 +1,17 @@
 # Kitchen OS Engineering Status
 
+## DONE — repeated Work Area alert / stale browser source, 2026-09-30
+
+- PR #178 merged as `7d54cc9ac7a104711e37561d77b4045b8b3648ff`.
+- Deploy #1038 / run `36599511542`: PASS; backup `kitchen_os_20260929T164701Z.dump`.
+- Production health: release `7d54cc9`, schema `030`, app/database OK, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #319 / run `36600414378`: PASS.
+- Root cause was a browser-side authority mismatch after the DB fix: the UI could display the live VPS snapshot while an edit handler resolved the source Work Area from a historical service-date record.
+- Work Area mutation now re-reads PostgreSQL, derives the source from current DB `work_area`, uses the live branch snapshot for catalog mutations and treats an already-applied move as idempotent.
+- Remaining failures display their exact error code.
+- Production inventory parity remains clean: Central 41, Fuxing 78, Yongji 75; Work Area sums equal each site's active catalog and all integrity counters remain 0.
+- NEXT: keep inventory UI redesign isolated from runtime logic; rebase presentation-only PR #176 onto release `7d54cc9` before any UI merge.
+
 ## DONE — atomic shared-catalog Work Area relocation / schema 030, 2026-09-29
 
 - PR #177 merged as `6588ef8e77d454ef0ccf8c027685875074d1bd04`.

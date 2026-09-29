@@ -1,5 +1,29 @@
 # Kitchen OS Work Log
 
+## 2026-09-30 — PR #178 production closure for repeated Work Area alert
+
+- User reported that the same Work Area database alert remained visible after schema 030.
+- Investigation separated database integrity from browser mutation state. Production audit was clean, but the inventory renderer used the latest VPS snapshot while mutation handlers could still call `authoritativeBranchRecord(state,site)`, which intentionally returned a historical service-date record away from today.
+- This mismatch could pair a current Work Area dropdown with an obsolete source Work Area/location and make the schema-030 API correctly reject the request.
+- PR #178 fixes the browser/runtime layer:
+  - adds a live mutation record resolver backed by `inventoryBranchSnapshot(site)`;
+  - force-refreshes the site before Work Area relocation;
+  - derives source Work Location from current PostgreSQL `item.work_area`;
+  - treats an already-applied destination as idempotent success;
+  - surfaces the exact error code for any remaining Work Area failure.
+- No schema migration, quantity/minimum rewrite, site/product hard-code or permission fallback.
+- Exact PR head `b9ae698df8bb2f8508872c5f1097d35b6f65a3d3` passed Deploy #1037 preflight/full regression, Super Admin Browser #287 and Workforce Approval #417.
+- PR #178 squash-merged as `7d54cc9ac7a104711e37561d77b4045b8b3648ff`.
+- Main Deploy #1038 / run `36599511542` PASS:
+  - backup `kitchen_os_20260929T164701Z.dump`;
+  - schema remains 030;
+  - `DATA_INTEGRITY_OK`;
+  - Web/API/Super Admin healthy;
+  - production release `7d54cc9`;
+  - production UI smoke PASS.
+- Inventory Site Production Audit #319 / run `36600414378` PASS with Central 41 / Fuxing 78 / Yongji 75 and all site, catalog, Work Area, legacy-manifest and hidden-integrity violation counters at 0.
+- Diagnostic behavior is intentionally improved: if a different remaining path fails, the popup now exposes the exact backend code so the next defect can be traced without guessing.
+
 ## 2026-09-29 — PR #177 schema-030 atomic Work Area production closure
 
 - Continued the shared-catalog Work Area bug from schema 029. Root cause: the immediate catalog parity trigger correctly rejected final drift, but also rejected the first row of a legitimate Central + branch multi-row move before its peers could be updated.

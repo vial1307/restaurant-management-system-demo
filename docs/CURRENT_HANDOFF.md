@@ -1,5 +1,49 @@
 # Kitchen OS — Current Development Handoff
 
+## CURRENT VERIFIED PRODUCTION — stale Work Area source reconciliation, 2026-09-30
+
+This supersedes the earlier schema-030 closure note for the user-reported Work Area edit alert.
+
+Production baseline:
+- PR #178 merged as `7d54cc9ac7a104711e37561d77b4045b8b3648ff`;
+- Deploy Kitchen OS to VPS #1038 / run `36599511542`: PASS;
+- pre-deploy backup: `kitchen_os_20260929T164701Z.dump`;
+- production health: `{"app":"ok","database":"ok","schema":"030","release":"7d54cc9"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #319 / run `36600414378`: PASS.
+
+Second-layer root cause fixed:
+- schema 030/database atomicity was healthy, but the branch inventory page rendered the latest VPS snapshot while some edit handlers could resolve the same row from the selected historical service-date record;
+- this allowed a stale previous Work Area/source location to be sent to `/api/inventory/relocate-work-area`, which PostgreSQL correctly rejected;
+- `cloudRelocateWorkArea` also trusted the caller source location too much instead of first re-reading the item's current PostgreSQL classification.
+
+Current invariant:
+1. Branch catalog/Work Area mutations use the live VPS inventory snapshot, not the historical service-date record.
+2. Before a Work Area mutation, the client force-refreshes the active site from PostgreSQL.
+3. Source Work Location is derived from the item's current database `work_area`.
+4. If another session already completed the requested move, the client treats it as an idempotent success and reconciles.
+5. Any remaining Work Area failure now shows the exact backend error code in the alert instead of only the generic message.
+6. Schema 030 remains unchanged and authoritative; no stock/minimum rewrite or new frontend master-data authority was introduced.
+
+Post-deploy inventory audit remains clean:
+- Central 41 items / quantity 81; Work Area 38 noodles / 1 soup / 2 seafood;
+- Fuxing 78 items / quantity 1793; Work Area 30 noodles / 18 soup / 21 seafood / 9 meat;
+- Yongji 75 items / quantity 17; Work Area 33 noodles / 17 soup / 17 seafood / 8 meat;
+- `stock_site_mismatch=0`;
+- `receive_default_site_mismatch=0`;
+- `duplicate_active_catalog_site_groups=0`;
+- `active_item_without_stock_rows=0`;
+- `active_item_without_storage_rows=0`;
+- `work_stock_area_mismatch=0`;
+- `catalog_work_area_mismatch_with_central=0`;
+- both 75-item branch manifests missing 0;
+- site/location/materialization/hidden integrity violation totals all 0.
+
+Continuation:
+- if the user can reproduce a Work Area failure after release `7d54cc9`, capture the new displayed `Mã lỗi · 錯誤碼` exactly; the generic-only alert is no longer sufficient diagnostic evidence;
+- keep UI redesign PR #176 separate from this runtime fix and rebase it onto this verified production baseline before merging.
+
 ## CURRENT VERIFIED PRODUCTION — schema 030 atomic shared-catalog Work Area, 2026-09-29
 
 This section is the current authority for continuation; older ACTIVE sections below are retained as history.
