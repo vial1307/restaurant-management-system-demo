@@ -1,5 +1,18 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — runtime site-scope cleanup after PR #174, 2026-09-29
+
+- PR #174 merged as `77d3e13077a41d82d990704abe3dd3546d2f9b91`.
+- Main Deploy #1006 / run `36466950388`, attempt 5: PASS after repeated known full-device timing flakes on prior attempts.
+- Production backup: `kitchen_os_20260929T004244Z.dump`; release `77d3e13`; schema `029`; `DATA_INTEGRITY_OK`; Web/API/Super Admin healthy; production UI smoke PASS.
+- Inventory Site Production Audit #286 / run `36504554850`: PASS with Central 41 / Fuxing 78 / Yongji 75, Work Area parity exact per site, both 75-item branch manifests missing 0, and every site/classification/hidden-integrity violation counter = 0.
+- Current branch `refactor/runtime-site-scope-cleanup-20260929` removes the next three frontend site hard-codes:
+  - Business persistence status no longer keeps a `central/fuxing/yongji` allowlist or defaults all-scope admins to Fuxing.
+  - Business recovery banners resolve branch names from the PostgreSQL-backed site registry instead of a static `SITE_LABELS` map.
+  - Device profile sync no longer falls back missing non-admin locations to Fuxing; missing scope fails closed and arbitrary server-assigned site codes are preserved.
+- No schema migration and no production data rewrite.
+- NEXT: exact-head CI/deploy, then continue auditing source-coded operational Work Area/task/SOP defaults separately from database inventory authority.
+
 ## ACTIVE — business-state dynamic site registry, 2026-09-29
 
 - Verified production baseline before this candidate: PR #173 merged as `0696efeb550e9aeac17b5b05170ba0f2fd465025`; Deploy #1004 / run `36459634291` attempt 2 PASS; schema remains `029`; backup `kitchen_os_20260928T175029Z.dump`; production UI smoke PASS; Inventory Site Audit #279 PASS.
