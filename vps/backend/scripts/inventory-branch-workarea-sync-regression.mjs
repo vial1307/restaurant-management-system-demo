@@ -208,6 +208,18 @@ try {
   assert.equal(Number(coordinatedStock.rows[0].quantity),9,"coordinated move changed physical quantity");
   assert.equal(Number(coordinatedStock.rows[0].minimum_quantity),5,"coordinated move changed minimum");
 
+  await assert.rejects(
+    client.query(
+      `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+       values($1,$2,0,0)
+       on conflict(item_id,location_id) do update
+       set quantity=excluded.quantity,minimum_quantity=excluded.minimum_quantity`,
+      [branchItemId,byArea.get("meat").id]
+    ),
+    /INVENTORY_WORK_STOCK_AREA_MISMATCH/,
+    "database accepted a work stock row outside the item's declared Work Area"
+  );
+
   await client.query(
     "delete from public.inventory_stock where item_id in (select id from public.inventory_items where catalog_key=$1)",
     [catalogKey]
