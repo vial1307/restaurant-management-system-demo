@@ -62,7 +62,7 @@ try {
   const overview = await request("/api/admin/super/overview", { cookie:owner.cookie });
   assert.equal(overview.response.status, 200, JSON.stringify(overview.data));
   assert.equal(overview.data.database.database_name, process.env.POSTGRES_DB || "kitchen_test");
-  assert.equal(overview.data.schema.version, "029");
+  assert.equal(overview.data.schema.version, "030");
   assert(Number(overview.data.api.uptime_seconds) >= 0);
 
   const development = await request("/api/admin/super/development-status", { cookie:owner.cookie });
@@ -72,9 +72,9 @@ try {
   assert(["stable","in_progress"].includes(development.data.status));
   assert.equal(typeof development.data.current_work.branch, "string");
   assert(development.data.current_work.branch.length > 0);
-  assert.equal(development.data.current_work.candidate_schema, "029");
-  assert.equal(development.data.runtime.schema.version, "029");
-  assert.equal(development.data.live_production.schema, "029");
+  assert.equal(development.data.current_work.candidate_schema, "030");
+  assert.equal(development.data.runtime.schema.version, "030");
+  assert.equal(development.data.live_production.schema, "030");
   assert.equal(development.data.release_evidence.schema, "024");
   const evidence = development.data.release_evidence;
   assert.match(evidence.workflow_run_id, /^\d+$/, "last verified deploy must reference a workflow run");
