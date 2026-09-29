@@ -1235,10 +1235,9 @@ export async function registerInventoryExtraRoutes(app) {
             );
           }
 
-          -- The schema-029 guard intentionally blocks one-site-at-a-time edits.
-          -- This endpoint owns the coordinated shared-catalog transaction, so
-          -- defer that invariant until every Central/branch row has moved.
-          await client.query("set constraints all deferred").catch(() => {});
+          // The schema-029 guard intentionally blocks one-site-at-a-time edits.
+          // This endpoint owns the coordinated shared-catalog transaction, so
+          // suspend only that guard while every Central/branch row is updated.
           await client.query("alter table public.inventory_items disable trigger inventory_items_catalog_work_area_guard");
           try {
             await client.query(
