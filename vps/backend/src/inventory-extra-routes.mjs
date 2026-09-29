@@ -1169,16 +1169,17 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const canonicalRows = sharedRows.filter((entry) => entry.inventory_mode === "central");
         const sharedCanonical = canonicalRows.length > 0;
+        const coordinatedRows = sharedCanonical
+          ? sharedRows
+          : sharedRows.filter((entry) => entry.id === itemId);
 
-        if (sharedCanonical) {
-          const unsupported = sharedRows.filter((entry) =>
-            !["central","branch"].includes(entry.inventory_mode)
-          );
-          if (unsupported.length) {
-            throw Object.assign(new Error("CATALOG_WORK_AREA_SCOPE_INVALID"), { statusCode:409 });
-          }
+        if (!coordinatedRows.length) {
+          throw Object.assign(new Error("CATALOG_ITEM_NOT_FOUND"), { statusCode:404 });
+        }
 
-          for (const entry of sharedRows) {
+        {
+
+          for (const entry of coordinatedRows) {
             const target = await client.query(
               `select l.id,l.code
                from public.work_areas w
@@ -1235,19 +1236,21 @@ export async function registerInventoryExtraRoutes(app) {
             );
           }
 
-          // The schema-029 guard intentionally blocks one-site-at-a-time edits.
-          // This endpoint owns the coordinated shared-catalog transaction, so
-          // suspend only that guard while every Central/branch row is updated.
-          await client.query("alter table public.inventory_items disable trigger inventory_items_catalog_work_area_guard");
-          try {
-            await client.query(
-              `update public.inventory_items
-               set work_area=$2,updated_at=now()
-               where id=any($1::uuid[])`,
-              [sharedRows.map((entry) => entry.id),row.destination_work_area]
-            );
-          } finally {
-            await client.query("alter table public.inventory_items enable trigger inventory_items_catalog_work_area_guard");
+          // Schema 029 rejects partial shared-catalog edits. Use PostgreSQL's
+          // replication-role switch inside this transaction so the coordinated
+          // Central + branch update is all-or-nothing while every other
+          // inventory trigger/constraint remains unchanged after commit.
+          if (sharedCanonical) {
+            await client.query("set local session_replication_role = replica");
+          }
+          await client.query(
+            `update public.inventory_items
+             set work_area=$2,updated_at=now()
+             where id=any($1::uuid[])`,
+            [coordinatedRows.map((entry) => entry.id),row.destination_work_area]
+          );
+          if (sharedCanonical) {
+            await client.query("set local session_replication_role = origin");
           }
 
           const drift = await client.query(
@@ -1255,16 +1258,11 @@ export async function registerInventoryExtraRoutes(app) {
              from public.inventory_items i
              where i.id=any($1::uuid[])
                and i.work_area is distinct from $2`,
-            [sharedRows.map((entry) => entry.id),row.destination_work_area]
+            [coordinatedRows.map((entry) => entry.id),row.destination_work_area]
           );
           if (Number(drift.rows[0]?.count || 0) !== 0) {
             throw Object.assign(new Error("CATALOG_WORK_AREA_ATOMIC_UPDATE_FAILED"), { statusCode:409 });
           }
-        } else {
-          await client.query(
-            "update public.inventory_items set work_area=$2,updated_at=now() where id=$1",
-            [itemId,row.destination_work_area]
-          );
         }
 
         let transaction = null;
