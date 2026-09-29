@@ -27,6 +27,26 @@ function catalogWorkAreaConflict(error) {
   return "";
 }
 
+async function setSharedCatalogWorkArea(client,{itemIds,workArea,sharedCanonical}) {
+  const ids=(itemIds || []).map(String).filter(Boolean);
+  if(!ids.length) throw Object.assign(new Error("CATALOG_ITEM_NOT_FOUND"),{statusCode:404});
+  if(sharedCanonical) {
+    await client.query("set local session_replication_role = replica");
+  }
+  try {
+    await client.query(
+      `update public.inventory_items
+       set work_area=$2,updated_at=now()
+       where id=any($1::uuid[])`,
+      [ids,workArea]
+    );
+  } finally {
+    if(sharedCanonical) {
+      await client.query("set local session_replication_role = origin");
+    }
+  }
+}
+
 async function canManageReceiveDefault(user, site) {
   return siteAllowed(user, site) && hasPermission(user, "inventory", "edit");
 }
@@ -1223,18 +1243,11 @@ export async function registerInventoryExtraRoutes(app) {
         // transaction has already validated every target, so bypass triggers
         // only for the coordinated item classification update and restore the
         // session role immediately afterwards.
-        if (sharedCanonical) {
-          await client.query("set local session_replication_role = replica");
-        }
-        await client.query(
-          `update public.inventory_items
-           set work_area=$2,updated_at=now()
-           where id=any($1::uuid[])`,
-          [coordinatedRows.map((entry) => entry.id),row.destination_work_area]
-        );
-        if (sharedCanonical) {
-          await client.query("set local session_replication_role = origin");
-        }
+        await setSharedCatalogWorkArea(client,{
+          itemIds:coordinatedRows.map((entry) => entry.id),
+          workArea:row.destination_work_area,
+          sharedCanonical,
+        });
 
         const drift = await client.query(
           `select count(*)::int as count
