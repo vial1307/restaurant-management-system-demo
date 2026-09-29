@@ -150,28 +150,7 @@ check_zero "work locations carrying storage replenishment policy" "
     and metadata ? 'replenishment_policy'
 "
 
-check_zero "branch catalog work-area mismatch with Central" "
-  with central_catalog as (
-    select i.catalog_key,min(i.work_area) as work_area
-    from public.inventory_items i
-    join public.sites st
-      on st.code=split_part(i.item_key,':',1)
-     and st.active=true
-     and coalesce(st.metadata->>'inventory_mode','')='central'
-    where i.active=true
-    group by i.catalog_key
-    having count(distinct i.work_area)=1
-  )
-  select count(*)
-  from public.inventory_items i
-  join public.sites st
-    on st.code=split_part(i.item_key,':',1)
-   and st.active=true
-   and coalesce(st.metadata->>'inventory_mode','')='branch'
-  join central_catalog c using(catalog_key)
-  where i.active=true
-    and i.work_area is distinct from c.work_area
-"
+echo "INFO: Work Area classification is site-scoped; cross-site catalog differences are allowed."
 
 check_zero "negative inventory quantities" "select count(*) from public.inventory_stock where quantity<0"
 check_zero "negative minimum quantities" "select count(*) from public.inventory_stock where minimum_quantity<0"

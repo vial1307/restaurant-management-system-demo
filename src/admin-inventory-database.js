@@ -91,7 +91,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   function integrityView() {
     const groups = {
       missingStorage:[], missingDefault:[], invalidArea:[], duplicateCatalog:[],
-      missingWorkStock:[], missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], invalidReplenishmentPolicy:[], workStockMismatch:[], crossSiteWorkArea:[],
+      missingWorkStock:[], missingWorkLocation:[], orphanWorkLocation:[], invalidStorageGroup:[], invalidReplenishmentPolicy:[], workStockMismatch:[],
     };
     const counts = new Map();
     const activeAreas = (master.workAreas || []).filter((area) => area.active);
@@ -131,19 +131,6 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       const item=itemById(row.item_id), location=locationById(row.location_id);
       if (item?.active && location?.active && location.kind==="work" && location.metadata?.work_area!==item.work_area) {
         groups.workStockMismatch.push(item);
-      }
-    }
-    for (const mismatch of catalogAudit?.workAreaMismatchesWithCentral || []) {
-      for (const row of mismatch.branchItems || []) {
-        if (row.site !== site) continue;
-        groups.crossSiteWorkArea.push({
-          catalog_key:mismatch.catalogKey,
-          name_vi:row.nameVi,
-          name_zh_tw:row.nameZhTw,
-          work_area:row.workArea,
-          central_work_area:mismatch.centralWorkArea,
-          integrity_detail:String(row.workArea || "—") + " → " + String(mismatch.centralWorkArea || "—"),
-        });
       }
     }
     const rowCode = (row) => row?.catalog_key || row?.code || row?.item_key || row?.id || "";

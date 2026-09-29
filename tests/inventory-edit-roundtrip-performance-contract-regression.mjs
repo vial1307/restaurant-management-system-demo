@@ -17,8 +17,13 @@ assert.match(
 );
 assert.match(
   backend,
-  /relocate-work-area[\s\S]*?s\.kind='work'[\s\S]*?d\.kind='work'[\s\S]*?inventory_catalog_identity[\s\S]*?update public\.inventory_items[\s\S]*?set work_area=\$2[\s\S]*?where id=any/,
-  "work-area relocation must validate work locations, lock shared catalog identity and persist coordinated item metadata"
+  /relocate-work-area[\s\S]*?s\.kind='work'[\s\S]*?d\.kind='work'[\s\S]*?WORK_AREA_DESTINATION_STALE[\s\S]*?update public\.inventory_items[\s\S]*?set work_area=\$2[\s\S]*?where id=\$1/,
+  "work-area relocation must validate current-site Work locations and persist only the selected item metadata"
+);
+assert.doesNotMatch(
+  backend,
+  /inventory_catalog_identity/,
+  "site-scoped Work Area edits must not lock or coordinate the same catalog across other sites"
 );
 assert.match(
   backend,
