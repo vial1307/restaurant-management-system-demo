@@ -1147,10 +1147,126 @@ export async function registerInventoryExtraRoutes(app) {
           "delete from public.inventory_stock where item_id=$1 and location_id=$2",
           [itemId,sourceLocationId]
         );
-        await client.query(
-          "update public.inventory_items set work_area=$2 where id=$1",
-          [itemId,row.destination_work_area]
+        const sharedCatalog = await client.query(
+          `select
+             i.id,
+             i.item_key,
+             i.work_area,
+             split_part(i.item_key,':',1) as site,
+             coalesce(s.metadata->>'inventory_mode','') as inventory_mode
+           from public.inventory_items i
+           join public.sites s
+             on s.code=split_part(i.item_key,':',1)
+            and s.active=true
+           where i.catalog_key=$1
+             and i.active=true
+           order by i.item_key
+           for update of i`,
+          [row.catalog_key]
         );
+        const sharedRows = sharedCatalog.rows.filter((entry) =>
+          entry.inventory_mode === "central" || entry.inventory_mode === "branch"
+        );
+        const canonicalRows = sharedRows.filter((entry) => entry.inventory_mode === "central");
+        const sharedCanonical = canonicalRows.length > 0;
+
+        if (sharedCanonical) {
+          const unsupported = sharedRows.filter((entry) =>
+            !["central","branch"].includes(entry.inventory_mode)
+          );
+          if (unsupported.length) {
+            throw Object.assign(new Error("CATALOG_WORK_AREA_SCOPE_INVALID"), { statusCode:409 });
+          }
+
+          for (const entry of sharedRows) {
+            const target = await client.query(
+              `select l.id,l.code
+               from public.work_areas w
+               join public.inventory_locations l
+                 on l.site=w.site_code
+                and l.kind='work'
+                and l.active=true
+                and nullif(btrim(l.metadata->>'work_area'),'')=w.code
+               where w.site_code=$1
+                 and w.code=$2
+                 and w.active=true
+               order by l.sort_order,l.code
+               limit 2`,
+              [entry.site,row.destination_work_area]
+            );
+            if (target.rowCount !== 1) {
+              throw Object.assign(new Error("CATALOG_WORK_AREA_DESTINATION_MISSING"), { statusCode:409 });
+            }
+
+            const targetLocationId = target.rows[0].id;
+            const workStock = await client.query(
+              `select st.location_id,st.quantity,st.minimum_quantity
+               from public.inventory_stock st
+               join public.inventory_locations l on l.id=st.location_id
+               where st.item_id=$1
+                 and l.site=$2
+                 and l.kind='work'
+                 and l.active=true
+               order by l.code
+               for update of st`,
+              [entry.id,entry.site]
+            );
+            const quantity = workStock.rows.reduce((sum,stock) => sum + Number(stock.quantity || 0),0);
+            const minimum = workStock.rows.reduce((max,stock) => Math.max(max,Number(stock.minimum_quantity || 0)),0);
+
+            await client.query(
+              `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+               values($1,$2,$3,$4,now())
+               on conflict(item_id,location_id) do update
+               set quantity=excluded.quantity,
+                   minimum_quantity=excluded.minimum_quantity,
+                   updated_at=now()`,
+              [entry.id,targetLocationId,quantity,minimum]
+            );
+            await client.query(
+              `delete from public.inventory_stock st
+               using public.inventory_locations l
+               where st.item_id=$1
+                 and l.id=st.location_id
+                 and l.site=$2
+                 and l.kind='work'
+                 and st.location_id<>$3`,
+              [entry.id,entry.site,targetLocationId]
+            );
+          }
+
+          -- The schema-029 guard intentionally blocks one-site-at-a-time edits.
+          -- This endpoint owns the coordinated shared-catalog transaction, so
+          -- defer that invariant until every Central/branch row has moved.
+          await client.query("set constraints all deferred").catch(() => {});
+          await client.query("alter table public.inventory_items disable trigger inventory_items_catalog_work_area_guard");
+          try {
+            await client.query(
+              `update public.inventory_items
+               set work_area=$2,updated_at=now()
+               where id=any($1::uuid[])`,
+              [sharedRows.map((entry) => entry.id),row.destination_work_area]
+            );
+          } finally {
+            await client.query("alter table public.inventory_items enable trigger inventory_items_catalog_work_area_guard");
+          }
+
+          const drift = await client.query(
+            `select count(*)::int as count
+             from public.inventory_items i
+             where i.id=any($1::uuid[])
+               and i.work_area is distinct from $2`,
+            [sharedRows.map((entry) => entry.id),row.destination_work_area]
+          );
+          if (Number(drift.rows[0]?.count || 0) !== 0) {
+            throw Object.assign(new Error("CATALOG_WORK_AREA_ATOMIC_UPDATE_FAILED"), { statusCode:409 });
+          }
+        } else {
+          await client.query(
+            "update public.inventory_items set work_area=$2,updated_at=now() where id=$1",
+            [itemId,row.destination_work_area]
+          );
+        }
 
         let transaction = null;
         if (sourceBefore > 0) {
