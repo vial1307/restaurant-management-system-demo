@@ -1,5 +1,47 @@
 # Kitchen OS — Current Development Handoff
 
+## CURRENT VERIFIED PRODUCTION — storage_only shared Work Area fix, 2026-09-30
+
+This supersedes the earlier stale-source note for the user-reported `CATALOG_ITEM_NOT_FOUND`.
+
+Production baseline:
+- PR #179 merged as `0839a587a91053671e0af7db41c5694eb84271c7`;
+- Deploy Kitchen OS to VPS #1040 / run `36608174657`: PASS;
+- pre-deploy backup: `kitchen_os_20260929T180340Z.dump`;
+- production health: `{"app":"ok","database":"ok","schema":"030","release":"0839a58"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #322 / run `36609522960`: PASS.
+
+Exact root cause fixed:
+- legacy branch catalog migration 027 intentionally creates a Work Location projection for every active branch item with a Work Area, **including items whose historical `storage_only=true` flag is set**;
+- schema 030 also enforces shared Central/branch Work Area parity independently of `storage_only`;
+- however `/api/inventory/relocate-work-area` still built its shared-catalog coordination set using `sharedRows.filter(entry => !entry.storage_only)`;
+- for products such as `川麻湯包 / Gói nước dùng mala Tứ Xuyên`, the selected Fuxing/Yongji row can be `storage_only=true`, so the item was removed from the relocation plan and the endpoint returned `CATALOG_ITEM_NOT_FOUND` even though the item existed.
+
+Current invariant:
+1. `storage_only` controls storage behavior only; it does not remove an active item's Work Area identity or Work Location projection.
+2. Shared-catalog Work Area relocation coordinates every active Central/branch peer regardless of `storage_only`.
+3. Quantity/minimum, permissions, audit logging and schema-030 atomicity remain unchanged.
+4. Regression now uses storage-only branch peers and verifies the relocation endpoint returns 200 and preserves quantities/minimums.
+
+Post-deploy inventory audit:
+- Central: 41 items, quantity 81, Work Area = 38 noodles / 1 soup / 2 seafood;
+- Fuxing: 78 items, quantity 1793, Work Area = 30 noodles / 18 soup / 21 seafood / 9 meat;
+- Yongji: 75 items, quantity 17, Work Area = 33 noodles / 17 soup / 17 seafood / 8 meat;
+- stock/site mismatch = 0;
+- receive-default site mismatch = 0;
+- duplicate active site/catalog groups = 0;
+- active item without stock/storage rows = 0;
+- work-stock Work Area mismatch = 0;
+- catalog Work Area mismatch with Central = 0;
+- Fuxing/Yongji 75-item manifests missing 0;
+- all site/location/materialization/hidden-integrity violation totals = 0.
+
+Continuation:
+- if a Work Area edit fails after release `0839a58`, use the displayed exact error code; `CATALOG_ITEM_NOT_FOUND` for storage-only shared items is now covered by regression and fixed in production.
+- keep UI redesign PR #176 isolated from runtime logic and rebase it onto this production baseline before merge.
+
 ## CURRENT VERIFIED PRODUCTION — stale Work Area source reconciliation, 2026-09-30
 
 This supersedes the earlier schema-030 closure note for the user-reported Work Area edit alert.

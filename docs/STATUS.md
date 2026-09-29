@@ -1,5 +1,17 @@
 # Kitchen OS Engineering Status
 
+## DONE — CATALOG_ITEM_NOT_FOUND on storage-only Work Area relocation, 2026-09-30
+
+- PR #179 merged as `0839a587a91053671e0af7db41c5694eb84271c7`.
+- Deploy #1040 / run `36608174657`: PASS; backup `kitchen_os_20260929T180340Z.dump`.
+- Production health: release `0839a58`, schema `030`, app/database OK, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #322 / run `36609522960`: PASS.
+- Root cause: runtime incorrectly removed `storage_only=true` shared-catalog items from the Work Area relocation plan even though migration 027 and schema 030 treat them as valid Work Area items.
+- Fix: shared Work Area coordination now includes every active shared-catalog peer regardless of `storage_only`.
+- Regression now reproduces the storage-only branch case directly and passes.
+- Inventory parity remains clean: Central 41, Fuxing 78, Yongji 75; all site/catalog/Work Area/legacy/hidden integrity counters are 0.
+- NEXT: rebase presentation-only UI PR #176 onto release `0839a58`; do not mix UI work with inventory mutation logic.
+
 ## DONE — repeated Work Area alert / stale browser source, 2026-09-30
 
 - PR #178 merged as `7d54cc9ac7a104711e37561d77b4045b8b3648ff`.

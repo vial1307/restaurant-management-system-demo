@@ -1,5 +1,24 @@
 # Kitchen OS Work Log
 
+## 2026-09-30 — PR #179 production closure for CATALOG_ITEM_NOT_FOUND
+
+- User reproduced the Work Area failure on current frontend and provided the exact code `CATALOG_ITEM_NOT_FOUND`.
+- The error identified a third, backend-specific edge case rather than stale browser state.
+- Root cause: shared Work Area relocation excluded `storage_only=true` peers when a Central catalog identity existed. Migration 027 explicitly says storage-only branch items still have Work Area projections, so the filter contradicted the database model.
+- Example affected class includes `川麻湯包 / Gói nước dùng mala Tứ Xuyên`, which is part of the historical storage-only branch catalog.
+- PR #179 removes the invalid `!storage_only` exclusion. All active shared-catalog peers are coordinated by the same schema-030 transaction.
+- Regression fixture was changed so Fuxing/Yongji peers are `storage_only=true` while Central remains non-storage-only; `Shared catalog Work Area API regression` passes with status 200 and validates quantity/minimum preservation across all sites.
+- First PR CI attempt had an unrelated Workforce Request browser-login timeout; the failed job was rerun and passed. Super Admin browser regression and isolated load smoke also passed.
+- PR #179 squash-merged as `0839a587a91053671e0af7db41c5694eb84271c7`.
+- Main Deploy #1040 / run `36608174657` PASS:
+  - backup `kitchen_os_20260929T180340Z.dump`;
+  - schema remains 030;
+  - `DATA_INTEGRITY_OK`;
+  - Web/API/Super Admin healthy;
+  - production release `0839a58`;
+  - production UI smoke PASS.
+- Inventory Site Production Audit #322 / run `36609522960` PASS with all inventory integrity counters at 0.
+
 ## 2026-09-30 — PR #178 production closure for repeated Work Area alert
 
 - User reported that the same Work Area database alert remained visible after schema 030.
