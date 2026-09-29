@@ -108,6 +108,13 @@ create index if not exists inventory_items_site_active_catalog_idx
   )
   where active=true;
 
+create unique index if not exists inventory_items_active_site_catalog_uidx
+  on public.inventory_items(
+    (split_part(item_key,':',1)),
+    catalog_key
+  )
+  where active=true;
+
 create index if not exists inventory_locations_site_kind_active_sort_idx
   on public.inventory_locations(site,kind,sort_order,code)
   where active=true;
@@ -118,6 +125,78 @@ create index if not exists inventory_transactions_item_created_at_idx
 create index if not exists audit_logs_site_created_at_idx
   on public.audit_logs(site,created_at desc)
   where site is not null;
+
+-- Work-stock classification is also a database invariant. Both item changes
+-- and stock changes are checked at transaction commit so a legitimate Work
+-- Area relocation may stage its target row first, while any final mismatch is
+-- still rejected even when a caller bypasses the API.
+create or replace function public.inventory_item_has_work_stock_area_mismatch(p_item_id uuid)
+returns boolean
+language sql
+stable
+as $work_stock_mismatch$
+  select exists (
+    select 1
+    from public.inventory_stock st
+    join public.inventory_items i on i.id=st.item_id
+    join public.inventory_locations l on l.id=st.location_id
+    where st.item_id=p_item_id
+      and i.active=true
+      and l.active=true
+      and l.kind='work'
+      and (
+        l.site<>split_part(i.item_key,':',1)
+        or coalesce(l.metadata->>'work_area','')<>i.work_area
+      )
+  );
+$work_stock_mismatch$;
+
+create or replace function public.assert_inventory_stock_work_area_match()
+returns trigger
+language plpgsql
+as $stock_work_area_guard$
+declare
+  v_item_id uuid;
+begin
+  v_item_id := case when tg_op='DELETE' then old.item_id else new.item_id end;
+  if public.inventory_item_has_work_stock_area_mismatch(v_item_id) then
+    raise exception using
+      errcode='23514',
+      message='INVENTORY_WORK_STOCK_AREA_MISMATCH',
+      detail=format('item_id=%s',v_item_id);
+  end if;
+  return null;
+end;
+$stock_work_area_guard$;
+
+drop trigger if exists inventory_stock_work_area_guard on public.inventory_stock;
+create constraint trigger inventory_stock_work_area_guard
+after insert or update or delete
+on public.inventory_stock
+deferrable initially deferred
+for each row execute function public.assert_inventory_stock_work_area_match();
+
+create or replace function public.assert_inventory_item_work_area_match()
+returns trigger
+language plpgsql
+as $item_work_area_guard$
+begin
+  if new.active=true and public.inventory_item_has_work_stock_area_mismatch(new.id) then
+    raise exception using
+      errcode='23514',
+      message='INVENTORY_WORK_STOCK_AREA_MISMATCH',
+      detail=format('item_id=%s item_key=%s work_area=%s',new.id,new.item_key,new.work_area);
+  end if;
+  return null;
+end;
+$item_work_area_guard$;
+
+drop trigger if exists inventory_item_work_area_stock_guard on public.inventory_items;
+create constraint trigger inventory_item_work_area_stock_guard
+after insert or update
+on public.inventory_items
+deferrable initially deferred
+for each row execute function public.assert_inventory_item_work_area_match();
 
 -- Migration-time safety verification: the database must still reject any
 -- existing shared-catalog drift and the replacement trigger must truly be
