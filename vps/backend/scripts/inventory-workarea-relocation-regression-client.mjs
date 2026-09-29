@@ -121,7 +121,7 @@ try{
         vi:"Kiểm thử chuyển khu dùng chung",
         unit:"包",
         work_area:sourceArea,
-        storage_only:false,
+        storage_only:site!=="central",
         locations,
       }},
     });

@@ -1155,8 +1155,14 @@ export async function registerInventoryExtraRoutes(app) {
           entry.inventory_mode === "central" || entry.inventory_mode === "branch"
         );
         const sharedCanonical = sharedRows.some((entry) => entry.inventory_mode === "central");
+        // storage_only is a storage-behavior flag, not an exclusion from
+        // Work Area classification. Branch migration 027 intentionally gives
+        // storage-only items a Work Location projection, and schema 030 applies
+        // catalog Work Area parity regardless of storage_only. Coordinate every
+        // active shared-catalog peer so the selected storage-only branch item
+        // cannot disappear from the relocation plan.
         const coordinatedRows = sharedCanonical
-          ? sharedRows.filter((entry) => !entry.storage_only)
+          ? sharedRows
           : sharedRows.filter((entry) => entry.id === itemId);
 
         if (!coordinatedRows.length) {
