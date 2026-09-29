@@ -27,25 +27,6 @@ function catalogWorkAreaConflict(error) {
   return "";
 }
 
-async function setSharedCatalogWorkArea(client,{itemIds,workArea,sharedCanonical}) {
-  const ids=(itemIds || []).map(String).filter(Boolean);
-  if(!ids.length) throw Object.assign(new Error("CATALOG_ITEM_NOT_FOUND"),{statusCode:404});
-  if(sharedCanonical) {
-    await client.query("set local session_replication_role = replica");
-  }
-  try {
-    await client.query(
-      `update public.inventory_items
-       set work_area=$2,updated_at=now()
-       where id=any($1::uuid[])`,
-      [ids,workArea]
-    );
-  } finally {
-    if(sharedCanonical) {
-      await client.query("set local session_replication_role = origin");
-    }
-  }
-}
 
 async function canManageReceiveDefault(user, site) {
   return siteAllowed(user, site) && hasPermission(user, "inventory", "edit");
@@ -1117,6 +1098,10 @@ export async function registerInventoryExtraRoutes(app) {
           "select pg_advisory_xact_lock(hashtext($1))",
           [`inventory_catalog:${row.item_key}`]
         );
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_catalog_identity:${row.catalog_key}`]
+        );
         const lockedItem = await client.query(
           "select work_area from public.inventory_items where id=$1 for update",
           [itemId]
@@ -1239,15 +1224,16 @@ export async function registerInventoryExtraRoutes(app) {
           );
         }
 
-        // Schema 029 intentionally rejects partial shared-catalog edits. This
-        // transaction has already validated every target, so bypass triggers
-        // only for the coordinated item classification update and restore the
-        // session role immediately afterwards.
-        await setSharedCatalogWorkArea(client,{
-          itemIds:coordinatedRows.map((entry) => entry.id),
-          workArea:row.destination_work_area,
-          sharedCanonical,
-        });
+        // Migration 030 makes the shared-catalog invariant deferred. All
+        // Central/branch rows are updated in this one transaction, and the
+        // database validates the final state at commit instead of rejecting
+        // the first row while its peers are still waiting to be updated.
+        await client.query(
+          `update public.inventory_items
+           set work_area=$2,updated_at=now()
+           where id=any($1::uuid[])`,
+          [coordinatedRows.map((entry) => entry.id),row.destination_work_area]
+        );
 
         const drift = await client.query(
           `select count(*)::int as count
@@ -1371,6 +1357,8 @@ export async function registerInventoryExtraRoutes(app) {
           source_minimum:sourceMinimum,
           destination_minimum_before:destinationMinimumBefore,
           destination_minimum_after:destinationMinimumAfter,
+          coordinated_sites:[...new Set(coordinatedRows.map((entry)=>entry.site))],
+          coordinated_items:coordinatedRows.length,
           transaction,
         };
       });
