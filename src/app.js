@@ -1868,7 +1868,7 @@ root.addEventListener("submit", async (event) => {
         });
         if (!relocation.ok) {
           restoreSaveButtons();
-          window.alert("Không thể lưu khu làm việc vào database; biểu mẫu vẫn được giữ để kiểm tra. · 工作區無法寫入資料庫，表單已保留供檢查。");
+          window.alert(workAreaMutationErrorMessage(relocation.error));
           await syncInventoryNow(site,{reloadBranch:false,force:true});
           return;
         }
