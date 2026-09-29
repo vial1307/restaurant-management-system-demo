@@ -21,7 +21,7 @@ let projectionTriggerDisabled=false;
 let canonicalGuardDisabled=false;
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"029","schema 029 must be active");
+  assert.equal(schema.rows[0]?.version,"030","schema 030 must be active");
 
   // This regression deliberately replays migration 026. In production 026 ran
   // before migration 027 installed the branch work-projection trigger, so
@@ -119,9 +119,8 @@ try {
   await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=false;
 
-  // Schema 029 must keep rejecting partial direct SQL changes. The runtime
-  // relocation endpoint is responsible for coordinating Central + branches
-  // atomically; this guard is the database boundary that prevents drift.
+  // Schema 030 keeps rejecting partial direct SQL changes but defers the
+  // invariant until transaction commit so Central + branches can move together.
   const sharedBefore=await client.query(
     `select item_key,work_area
      from public.inventory_items
@@ -141,6 +140,58 @@ try {
     /CENTRAL_CATALOG_WORK_AREA_BRANCH_CONFLICT/,
     "Central shared catalog must not move independently of active branches"
   );
+
+  // A coordinated transaction is valid: relocate the branch work projection
+  // first, then update Central + branch classification together. The deferred
+  // catalog guard validates only the final consistent state.
+  await client.query("begin");
+  try {
+    await client.query(
+      `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+       values($1,$2,9,5,now())
+       on conflict(item_id,location_id) do update
+       set quantity=excluded.quantity,minimum_quantity=excluded.minimum_quantity,updated_at=now()`,
+      [branchItemId,byArea.get("noodles").id]
+    );
+    await client.query(
+      "delete from public.inventory_stock where item_id=$1 and location_id=$2",
+      [branchItemId,byArea.get("meat").id]
+    );
+    await client.query(
+      `update public.inventory_items
+       set work_area='noodles',updated_at=now()
+       where item_key=any($1::text[])`,
+      [[centralItemKey,branchItemKey]]
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  }
+
+  const coordinated=await client.query(
+    `select item_key,work_area
+     from public.inventory_items
+     where item_key=any($1::text[])
+     order by item_key`,
+    [[centralItemKey,branchItemKey]]
+  );
+  assert.deepEqual(
+    coordinated.rows.map((row)=>[row.item_key,row.work_area]),
+    [[branchItemKey,"noodles"],[centralItemKey,"noodles"]].sort((a,b)=>a[0].localeCompare(b[0])),
+    "coordinated shared catalog Work Area update did not commit atomically"
+  );
+  const coordinatedStock=await client.query(
+    `select l.metadata->>'work_area' as work_area,s.quantity,s.minimum_quantity
+     from public.inventory_stock s
+     join public.inventory_locations l on l.id=s.location_id
+     where s.item_id=$1 and l.kind='work'`,
+    [branchItemId]
+  );
+  assert.equal(coordinatedStock.rowCount,1,"coordinated move left duplicate branch work rows");
+  assert.equal(coordinatedStock.rows[0].work_area,"noodles");
+  assert.equal(Number(coordinatedStock.rows[0].quantity),9,"coordinated move changed physical quantity");
+  assert.equal(Number(coordinatedStock.rows[0].minimum_quantity),5,"coordinated move changed minimum");
 
   await client.query(
     "delete from public.inventory_stock where item_id in (select id from public.inventory_items where catalog_key=$1)",
