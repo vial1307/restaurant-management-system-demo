@@ -119,6 +119,18 @@ try {
   await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=false;
 
+  // Schema 029 must keep rejecting partial direct SQL changes. The runtime
+  // relocation endpoint is responsible for coordinating Central + branches
+  // atomically; this guard is the database boundary that prevents drift.
+  const sharedBefore=await client.query(
+    `select item_key,work_area
+     from public.inventory_items
+     where catalog_key=$1 and active=true
+     order by item_key`,
+    [catalogKey]
+  );
+  assert.ok(sharedBefore.rowCount>=2,"shared catalog fixture missing");
+
   await assert.rejects(
     client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[branchItemKey]),
     /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
