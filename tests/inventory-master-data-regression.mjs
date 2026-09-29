@@ -314,22 +314,24 @@ assert.match(inventoryDatabaseSource2, /missingWorkStock/,
   "Super Admin integrity must surface products missing their work-area projection");
 
 const superAdminRoutesSource = fs.readFileSync(new URL("../vps/backend/src/super-admin-routes.mjs", import.meta.url), "utf8");
-assert.match(superAdminRoutesSource, /workAreaMismatchesWithCentral/,
-  "Super Admin catalog audit must expose Central-to-branch work-area drift");
-assert.match(superAdminRoutesSource, /centralWorkArea/,
-  "cross-site work-area audit must include the canonical Central area");
+assert.match(superAdminRoutesSource, /workAreaVariants/,
+  "Super Admin catalog audit must expose cross-site Work Area differences as informational variants");
+assert.doesNotMatch(superAdminRoutesSource, /centralWorkArea/,
+  "Super Admin must not treat Central Work Area as canonical for every site");
 
 const inventoryDatabaseSource = fs.readFileSync(new URL("../src/admin-inventory-database.js", import.meta.url), "utf8");
-assert.match(inventoryDatabaseSource, /crossSiteWorkArea/,
-  "Super Admin Database integrity view must show cross-site work-area drift");
+assert.doesNotMatch(inventoryDatabaseSource, /crossSiteWorkArea/,
+  "Super Admin integrity must not flag legitimate site-specific Work Areas as errors");
 assert.match(inventoryDatabaseSource, /\/api\/admin\/super\/inventory-catalog-audit/,
-  "Super Admin Database integrity view must load the cross-site catalog audit");
+  "Super Admin Database integrity view must keep loading the catalog audit");
 
 const productionAuditSource = fs.readFileSync(new URL("../.github/workflows/inventory-site-production-audit.yml", import.meta.url), "utf8");
-assert.match(productionAuditSource, /catalog_work_area_mismatch_with_central/,
-  "production audit must report Central-to-branch work-area drift");
-assert.match(productionAuditSource, /detail_work_area_drift/,
-  "production audit must print exact drift details");
+assert.match(productionAuditSource, /cross_site_work_area_variants/,
+  "production audit must report cross-site Work Area variants informationally");
+assert.match(productionAuditSource, /detail_cross_site_work_area_variant/,
+  "production audit must print exact site-scoped Work Area variant details");
+assert.doesNotMatch(productionAuditSource, /catalog_work_area_mismatch_with_central/,
+  "production audit must not treat branch-specific Work Areas as Central drift");
 assert.match(productionAuditSource, /'work_area\|' \|\| split_part\(i\.item_key,':',1\)[\s\S]{0,220}'\|items\|' \|\| count\(\*\)/,
   "production audit must report per-site work-area item counts for post-deploy verification");
 
