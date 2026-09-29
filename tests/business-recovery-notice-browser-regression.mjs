@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
+const source = await import("node:fs/promises").then(({readFile}) => readFile(new URL("../src/business-recovery-notice.js", import.meta.url), "utf8"));
+assert.doesNotMatch(source, /const SITE_LABELS\s*=|fuxing:\s*\{|yongji:\s*\{/, "recovery banner must not keep source-coded site labels");
+assert.match(source, /inventorySite\(code\)/, "recovery banner must resolve site labels from the database-backed site registry");
+assert.match(source, /shitu:inventory-sites-changed/, "recovery banner must rerender when database site labels change");
+
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const PASSWORD = "KitchenTest!123";
 const RECOVERY_KEY = "shitu-business-recovery-v1";

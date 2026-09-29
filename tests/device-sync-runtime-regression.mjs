@@ -4,6 +4,8 @@ import path from "node:path";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const source = fs.readFileSync(path.join(ROOT, "src/device-sync.js"), "utf8");
+assert.doesNotMatch(source, /user\.location\s*\|\|\s*"fuxing"/, "device sync must not invent Fuxing when the server omits an assigned site");
+assert.match(source, /location:\s*role === "admin" \? "all" : String\(user\.location \|\| ""\)\.trim\(\)/, "device sync must preserve arbitrary server-assigned site codes and fail closed on missing scope");
 const importLine = 'import { vpsListUsers, vpsMe, vpsUpdatePreferences } from "./vps-api.js";';
 const injected = source.replace(importLine, `
 const vpsListUsers = (...args) => globalThis.__testVpsListUsers(...args);

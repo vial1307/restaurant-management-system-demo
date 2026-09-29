@@ -75,7 +75,7 @@ function sessionSnapshot(user, preferredLanguageOverride = "") {
     name: user.displayName || user.display_name || user.username,
     role: role === "admin" ? "admin" : role === "central" ? "central" : "branch",
     accountRole: role,
-    location: role === "admin" ? "all" : (user.location || "fuxing"),
+    location: role === "admin" ? "all" : String(user.location || "").trim(),
     permissions: user.permissions || {},
     preferredLanguage: preferredLanguageOverride || user.preferredLanguage || user.preferred_language || "vi",
     provider: "vps",

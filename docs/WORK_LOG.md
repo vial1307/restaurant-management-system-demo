@@ -1,5 +1,24 @@
 # Kitchen OS Work Log
 
+## 2026-09-29 — PR #174 production closure and next runtime site-scope cleanup
+
+- PR #174 removed the closed site list from Business State synchronization and made the PostgreSQL Inventory site registry initialize/correct the all-scope active site.
+- Main Deploy #1006 / run `36466950388` encountered repeated known full-device timing flakes on early attempts (admin permission-state timeout and one cross-surface reload timeout). The unchanged code passed the full regression on attempt 5, then deployed successfully.
+- Backup: `kitchen_os_20260929T004244Z.dump`.
+- Production verification: schema `029`, `DATA_INTEGRITY_OK`, Web/API/Super Admin healthy, release `77d3e13`, production permission UI smoke PASS.
+- Inventory Site Production Audit #286 / run `36504554850` PASS:
+  - Central 41 items / quantity 81;
+  - Fuxing 78 items / quantity 1793;
+  - Yongji 75 items / quantity 17;
+  - Work Area counts sum exactly to each site's active catalog;
+  - all cross-site, storage classification, Work Area projection, shared-catalog parity, legacy manifest, materialization and hidden-inventory violations = 0.
+- Continued frontend hard-code audit found:
+  - `business-persistence-status.js`: closed Central/Fuxing/Yongji scope list + Fuxing fallback;
+  - `business-recovery-notice.js`: static Central/Fuxing/Yongji display-label map;
+  - `device-sync.js`: missing assigned site fell back to Fuxing.
+- Started `refactor/runtime-site-scope-cleanup-20260929` and removed all three runtime assumptions. Added regression guards requiring dynamic site scope/labels and fail-closed missing location.
+- No migration or business/inventory data rewrite in this candidate.
+
 ## 2026-09-29 — Workforce site-registry production closure and Business State follow-up
 
 - PR #173 removed the browser-side `central / fuxing / yongji` allowlist from Workforce attendance/payroll and Schedule Rules, reusing the database-backed active site resolver.
