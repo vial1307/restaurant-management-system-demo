@@ -19,6 +19,8 @@ const branchItemKey="fuxing:workarea-sync-regression";
 await client.connect();
 let projectionTriggerDisabled=false;
 let canonicalGuardDisabled=false;
+let stockWorkAreaGuardDisabled=false;
+let itemWorkAreaStockGuardDisabled=false;
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
   assert.equal(schema.rows[0]?.version,"030","schema 030 must be active");
@@ -30,6 +32,13 @@ try {
   canonicalGuardDisabled=true;
   await client.query("alter table public.inventory_items disable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=true;
+  // Schema 030 adds deferred final-state Work Area guards. Disable them only
+  // while this regression reconstructs the intentionally corrupt pre-026
+  // historical fixture that migration 026 is supposed to repair.
+  await client.query("alter table public.inventory_stock disable trigger inventory_stock_work_area_guard");
+  stockWorkAreaGuardDisabled=true;
+  await client.query("alter table public.inventory_items disable trigger inventory_item_work_area_stock_guard");
+  itemWorkAreaStockGuardDisabled=true;
 
   await client.query("delete from public.audit_logs where metadata->>'catalog_key'=$1",[catalogKey]);
   await client.query(
@@ -118,6 +127,10 @@ try {
   canonicalGuardDisabled=false;
   await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=false;
+  await client.query("alter table public.inventory_stock enable trigger inventory_stock_work_area_guard");
+  stockWorkAreaGuardDisabled=false;
+  await client.query("alter table public.inventory_items enable trigger inventory_item_work_area_stock_guard");
+  itemWorkAreaStockGuardDisabled=false;
 
   // Schema 030 keeps rejecting partial direct SQL changes but defers the
   // invariant until transaction commit so Central + branches can move together.
@@ -237,6 +250,16 @@ try {
   if(projectionTriggerDisabled) {
     try {
       await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
+    } catch {}
+  }
+  if(stockWorkAreaGuardDisabled) {
+    try {
+      await client.query("alter table public.inventory_stock enable trigger inventory_stock_work_area_guard");
+    } catch {}
+  }
+  if(itemWorkAreaStockGuardDisabled) {
+    try {
+      await client.query("alter table public.inventory_items enable trigger inventory_item_work_area_stock_guard");
     } catch {}
   }
   await client.end();
