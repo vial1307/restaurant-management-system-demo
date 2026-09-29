@@ -152,8 +152,10 @@ jobs:
           test -f vps/backend/scripts/inventory-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-location-archive-integrity-regression.mjs
           test -f vps/backend/scripts/inventory-branch-workarea-sync-regression.mjs
+          test -f vps/backend/scripts/inventory-workarea-relocation-regression-client.mjs
           test -f vps/database/migrations/026_branch_catalog_workarea_sync.sql
           test -f vps/database/migrations/027_branch_legacy_catalog_materialization.sql
+          test -f vps/database/migrations/030_inventory_shared_workarea_atomicity.sql
           test -f tests/branch-legacy-catalog-materialization-contract-regression.mjs
           test -f tests/inventory-archive-integrity-contract-regression.mjs
           test -f tests/inventory-location-archive-integrity-contract-regression.mjs
@@ -237,6 +239,9 @@ jobs:
           done
           cat /tmp/kitchen-api.log
           exit 1
+
+      - name: Shared catalog Work Area API regression
+        run: node vps/backend/scripts/inventory-workarea-relocation-regression-client.mjs
 
       - name: API role and inventory regression
         run: node vps/backend/scripts/api-regression-v6.mjs
