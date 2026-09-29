@@ -92,8 +92,22 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const persisted=await api(`/api/inventory/${site}`);
       assert.equal(persisted.items.find(i=>i.id===item.id).name_vi,mainName);
       assert.equal(Number(persisted.stock.find(s=>s.item_id===item.id&&s.location_id===location.id).minimum_quantity),9);
+      const reloadInventory = main.waitForResponse((response) => {
+        try {
+          const url = new URL(response.url());
+          return url.pathname === `/api/inventory/${site}` && response.status() === 200;
+        } catch {
+          return false;
+        }
+      }, { timeout:30000 });
       await main.reload({waitUntil:"domcontentloaded"});
-      await main.waitForFunction(selector=>document.querySelector(selector)?.value==='9',minSelector,{timeout:15000});
+      await main.waitForFunction((targetSite) => (
+        localStorage.getItem("shitu-admin-active-site-v1") === targetSite
+        && localStorage.getItem("shitu-inventory-cloud-v2") === "ready"
+      ), site, {timeout:20000});
+      await reloadInventory;
+      await main.locator(minSelector).waitFor({state:"attached",timeout:20000});
+      await main.waitForFunction(selector=>document.querySelector(selector)?.value==='9',minSelector,{timeout:30000});
       assert((await row.textContent()).includes(mainName),`${site}: reload reverted metadata`);
       assert((await row.textContent()).includes(areaName),`${site}: reload reverted area name`);
       assert((await row.textContent()).includes(locationName),`${site}: reload reverted location name`);
