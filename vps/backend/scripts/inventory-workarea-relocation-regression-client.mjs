@@ -11,7 +11,7 @@ const passwordMatch = baseSource.match(/const PASSWORD = "([^"]+)";/);
 assert(passwordMatch, "test fixture password not found in api-regression.mjs");
 const PASSWORD = passwordMatch[1];
 const BASE = process.env.TEST_API_BASE || "http://127.0.0.1:8080";
-const CATALOG_KEY = "shared-workarea-relocate-regression";
+const CATALOG_KEY = "site-workarea-relocate-regression";
 const SITES = ["central","fuxing","yongji"];
 
 async function request(pathname,{method="GET",body,cookie}={}){
@@ -72,6 +72,9 @@ async function cleanup(){
 await db.connect();
 try{
   await cleanup();
+  const schema=await db.query("select max(version) as version from public.schema_migrations");
+  assert.equal(schema.rows[0]?.version,"031","schema 031 must be active");
+
   const admin=await login("yangchuadmin");
 
   const before={};
@@ -89,7 +92,7 @@ try{
     ))
     .reduce((left,right)=>new Set([...left].filter((value)=>right.has(value))));
   const areas=[...commonAreas].sort();
-  assert(areas.length>=2,"shared Work Area relocation regression needs two common work areas");
+  assert(areas.length>=2,"site-scoped Work Area regression needs two common fixture areas");
   const [sourceArea,destinationArea]=areas;
 
   const fixtures={};
@@ -106,23 +109,21 @@ try{
   }
 
   for(const site of SITES){
-    const itemKey=`${site}:${CATALOG_KEY}`;
-    const locations=[
-      {code:fixtures[site].storage.code},
-      ...(site==="central" ? [{code:fixtures[site].sourceWork.code}] : []),
-    ];
     const saved=await request("/api/inventory/catalog/sync",{
       method:"POST",
       cookie:admin,
       body:{item:{
-        key:itemKey,
+        key:`${site}:${CATALOG_KEY}`,
         catalog_key:CATALOG_KEY,
-        zh:"共享工作區搬移測試",
-        vi:"Kiểm thử chuyển khu dùng chung",
+        zh:"站點工作區搬移測試",
+        vi:"Kiểm thử chuyển Work Area theo chi nhánh",
         unit:"包",
         work_area:sourceArea,
         storage_only:site!=="central",
-        locations,
+        locations:[
+          {code:fixtures[site].storage.code},
+          ...(site==="central" ? [{code:fixtures[site].sourceWork.code}] : []),
+        ],
       }},
     });
     assert.equal(saved.response.status,200,`${site} catalog create failed: ${JSON.stringify(saved.data)}`);
@@ -145,23 +146,13 @@ try{
 
     const quantity=await request("/api/inventory/set-quantity",{
       method:"POST",cookie:admin,
-      body:{
-        itemId:item.id,
-        locationId:fixtures[site].sourceWork.id,
-        quantity:quantities[site],
-        note:"shared Work Area relocation quantity seed",
-      },
+      body:{itemId:item.id,locationId:fixtures[site].sourceWork.id,quantity:quantities[site]},
     });
     assert.equal(quantity.response.status,200,`${site} quantity seed failed`);
 
     const minimum=await request("/api/inventory/set-minimum",{
       method:"POST",cookie:admin,
-      body:{
-        itemId:item.id,
-        locationId:fixtures[site].sourceWork.id,
-        minimum:minimums[site],
-        note:"shared Work Area relocation minimum seed",
-      },
+      body:{itemId:item.id,locationId:fixtures[site].sourceWork.id,minimum:minimums[site]},
     });
     assert.equal(minimum.response.status,200,`${site} minimum seed failed`);
   }
@@ -173,27 +164,33 @@ try{
       itemId:itemIds.fuxing,
       sourceLocationId:fixtures.fuxing.sourceWork.id,
       destinationLocationId:fixtures.fuxing.destinationWork.id,
-      note:"shared Work Area atomic regression",
+      note:"site-scoped Work Area regression",
     },
   });
   assert.equal(
     relocated.response.status,200,
-    `shared Work Area relocation failed: ${JSON.stringify(relocated.data)}`
+    `site-scoped Work Area relocation failed: ${JSON.stringify(relocated.data)}`
   );
   assert.equal(relocated.data?.ok,true);
   assert.equal(relocated.data?.work_area,destinationArea);
-  assert.equal(Number(relocated.data?.coordinated_items),3);
+  assert.equal(Number(relocated.data?.coordinated_items),1);
   assert.deepEqual(
-    [...(relocated.data?.coordinated_sites || [])].sort(),
-    [...SITES].sort(),
-    "shared Work Area relocation did not coordinate every catalog site"
+    relocated.data?.coordinated_sites,
+    ["fuxing"],
+    "branch Work Area relocation must stay inside the edited site"
   );
 
   for(const site of SITES){
     const snapshot=await request(`/api/inventory/${site}`,{cookie:admin});
     const item=snapshot.data.items.find((row)=>row.id===itemIds[site]);
     assert(item,`${site} item missing after relocation`);
-    assert.equal(item.work_area,destinationArea,`${site} Work Area did not move atomically`);
+
+    const expectedArea=site==="fuxing" ? destinationArea : sourceArea;
+    assert.equal(
+      item.work_area,
+      expectedArea,
+      `${site} Work Area changed outside the site-scoped edit`
+    );
 
     const workRows=snapshot.data.stock
       .filter((row)=>row.item_id===item.id)
@@ -202,14 +199,14 @@ try{
         location:snapshot.data.locations.find((location)=>location.id===row.location_id),
       }))
       .filter((entry)=>entry.location?.kind==="work");
-    assert.equal(workRows.length,1,`${site} has duplicate/missing work projection after relocation`);
-    assert.equal(workRows[0].location.metadata?.work_area,destinationArea);
+    assert.equal(workRows.length,1,`${site} has duplicate/missing Work Area projection`);
+    assert.equal(workRows[0].location.metadata?.work_area,expectedArea);
     assert.equal(Number(workRows[0].stock.quantity),quantities[site],`${site} quantity changed during relocation`);
     assert.equal(Number(workRows[0].stock.minimum_quantity),minimums[site],`${site} minimum changed during relocation`);
   }
 
   const audits=await db.query(
-    `select action,site,entity_id,metadata
+    `select action,site,entity_id
      from public.audit_logs
      where metadata->>'catalog_key'=$1
        and action in ('inventory_work_area_relocate','inventory_work_area_relocate_peer')
@@ -223,37 +220,23 @@ try{
   );
   assert.equal(
     audits.rows.filter((row)=>row.action==="inventory_work_area_relocate_peer").length,
-    2,
-    "peer Work Area relocation audits missing"
+    0,
+    "site-scoped Work Area edit must not generate peer-site mutations"
   );
 
-  const drift=await db.query(
-    `with central_catalog as (
-       select i.catalog_key,min(i.work_area) as work_area
-       from public.inventory_items i
-       join public.sites s
-         on s.code=split_part(i.item_key,':',1)
-        and s.active=true
-        and coalesce(s.metadata->>'inventory_mode','')='central'
-       where i.active=true and i.catalog_key=$1
-       group by i.catalog_key
-       having count(distinct i.work_area)=1
-     )
-     select count(*)::int as count
-     from public.inventory_items i
-     join public.sites s
-       on s.code=split_part(i.item_key,':',1)
-      and s.active=true
-      and coalesce(s.metadata->>'inventory_mode','')='branch'
-     join central_catalog c using(catalog_key)
-     where i.active=true
-       and i.catalog_key=$1
-       and i.work_area is distinct from c.work_area`,
+  const variants=await db.query(
+    `select count(distinct work_area)::int as count
+     from public.inventory_items
+     where active=true and catalog_key=$1`,
     [CATALOG_KEY]
   );
-  assert.equal(drift.rows[0]?.count,0,"shared catalog Work Area drift remains after API relocation");
+  assert.equal(
+    variants.rows[0]?.count,
+    2,
+    "shared product identity must be allowed to use different Work Areas at different sites"
+  );
 
-  console.log("INVENTORY_SHARED_WORKAREA_RELOCATION_API_OK");
+  console.log("INVENTORY_SITE_SCOPED_WORKAREA_API_OK");
 } finally {
   try{ await cleanup(); }catch{}
   await db.end();
