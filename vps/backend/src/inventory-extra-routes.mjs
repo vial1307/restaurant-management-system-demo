@@ -1124,6 +1124,7 @@ export async function registerInventoryExtraRoutes(app) {
              i.id,
              i.item_key,
              i.work_area,
+             i.storage_only,
              split_part(i.item_key,':',1) as site,
              coalesce(s.metadata->>'inventory_mode','') as inventory_mode
            from public.inventory_items i
@@ -1141,7 +1142,7 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const sharedCanonical = sharedRows.some((entry) => entry.inventory_mode === "central");
         const coordinatedRows = sharedCanonical
-          ? sharedRows
+          ? sharedRows.filter((entry) => !entry.storage_only)
           : sharedRows.filter((entry) => entry.id === itemId);
 
         if (!coordinatedRows.length) {
@@ -1181,6 +1182,9 @@ export async function registerInventoryExtraRoutes(app) {
              for update of st`,
             [entry.id,entry.site]
           );
+          if (!workStock.rowCount) {
+            throw Object.assign(new Error("CATALOG_WORK_PROJECTION_INCOMPLETE"), { statusCode:409 });
+          }
           relocationPlan.push({
             ...entry,
             target_location_id:target.rows[0].id,
