@@ -11,5 +11,8 @@ assert.match(rootModule, /host\.append\(marker\);\s*marker\.remove\(\);/, "stabl
 assert.match(statusModule, /window\.addEventListener\("shitu:business-persistence-status", handlePersistenceStatus\)/, "persistence status event reconciliation must remain present");
 assert.match(statusModule, /window\.addEventListener\("shitu:active-site-changed", scheduleRender\)/, "site-change reconciliation must remain present");
 assert.match(statusModule, /window\.addEventListener\("shitu:auth-synced", scheduleRender\)/, "auth reconciliation must remain present");
+assert.doesNotMatch(statusModule, /KNOWN_SITES|\["central",\s*"fuxing",\s*"yongji"\]/, "persistence status must not keep a closed physical-site list");
+assert.doesNotMatch(statusModule, /return\s+KNOWN_SITES[\s\S]{0,120}"fuxing"/, "persistence status must not invent Fuxing as an all-scope fallback");
+assert.match(statusModule, /if \(location !== "all"\) return location;[\s\S]{0,140}ACTIVE_SITE_KEY/, "persistence scope must accept server-assigned sites and the shared active-site key");
 
 console.log("BUSINESS_PERSISTENCE_OBSERVER_CONTRACT_OK");
