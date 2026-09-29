@@ -1077,28 +1077,67 @@ export async function cloudRelocateWorkArea({
 }) {
   if (!(await verifyMigration())) return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
 
-  const source = await resolveIds(itemKey,sourceLocationCode);
-  const destination = await resolveIds(itemKey,destinationLocationCode);
-  const site = source.location?.site || "";
-  if (!source.item || !source.location || !destination.location) {
-    return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
-  }
-  if (!site || destination.location.site !== site || !canManageBranchCatalog(site)) {
+  // Work Area is master data, not a historical stock field. The rendered UI
+  // can outlive a peer edit or a service-date switch, so never trust its source
+  // Work Location as the database truth. Refresh the active site first, then
+  // derive the source from the item's current PostgreSQL work_area.
+  const hintedSource = cache.locationsByCode.get(sourceLocationCode) || inventoryLocationByCode(sourceLocationCode);
+  const hintedDestination = cache.locationsByCode.get(destinationLocationCode) || inventoryLocationByCode(destinationLocationCode);
+  const site = hintedDestination?.site || hintedSource?.site || currentSite();
+  if (!site || !canManageBranchCatalog(site)) {
     return { ok:false,fallback:false,error:new Error("CATALOG_EDIT_NOT_ALLOWED") };
   }
 
   try {
+    await fetchSite(site,{force:true});
+  } catch (error) {
+    dispatchStatus("error",{error:error.message,stage:"relocate-work-area-refresh"});
+    return { ok:false,fallback:false,error };
+  }
+
+  const item = cache.itemsByKey.get(itemKey);
+  const destination = cache.locationsByCode.get(destinationLocationCode) || inventoryLocationByCode(destinationLocationCode);
+  const currentSourceMaster = item ? inventoryWorkLocation(site,item.work_area) : null;
+  const source = currentSourceMaster
+    ? (cache.locationsByCode.get(currentSourceMaster.code) || currentSourceMaster)
+    : null;
+
+  if (!item || !source || !destination) {
+    return { ok:false,fallback:false,error:new Error("INVENTORY_BACKEND_NOT_READY") };
+  }
+  if (source.site !== site || destination.site !== site || source.kind !== "work" || destination.kind !== "work") {
+    return { ok:false,fallback:false,error:new Error("INVALID_WORK_AREA") };
+  }
+
+  const destinationArea = String(destination.metadata?.work_area || "");
+  if (!destinationArea) {
+    return { ok:false,fallback:false,error:new Error("WORK_AREA_LOCATION_NOT_CONFIGURED") };
+  }
+
+  // Another device may already have completed the same requested move. Treat
+  // that as an idempotent success instead of sending a stale source row that
+  // PostgreSQL correctly rejects.
+  if (String(item.work_area || "") === destinationArea) {
+    if (sync) await syncInventoryNow(site,{reloadBranch:false,force:true});
+    return {
+      ok:true,
+      fallback:false,
+      data:{ ok:true, noop:true, item_id:item.id, work_area:destinationArea },
+    };
+  }
+
+  try {
     const data = await vpsRelocateWorkArea({
-      itemId:source.item.id,
-      sourceLocationId:source.location.id,
-      destinationLocationId:destination.location.id,
+      itemId:item.id,
+      sourceLocationId:source.id,
+      destinationLocationId:destination.id,
       note,
     });
-    if (sync) await syncInventoryNow(site,{reloadBranch:false});
+    if (sync) await syncInventoryNow(site,{reloadBranch:false,force:true});
     return { ok:true,fallback:false,data };
   } catch (error) {
     dispatchStatus("error",{error:error.message,stage:"relocate-work-area"});
-    if (sync) await syncInventoryNow(site,{reloadBranch:false});
+    if (sync) await syncInventoryNow(site,{reloadBranch:false,force:true});
     return { ok:false,fallback:false,error };
   }
 }

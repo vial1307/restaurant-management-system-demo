@@ -27,10 +27,32 @@ assert.match(
 );
 assert.match(api,/vpsRelocateWorkArea[\s\S]*?\/api\/inventory\/relocate-work-area/);
 assert.match(cloud,/cloudRelocateWorkArea[\s\S]*?vpsRelocateWorkArea[\s\S]*?syncInventoryNow/);
+assert.match(cloud,/cloudRelocateWorkArea[\s\S]*?fetchSite\(site,\{force:true\}\)[\s\S]*?inventoryWorkLocation\(site,item\.work_area\)[\s\S]*?vpsRelocateWorkArea/,"Work Area relocation must refresh PostgreSQL state and derive the source from the current database classification");
+assert.match(cloud,/String\(item\.work_area \|\| ""\) === destinationArea[\s\S]*?noop:true/,"already-completed Work Area moves must reconcile idempotently instead of failing on a stale source");
 assert.match(
   app,
   /key === "workArea"[\s\S]*?cloudRelocateWorkArea/,
   "inline work-area edits must use the database relocation endpoint"
+);
+assert.match(
+  app,
+  /function branchInventoryMutationRecord[\s\S]*?inventoryBranchSnapshot\(site\)[\s\S]*?inventory:snapshot\.inventory[\s\S]*?workInventory:snapshot\.workInventory/,
+  "branch catalog mutations must read the live VPS snapshot even on historical service dates"
+);
+assert.match(
+  app,
+  /field === "item"[\s\S]*?branchInventoryMutationRecord\(state,site\)[\s\S]*?key === "workArea"[\s\S]*?cloudRelocateWorkArea/,
+  "storage-row Work Area edits must not resolve their source from a historical service-date record"
+);
+assert.match(
+  app,
+  /field === "workItem"[\s\S]*?branchInventoryMutationRecord\(state,site\)[\s\S]*?key === "workArea"[\s\S]*?cloudRelocateWorkArea/,
+  "Work Area-row edits must not resolve their source from a historical service-date record"
+);
+assert.match(
+  app,
+  /workAreaMutationErrorMessage[\s\S]*?Mã lỗi · 錯誤碼/,
+  "remaining Work Area failures must surface the exact error code instead of a generic alert"
 );
 assert.match(
   app,
