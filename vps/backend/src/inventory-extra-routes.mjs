@@ -1176,6 +1176,7 @@ export async function registerInventoryExtraRoutes(app) {
         if (!coordinatedRows.length) {
           throw Object.assign(new Error("CATALOG_ITEM_NOT_FOUND"), { statusCode:404 });
         }
+        const relocatedPeers = [];
 
         {
 
@@ -1234,6 +1235,17 @@ export async function registerInventoryExtraRoutes(app) {
                  and st.location_id<>$3`,
               [entry.id,entry.site,targetLocationId]
             );
+            relocatedPeers.push({
+              id:entry.id,
+              item_key:entry.item_key,
+              site:entry.site,
+              before_work_area:entry.work_area,
+              after_work_area:row.destination_work_area,
+              target_location_id:targetLocationId,
+              target_location_code:target.rows[0].code,
+              quantity,
+              minimum,
+            });
           }
 
           // Schema 029 rejects partial shared-catalog edits. Use PostgreSQL's
@@ -1262,6 +1274,37 @@ export async function registerInventoryExtraRoutes(app) {
           );
           if (Number(drift.rows[0]?.count || 0) !== 0) {
             throw Object.assign(new Error("CATALOG_WORK_AREA_ATOMIC_UPDATE_FAILED"), { statusCode:409 });
+          }
+
+          for (const peer of relocatedPeers) {
+            if (peer.id === itemId) continue;
+            await client.query(
+              `insert into public.audit_logs(
+                 actor_user_id,actor_username,action,entity_type,entity_id,site,
+                 before_data,after_data,metadata
+               ) values(
+                 $1,$2,'inventory_work_area_relocate_peer','inventory_item',$3,$4,
+                 jsonb_build_object('work_area',$5::text),
+                 jsonb_build_object(
+                   'work_area',$6::text,
+                   'location_id',$7::uuid,
+                   'location_code',$8::text,
+                   'quantity',$9::numeric,
+                   'minimum',$10::numeric
+                 ),
+                 jsonb_build_object(
+                   'catalog_key',$11::text,
+                   'initiated_item_id',$12::uuid,
+                   'policy','shared_catalog_atomic'
+                 )
+               )`,
+              [
+                user.id,user.username,peer.id,peer.site,
+                peer.before_work_area,peer.after_work_area,
+                peer.target_location_id,peer.target_location_code,
+                peer.quantity,peer.minimum,row.catalog_key,itemId
+              ]
+            );
           }
         }
 
