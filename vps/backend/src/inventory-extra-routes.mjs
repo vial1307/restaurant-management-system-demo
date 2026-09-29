@@ -651,10 +651,15 @@ export async function registerInventoryExtraRoutes(app) {
           if (!code) continue;
 
           const location = await client.query(
-            "select id,site from public.inventory_locations where code=$1 and active=true limit 1",
+            "select id,site,kind from public.inventory_locations where code=$1 and active=true limit 1",
             [code]
           );
-          if (!location.rowCount || location.rows[0].site !== site) continue;
+          if (!location.rowCount) {
+            throw Object.assign(new Error("CATALOG_LOCATION_NOT_FOUND"), { statusCode:404 });
+          }
+          if (location.rows[0].site !== site) {
+            throw Object.assign(new Error("CATALOG_LOCATION_SITE_MISMATCH"), { statusCode:400 });
+          }
           await attachLocation(location.rows[0].id);
         }
 
@@ -885,6 +890,10 @@ export async function registerInventoryExtraRoutes(app) {
 
     try {
       const data = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_storage_relocate:${itemId}`]
+        );
         const ctx = await client.query(
           `select
              i.id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,i.unit,
@@ -1411,6 +1420,11 @@ export async function registerInventoryExtraRoutes(app) {
         if (!(siteAllowed(user,sourceItem.from_site) && hasPermission(user,"inventory","edit"))) {
           throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403 });
         }
+
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_direct_transfer:${sourceItem.to_site}:${sourceItem.catalog_key}`]
+        );
 
         const destinationItemResult = await client.query(
           `select *
