@@ -1,5 +1,63 @@
 # Kitchen OS — Current Development Handoff
 
+## CURRENT VERIFIED PRODUCTION — schema 030 atomic shared-catalog Work Area, 2026-09-29
+
+This section is the current authority for continuation; older ACTIVE sections below are retained as history.
+
+Production baseline:
+- PR #177 merged to `main` as release `6588ef8e77d454ef0ccf8c027685875074d1bd04`;
+- Deploy Kitchen OS to VPS #1032 / run `36519526311`: PASS;
+- pre-deploy backup: `kitchen_os_20260929T040434Z.dump`;
+- production health: `{"app":"ok","database":"ok","schema":"030","release":"6588ef8"}`;
+- `DATA_INTEGRITY_OK`;
+- Web/API/Super Admin edge healthy;
+- production UI smoke: `PRODUCTION_UI_SMOKE_OK`;
+- Inventory Site Production Audit #313 / run `36520094299`: PASS.
+
+Production inventory state after schema 030:
+- Central: 41 active products; Work Area = 38 noodles / 1 soup / 2 seafood; quantity 81;
+- Fuxing: 78 active products; Work Area = 30 noodles / 18 soup / 21 seafood / 9 meat; quantity 1793;
+- Yongji: 75 active products; Work Area = 33 noodles / 17 soup / 17 seafood / 8 meat; quantity 17;
+- `stock_site_mismatch=0`;
+- `receive_default_site_mismatch=0`;
+- `duplicate_active_catalog_site_groups=0`;
+- `active_item_without_stock_rows=0`;
+- `active_item_without_storage_rows=0`;
+- `active_storage_invalid_group_or_policy=0`;
+- `active_work_location_without_area=0`;
+- `active_work_area_without_location=0`;
+- `work_stock_area_mismatch=0`;
+- `active_branch_item_without_work_row=0`;
+- `catalog_work_area_mismatch_with_central=0`;
+- Fuxing/Yongji historical branch manifests: expected 75 / missing 0;
+- site, location-classification, legacy-materialization and hidden-inventory violation totals are all 0.
+
+Schema 030 / API invariants now in force:
+1. Shared Central + branch `catalog_key` Work Area parity is checked by a deferred PostgreSQL constraint at transaction COMMIT, allowing one legitimate coordinated multi-row move without permitting final drift.
+2. `/api/inventory/relocate-work-area` resolves and locks every active shared-catalog peer, validates a matching active Work Location at every affected site, relocates each work projection, then updates all item classifications atomically.
+3. PostgreSQL rejects Work stock whose site/Work Area does not match the active item's declared classification.
+4. Active catalog identity is unique per site + `catalog_key`.
+5. Catalog location writes fail closed for missing or cross-site location codes.
+6. Storage relocation and cross-site destination-catalog creation are serialized to prevent concurrent mutation races.
+7. Quantity/minimum remain dedicated stock authority; catalog metadata sync does not fabricate or overwrite physical stock values.
+8. Peer Work Area changes are audit logged.
+
+Regression coverage added/updated:
+- shared-catalog Work Area API relocation across Central/Fuxing/Yongji;
+- deferred DB guard accepts a fully coordinated transaction but rejects partial direct SQL drift;
+- wrong-Work-Area stock rejection at the database boundary;
+- invalid/cross-site catalog location fail-closed behavior;
+- concurrent direct-transfer destination catalog creation;
+- opposite-direction storage relocation serialization;
+- schema-030 expectations across API, Super Admin, master-data and conflict wrappers.
+
+Continuation rules:
+- do not bypass inventory constraints with `session_replication_role`, disabled triggers, label/name heuristics, or frontend fallbacks;
+- a shared catalog Work Area change must use the coordinated DB transaction path, never an independent one-site row update;
+- do not force Fuxing and Yongji product totals to match: each site's own Storage/catalog ↔ Work Area parity is the invariant;
+- PostgreSQL remains authority for sites, product identities, Work Areas, storage classification, replenishment policy, quantity/minimum and permissions;
+- next work should continue the hard-code audit outside already-closed inventory authority or improve Super Admin inventory UX without reintroducing local master data.
+
 ## Active candidate — remaining runtime site hard-codes, 2026-09-29
 
 Verified production baseline:

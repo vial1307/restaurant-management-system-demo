@@ -1,5 +1,18 @@
 # Kitchen OS Engineering Status
 
+## DONE — atomic shared-catalog Work Area relocation / schema 030, 2026-09-29
+
+- PR #177 merged as `6588ef8e77d454ef0ccf8c027685875074d1bd04`.
+- Deploy #1032 / run `36519526311`: PASS. Backup `kitchen_os_20260929T040434Z.dump`.
+- Runtime health: release `6588ef8`, schema `030`, app/database OK, `DATA_INTEGRITY_OK`, Web/API/Super Admin healthy, production UI smoke PASS.
+- Inventory Site Production Audit #313 / run `36520094299`: PASS.
+- Schema 030 validates shared Central/branch catalog Work Area parity at transaction COMMIT, so coordinated moves succeed while partial/direct drift still fails.
+- Database now additionally enforces active site+catalog uniqueness and item Work Area ↔ Work stock classification.
+- Runtime Work Area relocation coordinates all shared-catalog peers atomically and preserves quantity/minimum.
+- Catalog location mutation fails closed for missing/cross-site locations; transfer/relocation concurrency is serialized.
+- Production parity remains clean: Central 41, Fuxing 78, Yongji 75; every Work Area sum matches its own site's active catalog; all site/classification/shared-catalog/legacy/hidden integrity counters are 0.
+- NEXT: continue non-inventory hard-code audit or Super Admin inventory UX refinement; do not reintroduce frontend catalog/site/work-area authority.
+
 ## ACTIVE — runtime site-scope cleanup after PR #174, 2026-09-29
 
 - PR #174 merged as `77d3e13077a41d82d990704abe3dd3546d2f9b91`.

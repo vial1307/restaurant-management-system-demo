@@ -1,5 +1,39 @@
 # Kitchen OS Work Log
 
+## 2026-09-29 — PR #177 schema-030 atomic Work Area production closure
+
+- Continued the shared-catalog Work Area bug from schema 029. Root cause: the immediate catalog parity trigger correctly rejected final drift, but also rejected the first row of a legitimate Central + branch multi-row move before its peers could be updated.
+- PR #177 changed the model to final-state validation:
+  - migration 030 converts the shared-catalog Work Area guard to a deferred constraint trigger;
+  - Work stock ↔ item Work Area/site alignment is also enforced at the database boundary;
+  - one active item per site + `catalog_key` is enforced by PostgreSQL;
+  - hot-path site/catalog/location/history indexes were added.
+- Runtime `relocate-work-area` now coordinates all active Central/branch rows sharing the catalog identity, locks the shared identity, validates every site destination, preserves work quantity/minimum, updates classification atomically, and records peer audits.
+- Mutation hardening added:
+  - catalog location codes fail closed when missing or from another site;
+  - storage relocation is serialized per item;
+  - cross-site direct transfer serializes destination catalog creation.
+- Added/expanded regression coverage for atomic Work Area movement, deferred direct-SQL guard semantics, wrong-work-stock classification, concurrent transfer creation and concurrent storage relocation.
+- During CI cleanup, schema expectations were advanced to 030 in API, master-data, Super Admin and business-module conflict wrappers; the stocktake regression was corrected to use the item's declared database Work Area rather than a noodles-specific fixture.
+- Exact PR head `c50e272f6234abf40728ba817d21f151b0e690a6` passed Database Schema #304, Master Data/Admin #351, Super Admin Browser #284, Load #572, workforce regressions and Deploy preflight/full regression #1031.
+- PR #177 squash-merged as `6588ef8e77d454ef0ccf8c027685875074d1bd04`.
+- Main Deploy #1032 / run `36519526311` PASS:
+  - backup `kitchen_os_20260929T040434Z.dump`;
+  - migration 030 applied;
+  - API healthy;
+  - schema `030`;
+  - `DATA_INTEGRITY_OK`;
+  - Web/API/Super Admin healthy;
+  - release `6588ef8`;
+  - production UI smoke PASS.
+- Post-deploy Inventory Site Production Audit #313 / run `36520094299` PASS:
+  - Central 41 items / quantity 81;
+  - Fuxing 78 items / quantity 1793;
+  - Yongji 75 items / quantity 17;
+  - Work Area counts exactly equal each site's active product catalog;
+  - stock/site, duplicate catalog, storage policy, Work Area projection, shared-catalog drift, legacy manifest/materialization and hidden-integrity violations all 0.
+- Production result: shared Work Area edits are now transactional and database-enforced without disabling integrity triggers or fabricating stock.
+
 ## 2026-09-29 — PR #174 production closure and next runtime site-scope cleanup
 
 - PR #174 removed the closed site list from Business State synchronization and made the PostgreSQL Inventory site registry initialize/correct the all-scope active site.
