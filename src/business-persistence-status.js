@@ -1,7 +1,6 @@
 import { currentAccountSession } from "./account-permissions.js";
 
 const ACTIVE_SITE_KEY = "shitu-admin-active-site-v1";
-const KNOWN_SITES = new Set(["central", "fuxing", "yongji"]);
 const SAFE_ERROR_CODES = new Set([
   "BUSINESS_STATE_OFFLINE",
   "BUSINESS_STATE_NOT_READY",
@@ -26,12 +25,10 @@ function language() {
 }
 
 function currentSite(session = currentAccountSession()) {
-  if (KNOWN_SITES.has(session?.location)) return session.location;
-  if (session?.location === "all") {
-    const saved = localStorage.getItem(ACTIVE_SITE_KEY);
-    return KNOWN_SITES.has(saved) ? saved : "fuxing";
-  }
-  return "";
+  const location = String(session?.location || "").trim();
+  if (!location) return "";
+  if (location !== "all") return location;
+  return String(localStorage.getItem(ACTIVE_SITE_KEY) || "").trim();
 }
 
 function currentScope() {
@@ -43,7 +40,7 @@ function currentScope() {
 function detailScope(detail) {
   const userId = String(detail?.userId || "");
   const site = String(detail?.site || "");
-  return userId && KNOWN_SITES.has(site) ? `${userId}:${site}` : "";
+  return userId && site ? `${userId}:${site}` : "";
 }
 
 function clearHideTimer(scope) {
