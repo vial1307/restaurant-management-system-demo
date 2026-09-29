@@ -130,15 +130,30 @@ try {
   );
   assert.ok(sharedBefore.rowCount>=2,"shared catalog fixture missing");
 
+  // Zero the protected work values temporarily so the branch projection
+  // trigger does not mask the deferred shared-catalog guard under test.
+  await client.query(
+    "update public.inventory_stock set quantity=0,minimum_quantity=0 where item_id=$1 and location_id=$2",
+    [branchItemId,byArea.get("meat").id]
+  );
+
   await assert.rejects(
     client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[branchItemKey]),
     /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
-    "branch shared catalog must not drift from Central after schema 029"
+    "branch shared catalog must not drift from Central after schema 030"
   );
   await assert.rejects(
     client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[centralItemKey]),
     /CENTRAL_CATALOG_WORK_AREA_BRANCH_CONFLICT/,
     "Central shared catalog must not move independently of active branches"
+  );
+
+  await client.query(
+    `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+     values($1,$2,9,5,now())
+     on conflict(item_id,location_id) do update
+     set quantity=excluded.quantity,minimum_quantity=excluded.minimum_quantity,updated_at=now()`,
+    [branchItemId,byArea.get("meat").id]
   );
 
   // A coordinated transaction is valid: relocate the branch work projection
