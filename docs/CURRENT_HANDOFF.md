@@ -1,5 +1,45 @@
 # Kitchen OS — Current Development Handoff
 
+## Active candidate — remaining runtime site hard-codes, 2026-09-29
+
+Verified production baseline:
+- release `77d3e13077a41d82d990704abe3dd3546d2f9b91`;
+- Deploy #1006 / run `36466950388`, attempt 5: PASS;
+- backup `kitchen_os_20260929T004244Z.dump`;
+- schema `029`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke PASS;
+- Inventory Site Production Audit #286 / run `36504554850`: PASS.
+
+Production inventory integrity remains clean:
+- Central: 41 products = 38 noodles / 1 soup / 2 seafood;
+- Fuxing: 78 products = 30 noodles / 18 soup / 21 seafood / 9 meat;
+- Yongji: 75 products = 33 noodles / 17 soup / 17 seafood / 8 meat;
+- active item without stock/storage/work projection = 0;
+- storage group/replenishment policy classification violations = 0;
+- work-stock area mismatch = 0;
+- Central↔branch shared catalog Work Area mismatch = 0;
+- Fuxing/Yongji historical 75-item manifest missing = 0;
+- hidden inventory violations = 0.
+
+Current branch:
+- `refactor/runtime-site-scope-cleanup-20260929`
+- no schema migration.
+
+Remaining site-authority defects being removed:
+1. `business-persistence-status.js` still had `KNOWN_SITES = central/fuxing/yongji` and defaulted all-scope users to Fuxing.
+2. `business-recovery-notice.js` still had a source-coded site label map for Central/Fuxing/Yongji.
+3. `device-sync.js` still converted any missing non-admin site into Fuxing.
+
+Candidate rules:
+- any authenticated server-assigned site code is a valid scope candidate;
+- all-scope status follows the shared active-site key already owned by the PostgreSQL-backed site registry;
+- persistence events accept non-empty site codes instead of a closed frontend allowlist;
+- recovery labels resolve through `inventorySite(code)` and refresh on `shitu:inventory-sites-changed`;
+- missing server location is not guessed and therefore fails closed.
+
+Do not reintroduce branch names as authorization/routing logic. Static translations may mention historical branch names only when they are literal copy/search aliases, not data authority.
+
 ## Active candidate — database-declared Business State site scope, 2026-09-29
 
 Verified production baseline:
