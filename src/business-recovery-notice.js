@@ -1,21 +1,22 @@
 import { currentAccountSession } from "./account-permissions.js";
 import { businessRecoveryMetadataForUser } from "./business-state-sync.js";
+import { inventorySite } from "./inventory-master-data.js";
 
 const RECOVERY_STORAGE_KEY = "shitu-business-recovery-v1";
 const AUTH_STORAGE_KEY = "shitu-kitchen-auth-v1";
-
-const SITE_LABELS = {
-  central: { vi: "Bếp trung tâm · 央廚", zh: "央廚 · Bếp trung tâm" },
-  fuxing: { vi: "Fuxing · 復興", zh: "復興 · Fuxing" },
-  yongji: { vi: "Yongji · 永吉", zh: "永吉 · Yongji" },
-};
 
 function language() {
   return document.documentElement.lang === "zh-Hant" ? "zh" : "vi";
 }
 
 function siteLabel(site, lang) {
-  return SITE_LABELS[site]?.[lang] || String(site || "—");
+  const code = String(site || "").trim();
+  const record = inventorySite(code);
+  if (!record) return code || "—";
+  const vi = String(record.name_vi || "").trim();
+  const zh = String(record.name_zh_tw || "").trim();
+  if (lang === "zh") return [zh, vi].filter(Boolean).join(" · ") || code;
+  return [vi, zh].filter(Boolean).join(" · ") || code;
 }
 
 function capturedLabel(value, lang) {
@@ -147,6 +148,7 @@ for (const eventName of [
   "shitu:auth-expired",
   "shitu:vps-auth-ready",
   "shitu:active-site-changed",
+  "shitu:inventory-sites-changed",
 ]) {
   window.addEventListener(eventName, scheduleRecoveryNotice);
 }
