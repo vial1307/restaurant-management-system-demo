@@ -17,8 +17,8 @@ assert.match(
 );
 assert.match(
   backend,
-  /relocate-work-area[\s\S]*?s\.kind='work'[\s\S]*?d\.kind='work'[\s\S]*?update public\.inventory_items set work_area=\$2/,
-  "work-area relocation must validate work locations and persist item metadata"
+  /relocate-work-area[\s\S]*?s\.kind='work'[\s\S]*?d\.kind='work'[\s\S]*?inventory_catalog_identity[\s\S]*?update public\.inventory_items[\s\S]*?set work_area=\$2[\s\S]*?where id=any/,
+  "work-area relocation must validate work locations, lock shared catalog identity and persist coordinated item metadata"
 );
 assert.match(
   backend,

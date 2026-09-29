@@ -42,8 +42,10 @@ const before = await request("/api/inventory/fuxing", { cookie: admin });
 assert.equal(before.response.status, 200);
 const beef = before.data.items.find((item) => item.catalog_key === "beef");
 const freezer = before.data.locations.find((location) => location.code === "fuxing-freezer");
-const workNoodles = before.data.locations.find((location) => location.code === "fuxing-work-noodles");
-assert(beef && freezer && workNoodles, "fuxing beef/freezer/work fixture missing");
+const workAreaLocation = before.data.locations.find(
+  (location) => location.kind === "work" && location.metadata?.work_area === beef?.work_area
+);
+assert(beef && freezer && workAreaLocation, "fuxing beef/freezer/classified work fixture missing");
 
 const supervisorQuantity = await request("/api/inventory/set-quantity", {
   method: "POST",
@@ -60,7 +62,7 @@ assert.equal(supervisorMinimum.response.status, 200);
 const supervisorWorkMinimum = await request("/api/inventory/set-minimum", {
   method: "POST",
   cookie: supervisor,
-  body: { itemId: beef.id, locationId: workNoodles.id, minimum: 7 },
+  body: { itemId: beef.id, locationId: workAreaLocation.id, minimum: 7 },
 });
 assert.equal(supervisorWorkMinimum.response.status, 200);
 
@@ -72,13 +74,13 @@ const locations = seeded.data.stock
     return {
       code: location.code,
       quantity: row.location_id === freezer.id ? 999 : Number(row.quantity),
-      minimum: row.location_id === freezer.id || row.location_id === workNoodles.id
+      minimum: row.location_id === freezer.id || row.location_id === workAreaLocation.id
         ? 999
         : Number(row.minimum_quantity),
     };
   });
 assert(locations.some((entry) => entry.code === freezer.code));
-assert(locations.some((entry) => entry.code === workNoodles.code));
+assert(locations.some((entry) => entry.code === workAreaLocation.code));
 
 // Even a stocktake-capable role must not use catalog sync as a hidden quantity
 // write path. Product metadata saves can contain stale local quantities.
@@ -110,7 +112,7 @@ const supervisorProtectedStock = afterSupervisorCatalog.data.stock.find(
   (row) => row.item_id === beef.id && row.location_id === freezer.id
 );
 const supervisorProtectedWorkStock = afterSupervisorCatalog.data.stock.find(
-  (row) => row.item_id === beef.id && row.location_id === workNoodles.id
+  (row) => row.item_id === beef.id && row.location_id === workAreaLocation.id
 );
 assert.equal(Number(supervisorProtectedStock?.quantity), 13, "stocktake-capable catalog sync overwrote quantity");
 assert.equal(Number(supervisorProtectedStock?.minimum_quantity), 5, "stocktake-capable catalog sync overwrote minimum");
@@ -140,7 +142,7 @@ const protectedStock = after.data.stock.find((row) => row.item_id === beef.id &&
 assert(protectedStock, "protected beef stock row missing after catalog sync");
 assert.equal(Number(protectedStock.quantity), 13, "catalog sync bypassed stocktake quantity permission");
 assert.equal(Number(protectedStock.minimum_quantity), 5, "catalog sync bypassed stocktake minimum permission");
-const protectedWorkStock = after.data.stock.find((row) => row.item_id === beef.id && row.location_id === workNoodles.id);
+const protectedWorkStock = after.data.stock.find((row) => row.item_id === beef.id && row.location_id === workAreaLocation.id);
 assert(protectedWorkStock, "protected beef work stock row missing after catalog sync");
 assert.equal(Number(protectedWorkStock.minimum_quantity), 7, "catalog sync bypassed work minimum stocktake permission");
 

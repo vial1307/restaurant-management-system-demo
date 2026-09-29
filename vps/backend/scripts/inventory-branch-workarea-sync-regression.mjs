@@ -19,9 +19,11 @@ const branchItemKey="fuxing:workarea-sync-regression";
 await client.connect();
 let projectionTriggerDisabled=false;
 let canonicalGuardDisabled=false;
+let stockWorkAreaGuardDisabled=false;
+let itemWorkAreaStockGuardDisabled=false;
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"029","schema 029 must be active");
+  assert.equal(schema.rows[0]?.version,"030","schema 030 must be active");
 
   // This regression deliberately replays migration 026. In production 026 ran
   // before migration 027 installed the branch work-projection trigger, so
@@ -30,6 +32,13 @@ try {
   canonicalGuardDisabled=true;
   await client.query("alter table public.inventory_items disable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=true;
+  // Schema 030 adds deferred final-state Work Area guards. Disable them only
+  // while this regression reconstructs the intentionally corrupt pre-026
+  // historical fixture that migration 026 is supposed to repair.
+  await client.query("alter table public.inventory_stock disable trigger inventory_stock_work_area_guard");
+  stockWorkAreaGuardDisabled=true;
+  await client.query("alter table public.inventory_items disable trigger inventory_item_work_area_stock_guard");
+  itemWorkAreaStockGuardDisabled=true;
 
   await client.query("delete from public.audit_logs where metadata->>'catalog_key'=$1",[catalogKey]);
   await client.query(
@@ -118,16 +127,110 @@ try {
   canonicalGuardDisabled=false;
   await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
   projectionTriggerDisabled=false;
+  await client.query("alter table public.inventory_stock enable trigger inventory_stock_work_area_guard");
+  stockWorkAreaGuardDisabled=false;
+  await client.query("alter table public.inventory_items enable trigger inventory_item_work_area_stock_guard");
+  itemWorkAreaStockGuardDisabled=false;
+
+  // Schema 030 keeps rejecting partial direct SQL changes but defers the
+  // invariant until transaction commit so Central + branches can move together.
+  const sharedBefore=await client.query(
+    `select item_key,work_area
+     from public.inventory_items
+     where catalog_key=$1 and active=true
+     order by item_key`,
+    [catalogKey]
+  );
+  assert.ok(sharedBefore.rowCount>=2,"shared catalog fixture missing");
+
+  // Zero the protected work values temporarily so the branch projection
+  // trigger does not mask the deferred shared-catalog guard under test.
+  await client.query(
+    "update public.inventory_stock set quantity=0,minimum_quantity=0 where item_id=$1 and location_id=$2",
+    [branchItemId,byArea.get("meat").id]
+  );
 
   await assert.rejects(
     client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[branchItemKey]),
     /BRANCH_CATALOG_WORK_AREA_MISMATCH/,
-    "branch shared catalog must not drift from Central after schema 029"
+    "branch shared catalog must not drift from Central after schema 030"
   );
   await assert.rejects(
     client.query("update public.inventory_items set work_area='noodles' where item_key=$1",[centralItemKey]),
     /CENTRAL_CATALOG_WORK_AREA_BRANCH_CONFLICT/,
     "Central shared catalog must not move independently of active branches"
+  );
+
+  await client.query(
+    `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+     values($1,$2,9,5,now())
+     on conflict(item_id,location_id) do update
+     set quantity=excluded.quantity,minimum_quantity=excluded.minimum_quantity,updated_at=now()`,
+    [branchItemId,byArea.get("meat").id]
+  );
+
+  // A coordinated transaction is valid: relocate the branch work projection
+  // first, then update Central + branch classification together. The deferred
+  // catalog guard validates only the final consistent state.
+  await client.query("begin");
+  try {
+    await client.query(
+      `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+       values($1,$2,9,5,now())
+       on conflict(item_id,location_id) do update
+       set quantity=excluded.quantity,minimum_quantity=excluded.minimum_quantity,updated_at=now()`,
+      [branchItemId,byArea.get("noodles").id]
+    );
+    await client.query(
+      "delete from public.inventory_stock where item_id=$1 and location_id=$2",
+      [branchItemId,byArea.get("meat").id]
+    );
+    await client.query(
+      `update public.inventory_items
+       set work_area='noodles',updated_at=now()
+       where item_key=any($1::text[])`,
+      [[centralItemKey,branchItemKey]]
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  }
+
+  const coordinated=await client.query(
+    `select item_key,work_area
+     from public.inventory_items
+     where item_key=any($1::text[])
+     order by item_key`,
+    [[centralItemKey,branchItemKey]]
+  );
+  assert.deepEqual(
+    coordinated.rows.map((row)=>[row.item_key,row.work_area]),
+    [[branchItemKey,"noodles"],[centralItemKey,"noodles"]].sort((a,b)=>a[0].localeCompare(b[0])),
+    "coordinated shared catalog Work Area update did not commit atomically"
+  );
+  const coordinatedStock=await client.query(
+    `select l.metadata->>'work_area' as work_area,s.quantity,s.minimum_quantity
+     from public.inventory_stock s
+     join public.inventory_locations l on l.id=s.location_id
+     where s.item_id=$1 and l.kind='work'`,
+    [branchItemId]
+  );
+  assert.equal(coordinatedStock.rowCount,1,"coordinated move left duplicate branch work rows");
+  assert.equal(coordinatedStock.rows[0].work_area,"noodles");
+  assert.equal(Number(coordinatedStock.rows[0].quantity),9,"coordinated move changed physical quantity");
+  assert.equal(Number(coordinatedStock.rows[0].minimum_quantity),5,"coordinated move changed minimum");
+
+  await assert.rejects(
+    client.query(
+      `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity)
+       values($1,$2,0,0)
+       on conflict(item_id,location_id) do update
+       set quantity=excluded.quantity,minimum_quantity=excluded.minimum_quantity`,
+      [branchItemId,byArea.get("meat").id]
+    ),
+    /INVENTORY_WORK_STOCK_AREA_MISMATCH/,
+    "database accepted a work stock row outside the item's declared Work Area"
   );
 
   await client.query(
@@ -147,6 +250,16 @@ try {
   if(projectionTriggerDisabled) {
     try {
       await client.query("alter table public.inventory_items enable trigger inventory_items_sync_branch_work_projection");
+    } catch {}
+  }
+  if(stockWorkAreaGuardDisabled) {
+    try {
+      await client.query("alter table public.inventory_stock enable trigger inventory_stock_work_area_guard");
+    } catch {}
+  }
+  if(itemWorkAreaStockGuardDisabled) {
+    try {
+      await client.query("alter table public.inventory_items enable trigger inventory_item_work_area_stock_guard");
     } catch {}
   }
   await client.end();

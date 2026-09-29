@@ -27,6 +27,7 @@ function catalogWorkAreaConflict(error) {
   return "";
 }
 
+
 async function canManageReceiveDefault(user, site) {
   return siteAllowed(user, site) && hasPermission(user, "inventory", "edit");
 }
@@ -650,10 +651,15 @@ export async function registerInventoryExtraRoutes(app) {
           if (!code) continue;
 
           const location = await client.query(
-            "select id,site from public.inventory_locations where code=$1 and active=true limit 1",
+            "select id,site,kind from public.inventory_locations where code=$1 and active=true limit 1",
             [code]
           );
-          if (!location.rowCount || location.rows[0].site !== site) continue;
+          if (!location.rowCount) {
+            throw Object.assign(new Error("CATALOG_LOCATION_NOT_FOUND"), { statusCode:404 });
+          }
+          if (location.rows[0].site !== site) {
+            throw Object.assign(new Error("CATALOG_LOCATION_SITE_MISMATCH"), { statusCode:400 });
+          }
           await attachLocation(location.rows[0].id);
         }
 
@@ -884,6 +890,10 @@ export async function registerInventoryExtraRoutes(app) {
 
     try {
       const data = await withTransaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_storage_relocate:${itemId}`]
+        );
         const ctx = await client.query(
           `select
              i.id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,i.unit,
@@ -1097,6 +1107,10 @@ export async function registerInventoryExtraRoutes(app) {
           "select pg_advisory_xact_lock(hashtext($1))",
           [`inventory_catalog:${row.item_key}`]
         );
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_catalog_identity:${row.catalog_key}`]
+        );
         const lockedItem = await client.query(
           "select work_area from public.inventory_items where id=$1 for update",
           [itemId]
@@ -1116,41 +1130,178 @@ export async function registerInventoryExtraRoutes(app) {
           throw Object.assign(new Error("SOURCE_WORK_AREA_NOT_CONFIGURED"), { statusCode:409 });
         }
 
-        await client.query(
-          `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
-           values($1,$2,0,0,now())
-           on conflict(item_id,location_id) do nothing`,
-          [itemId,destinationLocationId]
-        );
-        const destinationResult = await client.query(
-          `select quantity,minimum_quantity
-           from public.inventory_stock
-           where item_id=$1 and location_id=$2
-           for update`,
-          [itemId,destinationLocationId]
-        );
-
         const sourceBefore = Number(sourceResult.rows[0].quantity || 0);
         const sourceMinimum = Number(sourceResult.rows[0].minimum_quantity || 0);
-        const destinationBefore = Number(destinationResult.rows[0]?.quantity || 0);
-        const destinationMinimumBefore = Number(destinationResult.rows[0]?.minimum_quantity || 0);
-        const destinationAfter = destinationBefore + sourceBefore;
-        const destinationMinimumAfter = Math.max(destinationMinimumBefore,sourceMinimum);
 
-        await client.query(
-          `update public.inventory_stock
-           set quantity=$3,minimum_quantity=$4,updated_at=now()
-           where item_id=$1 and location_id=$2`,
-          [itemId,destinationLocationId,destinationAfter,destinationMinimumAfter]
+        const sharedCatalog = await client.query(
+          `select
+             i.id,
+             i.item_key,
+             i.work_area,
+             i.storage_only,
+             split_part(i.item_key,':',1) as site,
+             coalesce(s.metadata->>'inventory_mode','') as inventory_mode
+           from public.inventory_items i
+           join public.sites s
+             on s.code=split_part(i.item_key,':',1)
+            and s.active=true
+           where i.catalog_key=$1
+             and i.active=true
+           order by i.item_key
+           for update of i`,
+          [row.catalog_key]
         );
-        await client.query(
-          "delete from public.inventory_stock where item_id=$1 and location_id=$2",
-          [itemId,sourceLocationId]
+        const sharedRows = sharedCatalog.rows.filter((entry) =>
+          entry.inventory_mode === "central" || entry.inventory_mode === "branch"
         );
+        const sharedCanonical = sharedRows.some((entry) => entry.inventory_mode === "central");
+        const coordinatedRows = sharedCanonical
+          ? sharedRows.filter((entry) => !entry.storage_only)
+          : sharedRows.filter((entry) => entry.id === itemId);
+
+        if (!coordinatedRows.length) {
+          throw Object.assign(new Error("CATALOG_ITEM_NOT_FOUND"), { statusCode:404 });
+        }
+
+        const relocationPlan = [];
+        for (const entry of coordinatedRows) {
+          const target = await client.query(
+            `select l.id,l.code
+             from public.work_areas w
+             join public.inventory_locations l
+               on l.site=w.site_code
+              and l.kind='work'
+              and l.active=true
+              and nullif(btrim(l.metadata->>'work_area'),'')=w.code
+             where w.site_code=$1
+               and w.code=$2
+               and w.active=true
+             order by l.sort_order,l.code
+             limit 2`,
+            [entry.site,row.destination_work_area]
+          );
+          if (target.rowCount !== 1) {
+            throw Object.assign(new Error("CATALOG_WORK_AREA_DESTINATION_MISSING"), { statusCode:409 });
+          }
+
+          const workStock = await client.query(
+            `select st.location_id,st.quantity,st.minimum_quantity
+             from public.inventory_stock st
+             join public.inventory_locations l on l.id=st.location_id
+             where st.item_id=$1
+               and l.site=$2
+               and l.kind='work'
+               and l.active=true
+             order by l.code
+             for update of st`,
+            [entry.id,entry.site]
+          );
+          if (!workStock.rowCount) {
+            throw Object.assign(new Error("CATALOG_WORK_PROJECTION_INCOMPLETE"), { statusCode:409 });
+          }
+          relocationPlan.push({
+            ...entry,
+            target_location_id:target.rows[0].id,
+            target_location_code:target.rows[0].code,
+            quantity:workStock.rows.reduce((sum,stock) => sum + Number(stock.quantity || 0),0),
+            minimum:workStock.rows.reduce((max,stock) => Math.max(max,Number(stock.minimum_quantity || 0)),0),
+          });
+        }
+
+        // Validate the full shared-catalog plan before changing any stock row.
+        // PostgreSQL remains authoritative; the request either commits every
+        // affected site or rolls the whole transaction back.
+        for (const peer of relocationPlan) {
+          await client.query(
+            `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
+             values($1,$2,$3,$4,now())
+             on conflict(item_id,location_id) do update
+             set quantity=excluded.quantity,
+                 minimum_quantity=excluded.minimum_quantity,
+                 updated_at=now()`,
+            [peer.id,peer.target_location_id,peer.quantity,peer.minimum]
+          );
+          await client.query(
+            `delete from public.inventory_stock st
+             using public.inventory_locations l
+             where st.item_id=$1
+               and l.id=st.location_id
+               and l.site=$2
+               and l.kind='work'
+               and st.location_id<>$3`,
+            [peer.id,peer.site,peer.target_location_id]
+          );
+        }
+
+        // Migration 030 makes the shared-catalog invariant deferred. All
+        // Central/branch rows are updated in this one transaction, and the
+        // database validates the final state at commit instead of rejecting
+        // the first row while its peers are still waiting to be updated.
         await client.query(
-          "update public.inventory_items set work_area=$2 where id=$1",
-          [itemId,row.destination_work_area]
+          `update public.inventory_items
+           set work_area=$2,updated_at=now()
+           where id=any($1::uuid[])`,
+          [coordinatedRows.map((entry) => entry.id),row.destination_work_area]
         );
+
+        const drift = await client.query(
+          `select count(*)::int as count
+           from public.inventory_items i
+           where i.id=any($1::uuid[])
+             and i.work_area is distinct from $2`,
+          [coordinatedRows.map((entry) => entry.id),row.destination_work_area]
+        );
+        if (Number(drift.rows[0]?.count || 0) !== 0) {
+          throw Object.assign(new Error("CATALOG_WORK_AREA_ATOMIC_UPDATE_FAILED"), { statusCode:409 });
+        }
+
+        for (const peer of relocationPlan) {
+          if (peer.id === itemId) continue;
+          await client.query(
+            `insert into public.audit_logs(
+               actor_user_id,actor_username,action,entity_type,entity_id,site,
+               before_data,after_data,metadata
+             ) values(
+               $1,$2,'inventory_work_area_relocate_peer','inventory_item',$3,$4,
+               jsonb_build_object('work_area',$5::text),
+               jsonb_build_object(
+                 'work_area',$6::text,
+                 'location_id',$7::uuid,
+                 'location_code',$8::text,
+                 'quantity',$9::numeric,
+                 'minimum',$10::numeric
+               ),
+               jsonb_build_object(
+                 'catalog_key',$11::text,
+                 'initiated_item_id',$12::uuid,
+                 'policy','shared_catalog_atomic'
+               )
+             )`,
+            [
+              user.id,user.username,peer.id,peer.site,
+              peer.work_area,row.destination_work_area,
+              peer.target_location_id,peer.target_location_code,
+              peer.quantity,peer.minimum,row.catalog_key,itemId
+            ]
+          );
+        }
+
+        const selectedPeer = relocationPlan.find((entry) => entry.id === itemId);
+        if (!selectedPeer) {
+          throw Object.assign(new Error("CATALOG_ITEM_NOT_FOUND"), { statusCode:404 });
+        }
+        const destinationBefore = Number(
+          selectedPeer.target_location_id === destinationLocationId
+            ? Math.max(0,selectedPeer.quantity - sourceBefore)
+            : 0
+        );
+        const destinationMinimumBefore = Number(
+          selectedPeer.target_location_id === destinationLocationId
+            ? Math.min(selectedPeer.minimum,sourceMinimum)
+            : 0
+        );
+        const destinationAfter = selectedPeer.quantity;
+        const destinationMinimumAfter = selectedPeer.minimum;
 
         let transaction = null;
         if (sourceBefore > 0) {
@@ -1215,6 +1366,8 @@ export async function registerInventoryExtraRoutes(app) {
           source_minimum:sourceMinimum,
           destination_minimum_before:destinationMinimumBefore,
           destination_minimum_after:destinationMinimumAfter,
+          coordinated_sites:[...new Set(coordinatedRows.map((entry)=>entry.site))],
+          coordinated_items:coordinatedRows.length,
           transaction,
         };
       });
@@ -1267,6 +1420,11 @@ export async function registerInventoryExtraRoutes(app) {
         if (!(siteAllowed(user,sourceItem.from_site) && hasPermission(user,"inventory","edit"))) {
           throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403 });
         }
+
+        await client.query(
+          "select pg_advisory_xact_lock(hashtext($1))",
+          [`inventory_direct_transfer:${sourceItem.to_site}:${sourceItem.catalog_key}`]
+        );
 
         const destinationItemResult = await client.query(
           `select *
