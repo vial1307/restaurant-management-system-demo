@@ -1,5 +1,18 @@
 # Kitchen OS Engineering Status
 
+## DONE — schema 031 site-scoped Work Area model, 2026-09-30
+
+- PR #180 merged as `4ebd83f5aaccf094c354ee6798ae7e23a602b562`.
+- Deploy #1046 / run `36623939891`: PASS; backup `kitchen_os_20260929T201202Z.dump`.
+- Production health: release `4ebd83f`, schema `031`, app/database OK, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #330 / run `36624828753`: PASS.
+- Corrected the underlying model: Work Area is owned by each site, not by a global Central canonical catalog identity.
+- Fuxing Work Area edits now update only Fuxing; Yongji/Central remain independent.
+- Local PostgreSQL Work stock ↔ Work Area integrity is still enforced, and quantity/minimum are preserved.
+- Super Admin and production audits treat cross-site Work Area differences as legitimate informational variants.
+- Current production has 4 cross-site Work Area variants and 0 actual inventory integrity violations.
+- NEXT: validate the previously failing product from the browser against release `4ebd83f`; any remaining popup should be handled by its exact displayed error code. Keep UI redesign separate.
+
 ## DONE — CATALOG_ITEM_NOT_FOUND on storage-only Work Area relocation, 2026-09-30
 
 - PR #179 merged as `0839a587a91053671e0af7db41c5694eb84271c7`.

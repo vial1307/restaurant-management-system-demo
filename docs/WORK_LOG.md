@@ -1,5 +1,39 @@
 # Kitchen OS Work Log
 
+## 2026-09-30 — PR #180 root-model fix: Work Area is site-scoped
+
+- Re-read the live handoff after the user reported the Work Area error still remained.
+- Found the deeper architectural defect in the handoff/schema itself: schema 029/030 treated one shared `catalog_key` as requiring one canonical Central Work Area across all sites.
+- That contradicted the actual branch model: Fuxing/Yongji/Central have independently configurable Work Areas and storage layouts.
+- Implemented schema 031:
+  - removes `inventory_items_catalog_work_area_guard`, the cross-site Central↔branch Work Area parity constraint;
+  - preserves schema-030 site-local Work stock ↔ item Work Area guards and site/catalog uniqueness;
+  - validates existing site-local projections during migration.
+- Reworked `/api/inventory/relocate-work-area`:
+  - locks and mutates only the selected item/site;
+  - validates destination Work Area/Work Location from PostgreSQL;
+  - preserves the site's work quantity and minimum;
+  - updates only `inventory_items.id=$1`;
+  - returns `coordinated_sites=[edited_site]` and `coordinated_items=1`;
+  - does not mutate Central or another branch as a side effect.
+- Super Admin catalog audit now reports `workAreaVariants` informationally; the Database integrity screen no longer flags cross-site differences as errors.
+- Production audit now reports `cross_site_work_area_variants` informationally and removes Central parity from violation totals.
+- Replaced shared-catalog regression with site-scoped DB/API regressions, including storage-only branch items, quantity/minimum preservation and proof that Central/Yongji stay unchanged during a Fuxing edit.
+- CI for PR #180 passed after updating legacy test expectations to schema 031. One unrelated full-device permission timing timeout occurred once; rerun passed.
+- PR #180 merged as `4ebd83f5aaccf094c354ee6798ae7e23a602b562`.
+- Main Deploy #1046 / run `36623939891`: PASS:
+  - backup `kitchen_os_20260929T201202Z.dump`;
+  - schema 031 applied;
+  - `DATA_INTEGRITY_OK`;
+  - API/Web/Super Admin healthy;
+  - release `4ebd83f`;
+  - production UI smoke PASS.
+- Inventory Site Production Audit #330 / run `36624828753`: PASS:
+  - Central 41 / Fuxing 78 / Yongji 75;
+  - all site-local integrity counters are 0;
+  - four cross-site Work Area variants are reported informationally, proving production now accepts legitimate per-site Work Area differences.
+- This is the first fix in this sequence that corrects the Work Area ownership model itself rather than adding another exception to global Central parity.
+
 ## 2026-09-30 — PR #179 production closure for CATALOG_ITEM_NOT_FOUND
 
 - User reproduced the Work Area failure on current frontend and provided the exact code `CATALOG_ITEM_NOT_FOUND`.

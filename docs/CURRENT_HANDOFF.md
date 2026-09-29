@@ -1,5 +1,66 @@
 # Kitchen OS — Current Development Handoff
 
+## CURRENT VERIFIED PRODUCTION — schema 031 site-scoped Work Area, 2026-09-30
+
+This section is the current authority. It supersedes the schema-029/030 assumption that one shared `catalog_key` must use the same Work Area across Central, Fuxing and Yongji.
+
+Production baseline:
+- PR #180 merged as `4ebd83f5aaccf094c354ee6798ae7e23a602b562`;
+- Deploy Kitchen OS to VPS #1046 / run `36623939891`: PASS;
+- pre-deploy backup: `kitchen_os_20260929T201202Z.dump`;
+- production health: `{"app":"ok","database":"ok","schema":"031","release":"4ebd83f"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #330 / run `36624828753`: PASS.
+
+Root cause of the repeated Work Area failure:
+- schema 029/030 incorrectly used shared product identity (`catalog_key`) as an operational Work Area authority across every site;
+- that forced a Fuxing Work Area edit to coordinate Central and Yongji too, even though each site has its own Work Area/storage configuration;
+- the earlier stale-source and `storage_only` fixes were valid edge-case fixes, but they could not remove this incorrect global invariant;
+- the handoff itself therefore contained the wrong invariant and was used to keep re-enforcing the failure.
+
+Schema 031 / runtime authority:
+1. `catalog_key` identifies the same product across sites; it does **not** define a global Work Area.
+2. Work Area is site-owned PostgreSQL master data. Central, Fuxing, Yongji, and future branches may assign the same product to different Work Areas.
+3. `/api/inventory/relocate-work-area` changes only the selected item's Work Area projection inside the selected site.
+4. The endpoint validates the current source Work Area, current destination Work Location, permissions and live PostgreSQL state before mutation.
+5. Quantity and minimum are preserved during the move.
+6. Other sites are not updated implicitly. Cross-site quantity movement remains an explicit transfer/shipping operation.
+7. PostgreSQL still rejects local Work stock whose site or Work Area does not match that item's declared site-local Work Area.
+8. Super Admin shows cross-site Work Area differences as informational variants, not integrity errors.
+9. Production audit reports cross-site variants informationally and only fails on real site-local integrity violations.
+
+Production inventory after schema 031:
+- Central: 41 active items / quantity 81; Work Areas 38 noodles / 1 soup / 2 seafood;
+- Fuxing: 78 active items / quantity 1793; Work Areas 30 noodles / 18 soup / 21 seafood / 9 meat;
+- Yongji: 75 active items / quantity 17; Work Areas 33 noodles / 17 soup / 17 seafood / 8 meat;
+- `stock_site_mismatch=0`;
+- `receive_default_site_mismatch=0`;
+- `unknown_item_site=0`;
+- `duplicate_active_catalog_site_groups=0`;
+- `active_item_without_stock_rows=0`;
+- `active_item_without_storage_rows=0`;
+- `work_stock_area_mismatch=0`;
+- Fuxing/Yongji 75-item historical manifests: missing 0;
+- inventory site, location-classification, legacy-materialization and hidden-integrity violation totals: 0.
+- `cross_site_work_area_variants=4` is informational and expected under the site-scoped model. Current examples include 和牛, 虎皮g腳包, 顆白菜 and 高麗菜 using different Work Areas between Fuxing/Yongji.
+
+Regression proof:
+- site-scoped DB regression: PASS;
+- site-scoped Work Area API regression: PASS;
+- changing Fuxing Work Area leaves Central/Yongji unchanged;
+- storage-only branch products are covered;
+- quantity/minimum preservation is asserted;
+- direct metadata-only bypass and wrong Work Area stock remain rejected by PostgreSQL;
+- full static, API/RBAC, Super Admin round-trip, concurrency, Chromium/mobile/full-device and production smoke regressions: PASS.
+
+Continuation rules:
+- never restore Central→branch Work Area canonicalization or cross-site Work Area parity as an integrity condition;
+- never infer Work Area from product name/label or legacy frontend defaults;
+- keep Work Area/storage/location configuration site-scoped and PostgreSQL-authoritative;
+- cross-site stock movement must remain explicit through transfer/shipping flows;
+- UI redesign remains separate from inventory mutation semantics.
+
 ## CURRENT VERIFIED PRODUCTION — storage_only shared Work Area fix, 2026-09-30
 
 This supersedes the earlier stale-source note for the user-reported `CATALOG_ITEM_NOT_FOUND`.
