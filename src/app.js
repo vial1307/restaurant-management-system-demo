@@ -494,6 +494,29 @@ function authoritativeBranchRecord(state, site = activeInventorySite()) {
   };
 }
 
+function branchInventoryMutationRecord(state, site = activeInventorySite()) {
+  const record = state?.records?.[state.selectedDate];
+  if (!record || !isBranchInventorySite(site)) return record;
+
+  // Catalog/storage/Work Area edits are current master-data mutations even if
+  // the operator is viewing a historical service date. Use the same live VPS
+  // snapshot that the inventory page renders so event handlers never pair a
+  // current dropdown with an old source Work Area/location from that date.
+  const snapshot = inventoryBranchSnapshot(site);
+  if (!snapshot) return authoritativeBranchRecord(state,site);
+  return {
+    ...record,
+    inventory:snapshot.inventory,
+    workInventory:snapshot.workInventory,
+    inventorySite:site,
+  };
+}
+
+function workAreaMutationErrorMessage(error) {
+  const code = String(error?.message || error?.code || "UNKNOWN_ERROR");
+  return `Không thể đổi khu làm việc trong database. Dữ liệu thật sẽ được tải lại. · 無法在資料庫中變更工作區，系統將重新載入實際資料。\n\nMã lỗi · 錯誤碼: ${code}`;
+}
+
 function inventoryControlItem(element, record, kind) {
   const id = String(element?.dataset?.id || "");
   const rows = kind === "workItem" ? record?.workInventory : record?.inventory;
@@ -1351,7 +1374,7 @@ root.addEventListener("click", (event) => {
     const site=activeInventorySite();
     const manageAdjust = target.dataset.manageAdjust === "true" && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !manageAdjust) return;
-    const item = inventoryControlItem(target,authoritativeBranchRecord(state,site),"item");
+    const item = inventoryControlItem(target,branchInventoryMutationRecord(state,site),"item");
     if (item) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"item",delta});
@@ -1360,7 +1383,7 @@ root.addEventListener("click", (event) => {
   if (action === "adjust-work-item") {
     const site=activeInventorySite();
     if (!canDirectInventoryAdjust()) return;
-    const item = inventoryControlItem(target,authoritativeBranchRecord(state,site),"workItem");
+    const item = inventoryControlItem(target,branchInventoryMutationRecord(state,site),"workItem");
     if (item) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"workItem",delta});
@@ -1459,7 +1482,7 @@ root.addEventListener("change", (event) => {
     const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(site) && canDirectInventoryAdjust();
     const catalogMetadataEdit = ["zone","workArea"].includes(key) && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !manageQuantityEdit && !catalogMetadataEdit) { render(); return; }
-    const record = authoritativeBranchRecord(state,site);
+    const record = branchInventoryMutationRecord(state,site);
     const item = inventoryControlItem(element,record,"item");
     if (!item) return;
     if (key === "zone") {
@@ -1510,7 +1533,7 @@ root.addEventListener("change", (event) => {
             window.shituNotify?.({type:"success",title:"Đã lưu khu làm việc · 工作區已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
             return;
           }
-          window.alert("Không thể đổi khu làm việc trong database. Dữ liệu thật sẽ được tải lại. · 無法在資料庫中變更工作區，系統將重新載入實際資料。");
+          window.alert(workAreaMutationErrorMessage(result.error));
           void syncInventoryNow(site,{reloadBranch:false,force:true});
         });
         return;
@@ -1570,7 +1593,7 @@ root.addEventListener("change", (event) => {
     const site = activeInventorySite();
     const catalogWorkAreaEdit = key === "workArea" && canManageBranchCatalog(site);
     if (!canDirectInventoryAdjust() && !catalogWorkAreaEdit) { render(); return; }
-    const item = inventoryControlItem(element,authoritativeBranchRecord(state,site),"workItem");
+    const item = inventoryControlItem(element,branchInventoryMutationRecord(state,site),"workItem");
     if (!item) return;
     if (key === "workArea") {
       const previousArea = String(item.workArea || "");
@@ -1590,7 +1613,7 @@ root.addEventListener("change", (event) => {
           window.shituNotify?.({type:"success",title:"Đã lưu khu làm việc · 工作區已儲存",body:"Database và giao diện đã được đồng bộ. · 資料庫與畫面已同步。"});
           return;
         }
-        window.alert("Không thể đổi khu làm việc trong database. Dữ liệu thật sẽ được tải lại. · 無法在資料庫中變更工作區，系統將重新載入實際資料。");
+        window.alert(workAreaMutationErrorMessage(result.error));
         void syncInventoryNow(site,{reloadBranch:false,force:true});
       });
       return;
@@ -1746,7 +1769,7 @@ root.addEventListener("submit", async (event) => {
   if (["add-item", "edit-item"].includes(form.dataset.form)) {
     if (!canManageBranchCatalog(activeInventorySite())) { view.modal = null; render(); return; }
     const site = activeInventorySite();
-    const inventoryRecord = authoritativeBranchRecord(state,site);
+    const inventoryRecord = branchInventoryMutationRecord(state,site);
     const locations = data.getAll("zones").map((zone) => ({
       zone: String(zone),
       quantity: Number(data.get(`quantity:${zone}`)),
