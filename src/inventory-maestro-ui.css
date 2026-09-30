@@ -448,7 +448,12 @@
 .inventory-summary .summary-pill .summary-dot.green{background:#55e8bd}
 .inventory-summary .summary-pill .summary-dot.amber{background:#f1bd57}
 
-.inventory-view-switch{
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) .inventory-view-switch{
   display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));
   gap:8px;
@@ -458,7 +463,12 @@
   border-radius:14px;
   background:#11162d;
 }
-.inventory-view-switch .inventory-view-button{
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) .inventory-view-switch .inventory-view-button{
   min-height:44px;
   justify-content:center;
   gap:8px;
@@ -468,11 +478,21 @@
   color:#9da8c6;
   font-weight:760;
 }
-.inventory-view-switch .inventory-view-button:hover{
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) .inventory-view-switch .inventory-view-button:hover{
   background:#191f3b;
   color:#fff;
 }
-.inventory-view-switch .inventory-view-button.selected{
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) .inventory-view-switch .inventory-view-button.selected{
   border-color:#465078;
   background:#242b4f;
   color:#fff;
@@ -871,8 +891,18 @@
 
 @media(max-width:420px){
   .inventory-summary{grid-template-columns:1fr 1fr}
-  .inventory-view-switch{gap:5px;padding:5px}
-  .inventory-view-switch .inventory-view-button{
+  :where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) .inventory-view-switch{gap:5px;padding:5px}
+  :where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) .inventory-view-switch .inventory-view-button{
     min-height:40px;
     padding:7px 8px;
     font-size:10px;
