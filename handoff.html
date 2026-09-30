@@ -6,17 +6,21 @@
   <meta name="color-scheme" content="light dark">
   <title>Kitchen OS · Live Handoff</title>
   <style>
-    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:light dark}
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
+    *{box-sizing:border-box}
     body{margin:0;background:#0b1020;color:#e9edf7}
-    main{max-width:980px;margin:auto;padding:32px 18px 72px}
-    h1{font-size:clamp(30px,5vw,54px);margin:.1em 0}.muted,small{color:#aeb9d1}
+    main{max-width:1040px;margin:auto;padding:32px 18px 72px}
+    h1{font-size:clamp(30px,5vw,54px);margin:.1em 0}h2{margin-top:0}
+    .muted,small{color:#aeb9d1}
     .hero,.card{border:1px solid #29334e;background:#121a2d;border-radius:18px;padding:20px;margin:16px 0}
+    .subcard{border:1px solid #27314c;background:#0e1526;border-radius:14px;padding:16px;margin-top:14px}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-    .kv{padding:13px;border-radius:12px;background:#0e1526}.kv b{display:block;margin-top:5px;overflow-wrap:anywhere}
+    .kv{padding:13px;border-radius:12px;background:#0a1120}.kv b{display:block;margin-top:5px;overflow-wrap:anywhere}
     a{color:#9ec5ff}.links{display:flex;flex-wrap:wrap;gap:10px}.links a,button{border:1px solid #3b4a70;border-radius:10px;padding:9px 12px;background:#18233d;color:#fff;text-decoration:none}
     button{cursor:pointer}.ok{color:#7ee787}.warn{color:#f2cc60}.bad{color:#ff7b72}
-    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border-radius:12px;padding:14px;max-height:440px;overflow:auto}
-    ul{padding-left:20px}code{overflow-wrap:anywhere}
+    .pill{display:inline-flex;align-items:center;border:1px solid #3b4a70;border-radius:999px;padding:4px 9px;font-size:12px;margin:2px 4px 2px 0}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0a1120;border-radius:12px;padding:14px;max-height:520px;overflow:auto}
+    ul{padding-left:20px}li{margin:6px 0}code{overflow-wrap:anywhere}
   </style>
 </head>
 <body>
@@ -24,19 +28,21 @@
   <section class="hero">
     <small>Kitchen OS · 開發交接</small>
     <h1>Live GitHub Handoff</h1>
-    <p class="muted">Một link duy nhất để dev hoặc chat mới xác định branch/PR đang làm, commit mới nhất, CI và tài liệu cần đọc trước khi tiếp tục.</p>
+    <p class="muted">Nguồn chuẩn là <strong>main + CURRENT_HANDOFF.md</strong>. PR mở chỉ được xem là công việc hiện tại khi CURRENT_HANDOFF.md ghi rõ <code>ACTIVE_PR: #...</code>; PR cũ/song song không còn tự động chiếm trạng thái tiếp quản.</p>
     <div class="links">
       <button id="copy">Copy link tiếp quản</button>
       <a href="https://github.com/vial1307/restaurant-management-system-demo" target="_blank" rel="noreferrer">Repository ↗</a>
       <a href="https://github.com/vial1307/restaurant-management-system-demo/blob/main/docs/CURRENT_HANDOFF.md" target="_blank" rel="noreferrer">CURRENT_HANDOFF.md ↗</a>
+      <a href="https://github.com/vial1307/restaurant-management-system-demo/blob/main/docs/WORK_LOG.md" target="_blank" rel="noreferrer">WORK_LOG.md ↗</a>
       <a href="https://github.com/vial1307/restaurant-management-system-demo/blob/main/docs/DEVELOPMENT_RULES.md" target="_blank" rel="noreferrer">DEVELOPMENT_RULES.md ↗</a>
     </div>
   </section>
-  <div id="app" class="card">Đang đọc GitHub live…</div>
+  <div id="app" class="card">Đang đọc main + CURRENT_HANDOFF.md…</div>
 </main>
 <script type="module">
 const REPO="vial1307/restaurant-management-system-demo";
 const API="https://api.github.com/repos/"+REPO;
+const RAW="https://raw.githubusercontent.com/"+REPO+"/main";
 const app=document.querySelector("#app");
 const esc=(v)=>String(v??"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const short=(v)=>String(v||"").slice(0,12)||"—";
@@ -45,48 +51,125 @@ const request=async(path)=>{
   if(!r.ok)throw new Error("GitHub API "+r.status);
   return r.json();
 };
+const rawText=async(path)=>{
+  const r=await fetch(RAW+"/"+path,{cache:"no-store"});
+  if(!r.ok)throw new Error("GitHub raw "+r.status);
+  return r.text();
+};
+const explicitActivePr=(content)=>{
+  const match=String(content||"").match(/^\s*(?:[-*]\s*)?(?:ACTIVE_PR|Active PR|Current active PR|PR đang làm)\s*[:=]\s*#?(\d+)\s*$/im);
+  return match?Number(match[1]):null;
+};
+const titleOf=(content)=>{
+  const match=String(content||"").match(/^##\s+(.+)$/m);
+  return match?match[1].trim():"CURRENT_HANDOFF.md";
+};
+const workflowHtml=(runs)=>{
+  const rows=(runs||[]).slice(0,20);
+  if(!rows.length)return "<li>Chưa có workflow exact-head để hiển thị.</li>";
+  return rows.map((r)=>{
+    const state=r.status==="completed"?(r.conclusion==="success"?"ok":"bad"):"warn";
+    return `<li><a href="${esc(r.html_url)}" target="_blank" rel="noreferrer">${esc(r.name)} #${esc(r.run_number)}</a> — <span class="${state}">${esc(r.status)} / ${esc(r.conclusion||"pending")}</span></li>`;
+  }).join("");
+};
 document.querySelector("#copy").addEventListener("click",async()=>{
   const value=location.href.split("#")[0];
   try{await navigator.clipboard.writeText(value);document.querySelector("#copy").textContent="Đã copy ✓";}
   catch{prompt("Copy link này:",value);}
 });
+
 try{
-  const pulls=await request("/pulls?state=open&sort=updated&direction=desc&per_page=10");
+  const [handoffResult,statusResult,mainResult,pullsResult,runsResult]=await Promise.allSettled([
+    rawText("docs/CURRENT_HANDOFF.md"),
+    rawText("docs/STATUS.md"),
+    request("/branches/main"),
+    request("/pulls?state=open&sort=updated&direction=desc&per_page=20"),
+    request("/actions/runs?branch=main&per_page=30"),
+  ]);
+  const handoff=handoffResult.status==="fulfilled"?handoffResult.value:"";
+  const status=statusResult.status==="fulfilled"?statusResult.value:"";
+  const main=mainResult.status==="fulfilled"?mainResult.value:null;
+  const pulls=pullsResult.status==="fulfilled"&&Array.isArray(pullsResult.value)?pullsResult.value:[];
+  const mainSha=String(main?.commit?.sha||"");
+  const mainRuns=runsResult.status==="fulfilled"
+    ? (runsResult.value.workflow_runs||[]).filter((r)=>!mainSha||r.head_sha===mainSha)
+    : [];
   const candidates=pulls.filter((pr)=>pr?.head?.repo?.full_name===REPO);
-  const pr=candidates.find((row)=>!row.draft)||candidates[0]||null;
-  if(!pr){
-    app.innerHTML=`<h2>Không có PR đang mở · main là điểm tiếp quản</h2>
-      <p>Đọc CURRENT_HANDOFF.md → WORK_LOG.md → DEVELOPMENT_RULES.md, sau đó kiểm tra GitHub Actions trước khi tạo branch mới.</p>
-      <div class="links"><a href="https://github.com/${REPO}/actions" target="_blank">GitHub Actions ↗</a><a href="https://github.com/${REPO}/commits/main" target="_blank">main ↗</a></div>`;
-  }else{
-    const [commits,files,runsData]=await Promise.all([
-      request(`/pulls/${pr.number}/commits?per_page=20`),
-      request(`/pulls/${pr.number}/files?per_page=100`),
-      request(`/actions/runs?branch=${encodeURIComponent(pr.head.ref)}&per_page=30`)
-    ]);
-    const commitsNewest=commits.slice(-8).reverse();
-    const runs=(runsData.workflow_runs||[]).filter((r)=>r.head_sha===pr.head.sha).slice(0,20);
-    const workflowHtml=runs.length?runs.map((r)=>{
-      const state=r.status==="completed"?(r.conclusion==="success"?"ok":"bad"):"warn";
-      return `<li><a href="${esc(r.html_url)}" target="_blank" rel="noreferrer">${esc(r.name)} #${esc(r.run_number)}</a> — <span class="${state}">${esc(r.status)} / ${esc(r.conclusion||"pending")}</span></li>`;
-    }).join(""):"<li>Chưa có workflow cho head hiện tại.</li>";
-    app.innerHTML=`
-      <h2>PR #${esc(pr.number)} · ${esc(pr.title)}</h2>
-      <div class="grid">
-        <div class="kv"><small>Branch</small><b><code>${esc(pr.head.ref)}</code></b></div>
-        <div class="kv"><small>Head SHA</small><b><code>${esc(short(pr.head.sha))}</code></b></div>
-        <div class="kv"><small>Base</small><b><code>${esc(pr.base.ref)} · ${esc(short(pr.base.sha))}</code></b></div>
-        <div class="kv"><small>Updated</small><b>${esc(pr.updated_at||"—")}</b></div>
-      </div>
-      <div class="links" style="margin-top:14px"><a href="${esc(pr.html_url)}" target="_blank" rel="noreferrer">Mở PR hiện tại ↗</a><a href="https://github.com/${REPO}/tree/${encodeURIComponent(pr.head.ref)}" target="_blank" rel="noreferrer">Mở branch ↗</a></div>
-      <h3>Mô tả fix / current chain</h3><pre>${esc(pr.body||"PR chưa có mô tả.")}</pre>
-      <h3>Files đang chạm</h3><ul>${files.slice(0,100).map((f)=>`<li><code>${esc(f.filename)}</code> · ${esc(f.status)} (+${esc(f.additions)}/-${esc(f.deletions)})</li>`).join("")}</ul>
-      <h3>Commit gần nhất</h3><ul>${commitsNewest.map((c)=>`<li><a href="${esc(c.html_url)}" target="_blank" rel="noreferrer"><code>${esc(short(c.sha))}</code></a> · ${esc(String(c.commit?.message||"").split("\n")[0])}</li>`).join("")}</ul>
-      <h3>CI của head hiện tại</h3><ul>${workflowHtml}</ul>
-      <p class="muted">Trước khi code: đọc CURRENT_HANDOFF.md, WORK_LOG.md và DEVELOPMENT_RULES.md; không merge nếu release gates chưa xanh.</p>`;
+  const requested=explicitActivePr(handoff);
+  let active=requested?candidates.find((pr)=>Number(pr.number)===requested)||null:null;
+  if(requested&&!active){
+    try{
+      const row=await request(`/pulls/${requested}`);
+      if(row?.state==="open"&&row?.head?.repo?.full_name===REPO)active=row;
+    }catch{}
   }
+
+  let workRuns=mainRuns, commits=[], files=[];
+  if(active){
+    const [commitRows,fileRows,actionData]=await Promise.all([
+      request(`/pulls/${active.number}/commits?per_page=20`),
+      request(`/pulls/${active.number}/files?per_page=100`),
+      request(`/actions/runs?branch=${encodeURIComponent(active.head.ref)}&per_page=30`)
+    ]);
+    commits=(commitRows||[]).slice(-8).reverse();
+    files=fileRows||[];
+    workRuns=(actionData.workflow_runs||[]).filter((r)=>r.head_sha===active.head.sha);
+  }else if(main){
+    try{commits=await request("/commits?sha=main&per_page=8");}catch{}
+  }
+
+  const authority=active
+    ? `<span class="pill warn">ACTIVE_PR #${esc(active.number)}</span> CURRENT_HANDOFF.md đã chỉ định PR này.`
+    : `<span class="pill ok">MAIN AUTHORITY</span> Không có ACTIVE_PR hợp lệ; main + CURRENT_HANDOFF.md là điểm tiếp quản.`;
+
+  const openPrHtml=candidates.length
+    ? candidates.map((pr)=>`<li><a href="${esc(pr.html_url)}" target="_blank" rel="noreferrer">#${esc(pr.number)} · ${esc(pr.title)}</a> — <code>${esc(pr.head.ref)}</code>${requested===pr.number?' <span class="pill warn">ACTIVE_PR</span>':''}</li>`).join("")
+    : "<li>Không có PR mở.</li>";
+
+  const commitsHtml=commits.length
+    ? commits.map((c)=>`<li><a href="${esc(c.html_url)}" target="_blank" rel="noreferrer"><code>${esc(short(c.sha))}</code></a> · ${esc(String(c.commit?.message||"").split("\n")[0])}</li>`).join("")
+    : "<li>Không tải được commit list.</li>";
+
+  const filesHtml=active
+    ? (files.length?files.slice(0,100).map((f)=>`<li><code>${esc(f.filename)}</code> · ${esc(f.status)} (+${esc(f.additions)}/-${esc(f.deletions)})</li>`).join(""):"<li>PR không có file thay đổi.</li>")
+    : "<li>Không có ACTIVE_PR; không gán file của PR song song vào công việc hiện tại.</li>";
+
+  app.innerHTML=`
+    <h2>${esc(titleOf(handoff))}</h2>
+    <p>${authority}</p>
+    <div class="grid">
+      <div class="kv"><small>Authority</small><b><code>${active?"PR #"+active.number:"main"}</code></b></div>
+      <div class="kv"><small>Main SHA</small><b><code>${esc(short(mainSha))}</code></b></div>
+      <div class="kv"><small>Active PR marker</small><b><code>${esc(requested?"#"+requested:"none")}</code></b></div>
+      <div class="kv"><small>Open PRs</small><b>${esc(candidates.length)}</b></div>
+    </div>
+    <div class="subcard">
+      <h3>CURRENT_HANDOFF.md · nguồn chuẩn</h3>
+      <pre>${esc(handoff||"Không tải được CURRENT_HANDOFF.md. Mở link GitHub phía trên để fallback.")}</pre>
+    </div>
+    <div class="subcard">
+      <h3>CI exact-head của ${active?"ACTIVE_PR":"main"}</h3>
+      <ul>${workflowHtml(workRuns)}</ul>
+    </div>
+    <div class="subcard">
+      <h3>Commit gần nhất</h3>
+      <ul>${commitsHtml}</ul>
+    </div>
+    <div class="subcard">
+      <h3>Files của ACTIVE_PR</h3>
+      <ul>${filesHtml}</ul>
+    </div>
+    <div class="subcard">
+      <h3>PR đang mở · chỉ là workstream song song nếu CURRENT_HANDOFF.md không chỉ định</h3>
+      <ul>${openPrHtml}</ul>
+    </div>
+    <div class="subcard">
+      <h3>STATUS.md</h3>
+      <pre>${esc(status||"Không tải được STATUS.md.")}</pre>
+    </div>
+    <p class="muted">Quy tắc tiếp quản: đọc CURRENT_HANDOFF.md → WORK_LOG.md → DEVELOPMENT_RULES.md; không suy đoán PR mới nhất là công việc hiện tại và không merge nếu exact-head release gates chưa xanh.</p>`;
 }catch(error){
-  app.innerHTML=`<h2>Live GitHub tạm thời không tải được</h2><p class="bad">${esc(error.message)}</p><p>Dùng các link tài liệu phía trên và GitHub Pull Requests làm fallback.</p>`;
+  app.innerHTML=`<h2>Live GitHub tạm thời không tải được</h2><p class="bad">${esc(error.message)}</p><p>Dùng CURRENT_HANDOFF.md trên main làm nguồn chuẩn; các PR mở không tự động được coi là công việc hiện tại.</p>`;
 }
 </script>
 </body>

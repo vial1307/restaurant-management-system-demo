@@ -737,6 +737,10 @@ export async function registerSuperAdminRoutes(app) {
     const repositoryUrl = DEVELOPMENT_STATUS.repository?.url || "https://github.com/vial1307/restaurant-management-system-demo";
     const releaseUrl = release && release !== "dev" ? `${repositoryUrl}/commit/${encodeURIComponent(release)}` : repositoryUrl;
     const activePr = liveGithub?.active_pr || null;
+    const liveMain = liveGithub?.main || null;
+    const liveHandoff = liveGithub?.current_handoff || null;
+    const mainSha = liveMain?.sha || release;
+    const mainUrl = liveMain?.commit_url || releaseUrl;
     const activeWork = activePr ? {
       ...DEVELOPMENT_STATUS.current_work,
       branch:activePr.branch,
@@ -750,28 +754,30 @@ export async function registerSuperAdminRoutes(app) {
         updated_at:activePr.updated_at,
         draft:activePr.draft,
       },
-      baseline_main_sha:release,
-      baseline_main_url:releaseUrl,
+      baseline_main_sha:mainSha,
+      baseline_main_url:mainUrl,
       candidate_schema:schema?.version || null,
-      stopping_point:activePr.body || activePr.title || DEVELOPMENT_STATUS.current_work?.stopping_point || "",
+      stopping_point:activePr.body || activePr.title || liveHandoff?.content || DEVELOPMENT_STATUS.current_work?.stopping_point || "",
       code_focus:(liveGithub.changed_files || []).map((entry) => entry.path).filter(Boolean),
     } : {
       ...DEVELOPMENT_STATUS.current_work,
       branch:"main",
-      url:`${repositoryUrl}/tree/main`,
+      url:liveMain?.url || `${repositoryUrl}/tree/main`,
       pull_request:null,
-      baseline_main_sha:release,
-      baseline_main_url:releaseUrl,
+      baseline_main_sha:mainSha,
+      baseline_main_url:mainUrl,
       candidate_schema:schema?.version || null,
+      stopping_point:liveHandoff?.content || DEVELOPMENT_STATUS.current_work?.stopping_point || "",
+      code_focus:[],
     };
     return {
       ...DEVELOPMENT_STATUS,
       updated_at:liveGithub?.generated_at || DEVELOPMENT_STATUS.updated_at,
-      phase:activePr ? "live-github-pr" : DEVELOPMENT_STATUS.phase,
-      status:activePr ? "in_progress" : DEVELOPMENT_STATUS.status,
+      phase:activePr ? "live-github-pr" : (liveGithub?.available ? "live-github-main" : DEVELOPMENT_STATUS.phase),
+      status:activePr ? "in_progress" : (liveGithub?.available ? "verified" : DEVELOPMENT_STATUS.status),
       headline:activePr
         ? `PR #${activePr.number}: ${activePr.title}`
-        : DEVELOPMENT_STATUS.headline,
+        : (liveHandoff?.title || DEVELOPMENT_STATUS.headline),
       canonical_handoff:{
         ...(DEVELOPMENT_STATUS.canonical_handoff || {}),
         url:liveGithub?.canonical_url || PUBLIC_HANDOFF_URL,
@@ -783,7 +789,7 @@ export async function registerSuperAdminRoutes(app) {
         schema:schema?.version || null,
         commit_url:releaseUrl,
         actions_url:DEVELOPMENT_STATUS.repository?.actions_url || `${repositoryUrl}/actions`,
-        note:"Live release/schema are read from the runtime currently serving this request. Active work is refreshed from GitHub with a short server-side cache.",
+        note:"Live release/schema are read from the runtime currently serving this request. CURRENT_HANDOFF.md on main is authoritative; an open PR is active only when that document explicitly names it.",
       },
       runtime:{ release,schema },
     };
