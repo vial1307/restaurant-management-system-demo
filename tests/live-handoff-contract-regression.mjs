@@ -13,8 +13,16 @@ const status=read("vps/backend/src/development-status.mjs");
 
 assert.match(feed,/PUBLIC_HANDOFF_URL = "https:\/\/vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html"/);
 assert.match(feed,/CACHE_TTL_MS = 5 \* 60 \* 1000/);
-assert.match(feed,/\/pulls\?state=open&sort=updated&direction=desc&per_page=10/);
-assert.match(feed,/\/actions\/runs\?branch=/);
+assert.match(feed,/\/branches\/main/);
+assert.match(feed,/docs\/CURRENT_HANDOFF\.md/);
+assert.match(feed,/\/pulls\?state=open&sort=updated&direction=desc&per_page=20/);
+assert.match(feed,/explicitActivePrNumber/);
+assert.match(feed,/requestedPrNumber[\s\S]{0,220}candidates\.find/);
+assert.doesNotMatch(feed,/candidates\.find\(\(pr\) => !pr\.draft\)/,
+  "newest open PR must not automatically become the current handoff");
+assert.match(feed,/authority:"main-current-handoff"/);
+assert.match(feed,/main_workflows:mainRuns/);
+assert.match(feed,/\/actions\/runs\?branch=main/);
 assert.match(feed,/changed_files:files/);
 assert.match(feed,/GITHUB_LIVE_HANDOFF_DISABLED/);
 assert.match(feed,/process\.env\.GITHUB_ACTIONS === "true"/);
@@ -22,6 +30,8 @@ assert.match(feed,/process\.env\.GITHUB_ACTIONS === "true"/);
 assert.match(routes,/getLiveGitHubHandoff/);
 assert.match(routes,/live_github:liveGithub/);
 assert.match(routes,/activePr \? "live-github-pr"/);
+assert.match(routes,/liveGithub\?\.available \? "live-github-main"/);
+assert.match(routes,/liveHandoff\?\.content/);
 assert.match(routes,/stopping_point:activePr\.body/);
 
 assert.match(panel,/One-link Handoff/);
@@ -34,8 +44,13 @@ assert.match(page,/Live GitHub Handoff/);
 assert.match(page,/api\.github\.com\/repos\//);
 assert.match(page,/CURRENT_HANDOFF\.md/);
 assert.match(page,/DEVELOPMENT_RULES\.md/);
+assert.match(page,/MAIN AUTHORITY/);
+assert.match(page,/ACTIVE_PR/);
+assert.match(page,/raw\.githubusercontent\.com/);
 assert.match(page,/pulls\?state=open/);
-assert.match(page,/actions\/runs\?branch=/);
+assert.match(page,/actions\/runs\?branch=main/);
+assert.doesNotMatch(page,/candidates\.find\(\(row\)=>!row\.draft\)/,
+  "public handoff must not promote the newest open PR automatically");
 
 assert.match(status,/canonical_handoff:\{/);
 assert.match(status,/url:PUBLIC_HANDOFF_URL/);
