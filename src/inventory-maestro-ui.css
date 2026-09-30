@@ -905,7 +905,7 @@
 ) .inventory-view-switch .inventory-view-button{
     min-height:40px;
     padding:7px 8px;
-    font-size:10px;
+    font-size:12px;
   }
   .storage-tab-groups,
   .zone-tabs.work-area-tabs{padding:8px}
