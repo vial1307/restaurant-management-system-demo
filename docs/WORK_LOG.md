@@ -1,5 +1,41 @@
 # Kitchen OS Work Log
 
+## 2026-10-01 — Inventory UI redesign completed without functional rewrite
+
+- Continued from the schema-031 production baseline and enforced the user's boundary: redesign Inventory UI only; do not rewrite stable functions and do not hard-code business data.
+- PR #176 was rebuilt on the verified production baseline and merged as `2c7ac057605c8b21c0297326ea16e1562e125832`.
+  - introduced the isolated `src/inventory-maestro-ui.css` visual layer;
+  - loaded it after existing styles in both `index.html` and `vps-entry.html`;
+  - left `src/app.js`, inventory handlers, inventory cloud/operations modules, API, backend and database untouched.
+- PR #182 added a second CSS-only polish and merged as `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de`.
+  - changed exactly `src/inventory-maestro-ui.css`;
+  - refined dark Inventory canvas, stock rows/cards, status dots/badges, quantity/minimum controls, readonly fields, source-location pills, action buttons, focus-visible states and mobile readability.
+- No new item/site/role/permission logic exists in the CSS; it only targets existing rendered Inventory classes.
+- PR #182 CI:
+  - preflight PASS;
+  - site-scoped Work Area DB/API PASS;
+  - inventory mutation/RBAC PASS;
+  - Super Admin branch inventory database round-trip PASS;
+  - multi-user PostgreSQL concurrency PASS;
+  - desktop/mobile Chromium PASS;
+  - first full-device attempt hit `Execution context was destroyed` in mobile role/site certification; same exact head rerun passed without a code change;
+  - full-device cross-browser final result PASS.
+- Main Deploy #1055 / run `36803409583`: PASS.
+  - frontend release stamped `b7ffd91`;
+  - backup `kitchen_os_20261001T020103Z.dump`;
+  - schema remains 031;
+  - `DATA_INTEGRITY_OK`;
+  - production health app/database OK;
+  - production UI smoke PASS.
+- GitHub Pages #991 PASS.
+- Inventory Site Production Audit #340 PASS:
+  - Central 41 / quantity 81;
+  - Fuxing 78 / quantity 1793;
+  - Yongji 75 / quantity 17;
+  - site/location/materialization/hidden integrity violations all 0;
+  - branch manifests missing 0;
+  - five cross-site Work Area variants are informational and valid under schema 031.
+
 ## 2026-09-30 — PR #180 root-model fix: Work Area is site-scoped
 
 - Re-read the live handoff after the user reported the Work Area error still remained.

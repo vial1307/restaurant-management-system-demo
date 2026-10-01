@@ -1,5 +1,18 @@
 # Kitchen OS Engineering Status
 
+## DONE — Inventory frontend redesign/polish, 2026-10-01
+
+- PR #176 merged as `2c7ac057605c8b21c0297326ea16e1562e125832`.
+- PR #182 merged as `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de`.
+- Deploy #1055 / run `36803409583`: PASS; backup `kitchen_os_20261001T020103Z.dump`.
+- GitHub Pages #991 / run `36803408605`: PASS.
+- Production health: release `b7ffd91`, schema `031`, app/database OK, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #340 / run `36803944820`: PASS.
+- Redesign is frontend presentation only. No JavaScript business logic, API/backend, schema, PostgreSQL authority, RBAC, inventory quantities/minimums, Work Area/storage semantics, transfer/shipping behavior or master-data authority was changed.
+- Final polish keeps all runtime logic untouched and improves stock rows/cards, status indicators, quantity/minimum controls, source pills, actions, focus states and responsive mobile presentation.
+- Full-device cross-browser regression passed on the exact PR #182 head after one unrelated navigation-context retry.
+- Production inventory integrity violation totals remain 0.
+
 ## DONE — schema 031 site-scoped Work Area model, 2026-09-30
 
 - PR #180 merged as `4ebd83f5aaccf094c354ee6798ae7e23a602b562`.

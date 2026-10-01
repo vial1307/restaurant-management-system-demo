@@ -1,5 +1,63 @@
 # Kitchen OS — Current Development Handoff
 
+## CURRENT VERIFIED PRODUCTION — Inventory frontend redesign only, 2026-10-01
+
+This is the current UI handoff on top of the unchanged schema-031 inventory runtime.
+
+Production:
+- first Inventory redesign PR #176 merged as `2c7ac057605c8b21c0297326ea16e1562e125832`;
+- second visual polish PR #182 merged as `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de`;
+- Deploy Kitchen OS to VPS #1055 / run `36803409583`: PASS;
+- GitHub Pages #991 / run `36803408605`: PASS;
+- pre-deploy backup: `kitchen_os_20261001T020103Z.dump`;
+- production health: `{"app":"ok","database":"ok","schema":"031","release":"b7ffd91"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #340 / run `36803944820`: PASS.
+
+Strict scope:
+1. UI redesign is presentation-only.
+2. Runtime business logic, event handlers, API/backend, PostgreSQL/schema, permissions/RBAC, site/catalog master data, quantities, minimums, Work Area rules, storage rules, transfer/shipping semantics and translation/business strings were not rewritten.
+3. PR #176 added/loaded `src/inventory-maestro-ui.css`; PR #182 modifies only that CSS file.
+4. Styling consumes classes already rendered by the existing inventory implementation; no product/site/role/business-data hard-code is introduced.
+5. Existing Overview / 入庫 / 領貨 / 轉撥 / 出貨 / 管理 / 紀錄 functions remain the same handlers and database paths.
+
+UI now covers:
+- Inventory page shell, header, navigation tabs and operation guide;
+- live KPI/status cards already supplied by current markup;
+- storage and Work Area filters;
+- search/filter bar;
+- stock tables/cards and status badges;
+- existing inbound/pick/transfer/ship operation cards;
+- quantity/minimum/source-location/action controls;
+- history/read-only states;
+- desktop/tablet/mobile responsive presentation and visible keyboard focus.
+
+Validation:
+- static/preflight: PASS;
+- site-scoped Work Area DB/API regressions: PASS;
+- inventory mutation/RBAC regressions: PASS;
+- Super Admin inventory round-trip: PASS;
+- multi-user PostgreSQL concurrency: PASS;
+- desktop/mobile Chromium: PASS;
+- full-device cross-browser: PASS;
+- production UI smoke: PASS.
+- PR #182's first full-device attempt hit an unrelated Playwright navigation-context race in the mobile role/site certification; rerunning the same exact head passed without code changes.
+
+Production inventory remains healthy after the UI deployment:
+- Central: 41 active items / quantity 81;
+- Fuxing: 78 active items / quantity 1793;
+- Yongji: 75 active items / quantity 17;
+- inventory site/location/materialization/hidden-integrity violation totals: 0;
+- branch historical manifests: missing 0;
+- `cross_site_work_area_variants=5` is informational under the site-scoped schema-031 model.
+
+Continuation rule:
+- continue Inventory visual work in `src/inventory-maestro-ui.css` wherever possible;
+- do not change stable inventory functions merely to achieve a visual result;
+- do not add frontend master-data or site/product/role hard-code;
+- any requested functional behavior change must be handled separately from UI redesign.
+
 ## CURRENT VERIFIED PRODUCTION — schema 031 site-scoped Work Area, 2026-09-30
 
 This section is the current authority. It supersedes the schema-029/030 assumption that one shared `catalog_key` must use the same Work Area across Central, Fuxing and Yongji.
