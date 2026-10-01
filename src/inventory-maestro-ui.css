@@ -1696,8 +1696,17 @@
 }
 .storage-tab-groups .filter-tab,
 .zone-tabs.work-area-tabs .filter-tab{
+  display:inline-flex;
   max-inline-size:240px;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
   white-space:normal;
+}
+.storage-tab-groups .filter-tab span,
+.zone-tabs.work-area-tabs .filter-tab span{
+  margin-left:0;
+  flex:0 0 auto;
 }
 
 .inventory-table .inventory-row>*,
