@@ -1988,8 +1988,10 @@
   .storage-tab-groups .filter-tab .bilingual-control-label,
   .zone-tabs.work-area-tabs .filter-tab .bilingual-control-label{
     display:grid;
+    width:auto;
     min-width:0;
     max-width:100%;
+    flex:1 1 0;
     gap:1px;
     overflow:hidden;
     line-height:1.15;
