@@ -1798,3 +1798,10 @@ The separate read-cutover candidate:
 - Created `fix/inventory-desktop-pick-transfer-20261002` from current `main`.
 - CSS-only repair makes pick/transfer operation cards span the full Desktop grid and stabilizes source/destination, quantity, transfer-balance and return-control widths.
 - No business logic or database behavior changed.
+
+
+### Regression guard for Desktop operations
+
+- Added a browser assertion for Desktop widths >900px.
+- In branch inventory, a pick card with `.pick-followup` and a transfer card with `.op-transfer-balance` must span the full `.inventory-ops-list` width and must not horizontally overflow.
+- This test is non-runtime and prevents future responsive CSS regressions in these two operation modes.
