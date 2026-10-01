@@ -1789,3 +1789,12 @@ The separate read-cutover candidate:
 - Added large-desktop width/readability tuning, tablet single-column operation layout, mobile operation-tab grid, larger touch targets, improved stock/source wrapping, narrow-phone stacking, and Central Kitchen mobile label readability.
 - No inventory JavaScript, API/backend, PostgreSQL/schema, RBAC, site/catalog master data, quantities/minimums, Work Area/storage, transfer/shipping semantics or business strings were changed.
 - Candidate must pass exact-head CI/full-device regression before merge/deploy.
+
+
+### Desktop 領貨 / 轉撥 correction
+
+- Operator reported broken Desktop layout in 領貨 (pick) and 轉撥 (transfer).
+- Root cause was presentation density: these modes have more nested controls than receive/ship but inherited the same two-column card grid.
+- CSS-only correction makes existing pick cards (identified by `.pick-followup`) and transfer cards (identified by `.op-transfer-balance`) span the full Desktop operation grid.
+- Transfer source → destination balance now uses a stable three-column presentation; pick return rows receive enough width for destination select + quantity + action.
+- No JavaScript, event handler, API, PostgreSQL, permission or stock semantics changed.
