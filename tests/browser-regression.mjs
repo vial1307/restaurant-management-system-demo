@@ -211,6 +211,19 @@ async function adminDesktop(browser) {
       await page.locator("[data-op-search]").fill("niu rou");
       assert.equal(await page.locator("[data-op-search]").inputValue(),"niu rou");
       await page.locator("[data-op-search]").fill("");
+
+      const desktopViewport=page.viewportSize();
+      if(desktopViewport?.width>900 && ["pick","transfer"].includes(mode)){
+        const listBox=await page.locator(".inventory-ops-list").boundingBox();
+        const denseCard=mode==="pick"
+          ? page.locator(".inventory-op-card:has(.pick-followup):visible").first()
+          : page.locator(".inventory-op-card:has(.op-transfer-balance):visible").first();
+        if(await denseCard.count()){
+          const cardBox=await denseCard.boundingBox();
+          assert(listBox && cardBox && Math.abs(cardBox.width-listBox.width)<=2,`${mode} desktop operation card must span the full operation grid`);
+          assert.equal(await denseCard.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,`${mode} desktop operation card has horizontal overflow`);
+        }
+      }
     }
   }
 

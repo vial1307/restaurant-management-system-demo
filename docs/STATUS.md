@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Desktop 領貨 / 轉撥 UI repair, 2026-10-02
+
+- PR #183 merged responsive UI Phase 3 into `main` as `52a1344cd9f1eafec372c15feffb85660d384b4b`; production deploy #1058 did not complete successfully, so this merge commit must not be treated as verified production yet.
+- Operator reported Desktop layout breakage specifically in 領貨 (pick) and 轉撥 (transfer).
+- Repair branch: `fix/inventory-desktop-pick-transfer-20261002`.
+- Runtime scope remains CSS-only in `src/inventory-maestro-ui.css`.
+- Fix: existing pick cards (detected by `.pick-followup`) and transfer cards (detected by `.op-transfer-balance`) span the full Desktop operation grid; transfer balance and pick return controls receive stable width.
+- No JavaScript handlers, API/backend, PostgreSQL/schema, RBAC, quantities/minimums, Work Area/storage, transfer semantics or business data changed.
+- NEXT: exact-head regression, merge the repair PR, then deploy and verify production health/smoke.
+
 ## ACTIVE — Inventory responsive UI Phase 3, 2026-10-01
 
 - PR #183: `style/inventory-responsive-polish-20261001`.
