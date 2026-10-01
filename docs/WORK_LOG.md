@@ -1,5 +1,23 @@
 # Kitchen OS Work Log
 
+## 2026-10-02 — Inventory-wide overflow hardening candidate
+
+- User requested a denser Pick UI and specifically asked that text/buttons no longer overflow anywhere in Inventory.
+- Continued from verified runtime release `53d218c` / schema 031.
+- Created `style/inventory-overflow-density-20261002`.
+- `src/inventory-maestro-ui.css` remains the only runtime file changed.
+- Wide Desktop Pick follow-up now reflows existing markup into one horizontal sequence: picked status → Use quantity/action → Return destination/quantity/action.
+- Added 901–1199px fallback layout and preserved existing mobile wrapping to avoid forcing one-line density into narrow workspaces.
+- Added scoped overflow protections for Inventory route surfaces:
+  - min/max width containment for operation cards, table/work rows, filter/tab shells and Central Kitchen panels;
+  - safe bilingual text wrapping for labels/status text;
+  - bounded selects with ellipsis;
+  - wrapping action buttons, source pills, tags, threshold/sync text and inventory tools;
+  - no clipping-based data hiding and no frontend business-data authority.
+- Extended `tests/browser-regression.mjs` with geometric checks for document/card/row/button horizontal overflow and wide-Desktop Pick one-row ordering.
+- No handler, API/backend, PostgreSQL/schema, permission/RBAC, stock quantity/minimum, Work Area/storage or movement semantics changed.
+- Pending exact-head CI and production verification.
+
 ## 2026-10-02 — Desktop 領貨 / 轉撥 repair verified in production
 
 - User reported Desktop UI breakage in 領貨 (pick) and 轉撥 (transfer) after responsive Inventory Phase 3.
