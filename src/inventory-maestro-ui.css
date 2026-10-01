@@ -544,8 +544,8 @@
   font-size:12px;
   font-weight:760;
 }
-.storage-tab-groups .filter-tab span,
-.zone-tabs.work-area-tabs .filter-tab span{
+.storage-tab-groups .filter-tab > span:last-child,
+.zone-tabs.work-area-tabs .filter-tab > span:last-child{
   display:inline-grid;
   min-width:20px;
   height:20px;
@@ -568,8 +568,8 @@
   background:#1d3f42;
   color:#8cf4d7;
 }
-.storage-tab-groups .filter-tab.selected span,
-.zone-tabs.work-area-tabs .filter-tab.selected span{
+.storage-tab-groups .filter-tab.selected > span:last-child,
+.zone-tabs.work-area-tabs .filter-tab.selected > span:last-child{
   background:#2d625d;
   color:#b9ffe9;
 }
@@ -1969,15 +1969,21 @@
 }
 
 @media(max-width:760px){
-  .storage-tab-groups .filter-tab,
-  .zone-tabs.work-area-tabs .filter-tab{
-    flex:0 0 150px;
+  .storage-tab-groups .zone-tabs > .filter-tab,
+  .zone-tabs.work-area-tabs > .filter-tab{
+    flex:0 0 150px !important;
     width:150px;
     max-width:150px;
     min-width:150px;
     min-height:48px;
     padding:6px 9px;
     overflow:hidden;
+  }
+  .storage-tab-groups .zone-tabs > .filter-tab:first-child,
+  .zone-tabs.work-area-tabs > .filter-tab:first-child{
+    flex-basis:150px !important;
+    width:150px;
+    min-width:150px;
   }
   .storage-tab-groups .filter-tab .bilingual-control-label,
   .zone-tabs.work-area-tabs .filter-tab .bilingual-control-label{
@@ -1994,9 +2000,10 @@
   .zone-tabs.work-area-tabs .filter-tab .label-secondary{
     min-width:0;
     max-width:100%;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
+    overflow:visible;
+    text-overflow:clip;
+    white-space:normal;
+    overflow-wrap:anywhere;
   }
   .storage-tab-groups .filter-tab>span:last-child,
   .zone-tabs.work-area-tabs .filter-tab>span:last-child{
