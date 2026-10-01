@@ -673,6 +673,15 @@ async function responsiveAdmin(browser, viewport) {
   await inventorySearchRoundTrip(page);
   await assertInventorySurfaceFits(page,`responsive inventory ${viewport.width}x${viewport.height}`);
 
+  const structuredFilterPrimary=page.locator(".storage-tab-groups .filter-tab .bilingual-control-label .label-primary").first();
+  if(await structuredFilterPrimary.count()){
+    assert.equal(
+      (await structuredFilterPrimary.innerText()).includes(" · "),
+      false,
+      `responsive inventory ${viewport.width}x${viewport.height}: structured bilingual primary label was translated twice`
+    );
+  }
+
   if(viewport.width <= 440 && viewport.height >= 700){
     const mobileRoutes=page.locator(".mobile-nav .nav-item");
     assert.equal(await mobileRoutes.count(),ACCOUNT_MODULES.length,"mobile navigation does not contain every desktop module");
