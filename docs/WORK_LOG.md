@@ -1789,3 +1789,12 @@ The separate read-cutover candidate:
 - Added large-desktop width/readability tuning, tablet single-column operation layout, mobile operation-tab grid, larger touch targets, improved stock/source wrapping, narrow-phone stacking, and Central Kitchen mobile label readability.
 - No inventory JavaScript, API/backend, PostgreSQL/schema, RBAC, site/catalog master data, quantities/minimums, Work Area/storage, transfer/shipping semantics or business strings were changed.
 - Candidate must pass exact-head CI/full-device regression before merge/deploy.
+
+
+## 2026-10-02 — Desktop 領貨 / 轉撥 UI repair
+
+- User reported broken Desktop presentation in 領貨 and 轉撥 after responsive redesign work.
+- PR #183 had already merged as `52a1344cd9f1eafec372c15feffb85660d384b4b`; deploy #1058 failed, so it was not recorded as verified production.
+- Created `fix/inventory-desktop-pick-transfer-20261002` from current `main`.
+- CSS-only repair makes pick/transfer operation cards span the full Desktop grid and stabilizes source/destination, quantity, transfer-balance and return-control widths.
+- No business logic or database behavior changed.
