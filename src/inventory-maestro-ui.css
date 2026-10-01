@@ -1765,6 +1765,20 @@
   flex:0 0 auto;
   min-width:0;
   max-width:100%;
+  overflow:hidden;
+}
+.inventory-operations-host .op-quantity button{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  padding:0;
+  overflow:hidden;
+}
+.inventory-operations-host .op-quantity input{
+  min-width:0;
+  max-width:100%;
+  padding-inline:0;
+  overflow:hidden;
 }
 .inventory-operations-host .op-primary,
 .inventory-operations-host .op-secondary{
