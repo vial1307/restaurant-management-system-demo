@@ -1,5 +1,18 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Inventory overflow hardening + compact Pick row, 2026-10-02
+
+- Branch: `style/inventory-overflow-density-20261002`.
+- Production baseline: runtime `53d218cf11b9cb1f10ceab586c402f531ff112d5`, schema 031.
+- Wide Desktop: Pick follow-up uses one horizontal row for 已領貨 / 使用 / 歸位 when the viewport has enough space.
+- Narrow Desktop/tablet/mobile: responsive fallback keeps controls wrapped instead of compressed.
+- Global Inventory UI hardening prevents bilingual text, buttons, badges, source pills and operation controls from protruding outside their cards/rows.
+- Select controls are width-bounded with ellipsis; action text wraps safely where necessary.
+- Central Kitchen Inventory panels/buttons receive the same overflow contract.
+- Runtime business logic remains untouched. CSS owns layout/overflow behavior; `search-i18n-layer.js` has one presentation-only guard so labels already structured by `ui-refresh.js` are not bilingualized twice.
+- Browser regression now checks Inventory surface/button overflow, wide-Desktop Pick horizontal ordering, and duplicate structured bilingual labels.
+- NEXT: exact-head CI → merge → production deploy/smoke/audit.
+
 ## DONE — Inventory responsive UI Phase 3 + Desktop 領貨 / 轉撥 repair, 2026-10-02
 
 - PR #184 merged as `53d218cf11b9cb1f10ceab586c402f531ff112d5`.

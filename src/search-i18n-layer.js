@@ -186,6 +186,10 @@ function bilingualize(root = document.body) {
   for (const node of nodes) {
     const parent = node.parentElement;
     if (!parent || ["SCRIPT", "STYLE", "INPUT", "TEXTAREA", "OPTION"].includes(parent.tagName)) continue;
+    // ui-refresh.js already split these labels into primary/secondary rows.
+    // Re-bilingualizing the primary row duplicates the Chinese label and can
+    // make compact Inventory controls overflow.
+    if (parent.closest(".bilingual-control-label")) continue;
     const raw = node.nodeValue || "";
     const trimmed = raw.trim();
     if (!trimmed) continue;

@@ -56,6 +56,76 @@ async function assertNoPageErrors(page, errors, label) {
   assert.deepEqual(errors,[],`${label} page errors: ${errors.join(" | ")}`);
 }
 
+async function assertInventorySurfaceFits(page,label){
+  const documentOverflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+  assert(documentOverflow<=3,`${label}: document horizontal overflow ${documentOverflow}px`);
+
+  const surfaceSelectors=[
+    ".inventory-op-card:visible",
+    ".inventory-row:visible",
+    ".work-row:visible",
+    ".central-kitchen-location-card:visible",
+    ".central-kitchen-priority-row:visible",
+  ];
+  for(const selector of surfaceSelectors){
+    const nodes=page.locator(selector);
+    const count=Math.min(await nodes.count(),8);
+    for(let i=0;i<count;i+=1){
+      const overflow=await nodes.nth(i).evaluate((node)=>node.scrollWidth-node.clientWidth);
+      if(overflow>2){
+        const diagnostics=await nodes.nth(i).evaluate((node)=>{
+          const root=node.getBoundingClientRect();
+          return [...node.querySelectorAll("*")].map((child)=>{
+            const box=child.getBoundingClientRect();
+            const style=getComputedStyle(child);
+            return {
+              tag:child.tagName.toLowerCase(),
+              className:String(child.className||"").slice(0,120),
+              scrollWidth:child.scrollWidth,
+              clientWidth:child.clientWidth,
+              left:Math.round(box.left-root.left),
+              right:Math.round(box.right-root.left),
+              width:Math.round(box.width),
+              overflowX:style.overflowX,
+              whiteSpace:style.whiteSpace,
+              display:style.display,
+            };
+          }).filter((entry)=>
+            entry.scrollWidth>entry.clientWidth+2 || entry.left< -2 || entry.right>root.width+2
+          ).slice(0,16);
+        });
+        assert.fail(`${label}: ${selector}[${i}] horizontal overflow ${overflow}px; children=${JSON.stringify(diagnostics)}`);
+      }
+    }
+  }
+
+  const controls=page.locator([
+    ".branch-ops-tabs button:visible",
+    ".inventory-view-switch button:visible",
+    ".storage-tab-groups .filter-tab:visible",
+    ".zone-tabs.work-area-tabs .filter-tab:visible",
+    ".inventory-op-card button:visible",
+    ".inventory-table button:visible",
+    ".central-kitchen-shell button:visible",
+  ].join(","));
+  const controlCount=Math.min(await controls.count(),32);
+  for(let i=0;i<controlCount;i+=1){
+    const control=controls.nth(i);
+    const overflow=await control.evaluate((node)=>node.scrollWidth-node.clientWidth);
+    if(overflow>2){
+      const diagnostics=await control.evaluate((node)=>({
+        className:String(node.className||"").slice(0,140),
+        text:String(node.textContent||"").trim().replace(/\\s+/g," ").slice(0,180),
+        scrollWidth:node.scrollWidth,
+        clientWidth:node.clientWidth,
+        whiteSpace:getComputedStyle(node).whiteSpace,
+        display:getComputedStyle(node).display,
+      }));
+      assert.fail(`${label}: visible Inventory button[${i}] text overflow ${overflow}px; control=${JSON.stringify(diagnostics)}`);
+    }
+  }
+}
+
 async function selectToday(page) {
   const calendarToggle = page.locator('[data-action="toggle-calendar"]').first();
   if (!await calendarToggle.count()) return;
@@ -201,6 +271,7 @@ async function adminDesktop(browser) {
 
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
+  await assertInventorySurfaceFits(page,"fuxing desktop overview");
 
   for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
     const button=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
@@ -222,8 +293,22 @@ async function adminDesktop(browser) {
           const cardBox=await denseCard.boundingBox();
           assert(listBox && cardBox && Math.abs(cardBox.width-listBox.width)<=2,`${mode} desktop operation card must span the full operation grid`);
           assert.equal(await denseCard.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,`${mode} desktop operation card has horizontal overflow`);
+
+          if(mode==="pick" && desktopViewport.width>=1200){
+            const followup=denseCard.locator(".pick-followup");
+            const [statusBox,useBox,returnBox]=await Promise.all([
+              followup.locator(".pick-status").boundingBox(),
+              followup.locator(".pick-use-row").boundingBox(),
+              followup.locator(".pick-return-row").boundingBox(),
+            ]);
+            assert(statusBox && useBox && returnBox,"pick Desktop compact-row geometry missing");
+            assert(statusBox.x+statusBox.width<=useBox.x+1,"pick Desktop status must remain left of Use controls");
+            assert(useBox.x+useBox.width<=returnBox.x+1,"pick Desktop Use controls must remain left of Return controls");
+            assert.equal(await followup.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,"pick Desktop compact row has horizontal overflow");
+          }
         }
       }
+      await assertInventorySurfaceFits(page,`fuxing desktop ${mode}`);
     }
   }
 
@@ -586,6 +671,16 @@ async function responsiveAdmin(browser, viewport) {
   await seedRoleSession(page,context,"yangchuadmin");
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
+  await assertInventorySurfaceFits(page,`responsive inventory ${viewport.width}x${viewport.height}`);
+
+  const structuredFilterPrimary=page.locator(".storage-tab-groups .filter-tab .bilingual-control-label .label-primary").first();
+  if(await structuredFilterPrimary.count()){
+    assert.equal(
+      (await structuredFilterPrimary.innerText()).includes(" · "),
+      false,
+      `responsive inventory ${viewport.width}x${viewport.height}: structured bilingual primary label was translated twice`
+    );
+  }
 
   if(viewport.width <= 440 && viewport.height >= 700){
     const mobileRoutes=page.locator(".mobile-nav .nav-item");

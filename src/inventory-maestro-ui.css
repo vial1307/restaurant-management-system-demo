@@ -544,8 +544,8 @@
   font-size:12px;
   font-weight:760;
 }
-.storage-tab-groups .filter-tab span,
-.zone-tabs.work-area-tabs .filter-tab span{
+.storage-tab-groups .filter-tab > span:last-child,
+.zone-tabs.work-area-tabs .filter-tab > span:last-child{
   display:inline-grid;
   min-width:20px;
   height:20px;
@@ -568,8 +568,8 @@
   background:#1d3f42;
   color:#8cf4d7;
 }
-.storage-tab-groups .filter-tab.selected span,
-.zone-tabs.work-area-tabs .filter-tab.selected span{
+.storage-tab-groups .filter-tab.selected > span:last-child,
+.zone-tabs.work-area-tabs .filter-tab.selected > span:last-child{
   background:#2d625d;
   color:#b9ffe9;
 }
@@ -1537,3 +1537,673 @@
     text-align:right;
   }
 }
+/* Operation-card structural reset: legacy ui-refresh.css still defines each
+ * card as a three-column grid with 240px + 320px intrinsic minimums. Maestro
+ * owns presentation now, so collapse that legacy internal grid without touching
+ * any operation markup or handlers.
+ */
+.inventory-operations-host .inventory-op-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
+}
+.inventory-operations-host .inventory-overview-card{
+  grid-template-columns:minmax(180px,.85fr) minmax(0,1.15fr);
+  align-items:center;
+}
+.inventory-operations-host .op-select-grid>:only-child{
+  grid-column:1 / -1;
+}
+@media(max-width:760px){
+  .inventory-operations-host .inventory-overview-card{
+    grid-template-columns:minmax(0,1fr);
+    align-items:stretch;
+  }
+}
+
+/* Phase 4 inventory density + overflow hardening — presentation only.
+ * Keeps existing DOM, handlers and PostgreSQL-backed values intact.
+ * Goal: dense Desktop pick flow when space is available and no text/control
+ * should protrude from Inventory cards, rows, tabs or Central Kitchen panels.
+ */
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) *,
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) *::before,
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) *::after{
+  box-sizing:border-box;
+}
+
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) :is(
+  .page-heading,
+  .page-heading>div,
+  .inventory-summary,
+  .summary-pill,
+  .inventory-view-switch,
+  .storage-tab-groups,
+  .storage-tab-group,
+  .filters-row,
+  .inventory-table,
+  .inventory-table-head,
+  .inventory-row,
+  .work-row,
+  .inventory-group-heading,
+  .inventory-item-name,
+  .inventory-item-name>div,
+  .inventory-work-area,
+  .inventory-zone,
+  .inventory-storage,
+  .inventory-minimum,
+  .inventory-badge,
+  .inventory-working,
+  .inventory-source,
+  .inventory-transfer,
+  .inventory-actions,
+  .inventory-item-tools,
+  .inventory-operations-host,
+  .inventory-ops-shell,
+  .inventory-ops-toolbar,
+  .inventory-ops-list,
+  .inventory-op-card,
+  .op-item-head,
+  .op-select-grid,
+  .op-select-grid>label,
+  .op-location-list,
+  .op-location-pill,
+  .op-action-row,
+  .pick-followup,
+  .pick-status,
+  .pick-use-row,
+  .pick-return-row,
+  .ship-fixed-hint,
+  .central-kitchen-shell,
+  .central-kitchen-hero,
+  .central-kitchen-kpis,
+  .central-kitchen-priority,
+  .central-kitchen-context,
+  .central-kitchen-section-head,
+  .central-kitchen-location-card,
+  .central-kitchen-priority-row,
+  .central-kitchen-modebar
+){
+  min-width:0;
+  max-width:100%;
+}
+
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) :is(
+  h1,h2,h3,p,label,small,strong,
+  .inventory-view-description,
+  .inventory-readonly-field,
+  .inventory-op-guide span,
+  .op-item-head span,
+  .op-item-head small,
+  .op-item-head strong,
+  .op-location-pill small,
+  .op-location-pill strong,
+  .ship-fixed-hint,
+  .central-kitchen-location-card>span,
+  .central-kitchen-location-card>small,
+  .central-kitchen-context p,
+  .central-kitchen-priority-row
+){
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) select{
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+:where(
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell)
+) :is(
+  .primary-button,
+  .secondary-button,
+  .branch-ops-tabs button,
+  .inventory-view-button,
+  .filter-tab,
+  .restock-button,
+  .op-primary,
+  .op-secondary,
+  .central-kitchen-mode,
+  .central-kitchen-priority-receive,
+  .central-kitchen-row-operation
+){
+  min-width:0;
+  max-width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  line-height:1.25;
+  text-align:center;
+}
+
+.branch-ops-tabs button,
+.storage-tab-groups .filter-tab,
+.zone-tabs.work-area-tabs .filter-tab{
+  overflow:hidden;
+}
+.storage-tab-groups .filter-tab,
+.zone-tabs.work-area-tabs .filter-tab{
+  display:inline-flex;
+  max-inline-size:240px;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  white-space:normal;
+}
+.storage-tab-groups .filter-tab span,
+.zone-tabs.work-area-tabs .filter-tab span{
+  margin-left:0;
+  flex:0 0 auto;
+}
+
+.inventory-table .inventory-row>*,
+.inventory-table .work-row>*{
+  min-width:0;
+  max-width:100%;
+}
+.inventory-table .quantity-control,
+.inventory-table .storage-threshold,
+.inventory-table .inventory-minimum,
+.inventory-table .inventory-badge,
+.inventory-table .inventory-working,
+.inventory-table .inventory-transfer,
+.inventory-table .inventory-actions,
+.inventory-table .inventory-item-tools{
+  flex-wrap:wrap;
+}
+.inventory-table .quantity-sync-status{
+  min-width:0;
+  max-width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.inventory-table .storage-threshold{
+  white-space:normal;
+}
+.inventory-table .source-quantities{
+  min-width:0;
+  max-width:100%;
+}
+.inventory-table .source-quantity{
+  min-width:0;
+  max-width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.inventory-table .tag{
+  max-width:100%;
+  justify-content:center;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-align:center;
+}
+.inventory-table .restock-button{
+  flex:0 1 auto;
+}
+
+/* ui-refresh.css uses a 240px + 320px + auto internal card grid.
+ * That minimum cannot fit inside the normal two-column operation list.
+ * Default operation cards therefore stack internally; only dense Pick/Transfer
+ * cards restore a flexible three-zone Desktop header because they already span
+ * the full operation list width.
+ */
+.inventory-operations-host .inventory-op-card{
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
+}
+.inventory-operations-host .inventory-op-card> :is(
+  .op-item-head,
+  .op-select-grid,
+  .op-transfer-balance,
+  .op-action-row,
+  .pick-followup
+){
+  grid-column:1 / -1;
+}
+.inventory-operations-host .inventory-op-card:has([data-op-submit="in"]) .op-select-grid{
+  grid-template-columns:minmax(0,1fr);
+}
+
+@media(min-width:901px){
+  .inventory-operations-host .inventory-op-card:has(.pick-followup),
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance){
+    grid-template-columns:minmax(220px,.9fr) minmax(0,1.35fr) auto;
+    align-items:end;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.op-item-head,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-item-head{
+    grid-column:1;
+    grid-row:1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.op-select-grid,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-select-grid{
+    grid-column:2;
+    grid-row:1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.op-action-row,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-action-row{
+    grid-column:3;
+    grid-row:1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.pick-followup,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-transfer-balance{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+}
+
+.inventory-operations-host .op-item-head>*,
+.inventory-operations-host .op-select-grid>*,
+.inventory-operations-host .pick-followup>*{
+  min-width:0;
+  max-width:100%;
+}
+.inventory-operations-host .op-item-head strong,
+.inventory-operations-host .op-item-head small{
+  overflow-wrap:anywhere;
+}
+.inventory-operations-host .op-location-pill{
+  overflow:hidden;
+}
+.inventory-operations-host .op-action-row{
+  flex-wrap:wrap;
+}
+.inventory-operations-host .op-quantity{
+  flex:0 0 auto;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+}
+.inventory-operations-host .op-quantity button{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  padding:0;
+  overflow:hidden;
+}
+.inventory-operations-host .op-quantity input{
+  min-width:0;
+  max-width:100%;
+  padding-inline:0;
+  overflow:hidden;
+}
+.inventory-operations-host .op-primary,
+.inventory-operations-host .op-secondary{
+  flex:0 1 auto;
+}
+.inventory-operations-host .pick-status{
+  flex-wrap:wrap;
+}
+.inventory-operations-host .pick-status small{
+  flex:1 1 160px;
+  min-width:0;
+}
+.inventory-operations-host .pick-use-row,
+.inventory-operations-host .pick-return-row{
+  flex-wrap:wrap;
+}
+.inventory-operations-host .pick-return-row label{
+  min-width:0;
+  max-width:100%;
+  flex:1 1 260px;
+}
+.inventory-operations-host .op-transfer-balance span{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+
+.central-kitchen-shell :is(
+  .central-kitchen-identity,
+  .central-kitchen-identity>*,
+  .central-kitchen-kpis article,
+  .central-kitchen-priority>header,
+  .central-kitchen-priority>header>*,
+  .central-kitchen-section-head>*,
+  .central-kitchen-location-card>*,
+  .central-kitchen-priority-row>*
+){
+  min-width:0;
+  max-width:100%;
+}
+.central-kitchen-shell :is(
+  .central-kitchen-mode,
+  .central-kitchen-location-card,
+  .central-kitchen-priority-row,
+  .central-kitchen-priority-receive,
+  .central-kitchen-row-operation
+){
+  overflow-wrap:anywhere;
+}
+
+/* Tablet / landscape inventory rows: legacy styles keep a 945px table
+ * minimum between 761px and 1100px. The actual content area is narrower when
+ * the sidebar is visible, so use the same semantic row content as responsive
+ * cards instead of forcing horizontal table overflow.
+ */
+@media(min-width:761px) and (max-width:1100px){
+  .inventory-table{
+    overflow:visible;
+    border:0;
+    background:transparent;
+    box-shadow:none;
+  }
+  .inventory-table .inventory-table-head{
+    display:none;
+  }
+  .inventory-table .inventory-group{
+    display:grid;
+    gap:8px;
+    margin:0 0 10px;
+  }
+  .inventory-table .inventory-group + .inventory-group{
+    margin-top:12px;
+    border-top:0;
+  }
+  .inventory-table .inventory-group-heading{
+    min-width:0;
+    min-height:36px;
+    padding:8px 10px;
+    border:1px solid #293151;
+    border-radius:10px;
+    background:#12182f;
+  }
+  .inventory-table .inventory-row,
+  .inventory-table .work-row{
+    min-width:0;
+    min-height:0;
+    grid-template-columns:minmax(0,1fr) minmax(130px,auto);
+    gap:8px 12px;
+    padding:12px;
+    border:1px solid #293151;
+    border-radius:12px;
+    background:#11162d;
+    box-shadow:0 8px 20px rgb(15 23 42 / 8%);
+  }
+  .inventory-table .inventory-row:last-child{
+    border-bottom:1px solid #293151;
+  }
+  .inventory-table .inventory-item-name{
+    grid-column:1;
+    grid-row:1;
+  }
+  .inventory-table .inventory-work-area,
+  .inventory-table .inventory-zone{
+    display:flex;
+    grid-column:1 / -1;
+    min-width:0;
+    align-items:center;
+    gap:8px;
+    padding-left:0;
+  }
+  .inventory-table .inventory-work-area{grid-row:2}
+  .inventory-table .inventory-zone{grid-row:3}
+  .inventory-table .mobile-field-label{
+    display:inline;
+    min-width:90px;
+    flex:0 0 90px;
+    color:#8a96b6;
+    font-size:10px;
+  }
+  .inventory-table .inventory-select{
+    width:100%;
+    min-width:0;
+    flex:1 1 180px;
+  }
+  .inventory-table .quantity-control{
+    grid-column:1;
+    grid-row:4;
+    margin-top:4px;
+    padding-left:0;
+  }
+  .inventory-table .inventory-storage{
+    grid-column:1;
+    grid-row:4;
+    min-width:0;
+    padding:0;
+  }
+  .inventory-table .inventory-storage>.quantity-control{
+    margin-top:0;
+  }
+  .inventory-table .storage-threshold{
+    padding-left:0;
+  }
+  .inventory-table .inventory-minimum{
+    grid-column:2;
+    grid-row:4;
+    justify-content:flex-end;
+  }
+  .inventory-table .inventory-badge,
+  .inventory-table .inventory-actions{
+    grid-column:2;
+    grid-row:1;
+    justify-content:flex-end;
+  }
+  .inventory-table .inventory-actions>.inventory-badge{
+    grid-column:auto;
+    grid-row:auto;
+  }
+  .inventory-table .inventory-working{
+    grid-column:2;
+    grid-row:4;
+    justify-content:flex-end;
+  }
+  .inventory-table .inventory-working>.mobile-field-label{
+    min-width:auto;
+    flex-basis:auto;
+  }
+  .inventory-table .work-row>.inventory-work-area{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+  .inventory-table .work-row>.quantity-control{
+    grid-column:1;
+    grid-row:3;
+  }
+  .inventory-table .work-row>.inventory-minimum{
+    grid-column:2;
+    grid-row:3;
+  }
+  .inventory-table .work-row>.inventory-source{
+    grid-column:1;
+    grid-row:4;
+    min-width:0;
+    padding-left:0;
+  }
+  .inventory-table .work-row>.inventory-transfer{
+    grid-column:2;
+    grid-row:4;
+    justify-content:flex-end;
+  }
+}
+
+/* Tablet/small Desktop: keep dense Pick controls compact without forcing a
+ * three-column row when the actual workspace is narrow.
+ */
+@media(min-width:901px) and (max-width:1199px){
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-followup{
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:end;
+    gap:10px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status{
+    grid-column:1 / -1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-use-row{
+    grid-column:2;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row{
+    grid-column:1 / -1;
+    display:grid;
+    grid-template-columns:minmax(220px,1fr) auto auto;
+    align-items:end;
+    gap:8px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row label{
+    min-width:0;
+    flex:none;
+  }
+}
+
+/* Wide Desktop: 已領貨 + 使用 + 歸位 become one compact row.
+ * The layout reuses the current Pick markup and action handlers.
+ */
+@media(min-width:1200px){
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-followup{
+    display:grid;
+    grid-template-columns:minmax(200px,.72fr) auto minmax(400px,1.55fr);
+    align-items:end;
+    gap:10px;
+    padding:10px 12px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status{
+    display:grid;
+    grid-template-columns:auto auto minmax(0,1fr);
+    align-items:center;
+    align-self:center;
+    justify-content:initial;
+    gap:8px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status>span,
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status>strong{
+    white-space:nowrap;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status small{
+    min-width:0;
+    text-align:right;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-use-row{
+    display:grid;
+    grid-template-columns:auto auto;
+    align-items:end;
+    justify-content:end;
+    gap:8px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row{
+    display:grid;
+    grid-template-columns:minmax(250px,1fr) auto auto;
+    align-items:end;
+    justify-content:stretch;
+    gap:8px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row label{
+    min-width:0;
+    flex:none;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) :is(.op-primary,.op-secondary){
+    white-space:nowrap;
+    overflow-wrap:normal;
+    word-break:normal;
+  }
+}
+
+@media(max-width:760px){
+  .storage-tab-groups .zone-tabs > .filter-tab,
+  .zone-tabs.work-area-tabs > .filter-tab{
+    flex:0 0 150px !important;
+    width:150px;
+    max-width:150px;
+    min-width:150px;
+    min-height:48px;
+    padding:6px 9px;
+    overflow:hidden;
+  }
+  .storage-tab-groups .zone-tabs > .filter-tab:first-child,
+  .zone-tabs.work-area-tabs > .filter-tab:first-child{
+    flex-basis:150px !important;
+    width:150px;
+    min-width:150px;
+  }
+  .storage-tab-groups .filter-tab .bilingual-control-label,
+  .zone-tabs.work-area-tabs .filter-tab .bilingual-control-label{
+    display:grid;
+    width:auto;
+    min-width:0;
+    max-width:100%;
+    flex:1 1 0;
+    gap:1px;
+    overflow:hidden;
+    line-height:1.15;
+  }
+  .storage-tab-groups .filter-tab .label-primary,
+  .storage-tab-groups .filter-tab .label-secondary,
+  .zone-tabs.work-area-tabs .filter-tab .label-primary,
+  .zone-tabs.work-area-tabs .filter-tab .label-secondary{
+    min-width:0;
+    max-width:100%;
+    overflow:visible;
+    text-overflow:clip;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .storage-tab-groups .filter-tab>span:last-child,
+  .zone-tabs.work-area-tabs .filter-tab>span:last-child{
+    flex:0 0 auto;
+  }
+
+  .inventory-table .inventory-select{
+    width:100%;
+    min-width:0;
+  }
+  .inventory-table .inventory-work-area,
+  .inventory-table .inventory-zone{
+    align-items:stretch;
+    flex-wrap:wrap;
+  }
+  .inventory-table .mobile-field-label{
+    flex:0 0 86px;
+  }
+  .inventory-operations-host .op-action-row,
+  .inventory-operations-host .pick-use-row,
+  .inventory-operations-host .pick-return-row{
+    width:100%;
+  }
+  .inventory-operations-host .op-primary,
+  .inventory-operations-host .op-secondary{
+    min-width:0;
+  }
+  .central-kitchen-shell :is(
+    .central-kitchen-priority-row,
+    .central-kitchen-section-head,
+    .central-kitchen-context
+  ){
+    overflow:hidden;
+  }
+}
+
