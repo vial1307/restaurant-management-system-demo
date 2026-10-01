@@ -1,5 +1,40 @@
 # Kitchen OS Work Log
 
+## 2026-10-02 — Inventory compact Pick + overflow hardening verified in production
+
+- Completed PR #186 from the user's request to compact 領貨 and prevent text/buttons from overflowing throughout Inventory.
+- Final exact PR head: `abd0276abc3009ed98375b7fcf49f8ccc6beb903`.
+- During regression, the new geometry guards found two real pre-existing presentation conflicts:
+  - 入庫 operation card overflowed by 51px because legacy `ui-refresh.css` still imposed an internal `minmax(240px) + minmax(320px) + auto` card grid;
+  - 844×390 Inventory rows overflowed by 214px because legacy responsive CSS still imposed a 945px minimum table width between mobile and desktop breakpoints.
+- Both were repaired in `src/inventory-maestro-ui.css` without changing operation markup, event handlers or data paths:
+  - normal operation cards use a flexible one-column internal structure while full-width Pick/Transfer keep their specialized responsive layouts;
+  - 761–1100px stock/work views switch to responsive card rows;
+  - wide Desktop Pick renders picked status → Use controls → Return destination/quantity/action in one row;
+  - narrower layouts wrap without squeezing controls;
+  - route-wide min/max-width, wrapping and bounded-select rules prevent bilingual labels/buttons/badges/source pills from protruding.
+- `src/search-i18n-layer.js` received one UI-only guard: labels already structured by `ui-refresh.js` are not bilingualized a second time.
+- `tests/browser-regression.mjs` now checks document/card/row/button horizontal overflow, dense Pick/Transfer width, wide-Desktop Pick ordering and duplicate structured bilingual labels.
+- Final exact-head CI passed preflight, database/API regressions, Super Admin round-trip, multi-user PostgreSQL concurrency, Desktop/mobile Chromium, Workforce browser checks and full-device cross-browser regression.
+- PR #186 merged as `337f5a2f6a3b0bfa06916fede0b0336cee4018e2`.
+- Main Deploy #1078 / run `36904751345`: PASS:
+  - exact deploy target verified;
+  - schema 031 unchanged;
+  - `DATA_INTEGRITY_OK`;
+  - health `{"app":"ok","database":"ok","schema":"031","release":"337f5a2"}`;
+  - Web/API/Super Admin edge healthy;
+  - `PRODUCTION_UI_SMOKE_OK`.
+- GitHub Pages #996 / run `36904748812`: PASS.
+- Inventory Site Production Audit #368 / run `36906762392`: PASS:
+  - Central 41 / quantity 81;
+  - Fuxing 78 / quantity 1823;
+  - Yongji 75 / quantity 17;
+  - site integrity, location classification, legacy materialization and hidden-integrity violations all 0;
+  - Fuxing/Yongji 75-item manifests missing 0;
+  - `cross_site_work_area_variants=8` informational.
+- A separate Workforce Schedule Production Parity run initially failed during `ssh-keyscan` because the VPS closed the SSH connection before any parity check ran; its failed job was rerun separately. This was not an Inventory/data regression.
+- Runtime continuation baseline is now `337f5a2f6a3b0bfa06916fede0b0336cee4018e2` / schema 031.
+
 ## 2026-10-02 — Inventory-wide overflow hardening candidate
 
 - User requested a denser Pick UI and specifically asked that text/buttons no longer overflow anywhere in Inventory.
