@@ -1,6 +1,55 @@
 # Kitchen OS — Current Development Handoff
 
-## ACTIVE CANDIDATE — Inventory compact Pick row + global overflow hardening, 2026-10-02
+## CURRENT VERIFIED PRODUCTION — Inventory compact Pick row + overflow hardening, 2026-10-02
+
+This is the current Inventory UI continuation authority on schema 031.
+
+Production:
+- PR #186 merged as `337f5a2f6a3b0bfa06916fede0b0336cee4018e2`;
+- exact PR head `abd0276abc3009ed98375b7fcf49f8ccc6beb903` passed preflight, Desktop/mobile Chromium and full-device cross-browser regression;
+- Deploy Kitchen OS to VPS #1078 / run `36904751345`: PASS;
+- GitHub Pages #996 / run `36904748812`: PASS;
+- production health: `{"app":"ok","database":"ok","schema":"031","release":"337f5a2"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: `PRODUCTION_UI_SMOKE_OK`;
+- Inventory Site Production Audit #368 / run `36906762392`: PASS.
+
+UI behavior now verified:
+- wide Desktop Pick follow-up compacts existing 已領貨 / 使用 / 歸位 controls into one horizontal sequence when enough width exists;
+- 901–1199px uses a responsive Pick fallback; mobile keeps the existing wrapped/touch-friendly layout;
+- operation cards no longer inherit the legacy `240px + 320px + auto` internal minimum grid that caused half-width 入庫/出貨 overflow;
+- 761–1100px Inventory stock/work tables use responsive cards rather than the legacy 945px minimum table width;
+- long bilingual text, buttons, badges, source pills and labels are width-contained and wrap safely;
+- selects remain bounded with ellipsis;
+- Central Kitchen Inventory surfaces use the same overflow contract;
+- one presentation-only guard in `src/search-i18n-layer.js` avoids bilingualizing labels already structured by `ui-refresh.js`, preventing duplicated Chinese text in compact controls.
+
+Regression findings that are now permanently covered:
+- first overflow guard caught a real 51px overflow in 入庫 cards caused by legacy internal operation-card minimums;
+- the next run caught a real 214px overflow at 844×390 caused by the legacy 945px Inventory table minimum;
+- both defects were fixed in presentation CSS, and final exact-head Chromium/full-device regression passed;
+- `tests/browser-regression.mjs` now checks document/card/row/button horizontal overflow, dense Pick/Transfer full width, wide-Desktop Pick ordering and duplicate structured bilingual labels.
+
+Strict scope:
+1. No Inventory business handler or operation semantics were rewritten.
+2. No API/backend, PostgreSQL/schema, RBAC/permissions, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changed.
+3. Runtime layout/overflow work remains in `src/inventory-maestro-ui.css`; the only runtime JavaScript change is the presentation-only duplicate-label guard above.
+4. PostgreSQL/VPS remains the sole Inventory data authority.
+
+Latest production Inventory audit:
+- Central: 41 active items / quantity 81;
+- Fuxing: 78 active items / quantity 1823;
+- Yongji: 75 active items / quantity 17;
+- inventory site integrity violations: 0;
+- location classification violations: 0;
+- branch legacy catalog materialization violations: 0;
+- hidden integrity violations: 0;
+- Fuxing/Yongji 75-item manifests: missing 0;
+- `cross_site_work_area_variants=8` remains informational under site-scoped schema 031.
+
+Continuation runtime baseline: `337f5a2f6a3b0bfa06916fede0b0336cee4018e2` / schema 031.
+
+## CLOSED CANDIDATE HISTORY — Inventory compact Pick row + global overflow hardening, 2026-10-02
 
 Verified production runtime baseline remains `53d218cf11b9cb1f10ceab586c402f531ff112d5` / schema 031. Documentation-only main head may be newer.
 
