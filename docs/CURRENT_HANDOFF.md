@@ -1,6 +1,53 @@
 # Kitchen OS — Current Development Handoff
 
-## ACTIVE REPAIR — Desktop 領貨 / 轉撥 UI, 2026-10-02
+## CURRENT VERIFIED PRODUCTION — Inventory responsive UI + Desktop 領貨 / 轉撥 repair, 2026-10-02
+
+This section is the current UI/Inventory continuation authority on schema 031.
+
+Production:
+- PR #184 merged to `main` as `53d218cf11b9cb1f10ceab586c402f531ff112d5`;
+- Deploy Kitchen OS to VPS #1062 / run `36896045707`: PASS;
+- GitHub Pages #994 / run `36896043714`: PASS;
+- production health: `{"app":"ok","database":"ok","schema":"031","release":"53d218c"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: `PRODUCTION_UI_SMOKE_OK`;
+- Inventory Site Production Audit #350 / run `36896923185`: PASS.
+
+Desktop repair:
+- user-reported 領貨 (pick) and 轉撥 (transfer) cards were being compressed into the two-column Desktop operation grid after responsive Phase 3;
+- repair remains presentation-only in `src/inventory-maestro-ui.css`;
+- cards already containing `.pick-followup` or `.op-transfer-balance` span the full Desktop operation grid;
+- transfer source → destination balance uses a stable three-column layout;
+- pick return destination / quantity / action controls receive sufficient width and wrapping;
+- existing DOM, handlers, API calls and database-backed values are reused unchanged.
+
+Regression protection:
+- `tests/browser-regression.mjs` now checks Desktop pick/transfer dense cards when present;
+- the guard requires the dense card to span the operation-list width and rejects horizontal overflow;
+- exact PR head `1f987b923f403e6af8744b7d3bba7ea117c3238b` passed Deploy #1061 on attempt 2;
+- attempt 1 failed only on a transient WebKit mobile CORS/page-error for `/api/inventory/fuxing`; the same unchanged head passed on rerun;
+- merge production regression, deploy and production smoke all passed.
+
+Scope remains strict:
+1. No Inventory JavaScript business handler was rewritten for this repair.
+2. No API/backend, PostgreSQL/schema, RBAC/permission, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changed.
+3. UI work should continue in `src/inventory-maestro-ui.css` wherever possible; do not hard-code product/site/role/business data to solve visual issues.
+4. PostgreSQL/VPS remains the sole runtime authority for Inventory data and configuration.
+
+Latest production Inventory audit:
+- Central: 41 active items / quantity 81;
+- Fuxing: 78 active items / quantity 1823;
+- Yongji: 75 active items / quantity 17;
+- inventory site integrity violations: 0;
+- location classification violations: 0;
+- branch legacy catalog materialization violations: 0;
+- hidden integrity violations: 0;
+- Fuxing/Yongji 75-item historical manifests: missing 0;
+- `cross_site_work_area_variants=8` is informational and valid under site-scoped schema 031.
+
+Continuation baseline: `53d218cf11b9cb1f10ceab586c402f531ff112d5` / schema 031.
+
+## CLOSED REPAIR HISTORY — Desktop 領貨 / 轉撥 UI, 2026-10-02
 
 Responsive UI Phase 3 was merged in PR #183 as `52a1344cd9f1eafec372c15feffb85660d384b4b`, but deploy #1058 failed and that merge commit is not a verified production release.
 
@@ -14,7 +61,7 @@ Repair scope:
 
 Do not record a new production SHA until the repair is merged, deploy is green, release health matches, and production smoke passes.
 
-## ACTIVE CANDIDATE — Inventory responsive UI Phase 3, 2026-10-01
+## CLOSED CANDIDATE HISTORY — Inventory responsive UI Phase 3, 2026-10-01
 
 PR #183 (`style/inventory-responsive-polish-20261001`) continues the presentation-only inventory redesign from verified production `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de` / schema 031.
 
