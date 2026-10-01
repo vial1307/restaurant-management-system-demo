@@ -72,7 +72,30 @@ async function assertInventorySurfaceFits(page,label){
     const count=Math.min(await nodes.count(),8);
     for(let i=0;i<count;i+=1){
       const overflow=await nodes.nth(i).evaluate((node)=>node.scrollWidth-node.clientWidth);
-      assert(overflow<=2,`${label}: ${selector}[${i}] horizontal overflow ${overflow}px`);
+      if(overflow>2){
+        const diagnostics=await nodes.nth(i).evaluate((node)=>{
+          const root=node.getBoundingClientRect();
+          return [...node.querySelectorAll("*")].map((child)=>{
+            const box=child.getBoundingClientRect();
+            const style=getComputedStyle(child);
+            return {
+              tag:child.tagName.toLowerCase(),
+              className:String(child.className||"").slice(0,120),
+              scrollWidth:child.scrollWidth,
+              clientWidth:child.clientWidth,
+              left:Math.round(box.left-root.left),
+              right:Math.round(box.right-root.left),
+              width:Math.round(box.width),
+              overflowX:style.overflowX,
+              whiteSpace:style.whiteSpace,
+              display:style.display,
+            };
+          }).filter((entry)=>
+            entry.scrollWidth>entry.clientWidth+2 || entry.left< -2 || entry.right>root.width+2
+          ).slice(0,16);
+        });
+        assert.fail(`${label}: ${selector}[${i}] horizontal overflow ${overflow}px; children=${JSON.stringify(diagnostics)}`);
+      }
     }
   }
 
