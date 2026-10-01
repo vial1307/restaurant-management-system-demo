@@ -1476,3 +1476,64 @@
     scroll-behavior:auto;
   }
 }
+
+
+/* Desktop operation repair — pick/transfer carry denser controls than receive/ship.
+ * CSS-only: selectors key off existing rendered markup and do not add data authority.
+ */
+@media(min-width:901px){
+  .inventory-operations-host .inventory-op-card:has(.pick-followup),
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance){
+    grid-column:1 / -1;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .op-select-grid,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance) .op-select-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .op-action-row,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance) .op-action-row{
+    justify-content:flex-end;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-followup{
+    padding:12px;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status{
+    min-width:0;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status small{
+    min-width:0;
+    overflow-wrap:anywhere;
+    text-align:right;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-use-row,
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row{
+    min-width:0;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row label{
+    min-width:220px;
+    flex:1 1 320px;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance) .op-transfer-balance{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+    align-items:center;
+    gap:12px;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance) .op-transfer-balance span{
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance) .op-transfer-balance span:last-child{
+    text-align:right;
+  }
+}
