@@ -1537,6 +1537,30 @@
     text-align:right;
   }
 }
+/* Operation-card structural reset: legacy ui-refresh.css still defines each
+ * card as a three-column grid with 240px + 320px intrinsic minimums. Maestro
+ * owns presentation now, so collapse that legacy internal grid without touching
+ * any operation markup or handlers.
+ */
+.inventory-operations-host .inventory-op-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
+}
+.inventory-operations-host .inventory-overview-card{
+  grid-template-columns:minmax(180px,.85fr) minmax(0,1.15fr);
+  align-items:center;
+}
+.inventory-operations-host .op-select-grid>:only-child{
+  grid-column:1 / -1;
+}
+@media(max-width:760px){
+  .inventory-operations-host .inventory-overview-card{
+    grid-template-columns:minmax(0,1fr);
+    align-items:stretch;
+  }
+}
+
 /* Phase 4 inventory density + overflow hardening — presentation only.
  * Keeps existing DOM, handlers and PostgreSQL-backed values intact.
  * Goal: dense Desktop pick flow when space is available and no text/control
