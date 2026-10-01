@@ -7,16 +7,17 @@ Verified production runtime baseline remains `53d218cf11b9cb1f10ceab586c402f531f
 Candidate branch: `style/inventory-overflow-density-20261002`.
 
 Scope:
-- presentation-only runtime change in `src/inventory-maestro-ui.css`;
+- presentation-only runtime work is concentrated in `src/inventory-maestro-ui.css`; one UI-only i18n guard in `src/search-i18n-layer.js` prevents already-structured bilingual labels from being translated a second time;
 - wide Desktop Pick follow-up compacts existing 已領貨 / 使用 / 歸位 controls into one row when enough width exists;
 - smaller Desktop/tablet/mobile retain responsive multi-row fallbacks instead of squeezing controls;
 - Inventory-wide overflow hardening covers operation cards, stock/work rows, tabs, buttons, labels, select controls, source pills, status badges and Central Kitchen panels;
 - long bilingual labels wrap safely; selects remain bounded and use ellipsis rather than protruding from cards;
-- no Inventory handler, API/backend, PostgreSQL/schema, RBAC/permissions, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changes.
+- no Inventory business handler, API/backend, PostgreSQL/schema, RBAC/permissions, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changes.
 
 Regression:
 - `tests/browser-regression.mjs` now checks document/card/row/button horizontal overflow on Inventory surfaces;
 - wide Desktop Pick geometry asserts status → Use → Return remain horizontally ordered in one compact row;
+- responsive regression also rejects duplicate bilingual primary labels and reports exact overflowing controls/descendants.
 - exact-head CI/full-device regression is required before merge/deploy.
 
 Do not record this candidate as production until merge, VPS deploy, release health, `DATA_INTEGRITY_OK`, production UI smoke and Inventory Site Production Audit all pass.
