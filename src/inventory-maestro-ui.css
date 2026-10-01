@@ -1745,6 +1745,57 @@
   flex:0 1 auto;
 }
 
+/* ui-refresh.css uses a 240px + 320px + auto internal card grid.
+ * That minimum cannot fit inside the normal two-column operation list.
+ * Default operation cards therefore stack internally; only dense Pick/Transfer
+ * cards restore a flexible three-zone Desktop header because they already span
+ * the full operation list width.
+ */
+.inventory-operations-host .inventory-op-card{
+  grid-template-columns:minmax(0,1fr);
+  align-items:stretch;
+}
+.inventory-operations-host .inventory-op-card> :is(
+  .op-item-head,
+  .op-select-grid,
+  .op-transfer-balance,
+  .op-action-row,
+  .pick-followup
+){
+  grid-column:1 / -1;
+}
+.inventory-operations-host .inventory-op-card:has([data-op-submit="in"]) .op-select-grid{
+  grid-template-columns:minmax(0,1fr);
+}
+
+@media(min-width:901px){
+  .inventory-operations-host .inventory-op-card:has(.pick-followup),
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance){
+    grid-template-columns:minmax(220px,.9fr) minmax(0,1.35fr) auto;
+    align-items:end;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.op-item-head,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-item-head{
+    grid-column:1;
+    grid-row:1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.op-select-grid,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-select-grid{
+    grid-column:2;
+    grid-row:1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.op-action-row,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-action-row{
+    grid-column:3;
+    grid-row:1;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup)>.pick-followup,
+  .inventory-operations-host .inventory-op-card:has(.op-transfer-balance)>.op-transfer-balance{
+    grid-column:1 / -1;
+    grid-row:2;
+  }
+}
+
 .inventory-operations-host .op-item-head>*,
 .inventory-operations-host .op-select-grid>*,
 .inventory-operations-host .pick-followup>*{
