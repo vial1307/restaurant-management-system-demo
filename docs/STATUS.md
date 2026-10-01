@@ -9,8 +9,8 @@
 - Global Inventory UI hardening prevents bilingual text, buttons, badges, source pills and operation controls from protruding outside their cards/rows.
 - Select controls are width-bounded with ellipsis; action text wraps safely where necessary.
 - Central Kitchen Inventory panels/buttons receive the same overflow contract.
-- Runtime business logic remains untouched; CSS only.
-- Browser regression now checks Inventory surface and button overflow plus wide-Desktop Pick horizontal ordering.
+- Runtime business logic remains untouched. CSS owns layout/overflow behavior; `search-i18n-layer.js` has one presentation-only guard so labels already structured by `ui-refresh.js` are not bilingualized twice.
+- Browser regression now checks Inventory surface/button overflow, wide-Desktop Pick horizontal ordering, and duplicate structured bilingual labels.
 - NEXT: exact-head CI → merge → production deploy/smoke/audit.
 
 ## DONE — Inventory responsive UI Phase 3 + Desktop 領貨 / 轉撥 repair, 2026-10-02
