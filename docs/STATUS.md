@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Inventory responsive UI Phase 3, 2026-10-01
+
+- PR #183: `style/inventory-responsive-polish-20261001`.
+- Candidate started from verified production `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de` on schema 031.
+- Runtime scope remains presentation-only: `src/inventory-maestro-ui.css`; no JavaScript business logic, API/backend, schema, PostgreSQL data, RBAC, quantities/minimums, Work Area/storage or transfer/shipping semantics are changed.
+- Desktop: increases usable inventory width at large resolutions and improves product/control readability.
+- Tablet: constrains operation cards to one column where dual-column cards become cramped.
+- Mobile: main operation tabs become a visible responsive grid, controls gain larger touch targets, stock/source rows wrap more safely, and Central Kitchen mode/location labels avoid unnecessary truncation.
+- NEXT: run exact-head CI/full-device regression for PR #183; only merge/deploy after green results, then record the verified production SHA.
+
 ## DONE — Inventory frontend redesign/polish, 2026-10-01
 
 - PR #176 merged as `2c7ac057605c8b21c0297326ea16e1562e125832`.

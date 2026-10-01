@@ -1,5 +1,19 @@
 # Kitchen OS — Current Development Handoff
 
+## ACTIVE CANDIDATE — Inventory responsive UI Phase 3, 2026-10-01
+
+PR #183 (`style/inventory-responsive-polish-20261001`) continues the presentation-only inventory redesign from verified production `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de` / schema 031.
+
+Candidate scope:
+- runtime file changed: `src/inventory-maestro-ui.css` only;
+- desktop workspace/readability polish;
+- tablet operation-card breakpoint polish;
+- mobile operation-tab grid, larger touch targets and safer wrapping;
+- Central Kitchen mobile mode/location label readability;
+- no handler, API, permission, PostgreSQL, schema, site/catalog, quantity/minimum, Work Area/storage, transfer/shipping or business-string rewrite.
+
+Do not treat PR #183 as production until exact-head CI, merge, deploy, release health and production smoke all pass.
+
 ## CURRENT VERIFIED PRODUCTION — Inventory frontend redesign only, 2026-10-01
 
 This is the current UI handoff on top of the unchanged schema-031 inventory runtime.

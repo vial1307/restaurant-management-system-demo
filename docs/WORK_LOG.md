@@ -1780,3 +1780,12 @@ The separate read-cutover candidate:
   - both branch legacy manifests expected 75, missing 0;
   - inventory site, classification, legacy materialization and hidden-inventory violations all 0.
 - Super Admin direct Database round-trip and browser regression passed; realtime invalidation remains PostgreSQL/VPS-backed.
+
+
+## 2026-10-01 — Inventory responsive UI Phase 3 candidate
+
+- Opened PR #183 from `style/inventory-responsive-polish-20261001`.
+- Runtime change is confined to `src/inventory-maestro-ui.css`.
+- Added large-desktop width/readability tuning, tablet single-column operation layout, mobile operation-tab grid, larger touch targets, improved stock/source wrapping, narrow-phone stacking, and Central Kitchen mobile label readability.
+- No inventory JavaScript, API/backend, PostgreSQL/schema, RBAC, site/catalog master data, quantities/minimums, Work Area/storage, transfer/shipping semantics or business strings were changed.
+- Candidate must pass exact-head CI/full-device regression before merge/deploy.
