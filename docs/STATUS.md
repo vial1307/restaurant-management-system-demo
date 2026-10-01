@@ -1,6 +1,24 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Inventory overflow hardening + compact Pick row, 2026-10-02
+## DONE — Inventory compact Pick row + overflow hardening, 2026-10-02
+
+- PR #186 merged as `337f5a2f6a3b0bfa06916fede0b0336cee4018e2`.
+- Exact PR head `abd0276abc3009ed98375b7fcf49f8ccc6beb903`: preflight, Desktop/mobile Chromium and full-device cross-browser PASS.
+- Deploy #1078 / run `36904751345`: PASS.
+- GitHub Pages #996 / run `36904748812`: PASS.
+- Production health: release `337f5a2`, schema `031`, app/database OK.
+- `DATA_INTEGRITY_OK`; production UI smoke PASS.
+- Inventory Site Production Audit #368 / run `36906762392`: PASS.
+- Wide Desktop Pick now renders 已領貨 → 使用 → 歸位 in one compact horizontal sequence when enough width exists.
+- 901–1199px and mobile keep responsive fallbacks; 761–1100px stock/work tables use responsive cards instead of the legacy fixed 945px table width.
+- Legacy operation-card internal minimums were neutralized inside the Maestro visual layer, eliminating the real 51px 入庫 overflow caught by regression.
+- Tablet/landscape row layout was corrected after regression caught a real 214px overflow at 844×390.
+- Long bilingual text/buttons/selects/badges/source pills are width-contained; one presentation-only i18n guard prevents duplicated structured bilingual labels.
+- No Inventory business handler, API/backend, PostgreSQL/schema, RBAC, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changed.
+- Latest audit: Central 41 / qty 81; Fuxing 78 / qty 1823; Yongji 75 / qty 17; all Inventory violation groups are 0; both historical branch manifests missing 0.
+- Current runtime continuation baseline: `337f5a2f6a3b0bfa06916fede0b0336cee4018e2` / schema 031.
+
+## CLOSED — Inventory overflow-hardening candidate, 2026-10-02
 
 - Branch: `style/inventory-overflow-density-20261002`.
 - Production baseline: runtime `53d218cf11b9cb1f10ceab586c402f531ff112d5`, schema 031.
