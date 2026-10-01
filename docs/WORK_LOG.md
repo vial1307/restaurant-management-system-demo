@@ -1,5 +1,41 @@
 # Kitchen OS Work Log
 
+## 2026-10-02 — Desktop 領貨 / 轉撥 repair verified in production
+
+- User reported Desktop UI breakage in 領貨 (pick) and 轉撥 (transfer) after responsive Inventory Phase 3.
+- Diagnosis: these flows contain denser nested controls than receive/ship, but the redesign still placed every operation card in the same two-column Desktop grid, compressing pick follow-up/return controls and transfer balance.
+- Repair PR #184 kept runtime scope CSS-only in `src/inventory-maestro-ui.css`:
+  - existing pick cards identified by `.pick-followup` span the full Desktop operation grid;
+  - existing transfer cards identified by `.op-transfer-balance` span the full Desktop operation grid;
+  - transfer balance uses a stable three-column source → arrow → destination presentation;
+  - pick return destination, quantity and action controls receive enough width and safe wrapping.
+- Added a browser regression guard in `tests/browser-regression.mjs`: on Desktop, dense pick/transfer cards must match the operation-list width and must not horizontally overflow.
+- No JavaScript handler, API/backend, PostgreSQL/schema, permission/RBAC, quantity/minimum, Work Area/storage, movement semantic or business-data authority changed.
+- Exact PR head `1f987b923f403e6af8744b7d3bba7ea117c3238b`:
+  - Workforce Approval diagnostic PASS;
+  - Deploy #1061 attempt 1 failed only on a transient WebKit mobile CORS/page-error against `/api/inventory/fuxing`;
+  - failed job rerun on the same unchanged head passed every regression.
+- PR #184 merged to `main` as `53d218cf11b9cb1f10ceab586c402f531ff112d5`.
+- Main Deploy #1062 / run `36896045707` PASS:
+  - exact deploy target verified `53d218cf11b9cb1f10ceab586c402f531ff112d5`;
+  - schema remains 031;
+  - production health `{"app":"ok","database":"ok","schema":"031","release":"53d218c"}`;
+  - `DATA_INTEGRITY_OK`;
+  - Web/API/Super Admin edge healthy;
+  - `PRODUCTION_UI_SMOKE_OK`.
+- GitHub Pages #994 / run `36896043714`: PASS.
+- Inventory Site Production Audit #350 / run `36896923185`: PASS:
+  - Central 41 active items / quantity 81;
+  - Fuxing 78 active items / quantity 1823;
+  - Yongji 75 active items / quantity 17;
+  - inventory site integrity violations 0;
+  - location classification violations 0;
+  - branch legacy catalog materialization violations 0;
+  - hidden integrity violations 0;
+  - Fuxing/Yongji 75-item manifests missing 0;
+  - 8 cross-site Work Area variants are informational under schema 031.
+- Production continuation baseline is now `53d218cf11b9cb1f10ceab586c402f531ff112d5`.
+
 ## 2026-10-01 — Inventory UI redesign completed without functional rewrite
 
 - Continued from the schema-031 production baseline and enforced the user's boundary: redesign Inventory UI only; do not rewrite stable functions and do not hard-code business data.
