@@ -110,8 +110,19 @@ async function assertInventorySurfaceFits(page,label){
   ].join(","));
   const controlCount=Math.min(await controls.count(),32);
   for(let i=0;i<controlCount;i+=1){
-    const overflow=await controls.nth(i).evaluate((node)=>node.scrollWidth-node.clientWidth);
-    assert(overflow<=2,`${label}: visible Inventory button[${i}] text overflow ${overflow}px`);
+    const control=controls.nth(i);
+    const overflow=await control.evaluate((node)=>node.scrollWidth-node.clientWidth);
+    if(overflow>2){
+      const diagnostics=await control.evaluate((node)=>({
+        className:String(node.className||"").slice(0,140),
+        text:String(node.textContent||"").trim().replace(/\\s+/g," ").slice(0,180),
+        scrollWidth:node.scrollWidth,
+        clientWidth:node.clientWidth,
+        whiteSpace:getComputedStyle(node).whiteSpace,
+        display:getComputedStyle(node).display,
+      }));
+      assert.fail(`${label}: visible Inventory button[${i}] text overflow ${overflow}px; control=${JSON.stringify(diagnostics)}`);
+    }
   }
 }
 
