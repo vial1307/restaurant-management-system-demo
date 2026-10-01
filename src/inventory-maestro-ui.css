@@ -1236,3 +1236,243 @@
     font-size:9.5px;
   }
 }
+
+
+/* Phase 3 responsive polish — presentation only.
+ * Improves density, touch ergonomics and breakpoint behavior without changing
+ * inventory DOM, handlers, API calls, permissions or database-backed values.
+ */
+@media(min-width:1200px){
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell){
+    max-width:1360px;
+  }
+  .inventory-table .inventory-item-name strong{
+    font-size:13px;
+  }
+  .inventory-table .inventory-item-name small,
+  .inventory-table .inventory-working small,
+  .inventory-table .inventory-source small{
+    font-size:10.5px;
+  }
+  .inventory-table .inventory-action-button,
+  .inventory-table .quantity-button{
+    width:36px;
+    height:36px;
+  }
+  .inventory-table .quantity-input,
+  .inventory-table .minimum-input{
+    min-height:36px;
+  }
+  .inventory-summary{
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  }
+}
+
+@media(min-width:761px) and (max-width:1100px){
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell){
+    max-width:100%;
+  }
+  .inventory-operations-host .inventory-ops-list{
+    grid-template-columns:1fr;
+  }
+  .branch-ops-tabs{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
+}
+
+@media(max-width:760px){
+  .page-content:has(.branch-ops-tabs),
+  .page-content:has(.inventory-table),
+  .page-content:has(.inventory-operations-host),
+  .page-content:has(.central-kitchen-shell){
+    max-width:100%;
+    border-radius:12px;
+    box-shadow:0 12px 32px rgb(15 23 42 / 10%);
+  }
+
+  .page-content:has(.branch-ops-tabs) .page-heading,
+  .page-content:has(.inventory-table) .page-heading,
+  .page-content:has(.inventory-operations-host) .page-heading,
+  .page-content:has(.central-kitchen-shell) .page-heading{
+    display:grid;
+    gap:9px;
+    margin-bottom:12px;
+  }
+  .page-content:has(.branch-ops-tabs) .page-heading .primary-button,
+  .page-content:has(.inventory-table) .page-heading .primary-button,
+  .page-content:has(.inventory-operations-host) .page-heading .primary-button{
+    width:100%;
+    min-height:44px;
+  }
+
+  .branch-ops-tabs{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+    overflow:visible;
+    padding:6px;
+    scroll-snap-type:none;
+  }
+  .branch-ops-tabs button{
+    min-width:0;
+    min-height:46px;
+    padding:7px 6px;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    line-height:1.25;
+  }
+
+  .storage-tab-groups .zone-tabs,
+  .zone-tabs.work-area-tabs{
+    padding-bottom:2px;
+    scroll-snap-type:x proximity;
+  }
+  .storage-tab-groups .filter-tab,
+  .zone-tabs.work-area-tabs .filter-tab{
+    min-height:40px;
+    scroll-snap-align:start;
+  }
+
+  .filters-row{
+    padding:9px;
+  }
+  .filters-row .inventory-view-description{
+    font-size:10.5px;
+  }
+
+  .inventory-table .inventory-row,
+  .inventory-table .work-row{
+    padding:12px;
+  }
+  .inventory-table .inventory-item-name strong{
+    font-size:13px;
+    line-height:1.4;
+  }
+  .inventory-table .inventory-item-name small{
+    font-size:10.5px;
+    line-height:1.4;
+  }
+  .inventory-table .quantity-button{
+    width:42px;
+    height:42px;
+  }
+  .inventory-table .quantity-input,
+  .inventory-table .minimum-input{
+    min-height:42px;
+  }
+  .inventory-table .inventory-item-tools{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+    gap:7px;
+  }
+  .inventory-table .inventory-action-button{
+    width:40px;
+    height:40px;
+  }
+  .inventory-table .restock-button{
+    min-height:40px;
+    padding-inline:11px;
+  }
+  .inventory-table .source-quantities{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  .inventory-table .source-quantity{
+    flex:1 1 130px;
+    min-width:0;
+  }
+
+  .inventory-operations-host .inventory-op-card{
+    padding:12px;
+  }
+  .inventory-operations-host .op-item-head{
+    gap:8px;
+  }
+  .inventory-operations-host .op-location-pill{
+    flex:1 1 150px;
+  }
+  .inventory-operations-host .op-action-row .op-quantity{
+    flex:1 0 100%;
+    grid-template-columns:44px minmax(64px,1fr) 44px;
+  }
+  .inventory-operations-host .op-quantity button,
+  .inventory-operations-host .op-quantity input{
+    min-height:44px;
+  }
+
+  .central-kitchen-modebar.central-tabs{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+    overflow:visible;
+  }
+  .central-kitchen-modebar.central-tabs button.central-kitchen-mode{
+    min-width:0;
+    min-height:56px;
+    padding:8px;
+  }
+  .central-kitchen-mode strong{
+    overflow:visible;
+    text-overflow:clip;
+    white-space:normal;
+    line-height:1.3;
+  }
+  .central-kitchen-location-card>span{
+    overflow:visible;
+    text-overflow:clip;
+    white-space:normal;
+    line-height:1.3;
+  }
+}
+
+@media(max-width:420px){
+  .branch-ops-tabs{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .inventory-table .source-quantity{
+    flex-basis:100%;
+  }
+  .inventory-operations-host .op-primary,
+  .inventory-operations-host .op-secondary{
+    flex-basis:100%;
+  }
+}
+
+@media(max-width:359px){
+  .inventory-summary{
+    grid-template-columns:1fr;
+  }
+  .inventory-table .mobile-field-label{
+    min-width:70px;
+    flex-basis:70px;
+  }
+  .central-kitchen-kpis{
+    grid-template-columns:1fr;
+  }
+}
+
+@media(pointer:coarse){
+  .inventory-table .inventory-action-button,
+  .inventory-table .quantity-button,
+  .storage-tab-groups .filter-tab,
+  .zone-tabs.work-area-tabs .filter-tab{
+    min-height:44px;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .branch-ops-tabs,
+  .storage-tab-groups .zone-tabs,
+  .zone-tabs.work-area-tabs,
+  .central-kitchen-modebar.central-tabs{
+    scroll-behavior:auto;
+  }
+}
