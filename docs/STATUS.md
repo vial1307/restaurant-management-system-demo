@@ -8,7 +8,8 @@
 - Desktop: increases usable inventory width at large resolutions and improves product/control readability.
 - Tablet: constrains operation cards to one column where dual-column cards become cramped.
 - Mobile: main operation tabs become a visible responsive grid, controls gain larger touch targets, stock/source rows wrap more safely, and Central Kitchen mode/location labels avoid unnecessary truncation.
-- NEXT: run exact-head CI/full-device regression for PR #183; only merge/deploy after green results, then record the verified production SHA.
+- Desktop correction added after operator feedback: 領貨 and 轉撥 cards now use full-width desktop rows so source/destination, quantity and return controls are not compressed inside the two-column card grid; this remains CSS-only.
+- NEXT: run exact-head CI/full-device regression for the corrected PR #183 head; only merge/deploy after green results, then record the verified production SHA.
 
 ## DONE — Inventory frontend redesign/polish, 2026-10-01
 
