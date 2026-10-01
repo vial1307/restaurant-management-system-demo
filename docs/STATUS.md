@@ -1,6 +1,21 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Desktop 領貨 / 轉撥 UI repair, 2026-10-02
+## DONE — Inventory responsive UI Phase 3 + Desktop 領貨 / 轉撥 repair, 2026-10-02
+
+- PR #184 merged as `53d218cf11b9cb1f10ceab586c402f531ff112d5`.
+- Deploy #1062 / run `36896045707`: PASS.
+- GitHub Pages #994 / run `36896043714`: PASS.
+- Production health: release `53d218c`, schema `031`, app/database OK.
+- `DATA_INTEGRITY_OK`; production UI smoke PASS.
+- Inventory Site Production Audit #350 / run `36896923185`: PASS.
+- Desktop 領貨/轉撥 regression root cause was layout compression of denser operation cards inside the two-column Desktop operation grid.
+- Runtime repair is CSS-only in `src/inventory-maestro-ui.css`: pick/transfer dense cards span full width, transfer balance is stable source → destination layout, and pick return controls have sufficient width.
+- `tests/browser-regression.mjs` now asserts dense Desktop pick/transfer cards span the list width and do not horizontally overflow.
+- No Inventory JavaScript handlers, API/backend, PostgreSQL/schema, RBAC, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changed.
+- Latest audit: Central 41 / qty 81; Fuxing 78 / qty 1823; Yongji 75 / qty 17; all site/location/materialization/hidden integrity violation totals are 0; both branch historical manifests missing 0.
+- Production baseline for continuation: `53d218cf11b9cb1f10ceab586c402f531ff112d5` / schema 031.
+
+## CLOSED — Desktop 領貨 / 轉撥 UI repair candidate, 2026-10-02
 
 - PR #183 merged responsive UI Phase 3 into `main` as `52a1344cd9f1eafec372c15feffb85660d384b4b`; production deploy #1058 did not complete successfully, so this merge commit must not be treated as verified production yet.
 - Operator reported Desktop layout breakage specifically in 領貨 (pick) and 轉撥 (transfer).
@@ -10,7 +25,7 @@
 - No JavaScript handlers, API/backend, PostgreSQL/schema, RBAC, quantities/minimums, Work Area/storage, transfer semantics or business data changed.
 - NEXT: exact-head regression, merge the repair PR, then deploy and verify production health/smoke.
 
-## ACTIVE — Inventory responsive UI Phase 3, 2026-10-01
+## CLOSED — Inventory responsive UI Phase 3 candidate, 2026-10-01
 
 - PR #183: `style/inventory-responsive-polish-20261001`.
 - Candidate started from verified production `b7ffd9127987ca38e3c9dcfa79f56e3127bbc2de` on schema 031.
