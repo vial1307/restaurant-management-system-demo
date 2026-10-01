@@ -1,5 +1,26 @@
 # Kitchen OS — Current Development Handoff
 
+## ACTIVE CANDIDATE — Inventory compact Pick row + global overflow hardening, 2026-10-02
+
+Verified production runtime baseline remains `53d218cf11b9cb1f10ceab586c402f531ff112d5` / schema 031. Documentation-only main head may be newer.
+
+Candidate branch: `style/inventory-overflow-density-20261002`.
+
+Scope:
+- presentation-only runtime change in `src/inventory-maestro-ui.css`;
+- wide Desktop Pick follow-up compacts existing 已領貨 / 使用 / 歸位 controls into one row when enough width exists;
+- smaller Desktop/tablet/mobile retain responsive multi-row fallbacks instead of squeezing controls;
+- Inventory-wide overflow hardening covers operation cards, stock/work rows, tabs, buttons, labels, select controls, source pills, status badges and Central Kitchen panels;
+- long bilingual labels wrap safely; selects remain bounded and use ellipsis rather than protruding from cards;
+- no Inventory handler, API/backend, PostgreSQL/schema, RBAC/permissions, quantity/minimum, Work Area/storage, transfer/shipping or master-data authority changes.
+
+Regression:
+- `tests/browser-regression.mjs` now checks document/card/row/button horizontal overflow on Inventory surfaces;
+- wide Desktop Pick geometry asserts status → Use → Return remain horizontally ordered in one compact row;
+- exact-head CI/full-device regression is required before merge/deploy.
+
+Do not record this candidate as production until merge, VPS deploy, release health, `DATA_INTEGRITY_OK`, production UI smoke and Inventory Site Production Audit all pass.
+
 ## CURRENT VERIFIED PRODUCTION — Inventory responsive UI + Desktop 領貨 / 轉撥 repair, 2026-10-02
 
 This section is the current UI/Inventory continuation authority on schema 031.
