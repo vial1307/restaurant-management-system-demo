@@ -1,0 +1,85 @@
+name: Marketing Runtime Audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/marketing-runtime-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Inspect Marketing bootstrap and runtime
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== AUDIT_TIME ==='
+          date -u '+%Y-%m-%dT%H:%M:%SZ'
+
+          echo '=== HOST_BRIDGE ==='
+          cat /opt/kitchen-os/admin-actions/READY 2>/dev/null || echo 'READY_MISSING'
+
+          echo '=== LATEST_MARKETING_DEPLOY_RESULT ==='
+          latest=''
+          while IFS= read -r file; do
+            if grep -q '^ACTION=marketing_deploy$' "$file" 2>/dev/null; then
+              latest="$file"
+              break
+            fi
+          done < <(find /opt/kitchen-os/admin-actions/results -maxdepth 1 -type f -name '*.result' -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2-)
+          if [[ -n "$latest" ]]; then
+            echo "RESULT_FILE=$latest"
+            grep -v '^OUTPUT_B64=' "$latest" || true
+            output_b64="$(sed -n 's/^OUTPUT_B64=//p' "$latest" | head -n1)"
+            if [[ -n "$output_b64" ]]; then
+              echo '-- decoded output --'
+              printf '%s' "$output_b64" | base64 -d || true
+              echo
+            fi
+          else
+            echo 'NO_MARKETING_DEPLOY_RESULT'
+          fi
+
+          echo '=== MARKETING_SOURCE ==='
+          if [[ -d /opt/marketing-seo-platform/.git ]]; then
+            git -C /opt/marketing-seo-platform rev-parse HEAD || true
+            git -C /opt/marketing-seo-platform remote -v || true
+          else
+            echo 'MARKETING_SOURCE_NOT_INSTALLED'
+          fi
+
+          echo '=== MARKETING_CONTAINER ==='
+          docker ps -a --filter name='^/marketing-seo-platform$' --format 'NAME={{.Names}} IMAGE={{.Image}} STATUS={{.Status}} PORTS={{.Ports}}' || true
+
+          echo '=== MARKETING_LOCAL_HTTP ==='
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:3100/ || true)"
+          echo "HTTP_CODE=${code:-000}"
+          REMOTE
+
+      - name: Verify public Marketing HTTPS
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 --max-time 15             -o /dev/null -w 'HTTP %{http_code} total=%{time_total}s\n'             https://marketing.82.47.180.185.nip.io/
