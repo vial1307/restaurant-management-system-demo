@@ -57,6 +57,9 @@ jobs:
       - name: Full static regression
         run: node tests/static-regression.mjs
 
+      - name: Super Admin command center regression
+        run: node tests/admin-panel-static-regression.mjs
+
       - name: Branch legacy catalog database contract
         run: node tests/branch-legacy-catalog-materialization-contract-regression.mjs
 
@@ -132,6 +135,8 @@ jobs:
           test -f vps/Caddyfile
           test -f src/vps-auth-bridge.js
           test -f vps/scripts/deploy-api.sh
+          test -f vps/scripts/admin-action-runner.sh
+          test -f vps/scripts/install-admin-action-runner.sh
           test -f vps/scripts/stamp-frontend-release.mjs
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh

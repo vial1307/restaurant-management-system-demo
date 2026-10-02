@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { constants as FS_CONSTANTS } from "node:fs";
+import crypto from "node:crypto";
 import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
 import { DEVELOPMENT_STATUS } from "./development-status.mjs";
@@ -93,6 +95,102 @@ const DATASET_POLICY = {
 };
 
 const HOST_METRICS_PATH = process.env.HOST_METRICS_PATH || "/run/kitchen-host-metrics/host-metrics.env";
+const HOST_ACTION_DIR = process.env.HOST_ACTION_DIR || "/run/kitchen-admin-actions";
+const HOST_ACTION_READY = `${HOST_ACTION_DIR}/READY`;
+const HOST_ACTION_REQUESTS = `${HOST_ACTION_DIR}/requests`;
+const HOST_ACTION_RESULTS = `${HOST_ACTION_DIR}/results`;
+const HOST_ACTION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SERVER_ACTIONS = Object.freeze({
+  marketing_status:{ label:"Check Marketing status", confirmation:false },
+  marketing_deploy:{ label:"Deploy latest Marketing", confirmation:true },
+  marketing_restart:{ label:"Restart Marketing", confirmation:true },
+  marketing_logs:{ label:"View Marketing logs", confirmation:false },
+  marketing_rollback:{ label:"Rollback Marketing", confirmation:true },
+});
+
+function serverActionCatalog() {
+  return Object.entries(SERVER_ACTIONS).map(([id,config]) => ({
+    id,
+    label:config.label,
+    requires_confirmation:Boolean(config.confirmation),
+  }));
+}
+
+async function hostActionBridgeState() {
+  try {
+    const ready = await readFile(HOST_ACTION_READY,"utf8");
+    if (!ready.trim().startsWith("KITCHEN_ADMIN_ACTIONS_V1")) {
+      return { available:false,reason:"HOST_ACTION_BRIDGE_VERSION_MISMATCH",actions:serverActionCatalog() };
+    }
+    await Promise.all([
+      access(HOST_ACTION_REQUESTS,FS_CONSTANTS.R_OK | FS_CONSTANTS.W_OK),
+      access(HOST_ACTION_RESULTS,FS_CONSTANTS.R_OK),
+    ]);
+    return { available:true,version:"1",actions:serverActionCatalog() };
+  } catch (error) {
+    return {
+      available:false,
+      reason:error?.code === "ENOENT" ? "HOST_ACTION_BRIDGE_NOT_INSTALLED" : "HOST_ACTION_BRIDGE_UNAVAILABLE",
+      actions:serverActionCatalog(),
+    };
+  }
+}
+
+function parseHostActionResult(content) {
+  const values = parseMetricEnv(content);
+  let output = "";
+  if (values.OUTPUT_B64) {
+    try { output = Buffer.from(values.OUTPUT_B64,"base64").toString("utf8"); }
+    catch { output = "Unable to decode host action output."; }
+  }
+  return {
+    request_id:text(values.REQUEST_ID),
+    action:text(values.ACTION),
+    status:text(values.STATUS) || "failed",
+    exit_code:integer(values.EXIT_CODE,-1),
+    started_at:text(values.STARTED_AT) || null,
+    finished_at:text(values.FINISHED_AT) || null,
+    output:output.slice(-60000),
+  };
+}
+
+async function readHostActionResult(id) {
+  if (!HOST_ACTION_ID_RE.test(id)) throw Object.assign(new Error("INVALID_SERVER_ACTION_ID"), { statusCode:400 });
+  try {
+    return parseHostActionResult(await readFile(`${HOST_ACTION_RESULTS}/${id}.result`,"utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  for (const suffix of ["request","processing"]) {
+    try {
+      await access(`${HOST_ACTION_REQUESTS}/${id}.${suffix}`,FS_CONSTANTS.R_OK);
+      return { request_id:id,status:"pending" };
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  throw Object.assign(new Error("SERVER_ACTION_NOT_FOUND"), { statusCode:404 });
+}
+
+async function queueHostAction(action,id) {
+  const bridge = await hostActionBridgeState();
+  if (!bridge.available) throw Object.assign(new Error(bridge.reason || "HOST_ACTION_BRIDGE_UNAVAILABLE"), { statusCode:503 });
+  const pending = (await readdir(HOST_ACTION_REQUESTS)).filter((name) => /\.(request|processing)$/.test(name)).length;
+  if (pending >= 8) throw Object.assign(new Error("HOST_ACTION_QUEUE_BUSY"), { statusCode:429 });
+  const createdAt = new Date().toISOString();
+  const finalPath = `${HOST_ACTION_REQUESTS}/${id}.request`;
+  const tempPath = `${HOST_ACTION_REQUESTS}/.${id}.${process.pid}.tmp`;
+  const payload = [
+    "VERSION=1",
+    `REQUEST_ID=${id}`,
+    `ACTION=${action}`,
+    `CREATED_AT=${createdAt}`,
+    "",
+  ].join("\n");
+  await writeFile(tempPath,payload,{ encoding:"utf8",mode:0o600,flag:"wx" });
+  await rename(tempPath,finalPath);
+  return { request_id:id,action,status:"pending",created_at:createdAt };
+}
 
 function object(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -837,6 +935,43 @@ export async function registerSuperAdminRoutes(app) {
       request.log.error(error);
       return reply.code(500).send({ error:"SYSTEM_METRICS_FAILED" });
     }
+  });
+
+  app.get("/api/admin/super/server-actions", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    return hostActionBridgeState();
+  });
+
+  app.post("/api/admin/super/server-actions", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    const body = object(request.body);
+    const action = text(body.action);
+    const spec = SERVER_ACTIONS[action];
+    if (!spec) return reply.code(400).send({ error:"SERVER_ACTION_NOT_ALLOWED" });
+    if (spec.confirmation && text(body.confirmation) !== action) {
+      return reply.code(400).send({ error:"SERVER_ACTION_CONFIRMATION_REQUIRED" });
+    }
+    const id = crypto.randomUUID();
+    try {
+      await withTransaction(async (client) => {
+        await audit(client,user,{
+          action:"super_admin_server_action_requested",
+          entityType:"server_action",
+          entityId:id,
+          metadata:{ action,label:spec.label },
+        });
+      });
+      return await queueHostAction(action,id);
+    } catch (error) {
+      request.log.error(error);
+      return reply.code(error.statusCode || 500).send({ error:error.message || "SERVER_ACTION_QUEUE_FAILED" });
+    }
+  });
+
+  app.get("/api/admin/super/server-actions/:id", async (request, reply) => {
+    const user = await superUser(request, reply); if (!user) return;
+    try { return await readHostActionResult(text(request.params?.id)); }
+    catch (error) { return reply.code(error.statusCode || 500).send({ error:error.message || "SERVER_ACTION_RESULT_FAILED" }); }
   });
 
   app.get("/api/admin/super/inventory-catalog-audit", async (request, reply) => {

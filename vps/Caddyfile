@@ -45,3 +45,15 @@
 82.47.180.185.nip.io {
   import kitchen_site
 }
+
+marketing.82.47.180.185.nip.io {
+  encode zstd gzip
+
+  reverse_proxy marketing-seo-platform:3000
+
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}

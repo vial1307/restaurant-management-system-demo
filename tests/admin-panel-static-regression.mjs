@@ -13,6 +13,9 @@ const auth = fs.readFileSync("vps/backend/src/auth.mjs", "utf8");
 const migration = fs.readFileSync("vps/database/migrations/018_super_admin_panel_v2.sql", "utf8");
 const deploy = fs.readFileSync("vps/scripts/deploy-api.sh", "utf8");
 const caddy = fs.readFileSync("vps/Caddyfile", "utf8");
+const compose = fs.readFileSync("vps/docker-compose.yml", "utf8");
+const hostActionRunner = fs.readFileSync("vps/scripts/admin-action-runner.sh", "utf8");
+const hostActionInstaller = fs.readFileSync("vps/scripts/install-admin-action-runner.sh", "utf8");
 
 assert.match(html, /id="admin-app"/);
 assert.match(html, /Kitchen OS · Super Admin/);
@@ -30,6 +33,9 @@ assert.match(js, /system\.super_admin/, "Super Admin Panel must require the dedi
 assert.match(js, /\/api\/admin\/super\/overview/, "overview must read live VPS/PostgreSQL information");
 assert.match(js, /\/api\/admin\/super\/development-status/, "GitHub/handoff section must read the protected backend status API");
 assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engineering handoff section");
+assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
+assert.match(js, /data-server-action="marketing_deploy"/, "Marketing deploy must be an explicit UI action");
+assert.match(js, /\/api\/admin\/super\/server-actions/, "VPS Command Center must use the protected backend action queue");
 assert.match(js, /\/api\/admin\/users/, "user administration must use database-backed API");
 assert.match(js, /\/api\/admin\/access-model/, "RBAC editor must read roles/modules from database access model");
 assert.match(js, /\/api\/admin\/super\/content/, "content moderation must use Super Admin API");
@@ -84,6 +90,11 @@ assert.match(superRoutes, /application\/pdf/);
 assert.match(superRoutes, /super_admin_menu_sync/);
 assert.match(superRoutes, /jsonb_build_object\('synced_from',\$1::text\)/, "menu sync metadata parameter must be explicitly typed for PostgreSQL");
 assert.match(superRoutes, /for update/, "sensitive Super Admin updates must preserve transaction locking where applicable");
+assert.match(superRoutes, /const SERVER_ACTIONS = Object\.freeze/, "server actions must use an explicit backend whitelist");
+for (const action of ["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback"]) assert.match(superRoutes, new RegExp(action));
+assert.match(superRoutes, /SERVER_ACTION_CONFIRMATION_REQUIRED/, "mutating host actions must require explicit confirmation");
+assert.match(superRoutes, /super_admin_server_action_requested/, "host actions must write audit logs");
+assert.doesNotMatch(superRoutes, /node:child_process|\bexec\(|\bspawn\(/, "API container must not execute host shell commands directly");
 
 assert.match(adminRoutes, /permission_overrides/, "user overrides must persist in the dedicated RBAC column");
 assert.doesNotMatch(adminRoutes, /permissions as permission_overrides/, "legacy app_users.permissions must not be reinterpreted as new RBAC overrides");
@@ -111,5 +122,16 @@ assert.doesNotMatch(migration, /select 'superadmin',capability_key,true\s+from p
 assert.match(deploy, /cp -a "\$\{REPO_DIR\}\/\.admindev\.html"/, "deployment must publish the dedicated Super Admin entry");
 assert.match(deploy, /cp -a "\$\{REPO_DIR\}\/admin\.html"/, "deployment must keep the legacy redirect file available");
 assert.match(deploy, /curl -fsS http:\/\/127\.0\.0\.1\/\.admindev\.html/, "deployment must smoke the dedicated Super Admin entry before success");
+assert.match(deploy, /install-admin-action-runner\.sh/, "production deployment must install the host action bridge");
+assert.match(deploy, /ACTION=marketing_deploy/, "first production install should queue Marketing bootstrap without blocking Kitchen OS");
+assert.match(caddy, /marketing\.82\.47\.180\.185\.nip\.io/, "Caddy must expose the isolated Marketing hostname");
+assert.match(caddy, /reverse_proxy marketing-seo-platform:3000/, "Marketing proxy must use the dedicated Docker edge network");
+assert.match(compose, /HOST_ACTION_DIR: \/run\/kitchen-admin-actions/, "API must receive only the host-action queue mount");
+assert.match(compose, /marketing_edge:/, "Caddy must join the dedicated Marketing edge network");
+assert.doesNotMatch(compose, /\/var\/run\/docker\.sock/, "Kitchen API must never receive the Docker socket");
+assert.match(hostActionRunner, /case "\$1" in[\s\S]*marketing_status\)[\s\S]*marketing_deploy\)[\s\S]*marketing_restart\)[\s\S]*marketing_logs\)[\s\S]*marketing_rollback\)/, "host runner must map only fixed Marketing actions");
+assert.doesNotMatch(hostActionRunner, /\beval\b/, "host runner must never eval queue input");
+assert.match(hostActionRunner, /MARKETING_REPO_ACCESS_REQUIRED/, "private repository access failures must be explicit and fail closed");
+assert.match(hostActionInstaller, /PathExistsGlob=\/opt\/kitchen-os\/admin-actions\/requests\/\*\.request/, "systemd path unit must watch only the action queue");
 
 console.log("SUPER_ADMIN_PANEL_STATIC_REGRESSION_OK");

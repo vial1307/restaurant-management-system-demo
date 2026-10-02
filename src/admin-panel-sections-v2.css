@@ -8,3 +8,5 @@
 @media(max-width:720px){.sa-dev-link-grid,.sa-dev-docs{grid-template-columns:1fr}}
 
 .sa-dev-stop strong,.sa-dev-stop p{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+
+.sa-server-actions{flex-wrap:wrap}.sa-command-result{margin-top:14px;border:1px solid #dfe8e2;border-radius:12px;overflow:hidden;background:#f8fbf9}.sa-command-result .sa-list-row{margin:0;border:0;border-bottom:1px solid #e5ece8;border-radius:0}.sa-command-output{margin:0;padding:13px 14px;max-height:320px;overflow:auto;background:#122019;color:#d8eadf;font-size:12px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}.sa-server-actions .sa-btn:disabled{opacity:.5;cursor:not-allowed}

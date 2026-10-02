@@ -38,8 +38,10 @@ services:
       APP_RELEASE: ${APP_RELEASE:-vps-dev}
       WORKFORCE_SCHEDULE_RELATIONAL_READ: ${WORKFORCE_SCHEDULE_RELATIONAL_READ:-true}
       HOST_METRICS_PATH: /run/kitchen-host-metrics/host-metrics.env
+      HOST_ACTION_DIR: /run/kitchen-admin-actions
     volumes:
       - ./runtime:/run/kitchen-host-metrics:ro
+      - ./admin-actions:/run/kitchen-admin-actions
     ports:
       - "127.0.0.1:8080:8080"
     networks:
@@ -69,6 +71,7 @@ services:
       - caddy_config:/config
     networks:
       - kitchen_internal
+      - marketing_edge
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -84,3 +87,6 @@ volumes:
 networks:
   kitchen_internal:
     driver: bridge
+  marketing_edge:
+    external: true
+    name: marketing_edge

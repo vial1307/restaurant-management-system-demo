@@ -24,6 +24,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
+docker network inspect marketing_edge >/dev/null 2>&1 || docker network create marketing_edge >/dev/null
 
 # Allow the dedicated deploy account to manage application containers.
 if id deploy >/dev/null 2>&1; then
@@ -68,6 +69,8 @@ if id deploy >/dev/null 2>&1; then
   chown root:deploy "${APP_DIR}/.env"
   chmod 640 "${APP_DIR}/.env"
 fi
+
+bash "${APP_DIR}/repo/vps/scripts/install-admin-action-runner.sh"
 
 cp "${APP_DIR}/repo/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 if id deploy >/dev/null 2>&1; then

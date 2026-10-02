@@ -43,6 +43,7 @@ let siteRegistryRenderTimer = 0;
 const state = {
   me:null, loading:true, error:"", success:"", section:"overview",
   overview:null, systemMetrics:null, developmentStatus:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
+  serverActions:{capabilities:null,running:false,result:null},
   data:{ name:"inventory-products",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
   audit:{ q:"",site:"",action:"",actor:"",page:1,pageSize:25,result:null,loading:false },
 };
@@ -108,12 +109,12 @@ async function loadAudit() {
   catch(error){state.error=errorText(error);} state.audit.loading=false; render();
 }
 async function loadCore() {
-  const [overview,systemMetrics,developmentStatus,users,accessModel,sites,settings,content]=await Promise.all([
+  const [overview,systemMetrics,developmentStatus,users,accessModel,sites,settings,content,serverActionCapabilities]=await Promise.all([
     api("/api/admin/super/overview"),api("/api/admin/super/system-metrics"),api("/api/admin/super/development-status").catch(()=>null),vpsListUsers(),api("/api/admin/access-model"),
-    api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),
+    api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),api("/api/admin/super/server-actions").catch(()=>null),
   ]);
   state.overview=overview; state.systemMetrics=systemMetrics||null; state.developmentStatus=developmentStatus||null; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
-  state.sites=sites?.sites||[]; state.settings=settings?.settings||[]; state.content=content||null;
+  state.sites=sites?.sites||[]; state.settings=settings?.settings||[]; state.content=content||null; state.serverActions.capabilities=serverActionCapabilities||null;
 }
 async function refreshCurrent() {
   state.error=""; state.success="";
@@ -235,6 +236,35 @@ function devLink(url,label,note="") {
   return `<a class="sa-dev-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer"><strong>${esc(label)}</strong>${note?`<small>${esc(note)}</small>`:""}<span>↗</span></a>`;
 }
 
+function renderServerActionCommandCenter() {
+  const actions=state.serverActions||{};
+  const capabilities=actions.capabilities||{};
+  const available=capabilities.available===true;
+  const running=actions.running===true;
+  const result=actions.result||null;
+  const stateLabel=running?"RUNNING":available?"READY":"OFFLINE";
+  const stateClass=running?"":available?"ok":"off";
+  const disabled=!available||running?"disabled":"";
+  const output=result?.output||"";
+  const resultClass=result?.status==="success"?"ok":result?.status==="failed"?"off":"";
+  return `<article class="sa-card" data-server-command-center>
+    <div class="sa-card-head">
+      <div><h2>VPS Command Center · 主機控制</h2><p>Chỉ chạy action cố định trên host. Không có terminal hoặc shell tùy ý trong Super Admin.</p></div>
+      <span class="sa-pill ${stateClass}">${esc(stateLabel)}</span>
+    </div>
+    <div class="sa-row-actions sa-server-actions">
+      <button class="sa-btn" type="button" data-server-action="marketing_status" ${disabled}>Check status</button>
+      <button class="sa-btn primary" type="button" data-server-action="marketing_deploy" ${disabled}>Deploy latest</button>
+      <button class="sa-btn" type="button" data-server-action="marketing_restart" ${disabled}>Restart</button>
+      <button class="sa-btn" type="button" data-server-action="marketing_logs" ${disabled}>View logs</button>
+      <button class="sa-btn danger" type="button" data-server-action="marketing_rollback" ${disabled}>Rollback</button>
+    </div>
+    <p class="sa-dev-note">Target: <strong>Marketing SEO Platform</strong> · <span class="mono">/opt/marketing-seo-platform</span> · <span class="mono">marketing.82.47.180.185.nip.io</span></p>
+    ${!available?`<div class="sa-empty">Host bridge chưa sẵn sàng: ${esc(capabilities.reason||"HOST_ACTION_BRIDGE_UNAVAILABLE")}</div>`:""}
+    ${result?`<div class="sa-command-result"><div class="sa-list-row"><div><strong>${esc(result.action||"Server action")}</strong><small>${esc(result.request_id||"")}</small></div><span class="sa-pill ${resultClass}">${esc(String(result.status||"unknown").toUpperCase())}</span></div>${output?`<pre class="sa-command-output mono">${esc(output)}</pre>`:""}</div>`:""}
+  </article>`;
+}
+
 function renderDevelopment() {
   const d=state.developmentStatus;
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
@@ -245,7 +275,7 @@ function renderDevelopment() {
   const workflowRows=(liveGit.workflows||[]).slice(0,12);
   const commitRows=(liveGit.commits||[]).slice(0,8);
   const canonicalUrl=canonical.url||liveGit.canonical_url||"";
-  return `<article class="sa-card">
+  return `${renderServerActionCommandCenter()}<article class="sa-card">
     <div class="sa-card-head"><div><h2>One-link Handoff · 單一交接連結</h2><p>Dev khác hoặc chat mới chỉ cần mở link này. Trang sẽ tự tìm PR/branch/head SHA/CI hiện tại.</p></div><span class="sa-pill ${liveGit.available?"ok":"off"}">${esc(liveState)}</span></div>
     <div class="sa-row-actions">
       ${canonicalUrl?`<button class="sa-btn primary" type="button" data-copy-handoff data-handoff-url="${esc(safeHref(canonicalUrl))}">Copy handoff link</button>`:""}
@@ -467,6 +497,45 @@ function openSettingEditor(row=null) {
   const host=modal(row?"Sửa setting":"Thêm setting",`<form data-setting-form><div class="sa-form-grid"><label class="wide"><span>Setting key</span><input required name="setting_key" pattern="[a-z][a-z0-9._-]{1,95}" value="${esc(row?.setting_key||"")}" ${row?"readonly":""}></label><label class="wide"><span>JSON value (chuỗi có thể nhập trực tiếp)</span><textarea name="value" rows="6">${esc(typeof row?.value==="string"?row.value:json(row?.value??""))}</textarea></label></div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu</button></div></form>`);const form=host.querySelector("[data-setting-form]");form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);let value=String(fd.get("value")||"");try{try{value=JSON.parse(value);}catch{}await api("/api/admin/super/settings",{method:"POST",body:{setting_key:String(fd.get("setting_key")||""),value}});host.remove();state.success="Đã lưu setting.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
 }
 
+const SERVER_ACTION_CONFIRM = new Set(["marketing_deploy","marketing_restart","marketing_rollback"]);
+const SERVER_ACTION_ALLOWED = new Set(["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback"]);
+
+async function runServerAction(action) {
+  if(!SERVER_ACTION_ALLOWED.has(action)||state.serverActions.running)return;
+  const confirmText={
+    marketing_deploy:"Deploy phiên bản Marketing mới nhất từ GitHub lên VPS?",
+    marketing_restart:"Restart container Marketing hiện tại?",
+    marketing_rollback:"Rollback Marketing về release trước? Chỉ thực hiện khi release hiện tại có vấn đề.",
+  }[action];
+  if(confirmText&&!window.confirm(confirmText))return;
+  state.serverActions.running=true;
+  state.serverActions.result={action,status:"pending",output:"Đang gửi action tới host VPS…"};
+  render();
+  try {
+    const queued=await api("/api/admin/super/server-actions",{method:"POST",body:{action,confirmation:SERVER_ACTION_CONFIRM.has(action)?action:""}});
+    state.serverActions.result=queued;
+    render();
+    for(let attempt=0;attempt<200;attempt+=1){
+      await new Promise((resolve)=>setTimeout(resolve,1500));
+      const result=await api(`/api/admin/super/server-actions/${encodeURIComponent(queued.request_id)}`);
+      state.serverActions.result=result;
+      render();
+      if(result.status!=="pending"){
+        if(result.status==="success")state.success=`${action} hoàn tất trên VPS.`;
+        else state.error=`${action} thất bại (exit ${result.exit_code??"?"}).`;
+        break;
+      }
+    }
+  } catch(error) {
+    state.error=errorText(error);
+    state.serverActions.result={action,status:"failed",output:errorText(error)};
+  } finally {
+    state.serverActions.running=false;
+    try { state.serverActions.capabilities=await api("/api/admin/super/server-actions"); } catch {}
+    render();
+  }
+}
+
 async function switchSection(section) {
   if(!SECTIONS.includes(section))return;
   state.section=section;
@@ -496,6 +565,7 @@ function bind() {
   root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
   root.querySelector("[data-refresh]")?.addEventListener("click",()=>void refreshCurrent()); root.querySelector("[data-toggle-nav]")?.addEventListener("click",()=>root.classList.toggle("nav-open"));
   root.querySelector("[data-copy-handoff]")?.addEventListener("click",async(event)=>{const button=event.currentTarget;const url=String(button.dataset.handoffUrl||"");if(!url)return;try{await navigator.clipboard.writeText(url);button.textContent="Đã copy ✓";}catch{window.prompt("Copy handoff link:",url);}});
+  root.querySelectorAll("[data-server-action]").forEach((button)=>button.addEventListener("click",()=>void runServerAction(String(button.dataset.serverAction||""))));
   root.querySelector("[data-user-new]")?.addEventListener("click",()=>openUserEditor()); root.querySelectorAll("[data-user-edit]").forEach((b)=>b.addEventListener("click",()=>openUserEditor(state.users.find((u)=>u.id===b.dataset.userEdit))));
   root.querySelectorAll("[data-user-delete]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Archive user này?"))return;try{await api(`/api/admin/users/${encodeURIComponent(b.dataset.userDelete)}`,{method:"DELETE"});state.success="Đã archive user.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
   root.querySelectorAll("[data-open-dataset]").forEach((b)=>b.addEventListener("click",async()=>{state.data.name=b.dataset.openDataset;state.data.page=1;state.data.result=null;await switchSection("data");await loadDataset();if(b.hasAttribute("data-new-row"))openDataEditor();}));

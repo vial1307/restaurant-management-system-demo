@@ -67,9 +67,13 @@ echo "Deploy target verified: ${DEPLOY_TARGET}"
 echo "[2/12] Updating compose definition..."
 cp "${REPO_DIR}/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 chown deploy:deploy "${APP_DIR}/docker-compose.yml"
+docker network inspect marketing_edge >/dev/null 2>&1 || docker network create marketing_edge >/dev/null
 
 echo "[3/12] Installing filtered host metrics snapshot..."
 bash "${REPO_DIR}/vps/scripts/install-host-metrics-timer.sh"
+
+echo "[3b/12] Installing allowlisted Super Admin host-action bridge..."
+bash "${REPO_DIR}/vps/scripts/install-admin-action-runner.sh"
 
 echo "[4/12] Frontend JavaScript syntax preflight..."
 docker run --rm -v "${REPO_DIR}:/repo:ro" node:22-alpine sh -lc '
@@ -155,6 +159,26 @@ for attempt in $(seq 1 30); do
     echo "Web/API/Super Admin edge healthy."
     echo "Release: ${APP_RELEASE}"
     docker compose --env-file .env ps
+
+    # First-time Marketing bootstrap is queued asynchronously so a private-repo
+    # access issue can never roll back an otherwise healthy Kitchen OS release.
+    MARKETING_BOOTSTRAP_SENTINEL="${APP_DIR}/admin-actions/.marketing-bootstrap-requested"
+    if [[ ! -d /opt/marketing-seo-platform/.git && ! -f "${MARKETING_BOOTSTRAP_SENTINEL}" ]]; then
+      REQUEST_ID="$(cat /proc/sys/kernel/random/uuid)"
+      REQUEST_TMP="${APP_DIR}/admin-actions/requests/.${REQUEST_ID}.bootstrap.tmp"
+      REQUEST_FILE="${APP_DIR}/admin-actions/requests/${REQUEST_ID}.request"
+      {
+        echo "VERSION=1"
+        echo "REQUEST_ID=${REQUEST_ID}"
+        echo "ACTION=marketing_deploy"
+        echo "CREATED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+      } > "${REQUEST_TMP}"
+      chmod 0600 "${REQUEST_TMP}"
+      mv "${REQUEST_TMP}" "${REQUEST_FILE}"
+      touch "${MARKETING_BOOTSTRAP_SENTINEL}"
+      systemctl start --no-block kitchen-admin-actions.service || true
+      echo "Queued first Marketing deployment request ${REQUEST_ID}."
+    fi
     exit 0
   fi
   sleep 2
