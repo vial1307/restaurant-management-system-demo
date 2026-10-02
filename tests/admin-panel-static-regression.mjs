@@ -132,6 +132,10 @@ assert.doesNotMatch(compose, /\/var\/run\/docker\.sock/, "Kitchen API must never
 assert.match(hostActionRunner, /case "\$1" in[\s\S]*marketing_status\)[\s\S]*marketing_deploy\)[\s\S]*marketing_restart\)[\s\S]*marketing_logs\)[\s\S]*marketing_rollback\)/, "host runner must map only fixed Marketing actions");
 assert.doesNotMatch(hostActionRunner, /\beval\b/, "host runner must never eval queue input");
 assert.match(hostActionRunner, /MARKETING_REPO_ACCESS_REQUIRED/, "private repository access failures must be explicit and fail closed");
+assert.match(hostActionRunner, /MARKETING_SSH_KEY="\/home\/deploy\/\.ssh\/marketing_vps_readonly"/, "Marketing must use a dedicated read-only SSH identity");
+assert.match(hostActionRunner, /IdentitiesOnly=yes/, "Marketing Git transport must be pinned to its dedicated identity");
+assert.match(hostActionRunner, /ensure_marketing_source \|\| return \$\?/, "deploy must stop immediately when private repository bootstrap fails");
+assert.match(hostActionRunner, /git_remote_as_deploy -C "\$\{MARKETING_DIR\}" fetch/, "remote fetch must use the dedicated Marketing deploy identity");
 assert.match(hostActionInstaller, /PathExistsGlob=\/opt\/kitchen-os\/admin-actions\/requests\/\*\.request/, "systemd path unit must watch only the action queue");
 
 console.log("SUPER_ADMIN_PANEL_STATIC_REGRESSION_OK");

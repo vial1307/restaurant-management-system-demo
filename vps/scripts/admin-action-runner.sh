@@ -7,6 +7,7 @@ RESULT_DIR="${QUEUE_ROOT}/results"
 MARKETING_DIR="/opt/marketing-seo-platform"
 MARKETING_REPO="git@github.com:vial1307/marketing-seo-platform.git"
 MARKETING_URL="https://marketing.82.47.180.185.nip.io"
+MARKETING_SSH_KEY="/home/deploy/.ssh/marketing_vps_readonly"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root."
@@ -19,8 +20,18 @@ if ! flock -n 9; then
   exit 0
 fi
 
-git_as_deploy() {
-  runuser -u deploy -- env     GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"     git "$@"
+git_local_as_deploy() {
+  runuser -u deploy -- git "$@"
+}
+
+git_remote_as_deploy() {
+  if [[ ! -s "${MARKETING_SSH_KEY}" ]]; then
+    echo "MARKETING_DEPLOY_KEY_MISSING: ${MARKETING_SSH_KEY}" >&2
+    return 41
+  fi
+  runuser -u deploy -- env \
+    GIT_SSH_COMMAND="ssh -i ${MARKETING_SSH_KEY} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15" \
+    git "$@"
 }
 
 ensure_marketing_source() {
@@ -33,10 +44,14 @@ ensure_marketing_source() {
     return 40
   fi
 
+  if [[ ! -s "${MARKETING_SSH_KEY}" ]]; then
+    echo "MARKETING_DEPLOY_KEY_MISSING: ${MARKETING_SSH_KEY}"
+    return 41
+  fi
   install -d -m 0755 -o deploy -g deploy "${MARKETING_DIR}"
   echo "Cloning Marketing repository..."
-  if ! timeout 90 runuser -u deploy -- env     GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"     git clone "${MARKETING_REPO}" "${MARKETING_DIR}"; then
-    echo "MARKETING_REPO_ACCESS_REQUIRED: deploy user cannot clone the private repository."
+  if ! timeout 90 git_remote_as_deploy clone "${MARKETING_REPO}" "${MARKETING_DIR}"; then
+    echo "MARKETING_REPO_ACCESS_REQUIRED: deploy key cannot read the private repository."
     return 41
   fi
 }
@@ -76,7 +91,7 @@ marketing_status() {
   if [[ ! -d "${MARKETING_DIR}/.git" ]]; then
     echo "SOURCE=not-installed"
   else
-    echo "SOURCE_COMMIT=$(git_as_deploy -C "${MARKETING_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    echo "SOURCE_COMMIT=$(git_local_as_deploy -C "${MARKETING_DIR}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   fi
   if docker inspect marketing-seo-platform >/dev/null 2>&1; then
     echo "CONTAINER=$(docker inspect -f '{{.State.Status}}' marketing-seo-platform)"
@@ -88,16 +103,16 @@ marketing_status() {
 }
 
 marketing_deploy() {
-  ensure_marketing_source
-  ensure_marketing_env
-  ensure_marketing_network
+  ensure_marketing_source || return $?
+  ensure_marketing_env || return $?
+  ensure_marketing_network || return $?
 
   local previous target
-  previous="$(git_as_deploy -C "${MARKETING_DIR}" rev-parse HEAD)"
+  previous="$(git_local_as_deploy -C "${MARKETING_DIR}" rev-parse HEAD)"
   echo "Current commit: ${previous}"
 
-  git_as_deploy -C "${MARKETING_DIR}" fetch --prune origin main
-  target="$(git_as_deploy -C "${MARKETING_DIR}" rev-parse origin/main)"
+  git_remote_as_deploy -C "${MARKETING_DIR}" fetch --prune origin main || return $?
+  target="$(git_local_as_deploy -C "${MARKETING_DIR}" rev-parse origin/main)"
   if [[ ! "${target}" =~ ^[0-9a-f]{40}$ ]]; then
     echo "MARKETING_TARGET_INVALID"
     return 42
@@ -107,7 +122,7 @@ marketing_deploy() {
   chown root:deploy "${MARKETING_DIR}/.previous-release"
   chmod 0640 "${MARKETING_DIR}/.previous-release"
 
-  git_as_deploy -C "${MARKETING_DIR}" reset --hard "${target}"
+  git_local_as_deploy -C "${MARKETING_DIR}" reset --hard "${target}"
   echo "Deploying commit: ${target}"
   (
     cd "${MARKETING_DIR}"
@@ -121,7 +136,7 @@ marketing_deploy() {
   fi
 
   echo "Marketing health check failed; restoring previous source ${previous}."
-  git_as_deploy -C "${MARKETING_DIR}" reset --hard "${previous}"
+  git_local_as_deploy -C "${MARKETING_DIR}" reset --hard "${previous}"
   (
     cd "${MARKETING_DIR}"
     docker compose --env-file .env up -d --build
@@ -156,30 +171,30 @@ marketing_rollback() {
     echo "MARKETING_PREVIOUS_RELEASE_NOT_FOUND"
     return 46
   fi
-  ensure_marketing_env
-  ensure_marketing_network
+  ensure_marketing_env || return $?
+  ensure_marketing_network || return $?
 
   local previous current
   previous="$(tr -d '[:space:]' < "${MARKETING_DIR}/.previous-release")"
-  current="$(git_as_deploy -C "${MARKETING_DIR}" rev-parse HEAD)"
+  current="$(git_local_as_deploy -C "${MARKETING_DIR}" rev-parse HEAD)"
   if [[ ! "${previous}" =~ ^[0-9a-f]{40}$ ]]; then
     echo "MARKETING_PREVIOUS_RELEASE_INVALID"
     return 47
   fi
-  if ! git_as_deploy -C "${MARKETING_DIR}" cat-file -e "${previous}^{commit}" 2>/dev/null; then
+  if ! git_local_as_deploy -C "${MARKETING_DIR}" cat-file -e "${previous}^{commit}" 2>/dev/null; then
     echo "MARKETING_PREVIOUS_RELEASE_MISSING"
     return 48
   fi
 
   echo "Rolling back ${current} -> ${previous}"
-  git_as_deploy -C "${MARKETING_DIR}" reset --hard "${previous}"
+  git_local_as_deploy -C "${MARKETING_DIR}" reset --hard "${previous}"
   (
     cd "${MARKETING_DIR}"
     docker compose --env-file .env up -d --build
   )
   if ! wait_marketing_health; then
     echo "Rollback health failed; restoring ${current}."
-    git_as_deploy -C "${MARKETING_DIR}" reset --hard "${current}"
+    git_local_as_deploy -C "${MARKETING_DIR}" reset --hard "${current}"
     (
       cd "${MARKETING_DIR}"
       docker compose --env-file .env up -d --build
