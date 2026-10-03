@@ -9,6 +9,7 @@ const api = read("src/vps-api.js");
 const inventoryCloud = read("src/inventory-cloud.js");
 const adminInventoryDatabase = read("src/admin-inventory-database.js");
 const backendServer = read("vps/backend/src/server.mjs");
+const inventoryReadModel = read("vps/backend/src/inventory-read-model.mjs");
 const businessSync = read("src/business-state-sync.js");
 const deviceSync = read("src/device-sync.js");
 const uiRefresh = read("src/ui-refresh.js");
@@ -63,13 +64,22 @@ assert.match(adminInventoryDatabase, /invalidateSiteCache\(site\);[\s\S]{0,180}l
 assert.match(adminInventoryDatabase, /payload\?\.sourceClientId&&payload\.sourceClientId===clientId\)return;/,
   "Super Admin Inventory realtime must ignore its own already-reconciled mutation event");
 
-const inventoryReadRoute = backendServer.match(/app\.get\("\/api\/inventory\/:site"[\s\S]*?\n\}\);/)?.[0] || "";
-assert.match(inventoryReadRoute, /split_part\(item_key,':',1\)=\$1/,
+assert.match(inventoryReadModel, /split_part\(item_key,':',1\)=\$1/,
   "Inventory item reads must use the existing site expression index");
-assert.match(inventoryReadRoute, /split_part\(i\.item_key,':',1\)=\$1/,
+assert.match(inventoryReadModel, /split_part\(i\.item_key,':',1\)=\$1/,
   "Inventory stock reads must use the existing site expression index");
-assert.doesNotMatch(inventoryReadRoute, /item_key like \$[12]/,
+assert.doesNotMatch(inventoryReadModel, /item_key like \$[12]/,
   "Inventory site reads must not fall back to prefix LIKE scans");
+assert.match(backendServer, /app\.get\("\/api\/admin\/inventory-database\/:site"[\s\S]{0,900}Promise\.all\([\s\S]{0,500}readInventorySnapshot[\s\S]{0,500}readMasterDataSnapshotForUser/,
+  "Super Admin Inventory Database must use one combined HTTP snapshot backed by parallel read models");
+assert.match(backendServer, /Server-Timing"[\s\S]{0,120}inventory-db;dur=/,
+  "combined Inventory Database reads must expose server timing for performance diagnosis");
+assert.match(adminInventoryDatabase, /\/api\/admin\/inventory-database\/\$\{encodeURIComponent\(targetSite\)\}/,
+  "Super Admin Inventory Database must consume the combined snapshot endpoint");
+assert.doesNotMatch(adminInventoryDatabase, /fetchBase[\s\S]{0,900}Promise\.all\(\[[\s\S]{0,500}\/api\/master-data\//,
+  "Super Admin Inventory base hydration must not issue separate master-data and inventory HTTP requests");
+assert.match(adminInventoryDatabase, /data-idb-performance>DB [\s\S]{0,120}loadMetrics\.source/,
+  "Super Admin Inventory Database must surface measured load timing");
 
 const receiveDefaultSave = inventoryCloud.match(/export async function cloudSetReceiveDefault\([\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
 assert.match(receiveDefaultSave, /navigator\?\.onLine===false\) return \{ok:false/, "offline receive-default saves must fail instead of reporting local fallback success");
