@@ -17,6 +17,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
   let snapshot = null, master = null, history = [], catalogAudit = null, editor = null, pending = false, loading = false, dirty = false;
   let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
+  let loadMetrics = { source:"idle", totalMs:0, serverMs:0 };
   let deferredSite = null, cacheUserId = "", passiveSyncHandler = null;
   const siteCache = new Map();
   let itemByIdIndex = new Map();
@@ -59,6 +60,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
         catalogAudit:null,
         auditAt:0,
         auditPromise:null,
+        serverMs:0,
       };
       siteCache.set(targetSite,entry);
     }
@@ -95,17 +97,20 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if (entry.basePromise) return entry.basePromise;
 
     let pending;
-    pending = Promise.all([
-      request(`/api/master-data/${encodeURIComponent(targetSite)}?includeInactive=true`),
-      request(`/api/inventory/${encodeURIComponent(targetSite)}?includeInactive=true`),
-    ]).then(([nextMaster,nextSnapshot]) => {
-      entry.master = nextMaster;
-      entry.snapshot = nextSnapshot;
-      entry.baseAt = Date.now();
-      return { master:nextMaster, snapshot:nextSnapshot, cached:false };
-    }).finally(() => {
-      if (entry.basePromise === pending) entry.basePromise = null;
-    });
+    pending = request(`/api/admin/inventory-database/${encodeURIComponent(targetSite)}`)
+      .then((result) => {
+        const nextMaster=result?.master;
+        const nextSnapshot=result?.inventory;
+        if(!nextMaster||!nextSnapshot)throw new Error("INVENTORY_DATABASE_SNAPSHOT_INVALID");
+        entry.master = nextMaster;
+        entry.snapshot = nextSnapshot;
+        entry.serverMs = Number(result?.meta?.server_ms || 0);
+        entry.baseAt = Date.now();
+        return { master:nextMaster, snapshot:nextSnapshot, cached:false, serverMs:entry.serverMs };
+      })
+      .finally(() => {
+        if (entry.basePromise === pending) entry.basePromise = null;
+      });
     entry.basePromise = pending;
     return pending;
   }
@@ -263,7 +268,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   function render() {
     if (!host?.isConnected) return;
     host.innerHTML = `<div class="sa-card-head"><div><h2>${esc(t("title"))}</h2><p>${esc(t("intro"))}</p></div>${button("refresh","refresh",pending?"disabled":"")}</div>
-      <div class="idb-toolbar">${select("site","site",sites.filter((s)=>s.active).map((s)=>option(s.code,label(s),site)).join(""))}<span class="sa-pill" data-idb-connection>${esc(t(connected?"connected":"disconnected"))}</span></div>
+      <div class="idb-toolbar">${select("site","site",sites.filter((s)=>s.active).map((s)=>option(s.code,label(s),site)).join(""))}<span class="sa-pill" data-idb-connection>${esc(t(connected?"connected":"disconnected"))}</span><span class="sa-pill" data-idb-performance>DB ${esc(Math.round(loadMetrics.totalMs||0))}ms · ${esc(loadMetrics.source.toUpperCase())}</span></div>
       <nav class="idb-tabs" aria-label="${esc(t("title"))}">${["items","locations","stock","history","integrity"].map((key)=>button(`tab-${key}`,key,`aria-pressed="${tab===key}" ${pending?"disabled":""}`)).join("")}</nav>
       <p data-idb-message role="status" class="${failed?"sa-form-error":"idb-message"}">${esc(message)}</p><p data-idb-remote role="status">${remote?esc(t("remote")):""}</p>
       <div data-idb-editor></div>
@@ -297,6 +302,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(quiet&&loading){refreshQueued=true;return false;}
 
     const seq=++generation, targetSite=site, targetTab=tab;
+    const loadStarted=globalThis.performance?.now?.() ?? Date.now();
     const entry=cacheFor(targetSite);
     const baseNeedsNetwork=force||!entry.master||!entry.snapshot||!fresh(entry.baseAt,BASE_CACHE_MS);
     const historyNeedsNetwork=targetTab==="history"&&(force||!fresh(entry.historyAt,SUPPLEMENT_CACHE_MS));
@@ -305,6 +311,11 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
 
     if(!needsNetwork){
       applyCachedSite(targetSite,targetTab);
+      loadMetrics={
+        source:"cache",
+        totalMs:Math.max(0,(globalThis.performance?.now?.() ?? Date.now())-loadStarted),
+        serverMs:Number(entry.serverMs||0),
+      };
       remote=false;loading=false;
       if(!quiet)render();
       return true;
@@ -322,6 +333,11 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       if(quiet&&(editor||pending)){markRemote();return false;}
 
       applyCachedSite(targetSite,targetTab);
+      loadMetrics={
+        source:"network",
+        totalMs:Math.max(0,(globalThis.performance?.now?.() ?? Date.now())-loadStarted),
+        serverMs:Number(cacheFor(targetSite).serverMs||0),
+      };
       const after=JSON.stringify([master,snapshot,history,catalogAudit]);
       const changed=before!==after;
       remote=false;loading=false;
