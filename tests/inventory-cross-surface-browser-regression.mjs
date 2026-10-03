@@ -27,16 +27,6 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
   try {
     await main.goto(`${base}/#inventory`,{waitUntil:"domcontentloaded"});
     await main.locator('.inventory-sql-ready').waitFor({timeout:20000});
-    await main.evaluate(() => {
-      window.__crossSurfaceHydrationEvents = [];
-      window.addEventListener("shitu:active-site-changed", (event) => {
-        if (!event.detail?.hydrated) return;
-        window.__crossSurfaceHydrationEvents.push({
-          site:String(event.detail?.site || ""),
-          previousSite:String(event.detail?.previousSite || ""),
-        });
-      });
-    });
     const stamp=Date.now().toString(36);
     for(const site of ["central","fuxing","yongji"]) {
       const key=`cross-${stamp}-${site}`, area=`cross-${stamp}`, code=`${site}-${key}`;
@@ -52,11 +42,19 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);
       if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) {
+        await main.evaluate((targetSite) => {
+          window.__crossSurfaceHydratedSite = "";
+          const handler = (event) => {
+            if (!event.detail?.hydrated || String(event.detail?.site || "") !== targetSite) return;
+            window.__crossSurfaceHydratedSite = targetSite;
+            window.removeEventListener("shitu:active-site-changed",handler);
+          };
+          window.addEventListener("shitu:active-site-changed",handler);
+        },site);
         await main.locator(`[data-warehouse="${site}"]`).first().click();
         await main.waitForFunction((targetSite) => (
           localStorage.getItem("shitu-admin-active-site-v1") === targetSite
-          && Array.isArray(window.__crossSurfaceHydrationEvents)
-          && window.__crossSurfaceHydrationEvents.some((entry) => entry.site === targetSite)
+          && window.__crossSurfaceHydratedSite === targetSite
         ),site,{timeout:20000});
       }
       const row=main.locator('.storage-row').filter({has:main.locator(`[data-cloud-item-id="${item.id}"], [data-central-item-key="${item.item_key}"]`)}).first();
