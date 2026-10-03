@@ -2,6 +2,7 @@ import { accountCan, currentAccountSession } from "./account-permissions.js";
 
 const MANAGER_ROLES = new Set(["admin", "manager"]);
 let reconcilePending = false;
+let reconcileFallbackTimer = null;
 let redirecting = false;
 
 function session() {
@@ -199,7 +200,22 @@ function reconcile() {
 function requestReconcile() {
   if (reconcilePending) return;
   reconcilePending = true;
-  requestAnimationFrame(() => requestAnimationFrame(reconcile));
+
+  const run = () => {
+    if (!reconcilePending) return;
+    if (reconcileFallbackTimer !== null) {
+      clearTimeout(reconcileFallbackTimer);
+      reconcileFallbackTimer = null;
+    }
+    reconcile();
+  };
+
+  // Normal browsers still reconcile after layout settles. Headless/mobile
+  // environments can throttle requestAnimationFrame while navigation is being
+  // replaced; the bounded timer prevents permission markers from depending on a
+  // later unrelated app render or Inventory refresh.
+  requestAnimationFrame(() => requestAnimationFrame(run));
+  reconcileFallbackTimer = window.setTimeout(run, 120);
 }
 
 document.addEventListener("click", (event) => {
