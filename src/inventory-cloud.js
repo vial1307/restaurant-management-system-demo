@@ -1294,8 +1294,16 @@ async function subscribeRealtime(site) {
   const clientId = vpsInventoryClientId();
   const source = new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
   realtimeSource = source;
-  // A reconnect has no replay log. Fetch anything missed while disconnected.
+  // boot() already hydrated Inventory immediately before opening this stream.
+  // Skip the first ready event so initial page load does not fetch Inventory +
+  // Master Data twice. A later ready event belongs to an EventSource reconnect,
+  // which has no replay log and therefore still requires a forced reconciliation.
+  let initialReady = true;
   source.addEventListener("ready", () => {
+    if (initialReady) {
+      initialReady = false;
+      return;
+    }
     void refreshInventorySiteRegistry({ reason:"reconnect" })
       .catch(() => null)
       .finally(() => {
