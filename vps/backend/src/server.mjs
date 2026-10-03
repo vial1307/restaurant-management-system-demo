@@ -164,9 +164,10 @@ app.get("/api/inventory/:site", async (request, reply) => {
       `select id,item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,
               storage_only,active,created_at,updated_at,revision::text as revision
        from public.inventory_items
-       where (active=true or $2::boolean) and item_key like $1
+       where (active=true or $2::boolean)
+         and split_part(item_key,':',1)=$1
        order by name_zh_tw,item_key`,
-      [site + ":%",includeInactive]
+      [site,includeInactive]
     ),
     pool.query(
       `select s.item_id,s.location_id,s.quantity,s.minimum_quantity,s.updated_at
@@ -174,8 +175,9 @@ app.get("/api/inventory/:site", async (request, reply) => {
        join public.inventory_locations l on l.id=s.location_id
        join public.inventory_items i on i.id=s.item_id
        where l.site=$1 and l.active=true
-         and i.active=true and i.item_key like $2`,
-      [site, site + ":%"]
+         and i.active=true
+         and split_part(i.item_key,':',1)=$1`,
+      [site]
     ),
     pool.query(
       `select d.site,d.catalog_key,d.location_id,d.updated_at,l.code as location_code
