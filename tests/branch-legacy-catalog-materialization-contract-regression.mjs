@@ -58,18 +58,16 @@ assert.doesNotMatch(
 assert.match(migration,/sync_branch_inventory_item_work_projection/,
   "PostgreSQL must preserve the branch item-to-work-area invariant after migration");
 
-assert.match(admin,/request\(\`\/api\/master-data\/\$\{encodeURIComponent\(targetSite\)\}\?includeInactive=true\`\)/,
-  "Super Admin inventory database must read location/work-area master data from VPS");
-assert.match(admin,/request\(\`\/api\/inventory\/\$\{encodeURIComponent\(targetSite\)\}\?includeInactive=true\`\)/,
-  "Super Admin inventory database must read catalog/stock directly from VPS");
+assert.match(admin,/request\(\`\/api\/admin\/inventory-database\/\$\{encodeURIComponent\(targetSite\)\}\`\)/,
+  "Super Admin inventory database must read master/catalog/stock from the VPS combined snapshot");
 assert.match(admin,/path="\/api\/inventory\/catalog\/sync"/,
   "Super Admin item writes must use the inventory catalog lifecycle API");
-assert.match(admin,/new EventSource\("\/api\/inventory\/events"\)/,
-  "Super Admin must subscribe to realtime inventory invalidation");
-assert.match(admin,/source\.addEventListener\("inventory",sync\)/,
-  "Super Admin must reload after inventory SSE");
-assert.match(admin,/await request\(path,\{method:"POST",body\}\)[\s\S]{0,260}await load\(\)/,
-  "Super Admin mutations must reconcile from server after successful writes");
+assert.match(admin,/new EventSource\(\`\/api\/inventory\/events\?clientId=/,
+  "Super Admin must subscribe to realtime inventory invalidation with a stable client identity");
+assert.match(admin,/source\.addEventListener\("inventory",[\s\S]{0,300}invalidateSiteCache\(site\)[\s\S]{0,120}sync\(\{force:true\}\)/,
+  "Super Admin must invalidate its site snapshot and reload after remote inventory SSE");
+assert.match(admin,/await request\(path,\{method:"POST",body\}\)[\s\S]{0,220}invalidateSiteCache\(site\)[\s\S]{0,220}load\(\{force:true\}\)/,
+  "Super Admin mutations must invalidate cache and reconcile from server after successful writes");
 assert.doesNotMatch(admin,/DEFAULT_ITEMS|LARGE_FREEZER_SHEET_ITEMS|localStorage/,
   "Super Admin database must never use browser legacy inventory as authority");
 
