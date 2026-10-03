@@ -79,7 +79,14 @@ export async function apiRequest(path, {
 
   let response;
   try {
-    const inventoryMutationHeaders = method !== "GET" && String(path).startsWith("/api/inventory/")
+    const mutationPath = String(path);
+    const publishesInventoryRealtime = method !== "GET" && (
+      mutationPath.startsWith("/api/inventory/")
+      || mutationPath.startsWith("/api/master-data/")
+      || mutationPath === "/api/admin/super/inventory-catalog-identity"
+      || mutationPath.startsWith("/api/admin/super/data/inventory-products")
+    );
+    const inventoryMutationHeaders = publishesInventoryRealtime
       ? { "X-Kitchen-Client-Id": vpsInventoryClientId() }
       : {};
     response = await fetch(path, {
