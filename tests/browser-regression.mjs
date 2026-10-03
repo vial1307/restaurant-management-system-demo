@@ -290,11 +290,25 @@ async function adminDesktop(browser) {
           ? page.locator(".inventory-op-card:has(.pick-followup):visible").first()
           : page.locator(".inventory-op-card:has(.op-transfer-balance):visible").first();
         if(await denseCard.count()){
+          await page.waitForFunction(({mode})=>{
+            const list=document.querySelector(".inventory-ops-list");
+            const card=document.querySelector(mode==="pick"
+              ? ".inventory-op-card:has(.pick-followup)"
+              : ".inventory-op-card:has(.op-transfer-balance)");
+            if(!list||!card)return false;
+            const listBox=list.getBoundingClientRect();
+            const cardBox=card.getBoundingClientRect();
+            return listBox.width>0&&cardBox.width>0&&Math.abs(cardBox.width-listBox.width)<=2;
+          },{mode},{timeout:5000});
+          const settledListBox=await page.locator(".inventory-ops-list").boundingBox();
           const cardBox=await denseCard.boundingBox();
-          assert(listBox && cardBox && Math.abs(cardBox.width-listBox.width)<=2,`${mode} desktop operation card must span the full operation grid`);
+          assert(
+            settledListBox&&cardBox&&Math.abs(cardBox.width-settledListBox.width)<=2,
+            `${mode} desktop operation card must span the full operation grid (card=${cardBox?.width ?? "missing"}, list=${settledListBox?.width ?? "missing"})`
+          );
           assert.equal(await denseCard.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,`${mode} desktop operation card has horizontal overflow`);
 
-          if(mode==="pick" && desktopViewport.width>=1200){
+          if(mode==="pick"&&desktopViewport.width>=1200){
             const followup=denseCard.locator(".pick-followup");
             const [statusBox,useBox,returnBox]=await Promise.all([
               followup.locator(".pick-status").boundingBox(),
