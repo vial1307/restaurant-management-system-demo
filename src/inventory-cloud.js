@@ -65,6 +65,7 @@ let activeSiteSwitchSerial = 0;
 let realtimeSource = null;
 let realtimeUserId = "";
 let realtimeRefreshTimer = 0;
+let realtimeInitialHydrationPending = false;
 let siteRegistryRefreshTimer = 0;
 let siteRegistryRefreshTail = Promise.resolve();
 const cache = {
@@ -1294,15 +1295,16 @@ async function subscribeRealtime(site) {
   const clientId = vpsInventoryClientId();
   const source = new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
   realtimeSource = source;
-  // boot() already hydrated Inventory immediately before opening this stream.
-  // Skip the first ready event so initial page load does not fetch Inventory +
-  // Master Data twice. A later ready event belongs to an EventSource reconnect,
-  // which has no replay log and therefore still requires a forced reconciliation.
+  // boot() opens the stream before its first database hydration. When the
+  // first ready arrives while that hydration is pending, the stream already
+  // covers all later mutations and no duplicate read is needed. If the stream
+  // connects only after hydration completed, reconcile once to close the small
+  // pre-stream gap. Later ready events are reconnects and have no replay log.
   let initialReady = true;
   source.addEventListener("ready", () => {
     if (initialReady) {
       initialReady = false;
-      return;
+      if (realtimeInitialHydrationPending) return;
     }
     void refreshInventorySiteRegistry({ reason:"reconnect" })
       .catch(() => null)
@@ -1363,8 +1365,15 @@ async function boot() {
 
   const site = currentSite();
   if (site) {
-    await syncInventoryNow(site, { reloadBranch: false });
-    await subscribeRealtime(site);
+    realtimeInitialHydrationPending = true;
+    try {
+      // Start listening first, then hydrate. If SSE becomes ready before the
+      // hydration finishes there is no blind window and therefore no second read.
+      await subscribeRealtime(site);
+      await syncInventoryNow(site, { reloadBranch:false });
+    } finally {
+      realtimeInitialHydrationPending = false;
+    }
   }
 
   polling = window.setInterval(() => {
