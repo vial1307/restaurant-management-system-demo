@@ -27,6 +27,16 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
   try {
     await main.goto(`${base}/#inventory`,{waitUntil:"domcontentloaded"});
     await main.locator('.inventory-sql-ready').waitFor({timeout:20000});
+    await main.evaluate(() => {
+      window.__crossSurfaceHydrationEvents = [];
+      window.addEventListener("shitu:active-site-changed", (event) => {
+        if (!event.detail?.hydrated) return;
+        window.__crossSurfaceHydrationEvents.push({
+          site:String(event.detail?.site || ""),
+          previousSite:String(event.detail?.previousSite || ""),
+        });
+      });
+    });
     const stamp=Date.now().toString(36);
     for(const site of ["central","fuxing","yongji"]) {
       const key=`cross-${stamp}-${site}`, area=`cross-${stamp}`, code=`${site}-${key}`;
@@ -41,9 +51,16 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       await api('/api/inventory/catalog/sync',{expectedRevision:"0",item:{key:`${site}:${key}`,catalog_key:key,vi:key,zh:key,unit:"包",work_area:area,locations}});
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);
-      if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) await main.locator(`[data-warehouse="${site}"]`).first().click();
+      if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) {
+        await main.locator(`[data-warehouse="${site}"]`).first().click();
+        await main.waitForFunction((targetSite) => (
+          localStorage.getItem("shitu-admin-active-site-v1") === targetSite
+          && Array.isArray(window.__crossSurfaceHydrationEvents)
+          && window.__crossSurfaceHydrationEvents.some((entry) => entry.site === targetSite)
+        ),site,{timeout:20000});
+      }
       const row=main.locator('.storage-row').filter({has:main.locator(`[data-cloud-item-id="${item.id}"], [data-central-item-key="${item.item_key}"]`)}).first();
-      await row.waitFor({state:"visible",timeout:15000});
+      await row.waitFor({state:"visible",timeout:20000});
       await workspace.locator('[name="site"]').selectOption(site);
       await workspace.locator('[data-idb-action="tab-locations"]').click();
       await workspace.locator('[data-idb-action="kind-areas"]').click();
