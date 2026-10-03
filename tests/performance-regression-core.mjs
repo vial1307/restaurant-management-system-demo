@@ -7,6 +7,9 @@ const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
 const api = read("src/vps-api.js");
 const inventoryCloud = read("src/inventory-cloud.js");
+const adminInventoryDatabase = read("src/admin-inventory-database.js");
+const backendServer = read("vps/backend/src/server.mjs");
+const inventoryReadModel = read("vps/backend/src/inventory-read-model.mjs");
 const businessSync = read("src/business-state-sync.js");
 const deviceSync = read("src/device-sync.js");
 const uiRefresh = read("src/ui-refresh.js");
@@ -31,6 +34,56 @@ assert.match(api, /vpsListUsers\(\)[\s\S]{0,300}if \(adminUsersInFlight\) return
 assert.match(api, /vpsLogout[\s\S]{0,300}clearRuntimeCaches\(\)/, "logout must clear API caches");
 assert.match(api, /vpsInventoryHistory[\s\S]{0,220}\/transactions\?limit=/, "inventory history must use the backend transactions route");
 assert.doesNotMatch(api, /vpsInventoryHistory[\s\S]{0,220}\/history\?limit=/, "inventory history must not call the removed history route");
+
+assert.match(api, /publishesInventoryRealtime[\s\S]{0,500}\/api\/master-data\//,
+  "master-data mutations that affect Inventory must carry the realtime source client id");
+assert.match(api, /publishesInventoryRealtime[\s\S]{0,700}\/api\/admin\/super\/inventory-catalog-identity/,
+  "Super Admin Inventory identity mutations must carry the realtime source client id");
+
+assert.match(inventoryCloud, /let realtimeInitialHydrationPending = false;/,
+  "Inventory boot must track whether the first database hydration is still pending");
+assert.match(inventoryCloud, /let initialReady = true;[\s\S]{0,300}if \(realtimeInitialHydrationPending\) return;/,
+  "first Inventory SSE ready may skip the duplicate read only while initial hydration is still pending");
+assert.match(inventoryCloud, /realtimeInitialHydrationPending = true;[\s\S]{0,300}await subscribeRealtime\(site\);[\s\S]{0,180}await syncInventoryNow\(site/,
+  "Inventory boot must open realtime before the initial database hydration to avoid a blind mutation window");
+assert.match(inventoryCloud, /initialReady = false;[\s\S]{0,650}reason:"reconnect"[\s\S]{0,400}force:true/,
+  "late first-ready and later reconnect-ready events must force reconciliation when no hydration is pending");
+
+assert.match(adminInventoryDatabase, /const BASE_CACHE_MS = 12_000;/,
+  "Super Admin Inventory base snapshot cache window changed unexpectedly");
+assert.match(adminInventoryDatabase, /const SUPPLEMENT_CACHE_MS = 30_000;/,
+  "Super Admin Inventory history\/audit cache window changed unexpectedly");
+assert.match(adminInventoryDatabase, /const siteCache = new Map\(\)/,
+  "Super Admin Inventory must cache database snapshots per site");
+assert.match(adminInventoryDatabase, /if \(!force && entry\.master && entry\.snapshot && fresh\(entry\.baseAt,BASE_CACHE_MS\)\)/,
+  "fresh Super Admin Inventory base data must bypass duplicate database reads");
+assert.match(adminInventoryDatabase, /if\(!needsNetwork\)[\s\S]{0,220}applyCachedSite\(targetSite,targetTab\)/,
+  "tab switches must reuse a fresh Inventory database snapshot without network work");
+assert.match(adminInventoryDatabase, /stockByItemIndex = new Map\(\)[\s\S]{0,300}stockByItemIndex\.set\(row\.item_id,rows\)/,
+  "Inventory database rendering must index stock by item instead of repeatedly scanning all stock rows");
+assert.match(adminInventoryDatabase, /name\.startsWith\("tab-"\)[\s\S]{0,140}render\(\);await load\(\{quiet:true\}\)/,
+  "Inventory database tab navigation must render cached data first and refresh only when needed");
+assert.match(adminInventoryDatabase, /invalidateSiteCache\(site\);[\s\S]{0,180}load\(\{force:true\}\)/,
+  "successful Inventory database mutations must invalidate cache before authoritative reconciliation");
+assert.match(adminInventoryDatabase, /payload\?\.sourceClientId&&payload\.sourceClientId===clientId\)return;/,
+  "Super Admin Inventory realtime must ignore its own already-reconciled mutation event");
+
+assert.match(inventoryReadModel, /split_part\(item_key,':',1\)=\$1/,
+  "Inventory item reads must use the existing site expression index");
+assert.match(inventoryReadModel, /split_part\(i\.item_key,':',1\)=\$1/,
+  "Inventory stock reads must use the existing site expression index");
+assert.doesNotMatch(inventoryReadModel, /item_key like \$[12]/,
+  "Inventory site reads must not fall back to prefix LIKE scans");
+assert.match(backendServer, /app\.get\("\/api\/admin\/inventory-database\/:site"[\s\S]{0,900}Promise\.all\([\s\S]{0,500}readInventorySnapshot[\s\S]{0,500}readMasterDataSnapshotForUser/,
+  "Super Admin Inventory Database must use one combined HTTP snapshot backed by parallel read models");
+assert.match(backendServer, /Server-Timing"[\s\S]{0,120}inventory-db;dur=/,
+  "combined Inventory Database reads must expose server timing for performance diagnosis");
+assert.match(adminInventoryDatabase, /\/api\/admin\/inventory-database\/\$\{encodeURIComponent\(targetSite\)\}/,
+  "Super Admin Inventory Database must consume the combined snapshot endpoint");
+assert.doesNotMatch(adminInventoryDatabase, /fetchBase[\s\S]{0,900}Promise\.all\(\[[\s\S]{0,500}\/api\/master-data\//,
+  "Super Admin Inventory base hydration must not issue separate master-data and inventory HTTP requests");
+assert.match(adminInventoryDatabase, /data-idb-performance>DB [\s\S]{0,120}loadMetrics\.source/,
+  "Super Admin Inventory Database must surface measured load timing");
 
 const receiveDefaultSave = inventoryCloud.match(/export async function cloudSetReceiveDefault\([\s\S]*?\n}\n\nfunction buildBranchCatalog/)?.[0] || "";
 assert.match(receiveDefaultSave, /navigator\?\.onLine===false\) return \{ok:false/, "offline receive-default saves must fail instead of reporting local fallback success");

@@ -1,5 +1,31 @@
 # Kitchen OS Work Log
 
+## 2026-10-03 — Inventory Database performance candidate
+
+- User requested page-load optimization, especially the Inventory Database.
+- Audited current production and found:
+  - normal Inventory already has short burst caches, realtime SSE and 60-second visible-only polling;
+  - Super Admin Inventory Database still fetched base Inventory + Master Data on every main tab switch;
+  - initial Inventory boot hydrated once, then the first SSE `ready` forced the same base data again;
+  - Super Admin rendering repeatedly scanned stock/items/locations for per-row lookups;
+  - backend site reads used prefix `LIKE 'site:%'` despite an existing schema-031 expression index on site identity.
+- Created `perf/inventory-database-load-20261003`.
+- Implemented site/user-scoped memory cache in `src/admin-inventory-database.js`:
+  - 12-second base cache;
+  - 30-second History/Integrity cache;
+  - in-flight promise reuse;
+  - mutation/realtime invalidation;
+  - cached branch/site restoration;
+  - Map indexes for items, locations, stock-by-item and Work Area.
+- Added one combined Super Admin database snapshot endpoint and shared backend read-model helpers.
+- Added server/client timing visibility for the combined snapshot.
+- Extended realtime source-id tagging to master-data and Super Admin Inventory mutations so own mutation events do not cause a second fetch.
+- Updated Inventory SSE boot contract so only reconnect-ready events force a full reconciliation.
+- Updated backend site filters to `split_part(...)=site`, matching the existing schema-031 index.
+- Added/extended performance, static contract and isolated API regressions.
+- No database migration or Inventory business-rule change introduced.
+- Pending exact-head CI and production verification.
+
 ## 2026-10-02 — Inventory compact Pick + overflow hardening verified in production
 
 - Completed PR #186 from the user's request to compact 領貨 and prevent text/buttons from overflowing throughout Inventory.

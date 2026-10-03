@@ -1,5 +1,21 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — Inventory Database load performance, 2026-10-03
+
+- Branch: `perf/inventory-database-load-20261003`.
+- Production runtime baseline: `850d99e1a651bed80586a3a6d1371896f0a12074`, schema 031.
+- Super Admin Database base snapshot cache: 12 seconds, site-scoped and user-scoped.
+- History / Integrity supplemental cache: 30 seconds and lazy by tab.
+- Items / Locations / Stock tab switches reuse fresh data with no database HTTP refetch.
+- One combined base endpoint replaces separate Inventory + Master Data HTTP requests.
+- Main Inventory boot skips the duplicate first SSE-ready forced hydration; reconnects still reconcile.
+- Rendering uses Map indexes for item/location/stock/work-area lookups.
+- Backend site filtering is aligned with the existing PostgreSQL expression index.
+- Same-client realtime invalidations are suppressed after explicit mutation reconciliation.
+- Timing is surfaced in the Super Admin Database UI and by `Server-Timing`.
+- No Inventory business semantics or schema authority change.
+- NEXT: exact-head CI → merge → production deploy/smoke/audit.
+
 ## DONE — Inventory compact Pick row + overflow hardening, 2026-10-02
 
 - PR #186 merged as `337f5a2f6a3b0bfa06916fede0b0336cee4018e2`.
