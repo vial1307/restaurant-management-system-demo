@@ -20,9 +20,11 @@ assert.match(cloud,/BRANCH_SNAPSHOT_KEY_PREFIX/,"branch inventory must keep per-
 assert.match(cloud,/inventoryBranchSnapshot\(site\)/,"branch mirror reader missing");
 assert.match(cloud,/saveInventoryBranchSnapshot\(site, inventory, workInventory\)/,"authoritative branch hydrate must persist a site-scoped mirror");
 
-const fetchIndex=cloud.indexOf("const rows = await fetchSite(targetSite, { force:true });");
+const fetchIndex=cloud.indexOf("const rows = await fetchSite(targetSite, { force:true, registryReady:true });");
 const commitIndex=cloud.indexOf("localStorage.setItem(ACTIVE_SITE_KEY, targetSite);",fetchIndex);
 assert(fetchIndex>=0 && commitIndex>fetchIndex,"site switch must fetch target snapshot before committing active site");
+assert.match(cloud,/await ensureSiteRegistry\(\{ force:true \}\)[\s\S]{0,900}fetchSite\(targetSite, \{ force:true, registryReady:true \}\)/,
+  "site switch must verify the registry exactly before reusing that verified context for the target snapshot");
 
 assert.doesNotMatch(app,/shitu-branch-inventory-draft-v1|loadBranchDraftRecord|saveBranchDraftRecord/,"offline branch drafts must remain retired");
 assert.match(cloud,/localStorage\.setItem\(branchSnapshotKey\(site\)[\s\S]{0,180}\bsite,/,"read-only branch snapshot cache must persist an explicit site marker");
