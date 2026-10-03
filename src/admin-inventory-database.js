@@ -1,4 +1,4 @@
-import { apiRequest } from "./vps-api.js";
+import { apiRequest, vpsInventoryClientId } from "./vps-api.js";
 import { inventoryAdminText as t } from "./admin-inventory-i18n.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -9,20 +9,144 @@ const select = (name, title, options) => `<label><span>${esc(t(title))}</span><s
 const button = (action, title, extra = "") => `<button type="button" class="sa-btn" data-idb-action="${action}" ${extra}>${esc(t(title))}</button>`;
 const errorCode = (error) => error?.payload?.error || error?.message || "UNKNOWN_ERROR";
 const PAGE_SIZE = 25;
+const BASE_CACHE_MS = 12_000;
+const SUPPLEMENT_CACHE_MS = 30_000;
 
 export function createInventoryDatabase({ request = apiRequest } = {}) {
   let host, sites = [], me, source, poll, timer, generation = 0;
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
   let snapshot = null, master = null, history = [], catalogAudit = null, editor = null, pending = false, loading = false, dirty = false;
   let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
-  let deferredSite = null;
+  let deferredSite = null, cacheUserId = "";
+  const siteCache = new Map();
+  let itemByIdIndex = new Map();
+  let locationByIdIndex = new Map();
+  let stockByItemIndex = new Map();
+  let workAreaByCodeIndex = new Map();
+
   const canEdit = () => Boolean(me?.permissions?.inventory?.edit);
   const canMaster = (kind) => Boolean(master?.permissions?.[kind === "areas" ? "manageWorkAreas" : "manageLocations"]);
   const activeItems = () => (snapshot?.items || []).filter((row) => row.active);
   const activeLocations = () => (master?.locations || []).filter((row) => row.active);
-  const itemById = (id) => snapshot?.items.find((row) => row.id === id);
-  const locationById = (id) => master?.locations.find((row) => row.id === id);
-  const stockFor = (id) => (snapshot?.stock || []).filter((row) => row.item_id === id);
+  const itemById = (id) => itemByIdIndex.get(id);
+  const locationById = (id) => locationByIdIndex.get(id);
+  const stockFor = (id) => stockByItemIndex.get(id) || [];
+  const workAreaByCode = (code) => workAreaByCodeIndex.get(code);
+
+  function rebuildIndexes() {
+    itemByIdIndex = new Map((snapshot?.items || []).map((row) => [row.id,row]));
+    locationByIdIndex = new Map((master?.locations || []).map((row) => [row.id,row]));
+    stockByItemIndex = new Map();
+    for (const row of snapshot?.stock || []) {
+      const rows = stockByItemIndex.get(row.item_id) || [];
+      rows.push(row);
+      stockByItemIndex.set(row.item_id,rows);
+    }
+    workAreaByCodeIndex = new Map((master?.workAreas || []).map((row) => [row.code,row]));
+  }
+
+  function cacheFor(targetSite) {
+    let entry = siteCache.get(targetSite);
+    if (!entry) {
+      entry = {
+        master:null,
+        snapshot:null,
+        baseAt:0,
+        basePromise:null,
+        history:[],
+        historyAt:0,
+        historyPromise:null,
+        catalogAudit:null,
+        auditAt:0,
+        auditPromise:null,
+      };
+      siteCache.set(targetSite,entry);
+    }
+    return entry;
+  }
+
+  const fresh = (at, ttl) => Number(at || 0) > 0 && Date.now() - Number(at) < ttl;
+
+  function applyCachedSite(targetSite, targetTab = tab) {
+    const entry = siteCache.get(targetSite);
+    if (!entry?.master || !entry?.snapshot) return false;
+    master = entry.master;
+    snapshot = entry.snapshot;
+    history = entry.history || [];
+    catalogAudit = entry.catalogAudit || null;
+    rebuildIndexes();
+    void targetTab;
+    return true;
+  }
+
+  function invalidateSiteCache(targetSite = site, { base = true, history:dropHistory = true, audit = true } = {}) {
+    const entry = siteCache.get(targetSite);
+    if (!entry) return;
+    if (base) entry.baseAt = 0;
+    if (dropHistory) entry.historyAt = 0;
+    if (audit) entry.auditAt = 0;
+  }
+
+  async function fetchBase(targetSite, { force = false } = {}) {
+    const entry = cacheFor(targetSite);
+    if (!force && entry.master && entry.snapshot && fresh(entry.baseAt,BASE_CACHE_MS)) {
+      return { master:entry.master, snapshot:entry.snapshot, cached:true };
+    }
+    if (entry.basePromise) return entry.basePromise;
+
+    let pending;
+    pending = Promise.all([
+      request(`/api/master-data/${encodeURIComponent(targetSite)}?includeInactive=true`),
+      request(`/api/inventory/${encodeURIComponent(targetSite)}?includeInactive=true`),
+    ]).then(([nextMaster,nextSnapshot]) => {
+      entry.master = nextMaster;
+      entry.snapshot = nextSnapshot;
+      entry.baseAt = Date.now();
+      return { master:nextMaster, snapshot:nextSnapshot, cached:false };
+    }).finally(() => {
+      if (entry.basePromise === pending) entry.basePromise = null;
+    });
+    entry.basePromise = pending;
+    return pending;
+  }
+
+  async function fetchHistory(targetSite, { force = false } = {}) {
+    const entry = cacheFor(targetSite);
+    if (!force && fresh(entry.historyAt,SUPPLEMENT_CACHE_MS)) return entry.history || [];
+    if (entry.historyPromise) return entry.historyPromise;
+
+    let pending;
+    pending = request(`/api/inventory/${encodeURIComponent(targetSite)}/transactions?limit=250`)
+      .then((result) => {
+        entry.history = result?.transactions || [];
+        entry.historyAt = Date.now();
+        return entry.history;
+      })
+      .finally(() => {
+        if (entry.historyPromise === pending) entry.historyPromise = null;
+      });
+    entry.historyPromise = pending;
+    return pending;
+  }
+
+  async function fetchCatalogAudit(targetSite, { force = false } = {}) {
+    const entry = cacheFor(targetSite);
+    if (!force && entry.catalogAudit && fresh(entry.auditAt,SUPPLEMENT_CACHE_MS)) return entry.catalogAudit;
+    if (entry.auditPromise) return entry.auditPromise;
+
+    let pending;
+    pending = request("/api/admin/super/inventory-catalog-audit")
+      .then((result) => {
+        entry.catalogAudit = result;
+        entry.auditAt = Date.now();
+        return result;
+      })
+      .finally(() => {
+        if (entry.auditPromise === pending) entry.auditPromise = null;
+      });
+    entry.auditPromise = pending;
+    return pending;
+  }
   const titleCell = (row) => `<strong>${esc(row?.name_vi || "—")}</strong><small>${esc(row?.name_zh_tw || "")}</small>`;
   const hasWork = (id) => stockFor(id).some((s) => locationById(s.location_id)?.kind === "work");
   const itemPayload = (row) => ({ key:row.item_key, catalog_key:row.catalog_key, vi:row.name_vi, zh:row.name_zh_tw, unit:row.unit, work_area:row.work_area, storage_only:row.storage_only });
@@ -43,7 +167,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
         canEdit() && row.active ? button("receive","receive",id) : "",
         me.role === "admin" && row.active ? button("archive-item","archive",id) : "",
       ].join("");
-      return `<tr data-idb-item="${esc(row.id)}"><td>${titleCell(row)}<small class="idb-code">${esc(row.catalog_key)}</small></td><td>${esc(row.unit)}</td><td>${esc(label(master.workAreas.find((a) => a.code === row.work_area)))}</td><td>${locations.length?locations.map((location)=>`<small>${esc(label(location))}</small>`).join(""):`<span class="idb-unconfigured">${esc(t("unconfigured"))}</span>`}</td><td><span class="idb-status ${row.active?"is-active":""}">${esc(t(row.active?"active":"inactive"))}</span></td><td><div class="idb-item-actions">${canEdit()?button("item","edit",id):""}${extra?`<details class="idb-more"><summary aria-label="${esc(t("more"))}: ${esc(row.name_vi)}">${esc(t("more"))}</summary><div class="idb-more-actions">${extra}</div></details>`:""}</div></td></tr>`;
+      return `<tr data-idb-item="${esc(row.id)}"><td>${titleCell(row)}<small class="idb-code">${esc(row.catalog_key)}</small></td><td>${esc(row.unit)}</td><td>${esc(label(workAreaByCode(row.work_area)))}</td><td>${locations.length?locations.map((location)=>`<small>${esc(label(location))}</small>`).join(""):`<span class="idb-unconfigured">${esc(t("unconfigured"))}</span>`}</td><td><span class="idb-status ${row.active?"is-active":""}">${esc(t(row.active?"active":"inactive"))}</span></td><td><div class="idb-item-actions">${canEdit()?button("item","edit",id):""}${extra?`<details class="idb-more"><summary aria-label="${esc(t("more"))}: ${esc(row.name_vi)}">${esc(t("more"))}</summary><div class="idb-more-actions">${extra}</div></details>`:""}</div></td></tr>`;
     });
     return `<div class="idb-list-heading"><p>${esc(t("identityHint"))}</p>${canEdit()?button("item","add"):""}</div>${rowsTable(["items","unit","area","storage","status","action"],list.rows)}${list.footer}`;
   }
@@ -67,7 +191,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
               ["primary","service"].includes(storageGroup) ? t(storageGroup) : t("unconfigured"),
               ["internal","factory"].includes(replenishmentPolicy) ? t(replenishmentPolicy) : t("unconfigured"),
             ].join(" · ")
-          : label(master.workAreas.find((area) => area.code === row.metadata?.work_area));
+          : label(workAreaByCode(row.metadata?.work_area));
       return `<tr><td>${titleCell(row)}<small>${esc(row.code)}</small></td><td>${esc(group)}</td><td>${esc(t(row.active?"active":"inactive"))}</td><td>${action}</td></tr>`;
     });
     const hint = derivedWork ? t("workLocationSyncHint") : t("masterHint");
@@ -148,7 +272,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(loading)host.querySelectorAll('[data-idb-action]').forEach((node)=>{node.disabled=true;});
     host.querySelector('[name="site"]').onchange = (event) => {
       if (!canLeave()) { event.target.value=site; return; }
-      site=event.target.value; snapshot=master=null; history=[]; catalogAudit=null; q=""; page=1; editor=null; message=""; void load();
+      site=event.target.value; q=""; page=1; editor=null; message=""; if(!applyCachedSite(site)){snapshot=master=null;history=[];catalogAudit=null;rebuildIndexes();} render(); void load({quiet:Boolean(snapshot&&master)});
     };
     host.querySelector("[data-idb-search]")?.addEventListener("submit",(event)=>{event.preventDefault();if(!canLeave())return;q=String(new FormData(event.target).get("q")||"");page=1;editor=null;render();});
     host.querySelectorAll("[data-idb-action]").forEach((node)=>node.addEventListener("click",()=>void action(node.dataset)));
@@ -165,28 +289,45 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(node)node.textContent=t("remote");
   }
   function canLeave() { if(pending)return false; if(dirty&&!window.confirm(t("discard")))return false;dirty=false;return true; }
-  async function load({quiet=false}={}) {
+  async function load({quiet=false,force=false}={}) {
     if(!host||!site)return false;
     if(quiet&&(editor||pending)){markRemote();return false;}
     // A background event cannot supersede the foreground request that owns
     // disabled controls. Reconcile again after that request releases the UI.
     if(quiet&&loading){refreshQueued=true;return false;}
+
     const seq=++generation, targetSite=site, targetTab=tab;
+    const entry=cacheFor(targetSite);
+    const baseNeedsNetwork=force||!entry.master||!entry.snapshot||!fresh(entry.baseAt,BASE_CACHE_MS);
+    const historyNeedsNetwork=targetTab==="history"&&(force||!fresh(entry.historyAt,SUPPLEMENT_CACHE_MS));
+    const auditNeedsNetwork=targetTab==="integrity"&&me?.role==="admin"&&(force||!entry.catalogAudit||!fresh(entry.auditAt,SUPPLEMENT_CACHE_MS));
+    const needsNetwork=baseNeedsNetwork||historyNeedsNetwork||auditNeedsNetwork;
+
+    if(!needsNetwork){
+      applyCachedSite(targetSite,targetTab);
+      remote=false;loading=false;
+      if(!quiet)render();
+      return true;
+    }
+
     if(!quiet){loading=true;render();}
+    const before=JSON.stringify([master,snapshot,history,catalogAudit]);
     try {
-      const [nextMaster,nextSnapshot,nextHistory,nextCatalogAudit] = await Promise.all([
-        request(`/api/master-data/${encodeURIComponent(targetSite)}?includeInactive=true`),
-        request(`/api/inventory/${encodeURIComponent(targetSite)}?includeInactive=true`),
-        targetTab==="history"?request(`/api/inventory/${encodeURIComponent(targetSite)}/transactions?limit=250`):Promise.resolve(null),
-        targetTab==="integrity"&&me?.role==="admin"?request("/api/admin/super/inventory-catalog-audit"):Promise.resolve(null),
+      await Promise.all([
+        fetchBase(targetSite,{force}),
+        targetTab==="history"?fetchHistory(targetSite,{force}):Promise.resolve(null),
+        targetTab==="integrity"&&me?.role==="admin"?fetchCatalogAudit(targetSite,{force}):Promise.resolve(null),
       ]);
       if(seq!==generation||!host)return false;
       if(quiet&&(editor||pending)){markRemote();return false;}
-      const nextAudit=nextCatalogAudit||catalogAudit;
-      const changed=JSON.stringify([master,snapshot,history,catalogAudit])!==JSON.stringify([nextMaster,nextSnapshot,nextHistory?.transactions||history,nextAudit]);
-      master=nextMaster;snapshot=nextSnapshot;if(nextHistory)history=nextHistory.transactions||[];if(nextCatalogAudit)catalogAudit=nextCatalogAudit;
-      remote=false;loading=false;if(changed||!quiet)render();
-      if(refreshQueued){refreshQueued=false;sync();}return true;
+
+      applyCachedSite(targetSite,targetTab);
+      const after=JSON.stringify([master,snapshot,history,catalogAudit]);
+      const changed=before!==after;
+      remote=false;loading=false;
+      if(changed||!quiet)render();
+      if(refreshQueued){refreshQueued=false;sync();}
+      return true;
     } catch(error) {
       if(seq===generation){
         loading=false;message=errorCode(error);failed=true;
@@ -196,6 +337,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       return false;
     }
   }
+
   function applyDeferredSite() {
     if (deferredSite === null) return false;
     const previousSite = site;
@@ -212,8 +354,8 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(!canLeave())return;
     editor=null;
     applyDeferredSite();
-    if(name==="refresh"){await load();return;}
-    if(name.startsWith("tab-")){tab=name.slice(4);page=1;q="";await load();return;}
+    if(name==="refresh"){invalidateSiteCache(site);await load({force:true});return;}
+    if(name.startsWith("tab-")){tab=name.slice(4);page=1;q="";render();await load({quiet:true});return;}
     if(name.startsWith("kind-")){locationKind=name.slice(5);page=1;q="";render();return;}
     if(name==="previous"||name==="next"){page+=name==="next"?1:-1;render();return;}
     if(name==="item-stock"){tab="stock";q=data.id;page=1;render();return;}
@@ -323,16 +465,21 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     notify(t("saving"));
     try {
       await request(path,{method:"POST",body});
+      invalidateSiteCache(site);
       dirty=false;editor=null;pending=false;notify(t("saved"));
       applyDeferredSite();
-      if(!await load())notify(t("saveReadFailed"),true);
+      if(!await load({force:true}))notify(t("saveReadFailed"),true);
     } catch(error) {
       pending=false;const code=errorCode(error);const text=`${t(code.includes("STALE")?"stale":"failed")} ${code}`;
       notify(text,true);if(form){form.querySelector("fieldset").disabled=false;form.querySelector("[data-idb-form-error]").textContent=text;}
       host.querySelectorAll('[data-idb-action], [name="site"]').forEach((node)=>{node.disabled=false;});
     }
   }
-  const sync=()=>{if(!document.hidden&&!pending){clearTimeout(timer);timer=setTimeout(()=>void load({quiet:true}),150);}};
+  const sync=({force=false}={})=>{
+    if(document.hidden||pending)return;
+    clearTimeout(timer);
+    timer=setTimeout(()=>void load({quiet:true,force}),150);
+  };
   function updateSites(nextSites = []) {
     const next = Array.isArray(nextSites) ? nextSites : [];
     const signature = (rows) => JSON.stringify(rows.map((row) => ({
@@ -362,9 +509,10 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
 
     site = nextSite;
     if (site !== previousSite) {
-      snapshot=master=null;history=[];q="";page=1;editor=null;message="";
+      q="";page=1;editor=null;message="";
+      if(!applyCachedSite(site)){snapshot=master=null;history=[];catalogAudit=null;rebuildIndexes();}
       render();
-      void load();
+      void load({quiet:Boolean(snapshot&&master)});
     } else {
       render();
     }
@@ -374,24 +522,38 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   const unload=(event)=>{if(dirty||pending){event.preventDefault();event.returnValue="";}};
   function detach() {
     generation++;source?.close();source=null;clearInterval(poll);clearTimeout(timer);
-    document.removeEventListener("visibilitychange",sync);window.removeEventListener("focus",sync);
+    const passiveSync=host?.__inventoryDatabasePassiveSync;
+    if(passiveSync){document.removeEventListener("visibilitychange",passiveSync);window.removeEventListener("focus",passiveSync);}
     document.removeEventListener("click",guard,true);window.removeEventListener("beforeunload",unload);
+    if(host)delete host.__inventoryDatabasePassiveSync;
     host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;deferredSite=null;
   }
   function mount(target,context) {
     detach();host=target;sites=context.sites;me=context.me;
     if(!host||!me?.capabilities?.["system.super_admin"])return;
+    const nextUserId=String(me?.id||me?.username||"");
+    if(cacheUserId&&cacheUserId!==nextUserId)siteCache.clear();
+    cacheUserId=nextUserId;
     if(!sites.some((s)=>s.code===site&&s.active))site=sites.find((s)=>s.active)?.code||"";
-    render();void load();
-    document.addEventListener("visibilitychange",sync);window.addEventListener("focus",sync);
+    applyCachedSite(site);
+    render();void load({quiet:Boolean(snapshot&&master)});
+    const passiveSync=()=>sync();
+    document.addEventListener("visibilitychange",passiveSync);window.addEventListener("focus",passiveSync);
     document.addEventListener("click",guard,true);window.addEventListener("beforeunload",unload);
     if(typeof EventSource!=="undefined") {
-      source=new EventSource("/api/inventory/events");
-      source.addEventListener("inventory",sync);
+      const clientId=vpsInventoryClientId();
+      source=new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
+      source.addEventListener("inventory",(event)=>{
+        let payload=null;try{payload=JSON.parse(event.data||"null");}catch{}
+        if(payload?.sourceClientId&&payload.sourceClientId===clientId)return;
+        invalidateSiteCache(site);
+        sync({force:true});
+      });
       source.addEventListener("ready",()=>{connected=true;const node=host?.querySelector("[data-idb-connection]");if(node)node.textContent=t("connected");sync();});
       source.onerror=()=>{connected=false;const node=host?.querySelector("[data-idb-connection]");if(node)node.textContent=t("disconnected");};
     }
-    poll=setInterval(sync,30000);
+    poll=setInterval(()=>sync(),30000);
+    host.__inventoryDatabasePassiveSync=passiveSync;
   }
   return {mount,detach,updateSites};
 }
