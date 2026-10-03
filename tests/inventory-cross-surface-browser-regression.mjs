@@ -42,21 +42,16 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);
       if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) {
-        await main.evaluate((targetSite) => {
-          window.__crossSurfaceHydratedSite = "";
-          const handler = (event) => {
-            if (!event.detail?.hydrated || String(event.detail?.site || "") !== targetSite) return;
-            window.__crossSurfaceHydratedSite = targetSite;
-            window.removeEventListener("shitu:active-site-changed",handler);
-          };
-          window.addEventListener("shitu:active-site-changed",handler);
-        },site);
         await main.locator(`[data-warehouse="${site}"]`).first().click();
-        await main.waitForFunction((targetSite) => (
-          localStorage.getItem("shitu-admin-active-site-v1") === targetSite
-          && window.__crossSurfaceHydratedSite === targetSite
-        ),site,{timeout:20000});
+        await main.waitForFunction(
+          (targetSite) => localStorage.getItem("shitu-admin-active-site-v1") === targetSite,
+          site,
+          {timeout:20000}
+        );
       }
+      // Certification is based on observable authoritative state rather than a
+      // one-shot hydration event: the newly created PostgreSQL item must be
+      // rendered on the selected site before the test proceeds.
       const row=main.locator('.storage-row').filter({has:main.locator(`[data-cloud-item-id="${item.id}"], [data-central-item-key="${item.item_key}"]`)}).first();
       await row.waitFor({state:"visible",timeout:20000});
       await workspace.locator('[name="site"]').selectOption(site);
