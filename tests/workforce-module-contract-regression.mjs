@@ -49,6 +49,8 @@ assert.match(workforce, /data-action="attendance-edit"/, "non-manager attendance
 assert.match(workforce, /data-permission-module="attendance"/, "existing attendance permission row must become the merged visible workforce row");
 assert.match(workforce, /data-permission-module="schedule"/, "legacy schedule permission must remain available for compatibility");
 assert.match(workforce, /scheduleRow\.hidden = true/, "Settings must show only one merged workforce permission row");
+assert.match(workforce, /node\.dataset\.workforceLegacySchedule === "true"\) return;/,
+  "workforce decorator must not overwrite the authorized legacy schedule navigation contract");
 assert.match(workforce, /scheduleView\.checked = attendanceView\.checked/, "merged permission view toggle must synchronize both legacy permission keys");
 assert.match(workforce, /scheduleEdit\.checked = managerRole && attendanceEdit\.checked/, "schedule edit permission must only mirror for manager/admin accounts");
 
