@@ -325,7 +325,11 @@ export async function switchActiveInventorySite(site) {
     // Fetch the authoritative target snapshot before changing the active site.
     // This prevents Fuxing/Yongji from ever rendering the previous branch while
     // a new branch request is still in flight.
-    const rows = await fetchSite(targetSite, { force:true });
+    // The registry was just force-verified above. Avoid a second identical
+    // /api/inventory/sites request inside fetchSite(); this shortens branch
+    // switching and removes a redundant registry race while preserving the
+    // authoritative Inventory + Master Data fetch.
+    const rows = await fetchSite(targetSite, { force:true, registryReady:true });
     if (serial !== activeSiteSwitchSerial) return false;
 
     localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
@@ -632,10 +636,10 @@ export async function refreshInventoryCloudState() {
   return verifyMigration({ force: true });
 }
 
-async function fetchSite(site, { force = false } = {}) {
+async function fetchSite(site, { force = false, registryReady = false } = {}) {
   if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
 
-  await ensureSiteRegistry({ force });
+  if (!registryReady) await ensureSiteRegistry({ force });
   const [result, master] = await Promise.all([
     vpsInventory(site, { force }),
     vpsMasterData(site, { force }),
