@@ -40,10 +40,14 @@ assert.match(api, /publishesInventoryRealtime[\s\S]{0,500}\/api\/master-data\//,
 assert.match(api, /publishesInventoryRealtime[\s\S]{0,700}\/api\/admin\/super\/inventory-catalog-identity/,
   "Super Admin Inventory identity mutations must carry the realtime source client id");
 
-assert.match(inventoryCloud, /let initialReady = true;[\s\S]{0,260}if \(initialReady\) \{[\s\S]{0,120}return;/,
-  "initial Inventory SSE ready must not force a second full hydration");
-assert.match(inventoryCloud, /initialReady = false;[\s\S]{0,500}reason:"reconnect"[\s\S]{0,400}force:true/,
-  "later SSE ready events must still force reconciliation after reconnect");
+assert.match(inventoryCloud, /let realtimeInitialHydrationPending = false;/,
+  "Inventory boot must track whether the first database hydration is still pending");
+assert.match(inventoryCloud, /let initialReady = true;[\s\S]{0,300}if \(realtimeInitialHydrationPending\) return;/,
+  "first Inventory SSE ready may skip the duplicate read only while initial hydration is still pending");
+assert.match(inventoryCloud, /realtimeInitialHydrationPending = true;[\s\S]{0,300}await subscribeRealtime\(site\);[\s\S]{0,180}await syncInventoryNow\(site/,
+  "Inventory boot must open realtime before the initial database hydration to avoid a blind mutation window");
+assert.match(inventoryCloud, /initialReady = false;[\s\S]{0,650}reason:"reconnect"[\s\S]{0,400}force:true/,
+  "late first-ready and later reconnect-ready events must force reconciliation when no hydration is pending");
 
 assert.match(adminInventoryDatabase, /const BASE_CACHE_MS = 12_000;/,
   "Super Admin Inventory base snapshot cache window changed unexpectedly");
