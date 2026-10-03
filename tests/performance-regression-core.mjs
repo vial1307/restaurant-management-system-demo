@@ -48,6 +48,10 @@ assert.match(inventoryCloud, /realtimeInitialHydrationPending = true;[\s\S]{0,30
   "Inventory boot must open realtime before the initial database hydration to avoid a blind mutation window");
 assert.match(inventoryCloud, /initialReady = false;[\s\S]{0,650}reason:"reconnect"[\s\S]{0,400}force:true/,
   "late first-ready and later reconnect-ready events must force reconciliation when no hydration is pending");
+assert.match(inventoryCloud, /fetchSite\(targetSite, \{ force:true, registryReady:true \}\)/,
+  "warehouse switching must reuse the registry verification already completed by switchActiveInventorySite");
+assert.match(inventoryCloud, /if \(!registryReady\) await ensureSiteRegistry\(\{ force \}\)/,
+  "ordinary Inventory fetches must still verify the site registry when no verified registry context is supplied");
 
 assert.match(adminInventoryDatabase, /const BASE_CACHE_MS = 12_000;/,
   "Super Admin Inventory base snapshot cache window changed unexpectedly");
