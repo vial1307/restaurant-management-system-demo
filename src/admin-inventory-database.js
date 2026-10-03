@@ -17,7 +17,7 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   let site = "", tab = "items", locationKind = "storage", q = "", page = 1;
   let snapshot = null, master = null, history = [], catalogAudit = null, editor = null, pending = false, loading = false, dirty = false;
   let message = "", failed = false, remote = false, connected = false, refreshQueued = false;
-  let deferredSite = null, cacheUserId = "";
+  let deferredSite = null, cacheUserId = "", passiveSyncHandler = null;
   const siteCache = new Map();
   let itemByIdIndex = new Map();
   let locationByIdIndex = new Map();
@@ -344,7 +344,8 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     site = deferredSite;
     deferredSite = null;
     if (site !== previousSite) {
-      snapshot=master=null;history=[];catalogAudit=null;q="";page=1;editor=null;message="";
+      q="";page=1;editor=null;message="";
+      if(!applyCachedSite(site)){snapshot=master=null;history=[];catalogAudit=null;rebuildIndexes();}
       return true;
     }
     return false;
@@ -522,10 +523,12 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
   const unload=(event)=>{if(dirty||pending){event.preventDefault();event.returnValue="";}};
   function detach() {
     generation++;source?.close();source=null;clearInterval(poll);clearTimeout(timer);
-    const passiveSync=host?.__inventoryDatabasePassiveSync;
-    if(passiveSync){document.removeEventListener("visibilitychange",passiveSync);window.removeEventListener("focus",passiveSync);}
+    if(passiveSyncHandler){
+      document.removeEventListener("visibilitychange",passiveSyncHandler);
+      window.removeEventListener("focus",passiveSyncHandler);
+      passiveSyncHandler=null;
+    }
     document.removeEventListener("click",guard,true);window.removeEventListener("beforeunload",unload);
-    if(host)delete host.__inventoryDatabasePassiveSync;
     host=null;editor=null;dirty=false;connected=false;loading=false;refreshQueued=false;deferredSite=null;
   }
   function mount(target,context) {
@@ -535,10 +538,10 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
     if(cacheUserId&&cacheUserId!==nextUserId)siteCache.clear();
     cacheUserId=nextUserId;
     if(!sites.some((s)=>s.code===site&&s.active))site=sites.find((s)=>s.active)?.code||"";
-    applyCachedSite(site);
+    if(!applyCachedSite(site)){snapshot=master=null;history=[];catalogAudit=null;rebuildIndexes();}
     render();void load({quiet:Boolean(snapshot&&master)});
-    const passiveSync=()=>sync();
-    document.addEventListener("visibilitychange",passiveSync);window.addEventListener("focus",passiveSync);
+    passiveSyncHandler=()=>sync();
+    document.addEventListener("visibilitychange",passiveSyncHandler);window.addEventListener("focus",passiveSyncHandler);
     document.addEventListener("click",guard,true);window.addEventListener("beforeunload",unload);
     if(typeof EventSource!=="undefined") {
       const clientId=vpsInventoryClientId();
@@ -553,7 +556,6 @@ export function createInventoryDatabase({ request = apiRequest } = {}) {
       source.onerror=()=>{connected=false;const node=host?.querySelector("[data-idb-connection]");if(node)node.textContent=t("disconnected");};
     }
     poll=setInterval(()=>sync(),30000);
-    host.__inventoryDatabasePassiveSync=passiveSync;
   }
   return {mount,detach,updateSites};
 }
