@@ -1,5 +1,36 @@
 # Kitchen OS — Current Development Handoff
 
+## ACTIVE CANDIDATE — Inventory Database load performance, 2026-10-03
+
+Latest verified production runtime before this candidate:
+- main/runtime release `850d99e1a651bed80586a3a6d1371896f0a12074`;
+- Deploy Kitchen OS to VPS #1080 / run `36981362445`: PASS;
+- production health: app/database OK, schema `031`, release `850d99e`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS.
+
+Candidate branch: `perf/inventory-database-load-20261003`.
+
+Performance scope:
+- Super Admin Inventory Database now keeps short-lived site-scoped in-memory snapshots instead of re-reading PostgreSQL-backed APIs on every Items / Locations / Stock tab switch;
+- History and Integrity supplemental reads use separate 30-second caches and still load only when those tabs are opened;
+- stock/item/location/work-area lookups are indexed in Maps during render instead of repeatedly scanning whole arrays;
+- a successful mutation invalidates the active site cache and then forces an authoritative PostgreSQL reconciliation;
+- realtime events from the same browser client are ignored after that explicit reconciliation, preventing duplicate reloads;
+- all Inventory-affecting master-data/catalog mutations now carry the Inventory realtime source client id;
+- initial Inventory SSE `ready` no longer forces a second full Inventory + Master Data hydration immediately after boot; reconnect `ready` still forces reconciliation;
+- Super Admin Inventory Database uses one combined `/api/admin/inventory-database/:site` HTTP snapshot instead of two separate base HTTP requests;
+- the combined endpoint reads Inventory and Master Data in parallel and exposes `Server-Timing` plus `meta.server_ms`;
+- Inventory item/stock site filters now use `split_part(item_key,':',1)=site`, aligned with the existing schema-031 expression index instead of prefix LIKE scans;
+- the UI exposes the latest measured Database load time as `DB <ms> · CACHE/NETWORK`.
+
+Authority/safety:
+1. PostgreSQL/VPS remains the only Inventory authority.
+2. No quantity/minimum, Work Area, storage, transfer, shipping, receiving-default, RBAC or mutation semantics are changed.
+3. Cache is memory-only, user-scoped, short-lived, invalidated on mutation/realtime, and never reports a local-only write success.
+4. No schema migration is introduced in this phase; the existing schema-031 indexes are reused.
+5. Exact-head static/performance/API/browser/full-device regression is required before merge, followed by production deploy/health/data-integrity/UI-smoke/audit verification.
+
 ## CURRENT VERIFIED PRODUCTION — Inventory compact Pick row + overflow hardening, 2026-10-02
 
 This is the current Inventory UI continuation authority on schema 031.
