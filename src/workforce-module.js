@@ -183,6 +183,10 @@ function decorateNavigation(panel) {
   const c = copy();
   decoratePermissionRows();
   document.querySelectorAll('a.nav-item[href="#schedule"]').forEach((node) => {
+    // workforce-access-compat owns the authorized legacy #schedule nav entry.
+    // Once it has established the zero-geometry compatibility contract, this
+    // decorator must not race its MutationObserver by hiding the same node again.
+    if (node.dataset.workforceLegacySchedule === "true") return;
     node.hidden = true;
     node.setAttribute("aria-hidden", "true");
     node.tabIndex = -1;
