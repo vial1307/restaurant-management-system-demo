@@ -53,6 +53,8 @@ assert(superBrowser.includes('page.on("pageerror"'),"Super Admin browser regress
 assert(superBrowser.includes("page.reload"),"Super Admin browser regression must exercise reload persistence");
 assert(browser.includes('page.on("requestfailed"'),"main browser regression must catch same-origin API request failures");
 assert(browser.includes("response.status()>=500"),"main browser regression must catch same-origin API 5xx responses");
+assert(browser.includes('parsed.pathname==="/api/inventory/events"'),"expected Inventory SSE teardown abort must be explicitly classified instead of hiding all request failures");
+assert(superBrowser.includes('parsed.pathname==="/api/inventory/events"'),"Super Admin diagnostics must use the same narrow SSE-abort exception");
 assert(superBrowser.includes('page.on("requestfailed"'),"Super Admin regression must catch same-origin API request failures");
 
 const productionSha="b61ef3837750a773294c1eb230bbb48393710cf3";
