@@ -53,6 +53,39 @@ services:
       retries: 10
       start_period: 10s
 
+  agentmemory:
+    build:
+      context: ./repo/vps/agentmemory
+      args:
+        AGENTMEMORY_VERSION: "0.9.29"
+    container_name: kitchen-agentmemory
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ./agentmemory.env
+    environment:
+      CI: "1"
+      HOME: /home/node
+      AGENTMEMORY_DATA_DIR: /data
+      AGENTMEMORY_TOOLS: core
+      AGENTMEMORY_AUTO_COMPRESS: "false"
+      AGENTMEMORY_INJECT_CONTEXT: "false"
+      III_TELEMETRY_ENABLED: "false"
+    volumes:
+      - ./agentmemory-data:/data
+      - ./agentmemory-home:/home/node/.agentmemory
+      - ./repo:/workspace:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3111/agentmemory/livez >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   web:
     image: caddy:2.10-alpine
     container_name: kitchen-os-web
