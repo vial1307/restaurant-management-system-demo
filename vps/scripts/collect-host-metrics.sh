@@ -9,6 +9,7 @@ TMP="${OUT}.tmp"
 STATE_TMP="${STATE}.tmp"
 AGENTMEMORY_HEALTH="${RUNTIME_DIR}/agentmemory-health.json"
 AGENTMEMORY_HEALTH_TMP="${AGENTMEMORY_HEALTH}.tmp"
+AGENTMEMORY_ENV="${APP_DIR}/agentmemory.env"
 
 cleanup_metrics_tmp() {
   rm -f "${TMP}" "${STATE_TMP}" "${TMP}.network" "${TMP}.services" "${AGENTMEMORY_HEALTH_TMP}"
@@ -143,7 +144,12 @@ for service in "${service_names[@]}"; do
   service_count=$((service_count + 1))
 done
 
-if curl -fsS --max-time 4 http://127.0.0.1:3111/agentmemory/health > "${AGENTMEMORY_HEALTH_TMP}" 2>/dev/null; then
+agentmemory_secret=""
+if [[ -r "${AGENTMEMORY_ENV}" ]]; then
+  agentmemory_secret="$(sed -n 's/^AGENTMEMORY_SECRET=//p' "${AGENTMEMORY_ENV}" | head -n1)"
+fi
+if [[ "${agentmemory_secret}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]] \
+  && curl -fsS --max-time 4 -H "Authorization: Bearer ${agentmemory_secret}" http://127.0.0.1:3111/agentmemory/health > "${AGENTMEMORY_HEALTH_TMP}" 2>/dev/null; then
   chmod 0644 "${AGENTMEMORY_HEALTH_TMP}"
   mv -f "${AGENTMEMORY_HEALTH_TMP}" "${AGENTMEMORY_HEALTH}"
 else
