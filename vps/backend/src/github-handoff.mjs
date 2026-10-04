@@ -84,6 +84,19 @@ function workflowSummary(run) {
   };
 }
 
+async function latestSuccessfulWorkflow(workflowFile, { branch="", event="" } = {}) {
+  const params = new URLSearchParams({ status:"success",per_page:"5" });
+  if (branch) params.set("branch",branch);
+  if (event) params.set("event",event);
+  try {
+    const data=await githubJson(`/actions/workflows/${encodeURIComponent(workflowFile)}/runs?${params.toString()}`);
+    const row=(Array.isArray(data?.workflow_runs) ? data.workflow_runs : [])[0] || null;
+    return row ? workflowSummary(row) : null;
+  } catch {
+    return null;
+  }
+}
+
 function workflowGateSummary(rows = [], expectedHead = "") {
   const latestByName = new Map();
   for (const row of rows || []) {
@@ -150,9 +163,11 @@ async function loadLiveGithubHandoff() {
     : null;
   const activePr = pullSummary(active);
 
-  const [mainCommitRows,mainActionData] = await Promise.all([
+  const [mainCommitRows,mainActionData,productionDeploy,inventoryAudit] = await Promise.all([
     githubJson("/commits?sha=main&per_page=8"),
     githubJson("/actions/runs?branch=main&per_page=30"),
+    latestSuccessfulWorkflow("deploy-vps.yml",{ branch:"main",event:"push" }),
+    latestSuccessfulWorkflow("inventory-site-production-audit.yml",{ event:"workflow_run" }),
   ]);
   const mainCommits=(Array.isArray(mainCommitRows) ? mainCommitRows : []).map(commitSummary);
   const mainRuns=(Array.isArray(mainActionData?.workflow_runs) ? mainActionData.workflow_runs : [])
@@ -214,6 +229,10 @@ async function loadLiveGithubHandoff() {
     main_workflows:mainRuns,
     workflow_summary:workflowGateSummary(runs,activePr?.head_sha || mainSha),
     main_workflow_summary:workflowGateSummary(mainRuns,mainSha),
+    production_workflows:{
+      deploy:productionDeploy,
+      inventory_audit:inventoryAudit,
+    },
   };
 }
 
@@ -237,6 +256,7 @@ function disabledResult(error="GITHUB_LIVE_HANDOFF_DISABLED") {
     main_workflows:[],
     workflow_summary:workflowGateSummary([],null),
     main_workflow_summary:workflowGateSummary([],null),
+    production_workflows:{ deploy:null,inventory_audit:null },
     error,
   };
 }
