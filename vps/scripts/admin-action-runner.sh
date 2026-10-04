@@ -8,6 +8,9 @@ MARKETING_DIR="/opt/marketing-seo-platform"
 MARKETING_REPO="git@github.com:vial1307/marketing-seo-platform.git"
 MARKETING_URL="https://marketing.82.47.180.185.nip.io"
 MARKETING_SSH_KEY="/home/deploy/.ssh/marketing_vps_readonly"
+AGENTMEMORY_CONTAINER="kitchen-agentmemory"
+AGENTMEMORY_HEALTH_URL="http://127.0.0.1:3111/agentmemory/health"
+AGENTMEMORY_STATUS_URL="http://127.0.0.1:3111/agentmemory/status"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root."
@@ -208,6 +211,65 @@ marketing_rollback() {
   marketing_status
 }
 
+wait_agentmemory_health() {
+  for attempt in $(seq 1 45); do
+    if curl -fsS --max-time 3 "${AGENTMEMORY_HEALTH_URL}" >/dev/null; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+agentmemory_secret() {
+  docker inspect "${AGENTMEMORY_CONTAINER}" >/dev/null 2>&1 || return 44
+  docker exec "${AGENTMEMORY_CONTAINER}" sh -lc 'printf "%s" "${AGENTMEMORY_SECRET:-}"'
+}
+
+agentmemory_status() {
+  if ! docker inspect "${AGENTMEMORY_CONTAINER}" >/dev/null 2>&1; then
+    echo "AGENTMEMORY_CONTAINER_NOT_FOUND"
+    return 44
+  fi
+  echo "CONTAINER=$(docker inspect -f '{{.State.Status}}' "${AGENTMEMORY_CONTAINER}")"
+  docker ps --filter name="^/${AGENTMEMORY_CONTAINER}$" --format 'IMAGE={{.Image}} STATUS={{.Status}}'
+  echo "HEALTH:"
+  curl -fsS --max-time 5 "${AGENTMEMORY_HEALTH_URL}"
+  echo
+  local secret
+  secret="$(agentmemory_secret)"
+  if [[ ! "${secret}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]]; then
+    echo "AGENTMEMORY_SECRET_UNAVAILABLE"
+    return 75
+  fi
+  echo "STATUS:"
+  curl -fsS --max-time 8 -H "Authorization: Bearer ${secret}" "${AGENTMEMORY_STATUS_URL}"
+  echo
+}
+
+agentmemory_sync_handoff() {
+  if ! docker inspect "${AGENTMEMORY_CONTAINER}" >/dev/null 2>&1; then
+    echo "AGENTMEMORY_CONTAINER_NOT_FOUND"
+    return 44
+  fi
+  docker exec "${AGENTMEMORY_CONTAINER}" node /workspace/vps/scripts/agentmemory-sync.mjs
+  agentmemory_status
+}
+
+agentmemory_restart() {
+  if ! docker inspect "${AGENTMEMORY_CONTAINER}" >/dev/null 2>&1; then
+    echo "AGENTMEMORY_CONTAINER_NOT_FOUND"
+    return 44
+  fi
+  docker restart "${AGENTMEMORY_CONTAINER}" >/dev/null
+  if ! wait_agentmemory_health; then
+    echo "AGENTMEMORY_RESTART_HEALTH_FAILED"
+    docker logs --tail 120 --timestamps "${AGENTMEMORY_CONTAINER}" 2>&1 || true
+    return 76
+  fi
+  agentmemory_status
+}
+
 run_action() {
   case "$1" in
     marketing_status) marketing_status ;;
@@ -215,6 +277,9 @@ run_action() {
     marketing_restart) marketing_restart ;;
     marketing_logs) marketing_logs ;;
     marketing_rollback) marketing_rollback ;;
+    agentmemory_status) agentmemory_status ;;
+    agentmemory_sync_handoff) agentmemory_sync_handoff ;;
+    agentmemory_restart) agentmemory_restart ;;
     *)
       echo "SERVER_ACTION_NOT_ALLOWED"
       return 64
