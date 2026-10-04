@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim
 ARG AGENTMEMORY_VERSION=0.9.29
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates curl tar \
+ && apt-get install -y --no-install-recommends ca-certificates curl tar gzip lsof procps \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g "@agentmemory/agentmemory@${AGENTMEMORY_VERSION}"
 
