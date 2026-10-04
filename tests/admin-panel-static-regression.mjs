@@ -33,6 +33,10 @@ assert.match(js, /system\.super_admin/, "Super Admin Panel must require the dedi
 assert.match(js, /\/api\/admin\/super\/overview/, "overview must read live VPS/PostgreSQL information");
 assert.match(js, /\/api\/admin\/super\/development-status/, "GitHub/handoff section must read the protected backend status API");
 assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engineering handoff section");
+assert.match(js, /data-workflow-dashboard/, "Super Admin GitHub section must expose an exact-head workflow dashboard");
+assert.match(js, /workflow_summary/, "Super Admin must consume backend-collapsed latest workflow gates");
+assert.match(js, /main_workflow_summary/, "Super Admin must distinguish main workflow state from active PR workflow state");
+assert.match(js, /development-status\?refresh=1/, "manual Super Admin refresh must bypass the short GitHub handoff cache");
 assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
 assert.match(js, /data-server-action="marketing_deploy"/, "Marketing deploy must be an explicit UI action");
 assert.match(js, /\/api\/admin\/super\/server-actions/, "VPS Command Center must use the protected backend action queue");
