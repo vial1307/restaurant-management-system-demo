@@ -241,7 +241,8 @@ function renderServerActionCommandCenter() {
   const capabilities=actions.capabilities||{};
   const available=capabilities.available===true;
   const running=actions.running===true;
-  const result=actions.result||null;
+  const rawResult=actions.result||null;
+  const result=String(rawResult?.action||"").startsWith("marketing_") ? rawResult : null;
   const stateLabel=running?"RUNNING":available?"READY":"OFFLINE";
   const stateClass=running?"":available?"ok":"off";
   const disabled=!available||running?"disabled":"";
@@ -265,6 +266,44 @@ function renderServerActionCommandCenter() {
   </article>`;
 }
 
+function renderAgentMemoryPanel(memory={}) {
+  const actions=state.serverActions||{};
+  const capabilities=actions.capabilities||{};
+  const bridgeReady=capabilities.available===true;
+  const running=actions.running===true;
+  const online=memory.available===true;
+  const rawResult=actions.result||null;
+  const result=String(rawResult?.action||"").startsWith("agentmemory_") ? rawResult : null;
+  const output=result?.output||"";
+  const resultClass=result?.status==="success"?"ok":result?.status==="failed"?"off":"";
+  const disabled=!bridgeReady||running?"disabled":"";
+  const health=memory.health||{};
+  const healthStatus=online?"ONLINE":String(memory.status||"OFFLINE").toUpperCase();
+  return `<article class="sa-card" data-agentmemory-panel>
+    <div class="sa-card-head">
+      <div><h2>AgentMemory · Dev memory</h2><p>Bộ nhớ dài hạn cho coding agents, chạy riêng trên VPS và chỉ dùng để truy hồi context kỹ thuật.</p></div>
+      <span class="sa-pill ${online?"ok":"off"}">${esc(healthStatus)}</span>
+    </div>
+    <div class="sa-kv-grid">
+      <div><small>Package</small><strong class="mono">${esc(memory.package_version||"—")}</strong></div>
+      <div><small>Recall mode</small><strong>${esc(memory.mode||"keyless-bm25")}</strong></div>
+      <div><small>Tool surface</small><strong>${esc(memory.tool_surface||"core")}</strong></div>
+      <div><small>Network</small><strong>${esc(memory.scope||"vps-loopback-only")}</strong></div>
+      <div><small>Service</small><strong class="mono">${esc(memory.service||"kitchen-agentmemory")}</strong></div>
+      <div><small>Health</small><strong>${esc(health.status||memory.status||"—")}</strong></div>
+    </div>
+    <div class="sa-row-actions sa-server-actions">
+      <button class="sa-btn" type="button" data-server-action="agentmemory_status" ${disabled}>Check status</button>
+      <button class="sa-btn primary" type="button" data-server-action="agentmemory_sync_handoff" ${disabled}>Sync Handoff → Memory</button>
+      <button class="sa-btn" type="button" data-server-action="agentmemory_restart" ${disabled}>Restart AgentMemory</button>
+      ${memory.source_repository?devLink(memory.source_repository,"AgentMemory source",memory.package_version?\`pinned ${memory.package_version}\`:""):""}
+    </div>
+    <p class="sa-dev-note">Persistent state: <span class="mono">${esc(memory.persistence||"/opt/kitchen-os/agentmemory-data")}</span>. Không public REST/viewer ra Internet. ${esc(memory.authority||"GitHub/PostgreSQL/VPS vẫn là source of truth.")}</p>
+    ${!bridgeReady?\`<div class="sa-empty">Host bridge chưa sẵn sàng: ${esc(capabilities.reason||"HOST_ACTION_BRIDGE_UNAVAILABLE")}</div>\`:""}
+    ${result?\`<div class="sa-command-result"><div class="sa-list-row"><div><strong>${esc(result.action||"AgentMemory action")}</strong><small>${esc(result.request_id||"")}</small></div><span class="sa-pill ${resultClass}">${esc(String(result.status||"unknown").toUpperCase())}</span></div>${output?\`<pre class="sa-command-output mono">${esc(output)}</pre>\`:""}</div>\`:""}
+  </article>`;
+}
+
 function renderDevelopment() {
   const d=state.developmentStatus;
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
@@ -275,7 +314,7 @@ function renderDevelopment() {
   const workflowRows=(liveGit.workflows||[]).slice(0,12);
   const commitRows=(liveGit.commits||[]).slice(0,8);
   const canonicalUrl=canonical.url||liveGit.canonical_url||"";
-  return `${renderServerActionCommandCenter()}<article class="sa-card">
+  return `${renderServerActionCommandCenter()}${renderAgentMemoryPanel(d.agent_memory||{})}<article class="sa-card">
     <div class="sa-card-head"><div><h2>One-link Handoff · 單一交接連結</h2><p>Dev khác hoặc chat mới chỉ cần mở link này. Trang sẽ tự tìm PR/branch/head SHA/CI hiện tại.</p></div><span class="sa-pill ${liveGit.available?"ok":"off"}">${esc(liveState)}</span></div>
     <div class="sa-row-actions">
       ${canonicalUrl?`<button class="sa-btn primary" type="button" data-copy-handoff data-handoff-url="${esc(safeHref(canonicalUrl))}">Copy handoff link</button>`:""}
@@ -497,8 +536,8 @@ function openSettingEditor(row=null) {
   const host=modal(row?"Sửa setting":"Thêm setting",`<form data-setting-form><div class="sa-form-grid"><label class="wide"><span>Setting key</span><input required name="setting_key" pattern="[a-z][a-z0-9._-]{1,95}" value="${esc(row?.setting_key||"")}" ${row?"readonly":""}></label><label class="wide"><span>JSON value (chuỗi có thể nhập trực tiếp)</span><textarea name="value" rows="6">${esc(typeof row?.value==="string"?row.value:json(row?.value??""))}</textarea></label></div><p class="sa-form-error" data-form-error></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu</button></div></form>`);const form=host.querySelector("[data-setting-form]");form.addEventListener("submit",async(event)=>{event.preventDefault();const fd=new FormData(form);let value=String(fd.get("value")||"");try{try{value=JSON.parse(value);}catch{}await api("/api/admin/super/settings",{method:"POST",body:{setting_key:String(fd.get("setting_key")||""),value}});host.remove();state.success="Đã lưu setting.";await loadCore();render();}catch(error){host.querySelector("[data-form-error]").textContent=errorText(error);}});
 }
 
-const SERVER_ACTION_CONFIRM = new Set(["marketing_deploy","marketing_restart","marketing_rollback"]);
-const SERVER_ACTION_ALLOWED = new Set(["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback"]);
+const SERVER_ACTION_CONFIRM = new Set(["marketing_deploy","marketing_restart","marketing_rollback","agentmemory_sync_handoff","agentmemory_restart"]);
+const SERVER_ACTION_ALLOWED = new Set(["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback","agentmemory_status","agentmemory_sync_handoff","agentmemory_restart"]);
 
 async function runServerAction(action) {
   if(!SERVER_ACTION_ALLOWED.has(action)||state.serverActions.running)return;
@@ -506,6 +545,8 @@ async function runServerAction(action) {
     marketing_deploy:"Deploy phiên bản Marketing mới nhất từ GitHub lên VPS?",
     marketing_restart:"Restart container Marketing hiện tại?",
     marketing_rollback:"Rollback Marketing về release trước? Chỉ thực hiện khi release hiện tại có vấn đề.",
+    agentmemory_sync_handoff:"Đồng bộ CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES hiện tại vào AgentMemory?",
+    agentmemory_restart:"Restart AgentMemory trên VPS? Memory persistent sẽ được giữ nguyên.",
   }[action];
   if(confirmText&&!window.confirm(confirmText))return;
   state.serverActions.running=true;
@@ -532,6 +573,9 @@ async function runServerAction(action) {
   } finally {
     state.serverActions.running=false;
     try { state.serverActions.capabilities=await api("/api/admin/super/server-actions"); } catch {}
+    if(action.startsWith("agentmemory_")){
+      try { state.developmentStatus=await api("/api/admin/super/development-status"); } catch {}
+    }
     render();
   }
 }
