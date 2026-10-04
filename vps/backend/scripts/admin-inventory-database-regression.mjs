@@ -84,6 +84,14 @@ for(const site of ["central","fuxing","yongji"]) {
   assert.equal(reread.workAreas.find((a)=>a.code===area.code).name_vi,`Khu riêng ${site}`);
   assert.equal(reread.locations.find((l)=>l.id===savedLocation.id).name_vi,`Tủ riêng ${site}`);
   assert.equal(reread.locations.find((l)=>l.id===savedLocation.id).metadata.test,suffix);
+  const combined=await get(`/api/admin/inventory-database/${site}`);
+  assert.equal(combined.site,site);
+  assert.equal(combined.inventory.site,site);
+  assert.equal(combined.master.site.code,site);
+  assert.equal(combined.inventory.items.find((i)=>i.id===savedItem.id)?.name_vi,savedItem.name_vi);
+  assert.equal(combined.master.locations.find((l)=>l.id===savedLocation.id)?.name_vi,`Tủ riêng ${site}`);
+  assert(Number.isFinite(Number(combined.meta?.server_ms))&&Number(combined.meta.server_ms)>=0,
+    `${site}: combined database snapshot must expose server timing`);
   // An append from a stale association list must not prune another location.
   const spare=(await post("/api/master-data/locations",{...location,code:`${location.code}-b`,metadata:{ui_key:`${suffix}-b`,storage_group:"primary"}})).location;
   await post("/api/inventory/catalog/sync",{expectedRevision:String(savedItem.revision),appendLocations:true,item:{...item,locations:[{code:spare.code}]}});
@@ -129,4 +137,5 @@ for(const site of ["central","fuxing","yongji"]) {
   console.log("ADMIN_INVENTORY_DATABASE_SITE_OK",site);
 }
 await request("/api/admin/super/data/inventory-products",{cookie:restricted,status:403});
+await request("/api/admin/inventory-database/fuxing",{cookie:restricted,status:403});
 console.log("ADMIN_INVENTORY_DATABASE_API_OK");
