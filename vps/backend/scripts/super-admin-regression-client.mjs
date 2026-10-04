@@ -75,12 +75,13 @@ try {
   assert.equal(development.data.current_work.candidate_schema, "031");
   assert.equal(development.data.runtime.schema.version, "031");
   assert.equal(development.data.live_production.schema, "031");
-  assert.equal(development.data.release_evidence.schema, "024");
   const evidence = development.data.release_evidence;
-  assert.match(evidence.workflow_run_id, /^\d+$/, "last verified deploy must reference a workflow run");
-  assert.equal(evidence.inventory_audit_run_id, evidence.workflow_run_id);
-  assert.equal(evidence.url, `https://github.com/vial1307/restaurant-management-system-demo/actions/runs/${evidence.workflow_run_id}`);
-  assert.equal(evidence.inventory_audit_url, evidence.url);
+  assert.equal(evidence.schema, null, "static fallback must not advertise a historical schema");
+  assert.equal(evidence.workflow_run_id, null, "static fallback must not advertise a historical deploy run");
+  assert.equal(evidence.inventory_audit_run_id, null, "static fallback must not advertise a historical Inventory audit");
+  assert.equal(evidence.url, null);
+  assert.equal(evidence.inventory_audit_url, null);
+  assert.match(evidence.note, /Fallback only|runtime|live GitHub/i, "fallback evidence must explicitly defer to live/runtime authority");
   assert.match(development.data.canonical_handoff.url, /vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html/);
   assert.equal(development.data.live_github.source, "github-api-live");
   assert.equal(typeof development.data.live_github.available, "boolean");
