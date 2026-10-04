@@ -75,18 +75,20 @@ try {
   assert.equal(development.data.current_work.candidate_schema, "031");
   assert.equal(development.data.runtime.schema.version, "031");
   assert.equal(development.data.live_production.schema, "031");
-  assert.equal(development.data.release_evidence.schema, "024");
+  assert.equal(development.data.release_evidence.schema, "031");
   const evidence = development.data.release_evidence;
   assert.match(evidence.workflow_run_id, /^\d+$/, "last verified deploy must reference a workflow run");
-  assert.equal(evidence.inventory_audit_run_id, evidence.workflow_run_id);
+  assert.match(evidence.inventory_audit_run_id, /^\d+$/, "last verified Inventory audit must reference a workflow run");
   assert.equal(evidence.url, `https://github.com/vial1307/restaurant-management-system-demo/actions/runs/${evidence.workflow_run_id}`);
-  assert.equal(evidence.inventory_audit_url, evidence.url);
+  assert.equal(evidence.inventory_audit_url, `https://github.com/vial1307/restaurant-management-system-demo/actions/runs/${evidence.inventory_audit_run_id}`);
+  assert.notEqual(evidence.inventory_audit_run_id,evidence.workflow_run_id,"deploy and Inventory audit evidence must remain separate workflow runs");
   assert.match(development.data.canonical_handoff.url, /vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html/);
   assert.equal(development.data.live_github.source, "github-api-live");
   assert.equal(typeof development.data.live_github.available, "boolean");
   assert(Array.isArray(development.data.live_github.commits));
   assert(Array.isArray(development.data.live_github.changed_files));
   assert(Array.isArray(development.data.live_github.workflows));
+  assert(development.data.live_github.production_workflows && typeof development.data.live_github.production_workflows === "object");
   assert(Array.isArray(development.data.documents) && development.data.documents.length >= 4);
   assert(Array.isArray(development.data.next_steps) && development.data.next_steps.length >= 3);
 
