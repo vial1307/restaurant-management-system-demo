@@ -158,11 +158,17 @@ mv "${WEB_NEXT}" "${WEB_LIVE}"
 
 docker compose --env-file .env up -d --force-recreate web
 
+AGENTMEMORY_DEPLOY_SECRET="$(sed -n 's/^AGENTMEMORY_SECRET=//p' "${APP_DIR}/agentmemory.env" | tail -n1)"
+if [[ ! "${AGENTMEMORY_DEPLOY_SECRET}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]]; then
+  echo "AGENTMEMORY_DEPLOY_SECRET_INVALID"
+  exit 1
+fi
+
 for attempt in $(seq 1 30); do
   if curl -fsS http://127.0.0.1/api/health >/dev/null \
     && curl -fsS http://127.0.0.1/ >/dev/null \
     && curl -fsS http://127.0.0.1/.admindev.html >/dev/null \
-    && curl -fsS http://127.0.0.1:3111/agentmemory/livez >/dev/null; then
+    && curl -fsS -H "Authorization: Bearer ${AGENTMEMORY_DEPLOY_SECRET}" http://127.0.0.1:3111/agentmemory/livez >/dev/null; then
     echo "Web/API/Super Admin edge healthy."
     echo "Release: ${APP_RELEASE}"
     docker compose --env-file .env ps
