@@ -74,3 +74,10 @@ else
   echo "AGENTMEMORY_HANDOFF_SYNC_FAILED"
   exit 74
 fi
+
+if docker exec kitchen-agentmemory node /workspace/vps/scripts/agentmemory-verify.mjs; then
+  echo "AgentMemory recall smoke passed."
+else
+  echo "AGENTMEMORY_RECALL_VERIFY_FAILED"
+  exit 76
+fi

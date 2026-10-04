@@ -18,6 +18,7 @@ const hostActionRunner = fs.readFileSync("vps/scripts/admin-action-runner.sh", "
 const hostActionInstaller = fs.readFileSync("vps/scripts/install-admin-action-runner.sh", "utf8");
 const agentMemoryInstaller = fs.readFileSync("vps/scripts/install-agentmemory.sh", "utf8");
 const agentMemorySync = fs.readFileSync("vps/scripts/agentmemory-sync.mjs", "utf8");
+const agentMemoryVerify = fs.readFileSync("vps/scripts/agentmemory-verify.mjs", "utf8");
 const agentMemoryDockerfile = fs.readFileSync("vps/agentmemory/Dockerfile", "utf8");
 const hostMetricsCollector = fs.readFileSync("vps/scripts/collect-host-metrics.sh", "utf8");
 
@@ -162,6 +163,12 @@ assert.match(agentMemorySync, /kitchen-os-handoff-hashes\.json/, "handoff seedin
 assert.match(agentMemorySync, /project:PROJECT/, "handoff memories must be scoped to the Kitchen OS project");
 assert.match(agentMemorySync, /MAX_SEED_CHARS = 40_000/, "handoff memory snapshots must be bounded");
 assert.match(agentMemorySync, /\/agentmemory\/remember/, "handoff seed must use AgentMemory's authenticated remember API");
+assert.match(agentMemoryInstaller, /agentmemory-verify\.mjs/, "AgentMemory install must run recall verification after seeding");
+assert.match(agentMemoryVerify, /\/agentmemory\/search/, "production recall verifier must use AgentMemory search API");
+assert.match(agentMemoryVerify, /project:"kitchen-os"/, "production recall verifier must stay scoped to Kitchen OS");
+assert.match(agentMemoryVerify, /agentId:"kitchen-os-handoff-sync"/, "production recall verifier must stay scoped to the handoff sync agent");
+assert.match(agentMemoryVerify, /AGENTMEMORY_RECALL_OK/, "production recall verifier must emit an explicit success marker");
+assert.match(compose, /Authorization: Bearer \$\$\{AGENTMEMORY_SECRET\}/, "Compose healthcheck must expand the AgentMemory secret inside the container");
 assert.match(hostActionRunner, /AGENTMEMORY_SEARCH_URL/, "host runner must expose a fixed audited recall smoke action");
 assert.match(hostMetricsCollector, /agentmemory-health\.json/, "host metrics must publish a filtered AgentMemory health snapshot");
 assert.match(hostMetricsCollector, /Authorization: Bearer \$\{agentmemory_secret\}/, "filtered AgentMemory health collection must authenticate locally");
