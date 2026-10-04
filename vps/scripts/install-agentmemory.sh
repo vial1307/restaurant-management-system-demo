@@ -31,6 +31,12 @@ if [[ ! -s "${AGENTMEMORY_ENV}" ]]; then
   chmod 0600 "${AGENTMEMORY_ENV}"
 fi
 
+agentmemory_secret="$(sed -n 's/^AGENTMEMORY_SECRET=//p' "${AGENTMEMORY_ENV}" | head -n1)"
+if [[ ! "${agentmemory_secret}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]]; then
+  echo "AGENTMEMORY_SECRET_INVALID"
+  exit 75
+fi
+
 cd "${APP_DIR}"
 echo "Building pinned AgentMemory image..."
 docker compose --env-file .env build agentmemory
@@ -58,7 +64,7 @@ if command -v ss >/dev/null 2>&1; then
   fi
 fi
 
-health="$(curl -fsS --max-time 5 http://127.0.0.1:3111/agentmemory/health)"
+health="$(curl -fsS --max-time 5 -H "Authorization: Bearer ${agentmemory_secret}" http://127.0.0.1:3111/agentmemory/health)"
 printf 'AgentMemory health: %s\n' "${health}"
 
 if docker exec kitchen-agentmemory node /workspace/vps/scripts/agentmemory-sync.mjs; then
