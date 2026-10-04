@@ -294,6 +294,7 @@ function renderAgentMemoryPanel(memory={}) {
     </div>
     <div class="sa-row-actions sa-server-actions">
       <button class="sa-btn" type="button" data-server-action="agentmemory_status" ${disabled}>Check status</button>
+      <button class="sa-btn" type="button" data-server-action="agentmemory_recall_handoff" ${disabled}>Test recall</button>
       <button class="sa-btn primary" type="button" data-server-action="agentmemory_sync_handoff" ${disabled}>Sync Handoff → Memory</button>
       <button class="sa-btn" type="button" data-server-action="agentmemory_restart" ${disabled}>Restart AgentMemory</button>
       ${memory.source_repository?devLink(memory.source_repository,"AgentMemory source",memory.package_version?\`pinned ${memory.package_version}\`:""):""}
@@ -537,7 +538,7 @@ function openSettingEditor(row=null) {
 }
 
 const SERVER_ACTION_CONFIRM = new Set(["marketing_deploy","marketing_restart","marketing_rollback","agentmemory_sync_handoff","agentmemory_restart"]);
-const SERVER_ACTION_ALLOWED = new Set(["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback","agentmemory_status","agentmemory_sync_handoff","agentmemory_restart"]);
+const SERVER_ACTION_ALLOWED = new Set(["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback","agentmemory_status","agentmemory_recall_handoff","agentmemory_sync_handoff","agentmemory_restart"]);
 
 async function runServerAction(action) {
   if(!SERVER_ACTION_ALLOWED.has(action)||state.serverActions.running)return;
