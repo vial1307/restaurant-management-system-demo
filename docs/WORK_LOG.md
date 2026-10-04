@@ -1,5 +1,18 @@
 # Kitchen OS Work Log
 
+## 2026-10-05 — Engineering Harness production closure + stale-fallback hotfix #197
+
+- PR #196 exact head `56eddaeededb048f0223e4e71a376281b28d2b92` passed the required exact-head CI and merged as `d8e332f399f299476c939539e809a24b85e0a7e8`.
+- Main Deploy #1147 / `37220344400` initially hit one 10-second mobile permission-state timeout in full-device certification; the unchanged merge SHA passed the isolated regression rerun, proving a transient CI flake rather than a code regression.
+- Production deploy then passed exact-target verification, backup/rollback path, release/schema health, `DATA_INTEGRITY_OK` and production UI permission-modal smoke.
+- Production release: `d8e332f`; schema: `031`; backup: `/opt/kitchen-os/backups/kitchen_os_20261004T173434Z.dump`.
+- AgentMemory production seed expanded to 7 engineering documents and recall passed: `AGENTMEMORY_SEED_COMPLETE changed=6 total=7`; `AGENTMEMORY_RECALL_OK results=5`.
+- Inventory Site Production Audit #451 and Workforce parity/staff/schedule/attendance post-deploy checks all passed.
+- Post-production inspection found stale static fallback metadata in `development-status.mjs` (historical PR #140/schema 024/RBAC next steps) and stale static release-evidence rendering in the Super Admin production card.
+- Created PR #197 `fix/engineering-harness-live-fallback-20261005` to remove those stale fallbacks and make production evidence prefer live main workflows/runtime state.
+- PR #188 remains paused until #197 production closure; afterward it can resume only as a BLOCKED reconciliation workstream because its current branch is stale/diverged/non-mergeable.
+
+
 ## 2026-10-05 — Engineering Harness / Coding Control Plane started
 
 - User requested GitHub & Handoff enforce a professional coding-engineering standard for future fresh chats/agents.
