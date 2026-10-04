@@ -320,6 +320,9 @@ function renderEngineeringHarnessPanel(harness={}) {
   const protocol=harness.start_protocol||[];
   const documents=harness.documents||[];
   const done=harness.definition_of_done||[];
+  const gaps=matrix.filter((row)=>String(row.coverage||"").toLowerCase()==="partial");
+  const candidate=harness.candidate||{};
+  const production=gates.production||{};
   const gate=(title,row={})=>`<div><small>${esc(title)}</small><strong><span class="sa-pill ${harnessPillClass(row.status)}">${esc(row.label||String(row.status||"UNKNOWN").toUpperCase())}</span></strong><small>${esc(row.reason||"")}</small></div>`;
   return `<article class="sa-card" data-engineering-harness>
     <div class="sa-card-head">
@@ -345,7 +348,7 @@ function renderEngineeringHarnessPanel(harness={}) {
     </article>
     <article class="sa-card">
       <div class="sa-card-head"><div><h2>Exact-head required workflows</h2><p>Không dùng kết quả PASS của SHA cũ để merge SHA mới.</p></div></div>
-      <div class="sa-list">${workflows.map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label||row.name)}</strong><small>${esc(row.purpose||"")}</small><small class="mono">${esc(row.run?.head_sha?String(row.run.head_sha).slice(0,12):"no exact-head evidence")}</small></div><span class="sa-pill ${harnessPillClass(row.status)}">${esc(String(row.status||"missing").toUpperCase())}</span></div>`).join("")||`<div class="sa-empty">Chưa có workflow evidence.</div>`}</div>
+      <div class="sa-list">${workflows.map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label||row.name)}</strong><small>${esc(row.purpose||"")}</small><small class="mono">${esc(row.run?.head_sha?String(row.run.head_sha).slice(0,12):"no exact-head evidence")}</small></div><div class="sa-row-actions"><span class="sa-pill ${harnessPillClass(row.status)}">${esc(String(row.status||"missing").toUpperCase())}</span>${row.run?.url?`<a class="sa-link" href="${esc(safeHref(row.run.url))}" target="_blank" rel="noreferrer">Run ↗</a>`:""}</div></div>`).join("")||`<div class="sa-empty">Chưa có workflow evidence.</div>`}</div>
     </article>
   </section>
   <article class="sa-card" data-verification-matrix>
@@ -354,6 +357,23 @@ function renderEngineeringHarnessPanel(harness={}) {
       ${matrix.map((row)=>`<tr><td><strong>${esc(row.label)}</strong></td><td><span class="sa-pill ${harnessPillClass(row.coverage)}">${esc(String(row.coverage||"unknown").toUpperCase())}</span></td><td><span class="sa-pill ${harnessPillClass(row.execution_status)}">${esc(String(row.execution_status||"missing").toUpperCase())}</span></td><td><small>${esc(row.evidence||"")}</small></td></tr>`).join("")}
     </tbody></table></div>
   </article>
+  <section class="sa-two-col" data-harness-evidence>
+    <article class="sa-card">
+      <div class="sa-card-head"><div><h2>Known gaps / Technical debt</h2><p>Vùng chưa có coverage toàn diện. Feature mới chạm vào đây phải bổ sung targeted regression.</p></div><span class="sa-pill ${gaps.length?"":"ok"}">${gaps.length?esc(String(gaps.length)+" PARTIAL"):"NO KNOWN GAP"}</span></div>
+      <div class="sa-list">${gaps.map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label)}</strong><small>${esc(row.evidence||"")}</small></div><span class="sa-pill">PARTIAL</span></div>`).join("")||`<div class="sa-empty">Không có gap được khai báo trong verification matrix.</div>`}</div>
+    </article>
+    <article class="sa-card">
+      <div class="sa-card-head"><div><h2>Evidence Center</h2><p>SHA/runtime evidence dùng để chứng minh task và release; không dựa vào lời mô tả của agent.</p></div></div>
+      <div class="sa-kv-grid">
+        <div><small>Active PR</small><strong>${candidate.active_pr?.number?"#"+esc(candidate.active_pr.number):"—"}</strong></div>
+        <div><small>Candidate head</small><strong class="mono">${esc(String(candidate.active_pr?.head_sha||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Main SHA</small><strong class="mono">${esc(String(candidate.main_sha||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Recorded production</small><strong class="mono">${esc(String(production.recorded_sha||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Live release</small><strong class="mono">${esc(String(production.live_release||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Schema</small><strong>${esc(production.schema||"—")}</strong></div>
+      </div>
+    </article>
+  </section>
   <article class="sa-card" data-definition-of-done>
     <div class="sa-card-head"><div><h2>Definition of Done</h2><p>Code compile không đồng nghĩa DONE. Task chỉ đóng khi các điều kiện áp dụng đã có evidence.</p></div></div>
     <div class="sa-list">${done.map((item)=>`<div class="sa-list-row"><div><strong>✓ ${esc(item)}</strong></div></div>`).join("")}</div>
