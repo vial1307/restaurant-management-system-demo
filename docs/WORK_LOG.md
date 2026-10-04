@@ -1,5 +1,22 @@
 # Kitchen OS Work Log
 
+## 2026-10-04 — Fuxing 大冷凍 production stocktake imported
+
+- User supplied a new physical count for 復興 / Fuxing `大冷凍` and required PostgreSQL updates only: do not duplicate existing products, do not hard-code stock data, and leave Work Area placement for manual operator configuration.
+- Reconciled the supplied list against the existing Fuxing catalog and historical large-freezer mappings: all 51 supplied product identities already existed and were active, so 0 catalog items were created and no Work Area/catalog metadata was changed.
+- Target storage was verified as `fuxing-large-freezer`.
+- A pre-write PostgreSQL backup was created at `/home/deploy/kitchen_os_pre_stocktake_20261004T045308Z.dump` with SHA-256 sidecar.
+- Production stocktake workflow run `37178274266` completed successfully:
+  - 51/51 target rows verified;
+  - 45 quantities changed;
+  - 6 quantities already matched and were left unchanged;
+  - changed rows wrote auditable `inventory_transactions` `adjust` records with before/after quantity and original raw count detail;
+  - one `stocktake_import` audit record captured the operation.
+- Mixed-unit values keep the configured inventory unit; residual grams/pieces remain in transaction detail rather than being silently converted. Existing `冷凍麵` conversion remains 1箱 = 30片.
+- The entire import ran in one database transaction and would roll back on a missing/inactive item, duplicate key, site mismatch or post-write verification mismatch.
+- First transport run `37178235483` failed before any database write because its payload was incomplete; no production data was affected.
+- The temporary one-time GitHub Actions transport was deleted after success. No inventory quantity payload remains in runtime source or migrations, and production release/schema were unchanged.
+
 ## 2026-10-04 — GitHub workflow + Super Admin handoff authority updated
 
 - User requested the current workflow be updated on GitHub and Super Admin.
