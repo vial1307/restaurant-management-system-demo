@@ -48,6 +48,7 @@ assert.match(panel,/CI exact-head hiện tại/);
 assert.match(panel,/data-workflow-dashboard/);
 assert.match(panel,/workflow_summary/);
 assert.match(panel,/main_workflow_summary/);
+assert.match(panel,/Runtime ↔ main/,"Super Admin must distinguish deployed runtime from documentation-only/newer main commits");
 assert.match(panel,/development-status\?refresh=1/);
 assert.match(panel,/live_github/);
 
