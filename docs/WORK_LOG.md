@@ -1,5 +1,31 @@
 # Kitchen OS Work Log
 
+## 2026-10-05 — Engineering Harness production closure
+
+- PR #196 exact tested head `56eddaeededb048f0223e4e71a376281b28d2b92` passed the required Harness gates:
+  - Deploy Kitchen OS PR run #1146 / `37219907875`: PASS including full-device cross-browser;
+  - Master Data/Admin Panel #428: PASS;
+  - Super Admin Browser #350: PASS;
+  - API Load #641: PASS;
+  - Workforce diagnostic #505: PASS.
+- PR #196 merged as `d8e332f399f299476c939539e809a24b85e0a7e8`.
+- Main Deploy #1147 / `37220344400` attempt 1 failed only at the final full-device suite with a 10-second permission-state timeout in `mobile-role-site-certification.mjs`; six Chromium role/site cases had already passed and no wrong assertion/API 5xx was reported.
+- Per Engineering Contract, reran only the failed regression job on the unchanged merge SHA; no test was weakened and no code was changed.
+- Attempt 2 passed full regression, exact VPS deploy and production UI smoke.
+- Production evidence:
+  - deploy target `d8e332f399f299476c939539e809a24b85e0a7e8`;
+  - health `{"app":"ok","database":"ok","schema":"031","release":"d8e332f"}`;
+  - `DATA_INTEGRITY_OK`;
+  - VPS Capacity Audit #17 PASS.
+- Post-deploy: Inventory Audit #451 and Workforce Staff #692 / Attendance #666 / Schedule Backfill #676 / Schedule Parity #465 all passed.
+- AgentMemory remained private/healthy and seeded the expanded 7-record engineering memory set:
+  - CURRENT_HANDOFF, STATUS, DEVELOPMENT_RULES;
+  - ENGINEERING_CONTRACT, AGENT_START_PROTOCOL, FEATURE_REGISTRY, VERIFICATION_MATRIX.
+- Deploy evidence: `AGENTMEMORY_SEED_COMPLETE changed=6 total=7 project=kitchen-os`; `AGENTMEMORY_RECALL_OK results=5`.
+- Engineering Harness is now production: live gates, change-aware workflow requirements, Verification Matrix, Known gaps, Evidence Center, new-chat packet, and browser API-failure diagnostics.
+- PR #188 is resumed as `ACTIVE_PR`, but its stale/non-mergeable head must be reconciled onto current main before any merge.
+
+
 ## 2026-10-05 — Engineering Harness / Coding Control Plane started
 
 - User requested GitHub & Handoff enforce a professional coding-engineering standard for future fresh chats/agents.
