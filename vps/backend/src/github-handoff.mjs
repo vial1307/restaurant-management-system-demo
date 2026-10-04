@@ -84,6 +84,40 @@ function workflowSummary(run) {
   };
 }
 
+function workflowGateSummary(rows = [], expectedHead = "") {
+  const latestByName = new Map();
+  for (const row of rows || []) {
+    const name=text(row?.name || "workflow");
+    const current=latestByName.get(name);
+    const rowTime=Date.parse(row?.updated_at || row?.created_at || 0) || 0;
+    const currentTime=Date.parse(current?.updated_at || current?.created_at || 0) || 0;
+    if (!current || rowTime >= currentTime || Number(row?.run_number || 0) > Number(current?.run_number || 0)) {
+      latestByName.set(name,row);
+    }
+  }
+
+  const gates=[...latestByName.values()]
+    .map(workflowSummary)
+    .sort((a,b)=>(Date.parse(b.updated_at || b.created_at || 0) || 0)-(Date.parse(a.updated_at || a.created_at || 0) || 0));
+
+  const counts={ total:gates.length,passed:0,failed:0,running:0,cancelled:0,skipped:0,other:0 };
+  for (const gate of gates) {
+    if (gate.status !== "completed") counts.running += 1;
+    else if (gate.conclusion === "success") counts.passed += 1;
+    else if (["failure","timed_out","action_required","startup_failure"].includes(gate.conclusion)) counts.failed += 1;
+    else if (gate.conclusion === "cancelled") counts.cancelled += 1;
+    else if (["skipped","neutral"].includes(gate.conclusion)) counts.skipped += 1;
+    else counts.other += 1;
+  }
+  const state = counts.failed ? "failed"
+    : counts.running ? "running"
+      : counts.cancelled || counts.other ? "attention"
+        : counts.total && counts.passed + counts.skipped === counts.total ? "passed"
+          : "unknown";
+  const exactHead = !expectedHead || gates.every((gate)=>gate.head_sha===expectedHead);
+  return { state,counts,exact_head:exactHead,head_sha:expectedHead || null,gates };
+}
+
 function handoffTitle(content) {
   const match = String(content || "").match(/^##\s+(.+)$/m);
   return text(match?.[1] || "");
@@ -178,6 +212,8 @@ async function loadLiveGithubHandoff() {
     changed_files:files,
     workflows:runs,
     main_workflows:mainRuns,
+    workflow_summary:workflowGateSummary(runs,activePr?.head_sha || mainSha),
+    main_workflow_summary:workflowGateSummary(mainRuns,mainSha),
   };
 }
 
@@ -199,6 +235,8 @@ function disabledResult(error="GITHUB_LIVE_HANDOFF_DISABLED") {
     changed_files:[],
     workflows:[],
     main_workflows:[],
+    workflow_summary:workflowGateSummary([],null),
+    main_workflow_summary:workflowGateSummary([],null),
     error,
   };
 }
