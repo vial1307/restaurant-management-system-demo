@@ -245,6 +245,9 @@ agentmemory_status() {
   echo "STATUS:"
   curl -fsS --max-time 8 -H "Authorization: Bearer ${secret}" "${AGENTMEMORY_STATUS_URL}"
   echo
+  if [[ -x /opt/kitchen-os/repo/vps/scripts/collect-host-metrics.sh ]]; then
+    APP_DIR=/opt/kitchen-os /bin/bash /opt/kitchen-os/repo/vps/scripts/collect-host-metrics.sh >/dev/null 2>&1 || true
+  fi
 }
 
 agentmemory_sync_handoff() {
