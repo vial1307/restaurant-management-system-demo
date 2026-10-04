@@ -22,6 +22,25 @@ const PROFILES = [
 
 const ENGINES = { chromium, webkit };
 
+function attachRuntimeDiagnostics(page, errors) {
+  const origin=new URL(BASE).origin;
+  const isSameOriginApi=(url)=>{
+    try {
+      const parsed=new URL(url);
+      return parsed.origin===origin && parsed.pathname.startsWith("/api/");
+    } catch {
+      return false;
+    }
+  };
+  page.on("pageerror",(error)=>errors.push(`pageerror: ${error.message}`));
+  page.on("requestfailed",(request)=>{
+    if(isSameOriginApi(request.url()))errors.push(`api request failed: ${request.method()} ${request.url()} ${request.failure()?.errorText||""}`);
+  });
+  page.on("response",(response)=>{
+    if(isSameOriginApi(response.url())&&response.status()>=500)errors.push(`api ${response.status()}: ${response.request().method()} ${response.url()}`);
+  });
+}
+
 async function login(context, username) {
   const response = await context.request.post(`${API_BASE}/api/auth/login`, {
     data:{ username, password:PASSWORD },
@@ -133,7 +152,7 @@ async function runSuperAdminProfile(profile) {
   });
   const page = await context.newPage();
   const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  attachRuntimeDiagnostics(page,pageErrors);
 
   try {
     console.log("SUPER_ADMIN_DEVICE_START", profile.name);
