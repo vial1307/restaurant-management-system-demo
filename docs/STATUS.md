@@ -1,14 +1,16 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #192 AgentMemory authenticated VPS probes, 2026-10-04
+## DONE — AgentMemory private VPS integration + authenticated recall, 2026-10-04
 
-- PR #191 merged as `6042a3761330226f8058255620854b1ccd80ebde`; exact-head CI was green.
-- Main production deploy #1122 reached VPS and built/started `kitchen-agentmemory`, but stopped before Kitchen OS activation because AgentMemory REST probes did not send the configured bearer token.
-- The runtime returned 401 once its authenticated REST surface was active; production release therefore remains the previously verified release/schema.
-- PR #192 authenticates every local AgentMemory health/liveness path: Docker healthcheck, installer, final deploy smoke, filtered metrics, and Super Admin host actions.
-- Secret remains VPS-only. No public AgentMemory route/port is introduced.
-- No PostgreSQL/schema/Inventory changes.
-- NEXT: exact-head #192 CI → merge → exact production deploy → Kitchen OS integrity/UI smoke + AgentMemory health/seed/recall verification.
+- Production merge `b61ef3837750a773294c1eb230bbb48393710cf3` is verified on VPS.
+- Deploy Kitchen OS #1131 / run `37192359669`: PASS.
+- Health: app/database OK, schema `031`, release `b61ef38`; `DATA_INTEGRITY_OK`; production UI smoke PASS.
+- AgentMemory 0.9.29 is healthy, loopback-only, persistent and protected by a VPS-only bearer secret.
+- Handoff seed verified: 3 project-scoped records, SHA-256 idempotent.
+- Recall verified in production: `AGENTMEMORY_RECALL_OK results=3`.
+- PR #195 permanently prevents the previous false-negative where a 2,000-token narrative response budget discarded oversized handoff snapshots.
+- Inventory Site Production Audit #434 and all four Workforce post-deploy backfill/parity workflows passed.
+- No PostgreSQL schema or Inventory business-data change was introduced by the AgentMemory recovery.
 
 ## DONE — Fuxing 大冷凍 production stocktake, 2026-10-04
 
@@ -23,19 +25,15 @@
 - No runtime source/migration was used as quantity authority; the one-time transport workflow was removed after success.
 - Production release remains the verified `337f5a2` / schema `031`; this was data-only and did not deploy application code.
 
-## PAUSED — PR #188 Inventory Database performance, 2026-10-04
+## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
 
-- PR #188 remains open but is paused/non-production while PR #192 is the explicit active recovery authority. It must be rebased and revalidated before any later merge.
+- AgentMemory recovery is closed; PR #188 is again the active engineering workstream.
 - Branch: `perf/inventory-database-load-20261003`.
-- Latest observed head during this update: `13dce345947d7a0ae0c9046799d21efed2b715d6`.
-- PASS: Super Admin Browser Regression #311.
-- PASS: Isolated CI API Load Smoke #601.
-- PASS: Master Data and Admin Panel Regression #379.
-- PASS: Workforce Approval Regression Diagnostic #466.
-- FAIL: Deploy Kitchen OS pull-request run #1097 / `37144352017`; preflight passed, regression failed on a WebKit mobile CORS/page-error for `/api/inventory/fuxing`, deploy/smoke skipped.
-- PR #188 is not production yet.
-- Super Admin → GitHub & Handoff should now display PR #188 live through the GitHub handoff API; no static branch/head hard-code is required.
-- NEXT: exact-head regression green → merge → production deploy/health/data-integrity/UI smoke/audit → close ACTIVE status.
+- Current head: `f76a851536562eb8e096615c54d3797a5b1de1bf`.
+- PR remains open but is currently non-mergeable against current main `b61ef3837750a773294c1eb230bbb48393710cf3`.
+- Scope remains Inventory/Super Admin read-load reduction only; PostgreSQL/VPS stays authoritative and mutation/realtime semantics must remain unchanged.
+- Do not merge the stale head. First reconcile the intended performance changes onto current main while preserving the now-production AgentMemory/GitHub/Handoff code.
+- NEXT: fresh current-main reconciliation → exact-head CI/full-device → merge tested head only → exact production deploy/health/integrity/UI smoke/Inventory audit.
 
 ## DONE — Inventory compact Pick row + overflow hardening, 2026-10-02
 
