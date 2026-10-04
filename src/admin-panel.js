@@ -291,19 +291,25 @@ function renderDevelopment() {
   const liveState=liveGit.available?(liveGit.stale?"STALE":"LIVE"):"FALLBACK";
   const workflowSummary=liveGit.workflow_summary||{};
   const mainWorkflowSummary=liveGit.main_workflow_summary||{};
+  const productionWorkflows=liveGit.production_workflows||{};
+  const productionDeploy=productionWorkflows.deploy||null;
+  const productionAudit=productionWorkflows.inventory_audit||null;
   const workflowRows=(workflowSummary.gates||liveGit.workflows||[]).slice(0,12);
   const commitRows=(liveGit.commits||[]).slice(0,8);
   const canonicalUrl=canonical.url||liveGit.canonical_url||"";
   const mainSha=String(liveGit.main?.sha||"");
   const liveRelease=String(live.release||runtime.release||"");
   const runtimeMatchesMain=Boolean(mainSha&&liveRelease&&mainSha.startsWith(liveRelease));
+  const runtimeMatchesDeploy=Boolean(productionDeploy?.head_sha&&liveRelease&&String(productionDeploy.head_sha).startsWith(liveRelease));
   const gateCounts=workflowSummary.counts||{};
   const mainGateCounts=mainWorkflowSummary.counts||{};
   return `${renderServerActionCommandCenter()}<section class="sa-stat-grid compact" data-workflow-dashboard>
     ${stat("PR exact-head gates",workflowStateLabel(workflowSummary),`${gateCounts.passed||0} pass · ${gateCounts.failed||0} fail · ${gateCounts.running||0} running`)}
     ${stat("Exact head",workflowSummary.exact_head===false?"MISMATCH":"MATCH",String(pr?.head_sha||liveGit.main?.sha||"").slice(0,12)||"—")}
+    ${stat("Production deploy",productionDeploy?.conclusion==="success"?"PASS":"—",productionDeploy?`#${productionDeploy.run_number} · ${String(productionDeploy.head_sha||"").slice(0,12)}`:"no live evidence")}
+    ${stat("Inventory audit",productionAudit?.conclusion==="success"?"PASS":"—",productionAudit?`#${productionAudit.run_number} · ${String(productionAudit.head_sha||"").slice(0,12)}`:"no live evidence")}
     ${stat("Main workflow",workflowStateLabel(mainWorkflowSummary),`${mainGateCounts.passed||0} pass · ${mainGateCounts.failed||0} fail · ${mainGateCounts.running||0} running`)}
-    ${stat("Runtime ↔ main",runtimeMatchesMain?"SYNCED":"MAIN AHEAD",liveRelease?`runtime ${liveRelease}`:"runtime unknown")}
+    ${stat("Runtime ↔ deploy",runtimeMatchesDeploy?"VERIFIED":runtimeMatchesMain?"MAIN SYNC":"CHECK",liveRelease?`runtime ${liveRelease}`:"runtime unknown")}
   </section><article class="sa-card">
     <div class="sa-card-head"><div><h2>One-link Handoff · 單一交接連結</h2><p>Dev khác hoặc chat mới chỉ cần mở link này. Trang sẽ tự tìm PR/branch/head SHA/CI hiện tại.</p></div><span class="sa-pill ${liveGit.available?"ok":"off"}">${esc(liveState)}</span></div>
     <div class="sa-row-actions">
@@ -334,13 +340,15 @@ function renderDevelopment() {
       <div class="sa-kv-grid">
         <div><small>Live release</small><strong class="mono">${esc(live.release||runtime.release||"—")}</strong></div>
         <div><small>Live schema</small><strong>${esc(live.schema||runtime.schema?.version||"—")}</strong></div>
-        <div><small>Release milestone</small><strong class="mono">${esc(String(evidence.milestone_sha||"").slice(0,12)||"—")}</strong></div>
-        <div><small>Inventory audit</small><strong>${esc(evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:"—")}</strong></div>
+        <div><small>Latest deploy</small><strong>${esc(productionDeploy?`#${productionDeploy.run_number} · ${productionDeploy.conclusion||productionDeploy.status}`:(evidence.workflow_run_id?`run ${evidence.workflow_run_id}`:"—"))}</strong></div>
+        <div><small>Deploy SHA</small><strong class="mono">${esc(String(productionDeploy?.head_sha||evidence.milestone_sha||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Inventory audit</small><strong>${esc(productionAudit?`#${productionAudit.run_number} · ${productionAudit.conclusion||productionAudit.status}`:(evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:"—"))}</strong></div>
+        <div><small>Audit SHA</small><strong class="mono">${esc(String(productionAudit?.head_sha||"").slice(0,12)||"—")}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
         ${live.commit_url?devLink(live.commit_url,"Live release commit",live.release||""):""}
-        ${evidence.url?devLink(evidence.url,"Release evidence",evidence.workflow_run_id?`run ${evidence.workflow_run_id}`:""):""}
-        ${evidence.inventory_audit_url?devLink(evidence.inventory_audit_url,"Inventory production audit",evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:""):""}
+        ${productionDeploy?.url?devLink(productionDeploy.url,"Latest successful deploy",`run #${productionDeploy.run_number}`):(evidence.url?devLink(evidence.url,"Release evidence",evidence.workflow_run_id?`run ${evidence.workflow_run_id}`:""):"")}
+        ${productionAudit?.url?devLink(productionAudit.url,"Latest Inventory audit",`run #${productionAudit.run_number}`):(evidence.inventory_audit_url?devLink(evidence.inventory_audit_url,"Inventory production audit",evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:""):"")}
         ${devLink(repo.actions_url,"GitHub Actions","CI / deploy / audit")}
       </div>
       <p class="sa-dev-note">${esc(live.note||evidence.note||"")}</p>
