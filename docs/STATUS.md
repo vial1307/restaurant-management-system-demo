@@ -1,5 +1,19 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
+
+- `ACTIVE_PR: #188` is now declared in `docs/CURRENT_HANDOFF.md` on main so Live Handoff and Super Admin resolve the same current workstream.
+- Branch: `perf/inventory-database-load-20261003`.
+- Latest observed head during this update: `13dce345947d7a0ae0c9046799d21efed2b715d6`.
+- PASS: Super Admin Browser Regression #311.
+- PASS: Isolated CI API Load Smoke #601.
+- PASS: Master Data and Admin Panel Regression #379.
+- PASS: Workforce Approval Regression Diagnostic #466.
+- FAIL: Deploy Kitchen OS pull-request run #1097 / `37144352017`; preflight passed, regression failed on a WebKit mobile CORS/page-error for `/api/inventory/fuxing`, deploy/smoke skipped.
+- PR #188 is not production yet.
+- Super Admin → GitHub & Handoff should now display PR #188 live through the GitHub handoff API; no static branch/head hard-code is required.
+- NEXT: exact-head regression green → merge → production deploy/health/data-integrity/UI smoke/audit → close ACTIVE status.
+
 ## DONE — Inventory compact Pick row + overflow hardening, 2026-10-02
 
 - PR #186 merged as `337f5a2f6a3b0bfa06916fede0b0336cee4018e2`.
