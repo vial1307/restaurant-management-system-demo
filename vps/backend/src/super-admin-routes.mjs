@@ -108,6 +108,7 @@ const SERVER_ACTIONS = Object.freeze({
   marketing_logs:{ label:"View Marketing logs", confirmation:false },
   marketing_rollback:{ label:"Rollback Marketing", confirmation:true },
   agentmemory_status:{ label:"Check AgentMemory status", confirmation:false },
+  agentmemory_recall_handoff:{ label:"Test AgentMemory handoff recall", confirmation:false },
   agentmemory_sync_handoff:{ label:"Sync handoff to AgentMemory", confirmation:true },
   agentmemory_restart:{ label:"Restart AgentMemory", confirmation:true },
 });
