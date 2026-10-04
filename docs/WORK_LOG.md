@@ -1,5 +1,25 @@
 # Kitchen OS Work Log
 
+## 2026-10-04 — GitHub workflow state promoted into Super Admin
+
+- Continued active PR #188 after the user requested workflow status in GitHub and Super Admin.
+- Main already contained PR #189 with `ACTIVE_PR: #188`, making `CURRENT_HANDOFF.md` the explicit authority.
+- Extended `vps/backend/src/github-handoff.mjs`:
+  - latest run per workflow name wins, so a successful rerun replaces an older failure in the dashboard;
+  - exposes PASS/FAIL/RUNNING/ATTENTION counts;
+  - verifies workflow rows belong to the exact active head;
+  - provides separate active-PR and main workflow summaries.
+- Extended protected Super Admin development status API with explicit `?refresh=1` cache bypass for manual refresh.
+- Extended Super Admin GitHub & Handoff UI:
+  - PR exact-head gate state/counts;
+  - exact-head match;
+  - main workflow state;
+  - runtime↔main release alignment;
+  - direct links to current workflow runs.
+- Extended public `handoff.html` with the same latest-per-workflow summary.
+- Added static/live-handoff regression guards for the new workflow authority contract.
+- No production/data mutation in this slice; production release remains separate until PR #188 passes exact-head gates and deploys.
+
 ## 2026-10-04 — GitHub workflow + Super Admin handoff authority updated
 
 - User requested the current workflow be updated on GitHub and Super Admin.
