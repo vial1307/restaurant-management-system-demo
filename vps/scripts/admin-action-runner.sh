@@ -11,6 +11,7 @@ MARKETING_SSH_KEY="/home/deploy/.ssh/marketing_vps_readonly"
 AGENTMEMORY_CONTAINER="kitchen-agentmemory"
 AGENTMEMORY_HEALTH_URL="http://127.0.0.1:3111/agentmemory/health"
 AGENTMEMORY_STATUS_URL="http://127.0.0.1:3111/agentmemory/status"
+AGENTMEMORY_SEARCH_URL="http://127.0.0.1:3111/agentmemory/search"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root."
@@ -250,6 +251,26 @@ agentmemory_status() {
   fi
 }
 
+agentmemory_recall_handoff() {
+  if ! docker inspect "${AGENTMEMORY_CONTAINER}" >/dev/null 2>&1; then
+    echo "AGENTMEMORY_CONTAINER_NOT_FOUND"
+    return 44
+  fi
+  local secret
+  secret="$(agentmemory_secret)"
+  if [[ ! "${secret}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]]; then
+    echo "AGENTMEMORY_SECRET_UNAVAILABLE"
+    return 75
+  fi
+  curl -fsS --max-time 10 \
+    -X POST \
+    -H "Authorization: Bearer ${secret}" \
+    -H "Content-Type: application/json" \
+    --data '{"query":"current Kitchen OS work production baseline next steps source of truth","project":"kitchen-os","agentId":"kitchen-os-handoff-sync","limit":5,"format":"compact","token_budget":1200}' \
+    "${AGENTMEMORY_SEARCH_URL}"
+  echo
+}
+
 agentmemory_sync_handoff() {
   if ! docker inspect "${AGENTMEMORY_CONTAINER}" >/dev/null 2>&1; then
     echo "AGENTMEMORY_CONTAINER_NOT_FOUND"
@@ -281,6 +302,7 @@ run_action() {
     marketing_logs) marketing_logs ;;
     marketing_rollback) marketing_rollback ;;
     agentmemory_status) agentmemory_status ;;
+    agentmemory_recall_handoff) agentmemory_recall_handoff ;;
     agentmemory_sync_handoff) agentmemory_sync_handoff ;;
     agentmemory_restart) agentmemory_restart ;;
     *)
