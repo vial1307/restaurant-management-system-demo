@@ -39,7 +39,20 @@ Next:
 2. Merge PR #188 only after all exact-head gates are green.
 3. Verify production release/schema/data-integrity/UI smoke and Inventory Site Production Audit.
 4. Then replace this ACTIVE block with a verified-production closure and clear/update `ACTIVE_PR`.
-5. The requested stock-count import remains a separate data operation: do not encode those quantities into source code or migrations; update PostgreSQL through the approved Inventory lifecycle once the target site/location/unit mapping is verified.
+5. The requested 2026-10-04 Fuxing 大冷凍 stock-count import is now complete as a separate production data operation; no quantity data was added to runtime source or migrations.
+
+### Production data operation — Fuxing 大冷凍 stocktake, 2026-10-04
+
+- Target was verified as site `fuxing`, storage location `fuxing-large-freezer`.
+- The supplied list reconciled to 51/51 existing active catalog item keys; no catalog item was created, duplicated or relabeled, and Work Area configuration was left untouched for the operator to manage.
+- Transactional production import run `37178274266`: PASS.
+- 45 stock quantities changed; 6 already matched and were left unchanged.
+- Every changed row wrote `inventory_stock` plus an `inventory_transactions` `adjust` record with before/after quantity and original count detail; a `stocktake_import` audit row records the operation.
+- Mixed-unit rule remains conservative: configured stock unit is authoritative; residual grams/pieces are preserved in transaction detail and are not converted unless a pre-existing conversion is known. `冷凍麵` retained the established 1箱 = 30片 conversion.
+- A production PostgreSQL backup was created before the write: `/home/deploy/kitchen_os_pre_stocktake_20261004T045308Z.dump` with SHA-256 sidecar.
+- The transaction verified all 51 target quantities before COMMIT; any missing/inactive item, site mismatch, duplicate key or post-write mismatch would have rolled back the whole import.
+- The one-time transport workflow was removed from `main` immediately after success; production release/schema were not changed.
+- The first transport attempt run `37178235483` failed before database mutation because its payload was incomplete; it had no production data effect.
 
 ## CURRENT VERIFIED PRODUCTION — Inventory compact Pick row + overflow hardening, 2026-10-02
 
