@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-10-05 — Engineering Harness / Coding Control Plane started
+
+- User requested GitHub & Handoff enforce a professional coding-engineering standard for future fresh chats/agents.
+- Created PR #196 from current main.
+- Added `ENGINEERING_CONTRACT.md`, `AGENT_START_PROTOCOL.md`, `FEATURE_REGISTRY.md`, and `VERIFICATION_MATRIX.md`.
+- Added backend `engineering-harness.mjs` to derive exact-head workflow gates and production verification from live GitHub + runtime evidence.
+- Added Super Admin Engineering Harness UI: gate summary, start protocol, required workflows, verification matrix, Definition of Done and copyable new-chat start packet.
+- Verification coverage is intentionally honest: interaction/list/reload/API/F5/RBAC/sync areas remain PARTIAL where repository tests are not universal.
+- Expanded AgentMemory seed to include the four engineering-standard documents; GitHub/PostgreSQL/VPS remain authoritative.
+- Added `engineering-harness-contract-regression.mjs` and wired it into deploy preflight.
+- No business data/schema/RBAC mutation and no Inventory runtime handler rewrite in this workstream.
+- PR #188 is paused while #196 is active.
+
+
 ## 2026-10-04 — AgentMemory production closure + PR #188 resumed
 
 - Closed the AgentMemory recovery chain after PRs #191/#192/#194/#195.
