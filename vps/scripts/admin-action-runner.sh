@@ -213,8 +213,13 @@ marketing_rollback() {
 }
 
 wait_agentmemory_health() {
+  local secret
+  secret="$(agentmemory_secret)"
+  if [[ ! "${secret}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]]; then
+    return 75
+  fi
   for attempt in $(seq 1 45); do
-    if curl -fsS --max-time 3 "${AGENTMEMORY_HEALTH_URL}" >/dev/null; then
+    if curl -fsS --max-time 3 -H "Authorization: Bearer ${secret}" "${AGENTMEMORY_HEALTH_URL}" >/dev/null; then
       return 0
     fi
     sleep 2
@@ -234,15 +239,15 @@ agentmemory_status() {
   fi
   echo "CONTAINER=$(docker inspect -f '{{.State.Status}}' "${AGENTMEMORY_CONTAINER}")"
   docker ps --filter name="^/${AGENTMEMORY_CONTAINER}$" --format 'IMAGE={{.Image}} STATUS={{.Status}}'
-  echo "HEALTH:"
-  curl -fsS --max-time 5 "${AGENTMEMORY_HEALTH_URL}"
-  echo
   local secret
   secret="$(agentmemory_secret)"
   if [[ ! "${secret}" =~ ^[0-9A-Za-z._~-]{16,256}$ ]]; then
     echo "AGENTMEMORY_SECRET_UNAVAILABLE"
     return 75
   fi
+  echo "HEALTH:"
+  curl -fsS --max-time 5 -H "Authorization: Bearer ${secret}" "${AGENTMEMORY_HEALTH_URL}"
+  echo
   echo "STATUS:"
   curl -fsS --max-time 8 -H "Authorization: Bearer ${secret}" "${AGENTMEMORY_STATUS_URL}"
   echo
