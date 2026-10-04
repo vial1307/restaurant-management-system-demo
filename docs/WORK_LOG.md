@@ -1,5 +1,20 @@
 # Kitchen OS Work Log
 
+## 2026-10-04 — AgentMemory integrated as private VPS dev-memory service
+
+- User requested `rohitg00/agentmemory` be added to the current system, installed on the VPS and exposed in Super Admin → GitHub & Handoff.
+- Created PR #191 from current main without mixing its implementation into PR #188.
+- Added a dedicated Node 22 AgentMemory image pinned to package `0.9.29`.
+- Added persistent VPS paths for AgentMemory data/home plus a one-time generated bearer secret.
+- Kept AgentMemory on VPS loopback only: no public Caddy route and no Docker REST/viewer port publication; deployment fails closed if REST is detected on a wildcard bind.
+- Initial operating mode is keyless/BM25 with external-LLM features disabled.
+- Added idempotent engineering-memory seeding for CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES using SHA-256 content tracking.
+- Added filtered AgentMemory health collection to Kitchen OS runtime metrics.
+- Added fixed host actions for status, handoff sync and restart; they reuse the audited Super Admin host-action queue.
+- Added the AgentMemory status/control card to GitHub & Handoff.
+- Added CI/static guards for package pinning, private networking, persistent storage, health, deployment and UI action wiring.
+- PR #188 remains open but paused/non-production while #191 is active.
+
 ## 2026-10-04 — Fuxing 大冷凍 production stocktake imported
 
 - User supplied a new physical count for 復興 / Fuxing `大冷凍` and required PostgreSQL updates only: do not duplicate existing products, do not hard-code stock data, and leave Work Area placement for manual operator configuration.
