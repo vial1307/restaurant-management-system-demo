@@ -1,42 +1,51 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #191
+ACTIVE_PR: #192
 
-## ACTIVE — AgentMemory VPS + Super Admin GitHub & Handoff, 2026-10-04
+## ACTIVE — AgentMemory authenticated VPS probes, 2026-10-04
 
-Current priority is PR #191: `feat(agentmemory): add VPS dev memory to Super Admin handoff`.
+PR #191 merged as `6042a3761330226f8058255620854b1ccd80ebde`, and its exact PR head passed all CI gates. The first main production deploy did **not** complete, so #191 must not yet be treated as verified production.
 
-Purpose:
-- install `rohitg00/agentmemory` on the VPS as a private persistent service;
-- surface AgentMemory runtime state and allowlisted controls inside Super Admin → `GitHub & Handoff`;
-- seed engineering handoff context without replacing GitHub or PostgreSQL/VPS authority.
+Observed production-deploy sequence:
+- main Deploy Kitchen OS run #1122 / `37185947849` initially hit a known full-device permission-state timeout; rerunning the failed jobs on the same merge SHA passed the full-device cross-browser gate;
+- deployment then reached the VPS and verified exact target `6042a3761330226f8058255620854b1ccd80ebde`;
+- the pinned AgentMemory 0.9.29 image built successfully and container `kitchen-agentmemory` started;
+- deploy stopped before Kitchen OS activation because local AgentMemory liveness/health probes were unauthenticated while the runtime has `AGENTMEMORY_SECRET` enabled: early liveness returned 404 during registration, then the protected REST surface returned 401;
+- production Kitchen OS release was therefore not advanced by that failed deploy.
 
-Runtime contract:
-- package is pinned to `@agentmemory/agentmemory@0.9.29` on Node 22;
-- service name/container: `kitchen-agentmemory`;
-- AgentMemory native REST/streams/viewer/engine bind stays on VPS loopback; no Caddy route and no Docker `3111:3111` publication;
-- persistent state: `/opt/kitchen-os/agentmemory-data`; persistent runtime home: `/opt/kitchen-os/agentmemory-home`;
-- an explicit VPS-only bearer secret is generated once in `/opt/kitchen-os/agentmemory.env`;
-- initial mode is keyless/BM25 with LLM compression and automatic context injection disabled, so the Kitchen OS handoff is not sent to an external model provider;
-- deploy seeds `CURRENT_HANDOFF.md`, `STATUS.md` and `DEVELOPMENT_RULES.md` through AgentMemory's authenticated remember API; a SHA-256 guard prevents duplicate seed writes when those documents are unchanged;
-- GitHub `CURRENT_HANDOFF.md` and PostgreSQL/VPS remain source of truth. AgentMemory is retrieval context only.
+Current active recovery is PR #192: `fix(agentmemory): authenticate VPS health probes`.
 
-Super Admin contract:
-- protected `development-status` includes a filtered AgentMemory health snapshot;
-- allowlisted/audited host actions: `agentmemory_status`, `agentmemory_sync_handoff`, `agentmemory_restart`;
-- the existing file-queue host bridge is reused; the API container receives no Docker socket and no arbitrary terminal/shell endpoint;
-- GitHub & Handoff shows AgentMemory package/mode/network/persistence/health plus status/sync/restart controls.
+Hotfix contract:
+- keep AgentMemory private/loopback-only and keep the existing persistent bearer secret;
+- authenticate Docker healthcheck, installer liveness/health, final deploy liveness smoke, filtered host-health collection, and Super Admin host status/restart health requests;
+- do not expose the secret to the browser/API response; Super Admin still receives filtered health JSON only;
+- no Caddy AgentMemory route, no Docker `3111:3111` publication, no PostgreSQL/schema/Inventory change.
 
-Safety / release gate:
-1. Exact-head CI for PR #191 must pass, including the pinned AgentMemory Docker image build and existing Kitchen OS regressions.
-2. Merge only the tested head.
-3. Deploy the exact merge SHA to VPS.
-4. Verify `/api/health`, AgentMemory `/agentmemory/livez`, loopback-only bind, persistent handoff seed, Super Admin card/actions, `DATA_INTEGRITY_OK` and existing UI smoke.
-5. Record the verified production release in this handoff.
+AgentMemory target architecture remains:
+- package `@agentmemory/agentmemory@0.9.29` / Node 22;
+- container `kitchen-agentmemory`;
+- persistent state `/opt/kitchen-os/agentmemory-data` and home `/opt/kitchen-os/agentmemory-home`;
+- VPS-only bearer secret in `/opt/kitchen-os/agentmemory.env`;
+- keyless/BM25 mode, LLM compression/context injection disabled;
+- CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES seeded as project-scoped, per-file, bounded, SHA-256-idempotent memories;
+- GitHub CURRENT_HANDOFF.md and PostgreSQL/VPS remain authoritative; AgentMemory is retrieval context only.
 
-PR #188 (`perf/inventory-database-load-20261003`) remains open but is **paused/non-production** while #191 is the explicit active workstream. Its Inventory performance changes must be rebased/revalidated before any later merge; do not treat it as current production or silently merge it around #191.
+Super Admin → GitHub & Handoff target:
+- filtered AgentMemory health/state;
+- allowlisted audited actions: status, fixed recall smoke, handoff sync, restart;
+- no arbitrary shell/terminal and no Docker socket in the API container.
 
-Production authority remains verified runtime `337f5a2` / schema `031` until PR #191 is merged and its exact production deploy is verified.
+Release gate for #192:
+1. Exact-head CI green.
+2. Merge tested head only.
+3. Deploy exact merge SHA.
+4. Verify Kitchen OS `/api/health`, schema/release, `DATA_INTEGRITY_OK`, production UI smoke.
+5. Verify AgentMemory authenticated liveness/health, loopback-only bind, persistent handoff seed and recall smoke.
+6. Then replace this ACTIVE block with verified-production closure.
+
+PR #188 remains paused/non-production and must be rebased/revalidated after this AgentMemory recovery is closed.
+
+Production authority remains verified runtime `337f5a2` / schema `031` until the hotfix production deploy is verified.
 
 ### Production data operation — Fuxing 大冷凍 stocktake, 2026-10-04
 

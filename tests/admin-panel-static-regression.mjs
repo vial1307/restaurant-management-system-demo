@@ -135,6 +135,7 @@ assert.match(deploy, /curl -fsS http:\/\/127\.0\.0\.1\/\.admindev\.html/, "deplo
 assert.match(deploy, /install-admin-action-runner\.sh/, "production deployment must install the host action bridge");
 assert.match(deploy, /install-agentmemory\.sh/, "production deployment must install the private AgentMemory runtime");
 assert.match(deploy, /127\.0\.0\.1:3111\/agentmemory\/livez/, "production success must include AgentMemory health");
+assert.match(deploy, /Authorization: Bearer \$\{AGENTMEMORY_DEPLOY_SECRET\}/, "production AgentMemory smoke must authenticate without exposing the secret");
 assert.match(deploy, /ACTION=marketing_deploy/, "first production install should queue Marketing bootstrap without blocking Kitchen OS");
 assert.match(caddy, /marketing\.82\.47\.180\.185\.nip\.io/, "Caddy must expose the isolated Marketing hostname");
 assert.match(caddy, /reverse_proxy marketing-seo-platform:3000/, "Marketing proxy must use the dedicated Docker edge network");
@@ -156,11 +157,14 @@ assert.match(hostActionInstaller, /PathExistsGlob=\/opt\/kitchen-os\/admin-actio
 assert.match(agentMemoryDockerfile, /AGENTMEMORY_VERSION=0\.9\.29/, "AgentMemory package must be version-pinned");
 assert.match(agentMemoryInstaller, /AGENTMEMORY_PUBLIC_BIND_REFUSED/, "installer must fail closed if REST becomes publicly bound");
 assert.match(agentMemoryInstaller, /AGENTMEMORY_SECRET/, "AgentMemory must use an explicit persistent secret");
+assert.match(agentMemoryInstaller, /Authorization: Bearer \$\{agentmemory_secret\}/, "AgentMemory installer probes must authenticate when a secret is configured");
 assert.match(agentMemorySync, /kitchen-os-handoff-hashes\.json/, "handoff seeding must keep per-file content hashes");
 assert.match(agentMemorySync, /project:PROJECT/, "handoff memories must be scoped to the Kitchen OS project");
 assert.match(agentMemorySync, /MAX_SEED_CHARS = 40_000/, "handoff memory snapshots must be bounded");
 assert.match(agentMemorySync, /\/agentmemory\/remember/, "handoff seed must use AgentMemory's authenticated remember API");
 assert.match(hostActionRunner, /AGENTMEMORY_SEARCH_URL/, "host runner must expose a fixed audited recall smoke action");
 assert.match(hostMetricsCollector, /agentmemory-health\.json/, "host metrics must publish a filtered AgentMemory health snapshot");
+assert.match(hostMetricsCollector, /Authorization: Bearer \$\{agentmemory_secret\}/, "filtered AgentMemory health collection must authenticate locally");
+assert.match(hostActionRunner, /Authorization: Bearer \$\{secret\}/, "AgentMemory host actions must authenticate local health/status requests");
 
 console.log("SUPER_ADMIN_PANEL_STATIC_REGRESSION_OK");

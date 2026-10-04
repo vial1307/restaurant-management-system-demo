@@ -1,15 +1,14 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #191 AgentMemory VPS + Super Admin handoff, 2026-10-04
+## ACTIVE — PR #192 AgentMemory authenticated VPS probes, 2026-10-04
 
-- Active authority is now `ACTIVE_PR: #191` in `docs/CURRENT_HANDOFF.md`.
-- Adds a pinned `@agentmemory/agentmemory@0.9.29` service on the VPS with persistent state and a VPS-only bearer secret.
-- Runtime starts in keyless/BM25 mode; LLM compression/context injection are disabled.
-- AgentMemory REST/viewer are not published through Caddy or Docker port mappings; deploy rejects a public REST bind.
-- Handoff seed is content-hash idempotent and includes CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES.
-- Super Admin → GitHub & Handoff receives filtered health plus audited status/sync/restart controls through the existing host-action queue.
-- GitHub/PostgreSQL/VPS remain authoritative; AgentMemory is retrieval context only.
-- NEXT: exact-head CI → merge → exact production deploy → verify AgentMemory loopback/health/persistence + Kitchen OS data integrity/UI smoke.
+- PR #191 merged as `6042a3761330226f8058255620854b1ccd80ebde`; exact-head CI was green.
+- Main production deploy #1122 reached VPS and built/started `kitchen-agentmemory`, but stopped before Kitchen OS activation because AgentMemory REST probes did not send the configured bearer token.
+- The runtime returned 401 once its authenticated REST surface was active; production release therefore remains the previously verified release/schema.
+- PR #192 authenticates every local AgentMemory health/liveness path: Docker healthcheck, installer, final deploy smoke, filtered metrics, and Super Admin host actions.
+- Secret remains VPS-only. No public AgentMemory route/port is introduced.
+- No PostgreSQL/schema/Inventory changes.
+- NEXT: exact-head #192 CI → merge → exact production deploy → Kitchen OS integrity/UI smoke + AgentMemory health/seed/recall verification.
 
 ## DONE — Fuxing 大冷凍 production stocktake, 2026-10-04
 
@@ -26,7 +25,7 @@
 
 ## PAUSED — PR #188 Inventory Database performance, 2026-10-04
 
-- PR #188 remains open but is paused/non-production while PR #191 is the explicit active authority. It must be rebased and revalidated before any later merge.
+- PR #188 remains open but is paused/non-production while PR #192 is the explicit active recovery authority. It must be rebased and revalidated before any later merge.
 - Branch: `perf/inventory-database-load-20261003`.
 - Latest observed head during this update: `13dce345947d7a0ae0c9046799d21efed2b715d6`.
 - PASS: Super Admin Browser Regression #311.
