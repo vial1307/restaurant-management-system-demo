@@ -34,9 +34,11 @@ for(const feature of ["Inventory / Kho","Users / RBAC","Super Admin","GitHub & H
   assert(registry.includes(feature),"Feature Registry missing "+feature);
 }
 
-for(const area of ["Buttons/tabs/forms","Unexpected full reload","Persistence / F5","RBAC positive/negative","Full-device cross-browser","Production UI smoke"]){
+for(const area of ["Buttons/tabs/forms","Unexpected full reload","Persistence / F5","RBAC positive/negative","Production UI smoke"]){
   assert(matrix.toLowerCase().includes(area.toLowerCase()),"Verification Matrix missing "+area);
 }
+assert(matrix.toLowerCase().includes("cross-browser/full-device"),"Verification Matrix must include cross-browser/full-device verification");
+assert(/cross-browser\/full-device[^\n]*covered/i.test(matrix),"Cross-browser/full-device must remain COVERED in Verification Matrix");
 
 assert(admin.includes("data-engineering-harness"),"Super Admin must render Engineering Harness");
 assert(admin.includes("Verification Matrix · 驗證矩陣"),"Super Admin must render verification matrix");
