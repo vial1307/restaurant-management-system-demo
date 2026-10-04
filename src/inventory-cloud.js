@@ -65,6 +65,7 @@ let activeSiteSwitchSerial = 0;
 let realtimeSource = null;
 let realtimeUserId = "";
 let realtimeRefreshTimer = 0;
+let realtimeInitialHydrationPending = false;
 let siteRegistryRefreshTimer = 0;
 let siteRegistryRefreshTail = Promise.resolve();
 const cache = {
@@ -324,7 +325,11 @@ export async function switchActiveInventorySite(site) {
     // Fetch the authoritative target snapshot before changing the active site.
     // This prevents Fuxing/Yongji from ever rendering the previous branch while
     // a new branch request is still in flight.
-    const rows = await fetchSite(targetSite, { force:true });
+    // The registry was just force-verified above. Avoid a second identical
+    // /api/inventory/sites request inside fetchSite(); this shortens branch
+    // switching and removes a redundant registry race while preserving the
+    // authoritative Inventory + Master Data fetch.
+    const rows = await fetchSite(targetSite, { force:true, registryReady:true });
     if (serial !== activeSiteSwitchSerial) return false;
 
     localStorage.setItem(ACTIVE_SITE_KEY, targetSite);
@@ -631,10 +636,10 @@ export async function refreshInventoryCloudState() {
   return verifyMigration({ force: true });
 }
 
-async function fetchSite(site, { force = false } = {}) {
+async function fetchSite(site, { force = false, registryReady = false } = {}) {
   if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
 
-  await ensureSiteRegistry({ force });
+  if (!registryReady) await ensureSiteRegistry({ force });
   const [result, master] = await Promise.all([
     vpsInventory(site, { force }),
     vpsMasterData(site, { force }),
@@ -1294,8 +1299,17 @@ async function subscribeRealtime(site) {
   const clientId = vpsInventoryClientId();
   const source = new EventSource(`/api/inventory/events?clientId=${encodeURIComponent(clientId)}`);
   realtimeSource = source;
-  // A reconnect has no replay log. Fetch anything missed while disconnected.
+  // boot() opens the stream before its first database hydration. When the
+  // first ready arrives while that hydration is pending, the stream already
+  // covers all later mutations and no duplicate read is needed. If the stream
+  // connects only after hydration completed, reconcile once to close the small
+  // pre-stream gap. Later ready events are reconnects and have no replay log.
+  let initialReady = true;
   source.addEventListener("ready", () => {
+    if (initialReady) {
+      initialReady = false;
+      if (realtimeInitialHydrationPending) return;
+    }
     void refreshInventorySiteRegistry({ reason:"reconnect" })
       .catch(() => null)
       .finally(() => {
@@ -1355,8 +1369,15 @@ async function boot() {
 
   const site = currentSite();
   if (site) {
-    await syncInventoryNow(site, { reloadBranch: false });
-    await subscribeRealtime(site);
+    realtimeInitialHydrationPending = true;
+    try {
+      // Start listening first, then hydrate. If SSE becomes ready before the
+      // hydration finishes there is no blind window and therefore no second read.
+      await subscribeRealtime(site);
+      await syncInventoryNow(site, { reloadBranch:false });
+    } finally {
+      realtimeInitialHydrationPending = false;
+    }
   }
 
   polling = window.setInterval(() => {
