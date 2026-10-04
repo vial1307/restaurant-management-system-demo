@@ -95,6 +95,7 @@ const DATASET_POLICY = {
 };
 
 const HOST_METRICS_PATH = process.env.HOST_METRICS_PATH || "/run/kitchen-host-metrics/host-metrics.env";
+const AGENTMEMORY_HEALTH_PATH = process.env.AGENTMEMORY_HEALTH_PATH || "/run/kitchen-host-metrics/agentmemory-health.json";
 const HOST_ACTION_DIR = process.env.HOST_ACTION_DIR || "/run/kitchen-admin-actions";
 const HOST_ACTION_READY = `${HOST_ACTION_DIR}/READY`;
 const HOST_ACTION_REQUESTS = `${HOST_ACTION_DIR}/requests`;
@@ -106,6 +107,9 @@ const SERVER_ACTIONS = Object.freeze({
   marketing_restart:{ label:"Restart Marketing", confirmation:true },
   marketing_logs:{ label:"View Marketing logs", confirmation:false },
   marketing_rollback:{ label:"Rollback Marketing", confirmation:true },
+  agentmemory_status:{ label:"Check AgentMemory status", confirmation:false },
+  agentmemory_sync_handoff:{ label:"Sync handoff to AgentMemory", confirmation:true },
+  agentmemory_restart:{ label:"Restart AgentMemory", confirmation:true },
 });
 
 function serverActionCatalog() {
@@ -114,6 +118,40 @@ function serverActionCatalog() {
     label:config.label,
     requires_confirmation:Boolean(config.confirmation),
   }));
+}
+
+async function readAgentMemoryHealth() {
+  const base = {
+    service:"kitchen-agentmemory",
+    source_repository:"https://github.com/rohitg00/agentmemory",
+    package_version:"0.9.29",
+    mode:"keyless-bm25",
+    tool_surface:"core",
+    scope:"vps-loopback-only",
+    persistence:"/opt/kitchen-os/agentmemory-data",
+    authority:"Retrieval context only. GitHub CURRENT_HANDOFF.md and PostgreSQL/VPS remain authoritative.",
+  };
+  try {
+    const parsed = JSON.parse(await readFile(AGENTMEMORY_HEALTH_PATH,"utf8"));
+    const status = text(parsed?.status || parsed?.state || parsed?.health?.status).toLowerCase();
+    const available = parsed?.available === true
+      || parsed?.ok === true
+      || parsed?.healthy === true
+      || ["ok","healthy","ready","live"].includes(status);
+    return {
+      ...base,
+      available,
+      status:available ? "healthy" : (status || "unknown"),
+      health:parsed,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      available:false,
+      status:error?.code === "ENOENT" ? "not-collected" : "unavailable",
+      health:null,
+    };
+  }
 }
 
 async function hostActionBridgeState() {
@@ -826,9 +864,10 @@ export async function registerSuperAdminRoutes(app) {
 
   app.get("/api/admin/super/development-status", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
-    const [migration,liveGithub] = await Promise.all([
+    const [migration,liveGithub,agentMemory] = await Promise.all([
       pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1"),
       getLiveGitHubHandoff(),
+      readAgentMemoryHealth(),
     ]);
     const schema = migration.rows[0] || null;
     const release = process.env.APP_RELEASE || "dev";
@@ -882,6 +921,7 @@ export async function registerSuperAdminRoutes(app) {
       },
       current_work:activeWork,
       live_github:liveGithub,
+      agent_memory:agentMemory,
       live_production:{
         release,
         schema:schema?.version || null,
