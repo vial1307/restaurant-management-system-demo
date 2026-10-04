@@ -1,35 +1,45 @@
 # Kitchen OS — Current Development Handoff
 
-## ACTIVE CANDIDATE — Inventory Database load performance, 2026-10-03
+ACTIVE_PR: #188
 
-Latest verified production runtime before this candidate:
-- main/runtime release `850d99e1a651bed80586a3a6d1371896f0a12074`;
-- Deploy Kitchen OS to VPS #1080 / run `36981362445`: PASS;
-- production health: app/database OK, schema `031`, release `850d99e`;
-- `DATA_INTEGRITY_OK`;
-- production UI smoke: PASS.
+## ACTIVE — Inventory Database performance + GitHub/Super Admin workflow authority, 2026-10-04
 
-Candidate branch: `perf/inventory-database-load-20261003`.
+Current active work is PR #188: `perf(inventory): optimize database load and snapshot reads`.
 
-Performance scope:
-- Super Admin Inventory Database now keeps short-lived site-scoped in-memory snapshots instead of re-reading PostgreSQL-backed APIs on every Items / Locations / Stock tab switch;
-- History and Integrity supplemental reads use separate 30-second caches and still load only when those tabs are opened;
-- stock/item/location/work-area lookups are indexed in Maps during render instead of repeatedly scanning whole arrays;
-- a successful mutation invalidates the active site cache and then forces an authoritative PostgreSQL reconciliation;
-- realtime events from the same browser client are ignored after that explicit reconciliation, preventing duplicate reloads;
-- all Inventory-affecting master-data/catalog mutations now carry the Inventory realtime source client id;
-- initial Inventory SSE `ready` no longer forces a second full Inventory + Master Data hydration immediately after boot; reconnect `ready` still forces reconciliation;
-- Super Admin Inventory Database uses one combined `/api/admin/inventory-database/:site` HTTP snapshot instead of two separate base HTTP requests;
-- the combined endpoint reads Inventory and Master Data in parallel and exposes `Server-Timing` plus `meta.server_ms`;
-- Inventory item/stock site filters now use `split_part(item_key,':',1)=site`, aligned with the existing schema-031 expression index instead of prefix LIKE scans;
-- the UI exposes the latest measured Database load time as `DB <ms> · CACHE/NETWORK`.
+Authority / visibility:
+- `CURRENT_HANDOFF.md` on `main` explicitly marks PR #188 as active.
+- `handoff.html` must resolve PR #188, its current branch/head SHA, changed files and exact-head workflows from GitHub live.
+- Super Admin → `GitHub & Handoff` reads the same live GitHub handoff feed from the VPS API; it must therefore show PR #188 instead of falling back to stale historical branch/status strings.
+- Workflow state is live; do not copy a newer open PR into the active slot unless this file explicitly changes `ACTIVE_PR`.
 
-Authority/safety:
-1. PostgreSQL/VPS remains the only Inventory authority.
-2. No quantity/minimum, Work Area, storage, transfer, shipping, receiving-default, RBAC or mutation semantics are changed.
-3. Cache is memory-only, user-scoped, short-lived, invalidated on mutation/realtime, and never reports a local-only write success.
-4. No schema migration is introduced in this phase; the existing schema-031 indexes are reused.
-5. Exact-head static/performance/API/browser/full-device regression is required before merge, followed by production deploy/health/data-integrity/UI-smoke/audit verification.
+Latest observed PR #188 state at this handoff update:
+- branch: `perf/inventory-database-load-20261003`;
+- latest observed head: `13dce345947d7a0ae0c9046799d21efed2b715d6`;
+- Super Admin Browser Regression #311: PASS;
+- Isolated CI API Load Smoke #601: PASS;
+- Master Data and Admin Panel Regression #379: PASS;
+- Workforce Approval Regression Diagnostic #466: PASS;
+- Deploy Kitchen OS to VPS pull-request run #1097 / run `37144352017`: FAIL in regression only; preflight PASS, deploy and production smoke were skipped;
+- failure was a WebKit mobile page-error/CORS access-control check on `/api/inventory/fuxing` after the Inventory/API/database regressions had passed. This exact head is not production.
+
+PR #188 scope remains:
+- reduce Inventory/Super Admin Database load work without changing PostgreSQL authority;
+- site/user-scoped short-lived cache for Super Admin Inventory Database;
+- one combined Inventory Database snapshot request;
+- lazy History/Integrity reads;
+- Map-based render lookups;
+- reduced duplicate initial SSE/warehouse-switch reads;
+- site reads aligned with schema-031 expression indexes;
+- mutation/realtime invalidation still reconciles from PostgreSQL.
+
+Production authority remains the latest verified runtime release, not PR #188, until exact-head CI, merge, VPS deploy, production health, `DATA_INTEGRITY_OK`, UI smoke and Inventory Site Production Audit all pass.
+
+Next:
+1. Stabilize/re-run the exact-head cross-browser regression without weakening Inventory authority checks.
+2. Merge PR #188 only after all exact-head gates are green.
+3. Verify production release/schema/data-integrity/UI smoke and Inventory Site Production Audit.
+4. Then replace this ACTIVE block with a verified-production closure and clear/update `ACTIVE_PR`.
+5. The requested stock-count import remains a separate data operation: do not encode those quantities into source code or migrations; update PostgreSQL through the approved Inventory lifecycle once the target site/location/unit mapping is verified.
 
 ## CURRENT VERIFIED PRODUCTION — Inventory compact Pick row + overflow hardening, 2026-10-02
 
