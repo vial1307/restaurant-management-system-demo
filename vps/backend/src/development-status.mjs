@@ -8,7 +8,7 @@ function github(path = "") {
 export const DEVELOPMENT_STATUS = Object.freeze({
   updated_at:"2026-10-05",
   phase:"engineering-harness-control-plane",
-  status:"verified",
+  status:"in_progress",
   headline:"Live GitHub handoff is primary. Engineering Harness enforces new-session startup, exact-head verification and production evidence.",
   repository:{
     name:"vial1307/restaurant-management-system-demo",
