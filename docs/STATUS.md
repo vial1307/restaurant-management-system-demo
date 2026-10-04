@@ -1,5 +1,17 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #196 Engineering Harness / Coding Control Plane, 2026-10-05
+
+- `ACTIVE_PR: #196` is the current engineering authority.
+- Adds Engineering Contract, Agent Start Protocol, Feature Registry and Verification Matrix.
+- Super Admin → GitHub & Handoff gains live Merge/Deploy/Production/Definition-of-Done gates.
+- Exact-head gate uses live GitHub workflows; PARTIAL test coverage remains explicitly PARTIAL.
+- AgentMemory seed expands from handoff/status/rules to include all four engineering-standard documents.
+- No Inventory business logic, PostgreSQL schema/data or RBAC mutation is in scope.
+- PR #188 is paused/non-production until #196 is production-verified.
+- NEXT: exact-head CI → merge tested head → exact production deploy → health/integrity/UI smoke → AgentMemory seed/recall → resume/rebase PR #188.
+
+
 ## DONE — AgentMemory private VPS integration + authenticated recall, 2026-10-04
 
 - Production merge `b61ef3837750a773294c1eb230bbb48393710cf3` is verified on VPS.
@@ -25,9 +37,9 @@
 - No runtime source/migration was used as quantity authority; the one-time transport workflow was removed after success.
 - Production release remains the verified `337f5a2` / schema `031`; this was data-only and did not deploy application code.
 
-## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
+## PAUSED — PR #188 Inventory Database performance, 2026-10-04
 
-- AgentMemory recovery is closed; PR #188 is again the active engineering workstream.
+- PR #188 remains open but is paused while PR #196 establishes the Engineering Harness control plane.
 - Branch: `perf/inventory-database-load-20261003`.
 - Current head: `f76a851536562eb8e096615c54d3797a5b1de1bf`.
 - PR remains open but is currently non-mergeable against current main `b61ef3837750a773294c1eb230bbb48393710cf3`.
