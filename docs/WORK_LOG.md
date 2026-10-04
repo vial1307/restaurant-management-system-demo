@@ -1,5 +1,20 @@
 # Kitchen OS Work Log
 
+## 2026-10-04 — AgentMemory production deploy auth failure + PR #192 recovery
+
+- PR #191 merged to main as `6042a3761330226f8058255620854b1ccd80ebde` after exact-head CI passed.
+- Main deploy run #1122 initially failed the known full-device permission-state timeout; rerunning failed jobs on the exact same SHA passed full-device regression.
+- VPS deploy then verified exact target `6042a376...`, successfully built AgentMemory 0.9.29 and started `kitchen-agentmemory`.
+- Deployment stopped before Kitchen OS activation because AgentMemory local REST probes did not include the configured bearer token. Probe sequence showed connection-refused during initial boot, then route registration/401 as the protected REST surface became active.
+- Created PR #192 to authenticate all local liveness/health consumers while keeping the service loopback-only:
+  - Docker healthcheck;
+  - install-agentmemory liveness + health;
+  - final production smoke;
+  - filtered host metrics;
+  - Super Admin host status/restart health.
+- Browser/API never receives the secret; filtered health JSON remains the only Super Admin status input.
+- No database/schema/Inventory change.
+
 ## 2026-10-04 — AgentMemory integrated as private VPS dev-memory service
 
 - User requested `rohitg00/agentmemory` be added to the current system, installed on the VPS and exposed in Super Admin → GitHub & Handoff.
