@@ -297,11 +297,11 @@ function renderAgentMemoryPanel(memory={}) {
       <button class="sa-btn" type="button" data-server-action="agentmemory_recall_handoff" ${disabled}>Test recall</button>
       <button class="sa-btn primary" type="button" data-server-action="agentmemory_sync_handoff" ${disabled}>Sync Handoff → Memory</button>
       <button class="sa-btn" type="button" data-server-action="agentmemory_restart" ${disabled}>Restart AgentMemory</button>
-      ${memory.source_repository?devLink(memory.source_repository,"AgentMemory source",memory.package_version?\`pinned ${memory.package_version}\`:""):""}
+      ${memory.source_repository?devLink(memory.source_repository,"AgentMemory source",memory.package_version?`pinned ${memory.package_version}`:""):""}
     </div>
     <p class="sa-dev-note">Persistent state: <span class="mono">${esc(memory.persistence||"/opt/kitchen-os/agentmemory-data")}</span>. Không public REST/viewer ra Internet. ${esc(memory.authority||"GitHub/PostgreSQL/VPS vẫn là source of truth.")}</p>
-    ${!bridgeReady?\`<div class="sa-empty">Host bridge chưa sẵn sàng: ${esc(capabilities.reason||"HOST_ACTION_BRIDGE_UNAVAILABLE")}</div>\`:""}
-    ${result?\`<div class="sa-command-result"><div class="sa-list-row"><div><strong>${esc(result.action||"AgentMemory action")}</strong><small>${esc(result.request_id||"")}</small></div><span class="sa-pill ${resultClass}">${esc(String(result.status||"unknown").toUpperCase())}</span></div>${output?\`<pre class="sa-command-output mono">${esc(output)}</pre>\`:""}</div>\`:""}
+    ${!bridgeReady?`<div class="sa-empty">Host bridge chưa sẵn sàng: ${esc(capabilities.reason||"HOST_ACTION_BRIDGE_UNAVAILABLE")}</div>`:""}
+    ${result?`<div class="sa-command-result"><div class="sa-list-row"><div><strong>${esc(result.action||"AgentMemory action")}</strong><small>${esc(result.request_id||"")}</small></div><span class="sa-pill ${resultClass}">${esc(String(result.status||"unknown").toUpperCase())}</span></div>${output?`<pre class="sa-command-output mono">${esc(output)}</pre>`:""}</div>`:""}
   </article>`;
 }
 
