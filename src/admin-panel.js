@@ -305,6 +305,61 @@ function renderAgentMemoryPanel(memory={}) {
   </article>`;
 }
 
+function harnessPillClass(status) {
+  const value=String(status||"").toLowerCase();
+  if(value==="pass"||value==="verified"||value==="covered")return "ok";
+  if(value==="fail"||value==="blocked")return "off";
+  return "";
+}
+
+function renderEngineeringHarnessPanel(harness={}) {
+  if(!harness?.version)return `<article class="sa-card" data-engineering-harness><div class="sa-card-head"><div><h2>Engineering Harness</h2><p>Engineering gate metadata chưa tải được.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
+  const gates=harness.gates||{};
+  const workflows=harness.required_workflows||[];
+  const matrix=harness.quality_matrix||[];
+  const protocol=harness.start_protocol||[];
+  const documents=harness.documents||[];
+  const done=harness.definition_of_done||[];
+  const gate=(title,row={})=>`<div><small>${esc(title)}</small><strong><span class="sa-pill ${harnessPillClass(row.status)}">${esc(row.label||String(row.status||"UNKNOWN").toUpperCase())}</span></strong><small>${esc(row.reason||"")}</small></div>`;
+  return `<article class="sa-card" data-engineering-harness>
+    <div class="sa-card-head">
+      <div><h2>Engineering Harness · Coding Control Plane</h2><p>Tiêu chuẩn bắt buộc cho chat mới/dev mới: baseline → code → interaction/persistence/RBAC → exact-head CI → production evidence.</p></div>
+      <span class="sa-pill ok">CONTRACT v${esc(harness.version)}</span>
+    </div>
+    <div class="sa-kv-grid sa-harness-gates">
+      ${gate("Merge gate",gates.merge)}
+      ${gate("Deploy gate",gates.deploy)}
+      ${gate("Production",gates.production)}
+      ${gate("Definition of Done",gates.definition_of_done)}
+    </div>
+    <div class="sa-row-actions">
+      <button class="sa-btn primary" type="button" data-copy-engineering-start>Copy new-chat start packet</button>
+      ${documents.map((doc)=>devLink(doc.url,doc.label,doc.path||"")).join("")}
+    </div>
+    <p class="sa-dev-note">${esc(harness.authority||"")}</p>
+  </article>
+  <section class="sa-two-col" data-engineering-harness-details>
+    <article class="sa-card">
+      <div class="sa-card-head"><div><h2>Agent Start Protocol</h2><p>Chat/agent mới phải đi theo thứ tự này trước khi sửa code.</p></div></div>
+      <ol class="sa-dev-steps">${protocol.map((step)=>`<li>${esc(step)}</li>`).join("")}</ol>
+    </article>
+    <article class="sa-card">
+      <div class="sa-card-head"><div><h2>Exact-head required workflows</h2><p>Không dùng kết quả PASS của SHA cũ để merge SHA mới.</p></div></div>
+      <div class="sa-list">${workflows.map((row)=>`<div class="sa-list-row"><div><strong>${esc(row.label||row.name)}</strong><small>${esc(row.purpose||"")}</small><small class="mono">${esc(row.run?.head_sha?String(row.run.head_sha).slice(0,12):"no exact-head evidence")}</small></div><span class="sa-pill ${harnessPillClass(row.status)}">${esc(String(row.status||"missing").toUpperCase())}</span></div>`).join("")||`<div class="sa-empty">Chưa có workflow evidence.</div>`}</div>
+    </article>
+  </section>
+  <article class="sa-card" data-verification-matrix>
+    <div class="sa-card-head"><div><h2>Verification Matrix · 驗證矩陣</h2><p>PARTIAL không được hiển thị như PASS: nếu tính năng mới chạm đường chưa cover thì phải bổ sung targeted regression.</p></div></div>
+    <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>Check</th><th>Coverage</th><th>Exact-head execution</th><th>Evidence / rule</th></tr></thead><tbody>
+      ${matrix.map((row)=>`<tr><td><strong>${esc(row.label)}</strong></td><td><span class="sa-pill ${harnessPillClass(row.coverage)}">${esc(String(row.coverage||"unknown").toUpperCase())}</span></td><td><span class="sa-pill ${harnessPillClass(row.execution_status)}">${esc(String(row.execution_status||"missing").toUpperCase())}</span></td><td><small>${esc(row.evidence||"")}</small></td></tr>`).join("")}
+    </tbody></table></div>
+  </article>
+  <article class="sa-card" data-definition-of-done>
+    <div class="sa-card-head"><div><h2>Definition of Done</h2><p>Code compile không đồng nghĩa DONE. Task chỉ đóng khi các điều kiện áp dụng đã có evidence.</p></div></div>
+    <div class="sa-list">${done.map((item)=>`<div class="sa-list-row"><div><strong>✓ ${esc(item)}</strong></div></div>`).join("")}</div>
+  </article>`;
+}
+
 function renderDevelopment() {
   const d=state.developmentStatus;
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
@@ -315,7 +370,7 @@ function renderDevelopment() {
   const workflowRows=(liveGit.workflows||[]).slice(0,12);
   const commitRows=(liveGit.commits||[]).slice(0,8);
   const canonicalUrl=canonical.url||liveGit.canonical_url||"";
-  return `${renderServerActionCommandCenter()}${renderAgentMemoryPanel(d.agent_memory||{})}<article class="sa-card">
+  return `${renderServerActionCommandCenter()}${renderAgentMemoryPanel(d.agent_memory||{})}${renderEngineeringHarnessPanel(d.engineering_harness||{})}<article class="sa-card">
     <div class="sa-card-head"><div><h2>One-link Handoff · 單一交接連結</h2><p>Dev khác hoặc chat mới chỉ cần mở link này. Trang sẽ tự tìm PR/branch/head SHA/CI hiện tại.</p></div><span class="sa-pill ${liveGit.available?"ok":"off"}">${esc(liveState)}</span></div>
     <div class="sa-row-actions">
       ${canonicalUrl?`<button class="sa-btn primary" type="button" data-copy-handoff data-handoff-url="${esc(safeHref(canonicalUrl))}">Copy handoff link</button>`:""}
@@ -610,6 +665,25 @@ function bind() {
   root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
   root.querySelector("[data-refresh]")?.addEventListener("click",()=>void refreshCurrent()); root.querySelector("[data-toggle-nav]")?.addEventListener("click",()=>root.classList.toggle("nav-open"));
   root.querySelector("[data-copy-handoff]")?.addEventListener("click",async(event)=>{const button=event.currentTarget;const url=String(button.dataset.handoffUrl||"");if(!url)return;try{await navigator.clipboard.writeText(url);button.textContent="Đã copy ✓";}catch{window.prompt("Copy handoff link:",url);}});
+  root.querySelector("[data-copy-engineering-start]")?.addEventListener("click",async(event)=>{
+    const button=event.currentTarget;
+    const d=state.developmentStatus||{};
+    const harness=d.engineering_harness||{};
+    const handoff=d.canonical_handoff?.url||"https://vial1307.github.io/restaurant-management-system-demo/handoff.html";
+    const docs=(harness.documents||[]).map((doc)=>`- ${doc.label}: ${doc.url}`).join("\n");
+    const packet=[
+      "Kitchen OS new coding session protocol:",
+      "1. Read the canonical handoff and resolve ACTIVE_PR explicitly.",
+      "2. Follow Engineering Contract + Agent Start Protocol + Feature Registry + Verification Matrix before editing code.",
+      "3. Establish a baseline, preserve PostgreSQL/VPS authority, test changed buttons/lists/forms, unexpected reloads, API/DB persistence, F5, RBAC and browser errors as applicable.",
+      "4. Merge only exact-head green CI; deploy exact merge SHA; verify production health/integrity/UI smoke/audit.",
+      "",
+      `Canonical handoff: ${handoff}`,
+      docs,
+    ].join("\n");
+    try{await navigator.clipboard.writeText(packet);button.textContent="Start packet copied ✓";}
+    catch{window.prompt("Copy engineering start packet:",packet);}
+  });
   root.querySelectorAll("[data-server-action]").forEach((button)=>button.addEventListener("click",()=>void runServerAction(String(button.dataset.serverAction||""))));
   root.querySelector("[data-user-new]")?.addEventListener("click",()=>openUserEditor()); root.querySelectorAll("[data-user-edit]").forEach((b)=>b.addEventListener("click",()=>openUserEditor(state.users.find((u)=>u.id===b.dataset.userEdit))));
   root.querySelectorAll("[data-user-delete]").forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Archive user này?"))return;try{await api(`/api/admin/users/${encodeURIComponent(b.dataset.userDelete)}`,{method:"DELETE"});state.success="Đã archive user.";await loadCore();render();}catch(error){flash("error",errorText(error));}}));
