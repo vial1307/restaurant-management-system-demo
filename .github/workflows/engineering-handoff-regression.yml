@@ -1,0 +1,75 @@
+name: Engineering Handoff Regression
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "docs/CURRENT_HANDOFF.md"
+      - "docs/STATUS.md"
+      - "docs/WORK_LOG.md"
+      - "handoff.html"
+      - "src/admin-panel.js"
+      - "src/admin-panel.css"
+      - "src/admin-panel-sections-v2.js"
+      - "src/admin-panel-ui-v2.js"
+      - "vps/backend/src/development-status.mjs"
+      - "vps/backend/src/github-handoff.mjs"
+      - "vps/backend/src/super-admin-routes.mjs"
+      - "tests/live-handoff-contract-regression.mjs"
+      - "tests/admin-panel-static-regression.mjs"
+      - ".github/workflows/engineering-handoff-regression.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/CURRENT_HANDOFF.md"
+      - "docs/STATUS.md"
+      - "docs/WORK_LOG.md"
+      - "handoff.html"
+      - "src/admin-panel.js"
+      - "src/admin-panel.css"
+      - "src/admin-panel-sections-v2.js"
+      - "src/admin-panel-ui-v2.js"
+      - "vps/backend/src/development-status.mjs"
+      - "vps/backend/src/github-handoff.mjs"
+      - "vps/backend/src/super-admin-routes.mjs"
+      - "tests/live-handoff-contract-regression.mjs"
+      - "tests/admin-panel-static-regression.mjs"
+      - ".github/workflows/engineering-handoff-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Validate handoff JavaScript
+        run: |
+          set -euo pipefail
+          node --check src/admin-panel.js
+          node --check src/admin-panel-sections-v2.js
+          node --check src/admin-panel-ui-v2.js
+          node --check vps/backend/src/development-status.mjs
+          node --check vps/backend/src/github-handoff.mjs
+          node --check vps/backend/src/super-admin-routes.mjs
+
+      - name: Live handoff contract
+        run: node tests/live-handoff-contract-regression.mjs
+
+      - name: Super Admin static contract
+        run: node tests/admin-panel-static-regression.mjs
+
+      - name: Super Admin UI v2 contract
+        run: node tests/admin-panel-ui-v2-static-regression.mjs
