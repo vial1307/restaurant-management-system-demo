@@ -1,5 +1,46 @@
 # Kitchen OS — Current Development Handoff
 
+ACTIVE_PR: #188
+
+## ACTIVE — Inventory Database performance + GitHub/Super Admin workflow authority, 2026-10-04
+
+Current active work is PR #188: `perf(inventory): optimize database load and snapshot reads`.
+
+Authority / visibility:
+- `CURRENT_HANDOFF.md` on `main` explicitly marks PR #188 as active.
+- `handoff.html` must resolve PR #188, its current branch/head SHA, changed files and exact-head workflows from GitHub live.
+- Super Admin → `GitHub & Handoff` reads the same live GitHub handoff feed from the VPS API; it must therefore show PR #188 instead of falling back to stale historical branch/status strings.
+- Workflow state is live; do not copy a newer open PR into the active slot unless this file explicitly changes `ACTIVE_PR`.
+
+Latest observed PR #188 state at this handoff update:
+- branch: `perf/inventory-database-load-20261003`;
+- latest observed head: `13dce345947d7a0ae0c9046799d21efed2b715d6`;
+- Super Admin Browser Regression #311: PASS;
+- Isolated CI API Load Smoke #601: PASS;
+- Master Data and Admin Panel Regression #379: PASS;
+- Workforce Approval Regression Diagnostic #466: PASS;
+- Deploy Kitchen OS to VPS pull-request run #1097 / run `37144352017`: FAIL in regression only; preflight PASS, deploy and production smoke were skipped;
+- failure was a WebKit mobile page-error/CORS access-control check on `/api/inventory/fuxing` after the Inventory/API/database regressions had passed. This exact head is not production.
+
+PR #188 scope remains:
+- reduce Inventory/Super Admin Database load work without changing PostgreSQL authority;
+- site/user-scoped short-lived cache for Super Admin Inventory Database;
+- one combined Inventory Database snapshot request;
+- lazy History/Integrity reads;
+- Map-based render lookups;
+- reduced duplicate initial SSE/warehouse-switch reads;
+- site reads aligned with schema-031 expression indexes;
+- mutation/realtime invalidation still reconciles from PostgreSQL.
+
+Production authority remains the latest verified runtime release, not PR #188, until exact-head CI, merge, VPS deploy, production health, `DATA_INTEGRITY_OK`, UI smoke and Inventory Site Production Audit all pass.
+
+Next:
+1. Stabilize/re-run the exact-head cross-browser regression without weakening Inventory authority checks.
+2. Merge PR #188 only after all exact-head gates are green.
+3. Verify production release/schema/data-integrity/UI smoke and Inventory Site Production Audit.
+4. Then replace this ACTIVE block with a verified-production closure and clear/update `ACTIVE_PR`.
+5. The requested stock-count import remains a separate data operation: do not encode those quantities into source code or migrations; update PostgreSQL through the approved Inventory lifecycle once the target site/location/unit mapping is verified.
+
 ## CURRENT VERIFIED PRODUCTION — Inventory compact Pick row + overflow hardening, 2026-10-02
 
 This is the current Inventory UI continuation authority on schema 031.
