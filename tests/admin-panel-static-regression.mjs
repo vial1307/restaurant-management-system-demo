@@ -40,6 +40,8 @@ assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engine
 assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
 assert.match(js, /data-server-action="marketing_deploy"/, "Marketing deploy must be an explicit UI action");
 assert.match(js, /AgentMemory · Dev memory/, "GitHub & Handoff must surface the private AgentMemory runtime");
+const agentMemoryPanelSource = js.slice(js.indexOf("function renderAgentMemoryPanel"), js.indexOf("function renderDevelopment"));
+assert.doesNotMatch(agentMemoryPanelSource, /\\\`/, "AgentMemory panel must not contain escaped template delimiters that break browser module parsing");
 for (const action of ["agentmemory_status","agentmemory_recall_handoff","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(js, new RegExp(`data-server-action=["']${action}["']`));
 assert.match(js, /\/api\/admin\/super\/server-actions/, "VPS Command Center must use the protected backend action queue");
 assert.match(js, /\/api\/admin\/users/, "user administration must use database-backed API");
