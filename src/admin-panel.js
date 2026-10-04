@@ -108,9 +108,10 @@ async function loadAudit() {
   try { state.audit.result=await api(`/api/admin/super/audit?${params}`); }
   catch(error){state.error=errorText(error);} state.audit.loading=false; render();
 }
-async function loadCore() {
+async function loadCore({forceDevelopment=false}={}) {
+  const developmentPath=forceDevelopment?"/api/admin/super/development-status?refresh=1":"/api/admin/super/development-status";
   const [overview,systemMetrics,developmentStatus,users,accessModel,sites,settings,content,serverActionCapabilities]=await Promise.all([
-    api("/api/admin/super/overview"),api("/api/admin/super/system-metrics"),api("/api/admin/super/development-status").catch(()=>null),vpsListUsers(),api("/api/admin/access-model"),
+    api("/api/admin/super/overview"),api("/api/admin/super/system-metrics"),api(developmentPath).catch(()=>null),vpsListUsers(),api("/api/admin/access-model"),
     api("/api/admin/super/sites"),api("/api/admin/super/settings"),api("/api/admin/super/content"),api("/api/admin/super/server-actions").catch(()=>null),
   ]);
   state.overview=overview; state.systemMetrics=systemMetrics||null; state.developmentStatus=developmentStatus||null; state.users=users?.users||[]; state.accessModel=accessModel||{roles:[],modules:[],capabilities:[]};
@@ -118,7 +119,7 @@ async function loadCore() {
 }
 async function refreshCurrent() {
   state.error=""; state.success="";
-  try { await loadCore(); if(currentSection()==="data")await loadDataset(); if(currentSection()==="logs")await loadAudit(); }
+  try { await loadCore({forceDevelopment:currentSection()==="development"}); if(currentSection()==="data")await loadDataset(); if(currentSection()==="logs")await loadAudit(); }
   catch(error){state.error=errorText(error);} render();
 }
 
@@ -265,6 +266,22 @@ function renderServerActionCommandCenter() {
   </article>`;
 }
 
+function workflowStateLabel(summary={}) {
+  const state=String(summary?.state||"unknown").toLowerCase();
+  return ({passed:"PASS",failed:"FAIL",running:"RUNNING",attention:"ATTENTION",unknown:"UNKNOWN"})[state]||state.toUpperCase();
+}
+function workflowStateClass(summary={}) {
+  const state=String(summary?.state||"unknown").toLowerCase();
+  return state==="passed"?"ok":state==="failed"||state==="attention"?"off":"";
+}
+function renderWorkflowGateRows(rows=[]) {
+  return rows.map((row)=>{
+    const ok=row.status==="completed"&&row.conclusion==="success";
+    const stateText=`${row.status||"unknown"} / ${row.conclusion||"pending"}`;
+    return `<div class="sa-list-row"><div><strong>${esc(row.name||"workflow")} #${esc(row.run_number||"")}</strong><small>${esc(stateText)} · <span class="mono">${esc(String(row.head_sha||"").slice(0,12))}</span></small></div><div class="sa-row-actions"><span class="sa-pill ${ok?"ok":row.status==="completed"?"off":""}">${esc(row.conclusion||row.status||"pending")}</span>${row.url?`<a class="sa-link" href="${esc(safeHref(row.url))}" target="_blank" rel="noreferrer">Mở</a>`:""}</div></div>`;
+  }).join("");
+}
+
 function renderDevelopment() {
   const d=state.developmentStatus;
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
@@ -272,10 +289,22 @@ function renderDevelopment() {
   const liveGit=d.live_github||{}; const pr=liveGit.active_pr||work.pull_request||null; const canonical=d.canonical_handoff||{};
   const status=String(d.status||"unknown").toLowerCase();
   const liveState=liveGit.available?(liveGit.stale?"STALE":"LIVE"):"FALLBACK";
-  const workflowRows=(liveGit.workflows||[]).slice(0,12);
+  const workflowSummary=liveGit.workflow_summary||{};
+  const mainWorkflowSummary=liveGit.main_workflow_summary||{};
+  const workflowRows=(workflowSummary.gates||liveGit.workflows||[]).slice(0,12);
   const commitRows=(liveGit.commits||[]).slice(0,8);
   const canonicalUrl=canonical.url||liveGit.canonical_url||"";
-  return `${renderServerActionCommandCenter()}<article class="sa-card">
+  const mainSha=String(liveGit.main?.sha||"");
+  const liveRelease=String(live.release||runtime.release||"");
+  const runtimeMatchesMain=Boolean(mainSha&&liveRelease&&mainSha.startsWith(liveRelease));
+  const gateCounts=workflowSummary.counts||{};
+  const mainGateCounts=mainWorkflowSummary.counts||{};
+  return `${renderServerActionCommandCenter()}<section class="sa-stat-grid compact" data-workflow-dashboard>
+    ${stat("PR exact-head gates",workflowStateLabel(workflowSummary),`${gateCounts.passed||0} pass · ${gateCounts.failed||0} fail · ${gateCounts.running||0} running`)}
+    ${stat("Exact head",workflowSummary.exact_head===false?"MISMATCH":"MATCH",String(pr?.head_sha||liveGit.main?.sha||"").slice(0,12)||"—")}
+    ${stat("Main workflow",workflowStateLabel(mainWorkflowSummary),`${mainGateCounts.passed||0} pass · ${mainGateCounts.failed||0} fail · ${mainGateCounts.running||0} running`)}
+    ${stat("Runtime ↔ main",runtimeMatchesMain?"SYNCED":"MAIN AHEAD",liveRelease?`runtime ${liveRelease}`:"runtime unknown")}
+  </section><article class="sa-card">
     <div class="sa-card-head"><div><h2>One-link Handoff · 單一交接連結</h2><p>Dev khác hoặc chat mới chỉ cần mở link này. Trang sẽ tự tìm PR/branch/head SHA/CI hiện tại.</p></div><span class="sa-pill ${liveGit.available?"ok":"off"}">${esc(liveState)}</span></div>
     <div class="sa-row-actions">
       ${canonicalUrl?`<button class="sa-btn primary" type="button" data-copy-handoff data-handoff-url="${esc(safeHref(canonicalUrl))}">Copy handoff link</button>`:""}
@@ -327,8 +356,14 @@ function renderDevelopment() {
     </article>
   </section>
   <section class="sa-two-col">
-    <article class="sa-card"><div class="sa-card-head"><div><h2>CI của head hiện tại</h2><p>Chỉ hiển thị workflow có đúng head SHA của PR.</p></div></div>
-      <div class="sa-list">${workflowRows.map((row)=>{const ok=row.status==="completed"&&row.conclusion==="success";const stateText=`${row.status||"unknown"} / ${row.conclusion||"pending"}`;return `<div class="sa-list-row"><div><strong>${esc(row.name||"workflow")} #${esc(row.run_number||"")}</strong><small>${esc(stateText)}</small></div><span class="sa-pill ${ok?"ok":row.status==="completed"?"off":""}">${esc(row.conclusion||row.status||"pending")}</span></div>`;}).join("")||`<div class="sa-empty">Chưa có CI live cho head hiện tại hoặc GitHub feed đang fallback.</div>`}</div>
+    <article class="sa-card"><div class="sa-card-head"><div><h2>CI exact-head hiện tại</h2><p>Latest run của từng workflow trên đúng head SHA; rerun cũ không còn làm dashboard báo đỏ giả.</p></div><span class="sa-pill ${workflowStateClass(workflowSummary)}">${esc(workflowStateLabel(workflowSummary))}</span></div>
+      <div class="sa-kv-grid">
+        <div><small>Passed</small><strong>${esc(gateCounts.passed||0)}</strong></div>
+        <div><small>Failed</small><strong>${esc(gateCounts.failed||0)}</strong></div>
+        <div><small>Running</small><strong>${esc(gateCounts.running||0)}</strong></div>
+        <div><small>Exact head</small><strong>${workflowSummary.exact_head===false?"NO":"YES"}</strong></div>
+      </div>
+      <div class="sa-list">${renderWorkflowGateRows(workflowRows)||`<div class="sa-empty">Chưa có CI live cho head hiện tại hoặc GitHub feed đang fallback.</div>`}</div>
     </article>
     <article class="sa-card"><div class="sa-card-head"><div><h2>Việc tiếp theo · Next steps</h2><p>Fallback workboard khi PR body chưa mô tả đủ bước kế tiếp.</p></div></div>
       <ol class="sa-dev-steps">${(d.next_steps||[]).map((step)=>`<li>${esc(step)}</li>`).join("")}</ol>
