@@ -176,6 +176,13 @@ async function runSuperAdminProfile(profile) {
 
     await gotoSection(page, "development");
     await page.locator(".sa-dev-summary").waitFor({ state:"visible", timeout:15000 });
+    await page.locator("[data-engineering-harness]").waitFor({ state:"visible", timeout:15000 });
+    await page.locator("[data-verification-matrix]").waitFor({ state:"visible", timeout:15000 });
+    assert.match(await page.locator("[data-engineering-harness]").textContent(), /Engineering Harness|Merge gate|Deploy gate|Production|Definition of Done/);
+    assert((await page.locator("[data-verification-matrix] tbody tr").count()) >= 10, "verification matrix is unexpectedly incomplete");
+    assert.match(await page.locator("[data-verification-matrix]").textContent(), /COVERED|PARTIAL/);
+    await page.locator("[data-copy-engineering-start]").waitFor({ state:"visible", timeout:10000 });
+    assert.equal(await page.locator("[data-copy-engineering-start]").isEnabled(),true,"new-chat start packet action disabled");
     assert.match(await page.locator(".sa-content").textContent(), /GitHub|Handoff|Current work|Công việc hiện tại/);
     assert.match(await page.locator(".sa-content").textContent(), /Live production|Production hiện tại/);
     assert((await page.locator('.sa-dev-link[href*="github.com/vial1307/restaurant-management-system-demo"]').count()) >= 3, `${profile.name}: handoff GitHub links missing`);
