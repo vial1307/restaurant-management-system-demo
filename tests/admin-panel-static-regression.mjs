@@ -156,6 +156,9 @@ assert.match(hostActionInstaller, /PathExistsGlob=\/opt\/kitchen-os\/admin-actio
 assert.match(agentMemoryDockerfile, /AGENTMEMORY_VERSION=0\.9\.29/, "AgentMemory package must be version-pinned");
 assert.match(agentMemoryInstaller, /AGENTMEMORY_PUBLIC_BIND_REFUSED/, "installer must fail closed if REST becomes publicly bound");
 assert.match(agentMemoryInstaller, /AGENTMEMORY_SECRET/, "AgentMemory must use an explicit persistent secret");
+assert.match(agentMemoryInstaller, /Authorization: Bearer \$\{agentmemory_secret\}/, "installer health probe must authenticate when AgentMemory secret is configured");
+assert.match(hostActionRunner, /Authorization: Bearer \$\{secret\}/, "host action health checks must authenticate");
+assert.match(hostMetricsCollector, /Authorization: Bearer \$\{agentmemory_secret\}/, "filtered host health snapshot must authenticate to AgentMemory");
 assert.match(agentMemorySync, /kitchen-os-handoff-hashes\.json/, "handoff seeding must keep per-file content hashes");
 assert.match(agentMemorySync, /project:PROJECT/, "handoff memories must be scoped to the Kitchen OS project");
 assert.match(agentMemorySync, /MAX_SEED_CHARS = 40_000/, "handoff memory snapshots must be bounded");
