@@ -1,46 +1,62 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #196
+ACTIVE_PR: #197
 
-## ACTIVE — PR #196 Engineering Harness / Coding Control Plane, 2026-10-05
+## ACTIVE — PR #197 Engineering Harness stale-fallback cleanup, 2026-10-05
 
 Purpose:
-- make Super Admin → GitHub & Handoff the engineering control plane for a new chat/dev with no prior context;
-- define mandatory Engineering Contract, Agent Start Protocol, Feature Registry and Verification Matrix;
-- derive Merge/Deploy/Production/Definition-of-Done gates from live GitHub exact-head evidence plus VPS runtime release;
-- expose verification coverage without promoting PARTIAL areas to PASS;
-- seed the engineering standards into AgentMemory as project-scoped recall context.
+- remove historical PR #140 / schema 024 / RBAC fallback metadata from Super Admin GitHub & Handoff;
+- make current-work and production-evidence cards prefer live GitHub + VPS runtime + Engineering Harness evidence;
+- keep fallback metadata intentionally neutral when GitHub live feed is unavailable.
 
 Scope:
-- docs + Super Admin engineering UI + protected development-status metadata + CI contract regression;
-- no Inventory/business handler rewrite;
+- metadata/UI evidence only;
+- no Inventory/business handler changes;
 - no PostgreSQL schema/data/RBAC mutation;
-- no mutable business configuration hard-coded into frontend;
-- PostgreSQL/VPS remains runtime business-data authority; GitHub CURRENT_HANDOFF remains engineering workstream authority.
+- AgentMemory remains retrieval-only and private.
 
-New mandatory files:
-- `docs/ENGINEERING_CONTRACT.md`
-- `docs/AGENT_START_PROTOCOL.md`
-- `docs/FEATURE_REGISTRY.md`
-- `docs/VERIFICATION_MATRIX.md`
+Required exact-head gate:
+1. Deploy Kitchen OS to VPS;
+2. Master Data and Admin Panel Regression;
+3. Super Admin Browser Regression;
+4. Isolated CI API Load Smoke;
+5. merge tested head only, then deploy exact merge SHA and verify production health/integrity/UI smoke/audits.
 
-New Super Admin behavior:
-- Engineering Harness panel under GitHub & Handoff;
-- Merge gate driven by exact active-PR workflow results;
-- Deploy gate blocks branch deploy before merge;
-- Production gate compares runtime release against verified production SHA recorded in CURRENT_HANDOFF;
-- one-click "new-chat start packet";
-- verification matrix for controls/lists/reload/page errors/API/F5/RBAC/responsive/full-device/production evidence.
+PR #188 stays paused until #197 is production-verified. After #197 closure it may become the explicit active workstream, but remains BLOCKED pending reconciliation onto current main because its current head is stale/diverged/non-mergeable.
 
-Release gate:
-1. exact PR #196 head must pass `Deploy Kitchen OS to VPS` and `Master Data and Admin Panel Regression`;
-2. merge only that tested head;
-3. deploy exact merge SHA;
-4. require release/schema health, `DATA_INTEGRITY_OK`, production UI smoke and existing post-deploy audits;
-5. confirm AgentMemory seeds/recalls the new engineering-standard documents;
-6. then close #196 and resume PR #188 only after rebasing it onto the new main.
+## CURRENT VERIFIED PRODUCTION — Engineering Harness / Coding Control Plane, 2026-10-05
 
-PR #188 remains open but is **paused/non-production** while #196 is the explicit active engineering workstream.
+PR #196 is production-verified.
+
+Production closure:
+- exact PR head: `56eddaeededb048f0223e4e71a376281b28d2b92`;
+- PR Deploy #1146 / run `37219907875`: PASS;
+- Master Data/Admin #428: PASS;
+- Super Admin Browser #350: PASS;
+- API Load #641: PASS;
+- Workforce diagnostic #505: PASS;
+- final production merge: `d8e332f399f299476c939539e809a24b85e0a7e8`;
+- main Deploy #1147 / run `37220344400`: PASS on attempt 2;
+- attempt 1 was blocked only by a 10-second permission-state timeout inside full-device certification after six Chromium role/site cases had passed; the unchanged merge SHA passed the isolated regression rerun, so it was treated as a transient CI flake rather than bypassed;
+- production health: `{"app":"ok","database":"ok","schema":"031","release":"d8e332f"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI permission-modal smoke: PASS;
+- pre-deploy PostgreSQL backup: `/opt/kitchen-os/backups/kitchen_os_20261004T173434Z.dump`;
+- Inventory Site Production Audit #451 / run `37221126486`: PASS;
+- Workforce Schedule Production Parity #465: PASS;
+- Workforce Staff Production Backfill #692 / run `37221126418`: PASS;
+- Workforce Schedule Production Backfill #676 / run `37221126430`: PASS;
+- Workforce Attendance Production Backfill #666 / run `37221126465`: PASS;
+- VPS Capacity Audit #17: PASS.
+
+Engineering Harness production contract:
+- mandatory docs: Engineering Contract, Agent Start Protocol, Feature Registry and Verification Matrix;
+- Super Admin shows Merge/Deploy/Production/Definition-of-Done gates, exact-head workflow evidence, known PARTIAL coverage gaps and Evidence Center;
+- browser regression rejects uncaught page errors and same-origin API 5xx/request failures, with only the explicitly classified teardown abort of `/api/inventory/events` SSE exempt;
+- AgentMemory seed now includes 7 bounded project-scoped engineering documents;
+- production deploy confirmed `AGENTMEMORY_SEED_COMPLETE changed=6 total=7 project=kitchen-os`;
+- authenticated recall confirmed `AGENTMEMORY_RECALL_OK results=5`;
+- GitHub CURRENT_HANDOFF and PostgreSQL/VPS remain authoritative; AgentMemory remains recall context only.
 
 ## CURRENT VERIFIED PRODUCTION — AgentMemory private dev memory + recall, 2026-10-04
 
@@ -77,13 +93,13 @@ AgentMemory production contract:
 
 ## PAUSED — PR #188 Inventory Database performance, 2026-10-04
 
-PR #188 is temporarily paused while PR #196 installs the Engineering Harness control plane. It must be rebased/revalidated against the new main before any later merge.
+PR #188 is temporarily paused while PR #197 removes stale fallback metadata. After #197 production closure, #188 may resume as the explicit workstream but remains BLOCKED until reconciled/revalidated against current main.
 
 Observed state:
 - branch: `perf/inventory-database-load-20261003`;
 - head: `f76a851536562eb8e096615c54d3797a5b1de1bf`;
 - open, currently non-mergeable against current main;
-- current production/main runtime authority is `b61ef3837750a773294c1eb230bbb48393710cf3` / schema `031`;
+- current verified production runtime authority is `d8e332f399f299476c939539e809a24b85e0a7e8` / schema `031`;
 - PR #188 was built before the AgentMemory + GitHub/Handoff production changes and must not be merged in its stale state.
 
 Continuation rule:
