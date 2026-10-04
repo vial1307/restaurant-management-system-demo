@@ -168,6 +168,8 @@ assert.match(agentMemoryVerify, /\/agentmemory\/search/, "production recall veri
 assert.match(agentMemoryVerify, /project:"kitchen-os"/, "production recall verifier must stay scoped to Kitchen OS");
 assert.match(agentMemoryVerify, /agentId:"kitchen-os-handoff-sync"/, "production recall verifier must stay scoped to the handoff sync agent");
 assert.match(agentMemoryVerify, /AGENTMEMORY_RECALL_OK/, "production recall verifier must emit an explicit success marker");
+assert.match(agentMemoryVerify, /format:"compact"/, "production recall verifier must use compact results so large handoff snapshots are not dropped by a small narrative token budget");
+assert.doesNotMatch(agentMemoryVerify, /token_budget/, "production recall smoke must not discard an oversized handoff result because of response token budgeting");
 assert.match(compose, /Authorization: Bearer \$\$\{AGENTMEMORY_SECRET\}/, "Compose healthcheck must expand the AgentMemory secret inside the container");
 assert.match(hostActionRunner, /AGENTMEMORY_SEARCH_URL/, "host runner must expose a fixed audited recall smoke action");
 assert.match(hostMetricsCollector, /agentmemory-health\.json/, "host metrics must publish a filtered AgentMemory health snapshot");
