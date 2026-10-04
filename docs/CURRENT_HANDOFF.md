@@ -1,45 +1,42 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #188
+ACTIVE_PR: #191
 
-## ACTIVE — Inventory Database performance + GitHub/Super Admin workflow authority, 2026-10-04
+## ACTIVE — AgentMemory VPS + Super Admin GitHub & Handoff, 2026-10-04
 
-Current active work is PR #188: `perf(inventory): optimize database load and snapshot reads`.
+Current priority is PR #191: `feat(agentmemory): add VPS dev memory to Super Admin handoff`.
 
-Authority / visibility:
-- `CURRENT_HANDOFF.md` on `main` explicitly marks PR #188 as active.
-- `handoff.html` must resolve PR #188, its current branch/head SHA, changed files and exact-head workflows from GitHub live.
-- Super Admin → `GitHub & Handoff` reads the same live GitHub handoff feed from the VPS API; it must therefore show PR #188 instead of falling back to stale historical branch/status strings.
-- Workflow state is live; do not copy a newer open PR into the active slot unless this file explicitly changes `ACTIVE_PR`.
+Purpose:
+- install `rohitg00/agentmemory` on the VPS as a private persistent service;
+- surface AgentMemory runtime state and allowlisted controls inside Super Admin → `GitHub & Handoff`;
+- seed engineering handoff context without replacing GitHub or PostgreSQL/VPS authority.
 
-Latest observed PR #188 state at this handoff update:
-- branch: `perf/inventory-database-load-20261003`;
-- latest observed head: `13dce345947d7a0ae0c9046799d21efed2b715d6`;
-- Super Admin Browser Regression #311: PASS;
-- Isolated CI API Load Smoke #601: PASS;
-- Master Data and Admin Panel Regression #379: PASS;
-- Workforce Approval Regression Diagnostic #466: PASS;
-- Deploy Kitchen OS to VPS pull-request run #1097 / run `37144352017`: FAIL in regression only; preflight PASS, deploy and production smoke were skipped;
-- failure was a WebKit mobile page-error/CORS access-control check on `/api/inventory/fuxing` after the Inventory/API/database regressions had passed. This exact head is not production.
+Runtime contract:
+- package is pinned to `@agentmemory/agentmemory@0.9.29` on Node 22;
+- service name/container: `kitchen-agentmemory`;
+- AgentMemory native REST/streams/viewer/engine bind stays on VPS loopback; no Caddy route and no Docker `3111:3111` publication;
+- persistent state: `/opt/kitchen-os/agentmemory-data`; persistent runtime home: `/opt/kitchen-os/agentmemory-home`;
+- an explicit VPS-only bearer secret is generated once in `/opt/kitchen-os/agentmemory.env`;
+- initial mode is keyless/BM25 with LLM compression and automatic context injection disabled, so the Kitchen OS handoff is not sent to an external model provider;
+- deploy seeds `CURRENT_HANDOFF.md`, `STATUS.md` and `DEVELOPMENT_RULES.md` through AgentMemory's authenticated remember API; a SHA-256 guard prevents duplicate seed writes when those documents are unchanged;
+- GitHub `CURRENT_HANDOFF.md` and PostgreSQL/VPS remain source of truth. AgentMemory is retrieval context only.
 
-PR #188 scope remains:
-- reduce Inventory/Super Admin Database load work without changing PostgreSQL authority;
-- site/user-scoped short-lived cache for Super Admin Inventory Database;
-- one combined Inventory Database snapshot request;
-- lazy History/Integrity reads;
-- Map-based render lookups;
-- reduced duplicate initial SSE/warehouse-switch reads;
-- site reads aligned with schema-031 expression indexes;
-- mutation/realtime invalidation still reconciles from PostgreSQL.
+Super Admin contract:
+- protected `development-status` includes a filtered AgentMemory health snapshot;
+- allowlisted/audited host actions: `agentmemory_status`, `agentmemory_sync_handoff`, `agentmemory_restart`;
+- the existing file-queue host bridge is reused; the API container receives no Docker socket and no arbitrary terminal/shell endpoint;
+- GitHub & Handoff shows AgentMemory package/mode/network/persistence/health plus status/sync/restart controls.
 
-Production authority remains the latest verified runtime release, not PR #188, until exact-head CI, merge, VPS deploy, production health, `DATA_INTEGRITY_OK`, UI smoke and Inventory Site Production Audit all pass.
+Safety / release gate:
+1. Exact-head CI for PR #191 must pass, including the pinned AgentMemory Docker image build and existing Kitchen OS regressions.
+2. Merge only the tested head.
+3. Deploy the exact merge SHA to VPS.
+4. Verify `/api/health`, AgentMemory `/agentmemory/livez`, loopback-only bind, persistent handoff seed, Super Admin card/actions, `DATA_INTEGRITY_OK` and existing UI smoke.
+5. Record the verified production release in this handoff.
 
-Next:
-1. Stabilize/re-run the exact-head cross-browser regression without weakening Inventory authority checks.
-2. Merge PR #188 only after all exact-head gates are green.
-3. Verify production release/schema/data-integrity/UI smoke and Inventory Site Production Audit.
-4. Then replace this ACTIVE block with a verified-production closure and clear/update `ACTIVE_PR`.
-5. The requested 2026-10-04 Fuxing 大冷凍 stock-count import is now complete as a separate production data operation; no quantity data was added to runtime source or migrations.
+PR #188 (`perf/inventory-database-load-20261003`) remains open but is **paused/non-production** while #191 is the explicit active workstream. Its Inventory performance changes must be rebased/revalidated before any later merge; do not treat it as current production or silently merge it around #191.
+
+Production authority remains verified runtime `337f5a2` / schema `031` until PR #191 is merged and its exact production deploy is verified.
 
 ### Production data operation — Fuxing 大冷凍 stocktake, 2026-10-04
 
