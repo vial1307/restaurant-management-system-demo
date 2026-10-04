@@ -40,7 +40,7 @@ assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engine
 assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
 assert.match(js, /data-server-action="marketing_deploy"/, "Marketing deploy must be an explicit UI action");
 assert.match(js, /AgentMemory · Dev memory/, "GitHub & Handoff must surface the private AgentMemory runtime");
-for (const action of ["agentmemory_status","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(js, new RegExp(`data-server-action=["']${action}["']`));
+for (const action of ["agentmemory_status","agentmemory_recall_handoff","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(js, new RegExp(`data-server-action=["']${action}["']`));
 assert.match(js, /\/api\/admin\/super\/server-actions/, "VPS Command Center must use the protected backend action queue");
 assert.match(js, /\/api\/admin\/users/, "user administration must use database-backed API");
 assert.match(js, /\/api\/admin\/access-model/, "RBAC editor must read roles/modules from database access model");
@@ -97,7 +97,7 @@ assert.match(superRoutes, /super_admin_menu_sync/);
 assert.match(superRoutes, /jsonb_build_object\('synced_from',\$1::text\)/, "menu sync metadata parameter must be explicitly typed for PostgreSQL");
 assert.match(superRoutes, /for update/, "sensitive Super Admin updates must preserve transaction locking where applicable");
 assert.match(superRoutes, /const SERVER_ACTIONS = Object\.freeze/, "server actions must use an explicit backend whitelist");
-for (const action of ["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback","agentmemory_status","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(superRoutes, new RegExp(action));
+for (const action of ["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback","agentmemory_status","agentmemory_recall_handoff","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(superRoutes, new RegExp(action));
 assert.match(superRoutes, /AGENTMEMORY_HEALTH_PATH/, "AgentMemory UI status must come from a filtered host health snapshot");
 assert.match(superRoutes, /readAgentMemoryHealth/, "development status must include AgentMemory runtime health");
 assert.match(superRoutes, /SERVER_ACTION_CONFIRMATION_REQUIRED/, "mutating host actions must require explicit confirmation");
@@ -142,7 +142,7 @@ assert.match(compose, /\.\/agentmemory-data:\/data/, "AgentMemory state must sur
 assert.doesNotMatch(compose, /3111:3111/, "AgentMemory REST must never be published through a Docker port mapping");
 assert.match(compose, /marketing_edge:/, "Caddy must join the dedicated Marketing edge network");
 assert.doesNotMatch(compose, /\/var\/run\/docker\.sock/, "Kitchen API must never receive the Docker socket");
-assert.match(hostActionRunner, /case "\$1" in[\s\S]*marketing_status\)[\s\S]*marketing_deploy\)[\s\S]*marketing_restart\)[\s\S]*marketing_logs\)[\s\S]*marketing_rollback\)[\s\S]*agentmemory_status\)[\s\S]*agentmemory_sync_handoff\)[\s\S]*agentmemory_restart\)/, "host runner must map only fixed allowlisted VPS actions");
+assert.match(hostActionRunner, /case "\$1" in[\s\S]*marketing_status\)[\s\S]*marketing_deploy\)[\s\S]*marketing_restart\)[\s\S]*marketing_logs\)[\s\S]*marketing_rollback\)[\s\S]*agentmemory_status\)[\s\S]*agentmemory_recall_handoff\)[\s\S]*agentmemory_sync_handoff\)[\s\S]*agentmemory_restart\)/, "host runner must map only fixed allowlisted VPS actions");
 assert.match(hostActionRunner, /AGENTMEMORY_STATUS_URL/, "AgentMemory status must be fetched locally on the VPS");
 assert.doesNotMatch(hostActionRunner, /\beval\b/, "host runner must never eval queue input");
 assert.match(hostActionRunner, /MARKETING_REPO_ACCESS_REQUIRED/, "private repository access failures must be explicit and fail closed");
@@ -154,8 +154,11 @@ assert.match(hostActionInstaller, /PathExistsGlob=\/opt\/kitchen-os\/admin-actio
 assert.match(agentMemoryDockerfile, /AGENTMEMORY_VERSION=0\.9\.29/, "AgentMemory package must be version-pinned");
 assert.match(agentMemoryInstaller, /AGENTMEMORY_PUBLIC_BIND_REFUSED/, "installer must fail closed if REST becomes publicly bound");
 assert.match(agentMemoryInstaller, /AGENTMEMORY_SECRET/, "AgentMemory must use an explicit persistent secret");
-assert.match(agentMemorySync, /kitchen-os-handoff\.sha256/, "handoff seeding must be content-hash idempotent");
+assert.match(agentMemorySync, /kitchen-os-handoff-hashes\.json/, "handoff seeding must keep per-file content hashes");
+assert.match(agentMemorySync, /project:PROJECT/, "handoff memories must be scoped to the Kitchen OS project");
+assert.match(agentMemorySync, /MAX_SEED_CHARS = 40_000/, "handoff memory snapshots must be bounded");
 assert.match(agentMemorySync, /\/agentmemory\/remember/, "handoff seed must use AgentMemory's authenticated remember API");
+assert.match(hostActionRunner, /AGENTMEMORY_SEARCH_URL/, "host runner must expose a fixed audited recall smoke action");
 assert.match(hostMetricsCollector, /agentmemory-health\.json/, "host metrics must publish a filtered AgentMemory health snapshot");
 
 console.log("SUPER_ADMIN_PANEL_STATIC_REGRESSION_OK");
