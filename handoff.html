@@ -64,8 +64,29 @@ const titleOf=(content)=>{
   const match=String(content||"").match(/^##\s+(.+)$/m);
   return match?match[1].trim():"CURRENT_HANDOFF.md";
 };
-const workflowHtml=(runs)=>{
-  const rows=(runs||[]).slice(0,20);
+const summarizeWorkflows=(runs)=>{
+  const latest=new Map();
+  for(const run of runs||[]){
+    const key=String(run.name||"workflow");
+    const current=latest.get(key);
+    const time=Date.parse(run.updated_at||run.created_at||0)||0;
+    const currentTime=Date.parse(current?.updated_at||current?.created_at||0)||0;
+    if(!current||time>=currentTime||Number(run.run_number||0)>Number(current.run_number||0))latest.set(key,run);
+  }
+  const rows=[...latest.values()].sort((a,b)=>(Date.parse(b.updated_at||b.created_at||0)||0)-(Date.parse(a.updated_at||a.created_at||0)||0));
+  const counts={passed:0,failed:0,running:0,cancelled:0,skipped:0};
+  for(const r of rows){
+    if(r.status!=="completed")counts.running++;
+    else if(r.conclusion==="success")counts.passed++;
+    else if(["failure","timed_out","action_required","startup_failure"].includes(r.conclusion))counts.failed++;
+    else if(r.conclusion==="cancelled")counts.cancelled++;
+    else if(["skipped","neutral"].includes(r.conclusion))counts.skipped++;
+  }
+  const state=counts.failed?"FAIL":counts.running?"RUNNING":counts.cancelled?"ATTENTION":rows.length?"PASS":"UNKNOWN";
+  return {rows,counts,state};
+};
+const workflowHtml=(summary)=>{
+  const rows=(summary?.rows||[]).slice(0,20);
   if(!rows.length)return "<li>Chưa có workflow exact-head để hiển thị.</li>";
   return rows.map((r)=>{
     const state=r.status==="completed"?(r.conclusion==="success"?"ok":"bad"):"warn";
@@ -118,6 +139,8 @@ try{
     try{commits=await request("/commits?sha=main&per_page=8");}catch{}
   }
 
+  const workSummary=summarizeWorkflows(workRuns);
+  const mainSummary=summarizeWorkflows(mainRuns);
   const authority=active
     ? `<span class="pill warn">ACTIVE_PR #${esc(active.number)}</span> CURRENT_HANDOFF.md đã chỉ định PR này.`
     : `<span class="pill ok">MAIN AUTHORITY</span> Không có ACTIVE_PR hợp lệ; main + CURRENT_HANDOFF.md là điểm tiếp quản.`;
@@ -141,6 +164,8 @@ try{
       <div class="kv"><small>Authority</small><b><code>${active?"PR #"+active.number:"main"}</code></b></div>
       <div class="kv"><small>Main SHA</small><b><code>${esc(short(mainSha))}</code></b></div>
       <div class="kv"><small>Active PR marker</small><b><code>${esc(requested?"#"+requested:"none")}</code></b></div>
+      <div class="kv"><small>PR workflow gates</small><b class="${workSummary.state==="PASS"?"ok":workSummary.state==="FAIL"?"bad":"warn"}">${esc(workSummary.state)}</b><small>${esc(workSummary.counts.passed)} pass · ${esc(workSummary.counts.failed)} fail · ${esc(workSummary.counts.running)} running</small></div>
+      <div class="kv"><small>Main workflow gates</small><b class="${mainSummary.state==="PASS"?"ok":mainSummary.state==="FAIL"?"bad":"warn"}">${esc(mainSummary.state)}</b></div>
       <div class="kv"><small>Open PRs</small><b>${esc(candidates.length)}</b></div>
     </div>
     <div class="subcard">
@@ -149,7 +174,7 @@ try{
     </div>
     <div class="subcard">
       <h3>CI exact-head của ${active?"ACTIVE_PR":"main"}</h3>
-      <ul>${workflowHtml(workRuns)}</ul>
+      <ul>${workflowHtml(workSummary)}</ul>
     </div>
     <div class="subcard">
       <h3>Commit gần nhất</h3>
