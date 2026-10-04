@@ -1,51 +1,57 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #192
+ACTIVE_PR: #188
 
-## ACTIVE — AgentMemory authenticated VPS probes, 2026-10-04
+## CURRENT VERIFIED PRODUCTION — AgentMemory private dev memory + recall, 2026-10-04
 
-PR #191 merged as `6042a3761330226f8058255620854b1ccd80ebde`, and its exact PR head passed all CI gates. The first main production deploy did **not** complete, so #191 must not yet be treated as verified production.
+AgentMemory recovery/integration is now production-verified.
 
-Observed production-deploy sequence:
-- main Deploy Kitchen OS run #1122 / `37185947849` initially hit a known full-device permission-state timeout; rerunning the failed jobs on the same merge SHA passed the full-device cross-browser gate;
-- deployment then reached the VPS and verified exact target `6042a3761330226f8058255620854b1ccd80ebde`;
-- the pinned AgentMemory 0.9.29 image built successfully and container `kitchen-agentmemory` started;
-- deploy stopped before Kitchen OS activation because local AgentMemory liveness/health probes were unauthenticated while the runtime has `AGENTMEMORY_SECRET` enabled: early liveness returned 404 during registration, then the protected REST surface returned 401;
-- production Kitchen OS release was therefore not advanced by that failed deploy.
+Production closure:
+- PR #191 introduced the private AgentMemory integration.
+- PR #192 fixed authenticated local health/liveness consumers after the first deploy exposed 401 responses from protected REST endpoints.
+- PR #194 added a required post-seed recall smoke and deferred Compose secret expansion to the container.
+- PR #195 fixed the recall smoke false-negative: narrative results up to ~40k characters were being discarded by a 2,000-token response budget; the production verifier now uses compact results and validates the seeded title marker.
+- final production merge: `b61ef3837750a773294c1eb230bbb48393710cf3`;
+- Deploy Kitchen OS #1131 / run `37192359669`: PASS;
+- production health: `{"app":"ok","database":"ok","schema":"031","release":"b61ef38"}`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- Inventory Site Production Audit #434 / run `37192753555`: PASS;
+- Workforce Staff Production Backfill #675 / `37192753549`: PASS;
+- Workforce Attendance Production Backfill #649 / `37192753569`: PASS;
+- Workforce Schedule Production Backfill #659 / `37192753562`: PASS;
+- Workforce Schedule Production Parity #448 / `37192753582`: PASS.
 
-Current active recovery is PR #192: `fix(agentmemory): authenticate VPS health probes`.
-
-Hotfix contract:
-- keep AgentMemory private/loopback-only and keep the existing persistent bearer secret;
-- authenticate Docker healthcheck, installer liveness/health, final deploy liveness smoke, filtered host-health collection, and Super Admin host status/restart health requests;
-- do not expose the secret to the browser/API response; Super Admin still receives filtered health JSON only;
-- no Caddy AgentMemory route, no Docker `3111:3111` publication, no PostgreSQL/schema/Inventory change.
-
-AgentMemory target architecture remains:
+AgentMemory production contract:
 - package `@agentmemory/agentmemory@0.9.29` / Node 22;
-- container `kitchen-agentmemory`;
-- persistent state `/opt/kitchen-os/agentmemory-data` and home `/opt/kitchen-os/agentmemory-home`;
-- VPS-only bearer secret in `/opt/kitchen-os/agentmemory.env`;
-- keyless/BM25 mode, LLM compression/context injection disabled;
-- CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES seeded as project-scoped, per-file, bounded, SHA-256-idempotent memories;
-- GitHub CURRENT_HANDOFF.md and PostgreSQL/VPS remain authoritative; AgentMemory is retrieval context only.
+- container `kitchen-agentmemory`, private VPS loopback REST only; no Caddy AgentMemory route and no Docker `3111:3111` publication;
+- persistent data/home at `/opt/kitchen-os/agentmemory-data` and `/opt/kitchen-os/agentmemory-home`;
+- bearer secret remains VPS-only in `/opt/kitchen-os/agentmemory.env`;
+- keyless/BM25 mode; external LLM compression/context injection remain disabled;
+- CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES are seeded as project-scoped, bounded, SHA-256-idempotent records;
+- production deploy confirmed `AGENTMEMORY_SEED_COMPLETE changed=0 total=3 project=kitchen-os`;
+- authenticated compact recall confirmed `AGENTMEMORY_RECALL_OK results=3`;
+- AgentMemory health reported `status=healthy`;
+- browser/API never receives the bearer secret; Super Admin receives filtered health and uses fixed audited host actions only;
+- GitHub CURRENT_HANDOFF.md plus PostgreSQL/VPS remain authoritative; AgentMemory is retrieval context only.
 
-Super Admin → GitHub & Handoff target:
-- filtered AgentMemory health/state;
-- allowlisted audited actions: status, fixed recall smoke, handoff sync, restart;
-- no arbitrary shell/terminal and no Docker socket in the API container.
+## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
 
-Release gate for #192:
-1. Exact-head CI green.
-2. Merge tested head only.
-3. Deploy exact merge SHA.
-4. Verify Kitchen OS `/api/health`, schema/release, `DATA_INTEGRITY_OK`, production UI smoke.
-5. Verify AgentMemory authenticated liveness/health, loopback-only bind, persistent handoff seed and recall smoke.
-6. Then replace this ACTIVE block with verified-production closure.
+PR #188 is the resumed engineering workstream after AgentMemory production closure.
 
-PR #188 remains paused/non-production and must be rebased/revalidated after this AgentMemory recovery is closed.
+Observed state:
+- branch: `perf/inventory-database-load-20261003`;
+- head: `f76a851536562eb8e096615c54d3797a5b1de1bf`;
+- open, currently non-mergeable against current main;
+- current production/main runtime authority is `b61ef3837750a773294c1eb230bbb48393710cf3` / schema `031`;
+- PR #188 was built before the AgentMemory + GitHub/Handoff production changes and must not be merged in its stale state.
 
-Production authority remains verified runtime `337f5a2` / schema `031` until the hotfix production deploy is verified.
+Continuation rule:
+1. reconcile/rebase the Inventory performance changes onto current main without reintroducing superseded handoff/AgentMemory code;
+2. preserve PostgreSQL/VPS Inventory authority and existing mutation/realtime semantics;
+3. run exact-head static/API/PostgreSQL/browser/full-device CI;
+4. merge only the tested head;
+5. deploy exact merge SHA and require health/release, `DATA_INTEGRITY_OK`, production UI smoke and Inventory production audit before closure.
 
 ### Production data operation — Fuxing 大冷凍 stocktake, 2026-10-04
 
@@ -60,9 +66,9 @@ Production authority remains verified runtime `337f5a2` / schema `031` until the
 - The one-time transport workflow was removed from `main` immediately after success; production release/schema were not changed.
 - The first transport attempt run `37178235483` failed before database mutation because its payload was incomplete; it had no production data effect.
 
-## CURRENT VERIFIED PRODUCTION — Inventory compact Pick row + overflow hardening, 2026-10-02
+## VERIFIED PRODUCTION HISTORY — Inventory compact Pick row + overflow hardening, 2026-10-02
 
-This is the current Inventory UI continuation authority on schema 031.
+This remains verified Inventory UI history on schema 031; current runtime authority is recorded in the production closure above.
 
 Production:
 - PR #186 merged as `337f5a2f6a3b0bfa06916fede0b0336cee4018e2`;
