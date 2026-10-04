@@ -51,6 +51,9 @@ assert(browser.includes('performance.getEntriesByType("navigation").length'),"ma
 assert(browser.includes('page.on("pageerror"'),"main browser regression must collect page errors");
 assert(superBrowser.includes('page.on("pageerror"'),"Super Admin browser regression must collect page errors");
 assert(superBrowser.includes("page.reload"),"Super Admin browser regression must exercise reload persistence");
+assert(browser.includes('page.on("requestfailed"'),"main browser regression must catch same-origin API request failures");
+assert(browser.includes("response.status()>=500"),"main browser regression must catch same-origin API 5xx responses");
+assert(superBrowser.includes('page.on("requestfailed"'),"Super Admin regression must catch same-origin API request failures");
 
 const productionSha="b61ef3837750a773294c1eb230bbb48393710cf3";
 const handoff="# Handoff\n\n## CURRENT VERIFIED PRODUCTION\n- final production merge: " + String.fromCharCode(96) + productionSha + String.fromCharCode(96) + ";\n";
@@ -60,9 +63,12 @@ const liveGithub={
   active_pr:{number:999,title:"Harness test",head_sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",branch:"feat/test"},
   main:{sha:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
   current_handoff:{content:handoff},
+  changed_files:[{path:"src/admin-panel.js"},{path:"vps/backend/src/engineering-harness.mjs"}],
   workflows:[
     {id:1,name:"Deploy Kitchen OS to VPS",status:"completed",conclusion:"success",head_sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",run_number:1,url:"https://example.invalid/1"},
     {id:2,name:"Master Data and Admin Panel Regression",status:"completed",conclusion:"success",head_sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",run_number:2,url:"https://example.invalid/2"},
+    {id:3,name:"Super Admin Browser Regression",status:"completed",conclusion:"success",head_sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",run_number:3,url:"https://example.invalid/3"},
+    {id:4,name:"Isolated CI API Load Smoke",status:"completed",conclusion:"success",head_sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",run_number:4,url:"https://example.invalid/4"},
   ],
   main_workflows:[],
 };
@@ -71,6 +77,7 @@ assert.equal(green.gates.merge.status,"pass","all exact-head mandatory workflows
 assert.equal(green.gates.deploy.status,"blocked","active PR must never be treated as deployable branch");
 assert.equal(green.gates.production.status,"pass","recorded production SHA must match runtime release");
 assert.equal(green.quality_matrix.find((row)=>row.id==="controls")?.coverage,"partial","interaction coverage must not be overstated");
+assert.equal(green.quality_matrix.find((row)=>row.id==="api-failures")?.coverage,"covered","same-origin API failure diagnostics should be represented as covered");
 
 const failed=buildEngineeringHarnessState({
   liveGithub:{
