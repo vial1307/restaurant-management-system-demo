@@ -12,8 +12,7 @@ const response = await fetch("http://127.0.0.1:3111/agentmemory/search", {
     project:"kitchen-os",
     agentId:"kitchen-os-handoff-sync",
     limit:5,
-    format:"narrative",
-    token_budget:2000,
+    format:"compact",
   }),
 });
 
@@ -31,7 +30,7 @@ if (!results.length) {
   throw new Error("AGENTMEMORY_RECALL_EMPTY");
 }
 const joined = JSON.stringify(results);
-if (!joined.includes("Kitchen OS engineering memory snapshot")) {
+if (!results.some((row) => String(row?.title || "").includes("Kitchen OS engineering memory snapshot"))) {
   throw new Error(`AGENTMEMORY_RECALL_WRONG_SCOPE results=${joined.slice(0,1500)}`);
 }
 console.log(`AGENTMEMORY_RECALL_OK results=${results.length} first=${String(results[0]?.title || results[0]?.obsId || "").slice(0,140)}`);
