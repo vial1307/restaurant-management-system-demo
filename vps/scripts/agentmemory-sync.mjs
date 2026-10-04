@@ -28,6 +28,34 @@ const sources = [
     type:"preference",
     concepts:["kitchen-os","development-rules","safety","source-of-truth"],
   },
+  {
+    label:"ENGINEERING_CONTRACT.md",
+    path:"/workspace/docs/ENGINEERING_CONTRACT.md",
+    repoPath:"docs/ENGINEERING_CONTRACT.md",
+    type:"preference",
+    concepts:["kitchen-os","engineering-contract","definition-of-done","verification","safety"],
+  },
+  {
+    label:"AGENT_START_PROTOCOL.md",
+    path:"/workspace/docs/AGENT_START_PROTOCOL.md",
+    repoPath:"docs/AGENT_START_PROTOCOL.md",
+    type:"workflow",
+    concepts:["kitchen-os","agent-start","new-session","handoff","workflow"],
+  },
+  {
+    label:"FEATURE_REGISTRY.md",
+    path:"/workspace/docs/FEATURE_REGISTRY.md",
+    repoPath:"docs/FEATURE_REGISTRY.md",
+    type:"architecture",
+    concepts:["kitchen-os","feature-registry","authority","invariants","modules"],
+  },
+  {
+    label:"VERIFICATION_MATRIX.md",
+    path:"/workspace/docs/VERIFICATION_MATRIX.md",
+    repoPath:"docs/VERIFICATION_MATRIX.md",
+    type:"workflow",
+    concepts:["kitchen-os","verification-matrix","browser","persistence","rbac","release-gate"],
+  },
 ];
 
 let state = {};
