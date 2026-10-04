@@ -1,20 +1,18 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — Inventory Database load performance, 2026-10-03
+## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
 
+- `ACTIVE_PR: #188` is now declared in `docs/CURRENT_HANDOFF.md` on main so Live Handoff and Super Admin resolve the same current workstream.
 - Branch: `perf/inventory-database-load-20261003`.
-- Production runtime baseline: `850d99e1a651bed80586a3a6d1371896f0a12074`, schema 031.
-- Super Admin Database base snapshot cache: 12 seconds, site-scoped and user-scoped.
-- History / Integrity supplemental cache: 30 seconds and lazy by tab.
-- Items / Locations / Stock tab switches reuse fresh data with no database HTTP refetch.
-- One combined base endpoint replaces separate Inventory + Master Data HTTP requests.
-- Main Inventory boot skips the duplicate first SSE-ready forced hydration; reconnects still reconcile.
-- Rendering uses Map indexes for item/location/stock/work-area lookups.
-- Backend site filtering is aligned with the existing PostgreSQL expression index.
-- Same-client realtime invalidations are suppressed after explicit mutation reconciliation.
-- Timing is surfaced in the Super Admin Database UI and by `Server-Timing`.
-- No Inventory business semantics or schema authority change.
-- NEXT: exact-head CI → merge → production deploy/smoke/audit.
+- Latest observed head during this update: `13dce345947d7a0ae0c9046799d21efed2b715d6`.
+- PASS: Super Admin Browser Regression #311.
+- PASS: Isolated CI API Load Smoke #601.
+- PASS: Master Data and Admin Panel Regression #379.
+- PASS: Workforce Approval Regression Diagnostic #466.
+- FAIL: Deploy Kitchen OS pull-request run #1097 / `37144352017`; preflight passed, regression failed on a WebKit mobile CORS/page-error for `/api/inventory/fuxing`, deploy/smoke skipped.
+- PR #188 is not production yet.
+- Super Admin → GitHub & Handoff should now display PR #188 live through the GitHub handoff API; no static branch/head hard-code is required.
+- NEXT: exact-head regression green → merge → production deploy/health/data-integrity/UI smoke/audit → close ACTIVE status.
 
 ## DONE — Inventory compact Pick row + overflow hardening, 2026-10-02
 
