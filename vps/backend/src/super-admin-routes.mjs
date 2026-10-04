@@ -826,9 +826,10 @@ export async function registerSuperAdminRoutes(app) {
 
   app.get("/api/admin/super/development-status", async (request, reply) => {
     const user = await superUser(request, reply); if (!user) return;
+    const forceGithub=["1","true","yes"].includes(String(request.query?.refresh || "").toLowerCase());
     const [migration,liveGithub] = await Promise.all([
       pool.query("select version,filename,applied_at from public.schema_migrations order by version desc limit 1"),
-      getLiveGitHubHandoff(),
+      getLiveGitHubHandoff({ force:forceGithub }),
     ]);
     const schema = migration.rows[0] || null;
     const release = process.env.APP_RELEASE || "dev";
