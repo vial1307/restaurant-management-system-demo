@@ -63,7 +63,12 @@ function attachRuntimeDiagnostics(page, errors, prefix="") {
   };
   page.on("pageerror",(error)=>errors.push(`${prefix}pageerror: ${error.message}`));
   page.on("requestfailed",(request)=>{
-    if(isSameOriginApi(request.url()))errors.push(`${prefix}api request failed: ${request.method()} ${request.url()} ${request.failure()?.errorText||""}`);
+    if(!isSameOriginApi(request.url()))return;
+    const parsed=new URL(request.url());
+    const errorText=request.failure()?.errorText||"";
+    const expectedStreamAbort=parsed.pathname==="/api/inventory/events" && /ERR_ABORTED|NS_BINDING_ABORTED|cancel/i.test(errorText);
+    if(expectedStreamAbort)return;
+    errors.push(`${prefix}api request failed: ${request.method()} ${request.url()} ${errorText}`);
   });
   page.on("response",(response)=>{
     if(isSameOriginApi(response.url())&&response.status()>=500)errors.push(`${prefix}api ${response.status()}: ${response.request().method()} ${response.url()}`);
