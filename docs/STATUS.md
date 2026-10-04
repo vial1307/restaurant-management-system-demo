@@ -1,5 +1,16 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #191 AgentMemory VPS + Super Admin handoff, 2026-10-04
+
+- Active authority is now `ACTIVE_PR: #191` in `docs/CURRENT_HANDOFF.md`.
+- Adds a pinned `@agentmemory/agentmemory@0.9.29` service on the VPS with persistent state and a VPS-only bearer secret.
+- Runtime starts in keyless/BM25 mode; LLM compression/context injection are disabled.
+- AgentMemory REST/viewer are not published through Caddy or Docker port mappings; deploy rejects a public REST bind.
+- Handoff seed is content-hash idempotent and includes CURRENT_HANDOFF / STATUS / DEVELOPMENT_RULES.
+- Super Admin → GitHub & Handoff receives filtered health plus audited status/sync/restart controls through the existing host-action queue.
+- GitHub/PostgreSQL/VPS remain authoritative; AgentMemory is retrieval context only.
+- NEXT: exact-head CI → merge → exact production deploy → verify AgentMemory loopback/health/persistence + Kitchen OS data integrity/UI smoke.
+
 ## DONE — Fuxing 大冷凍 production stocktake, 2026-10-04
 
 - PostgreSQL production data operation completed for `fuxing-large-freezer`.
@@ -13,9 +24,9 @@
 - No runtime source/migration was used as quantity authority; the one-time transport workflow was removed after success.
 - Production release remains the verified `337f5a2` / schema `031`; this was data-only and did not deploy application code.
 
-## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
+## PAUSED — PR #188 Inventory Database performance, 2026-10-04
 
-- `ACTIVE_PR: #188` is now declared in `docs/CURRENT_HANDOFF.md` on main so Live Handoff and Super Admin resolve the same current workstream.
+- PR #188 remains open but is paused/non-production while PR #191 is the explicit active authority. It must be rebased and revalidated before any later merge.
 - Branch: `perf/inventory-database-load-20261003`.
 - Latest observed head during this update: `13dce345947d7a0ae0c9046799d21efed2b715d6`.
 - PASS: Super Admin Browser Regression #311.

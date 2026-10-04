@@ -99,6 +99,7 @@ jobs:
           for file in vps/backend/src/*.mjs vps/backend/scripts/*.mjs; do
             node --check "$file"
           done
+          node --check vps/scripts/agentmemory-sync.mjs
 
       - name: Validate VPS shell scripts
         run: bash -n vps/scripts/*.sh
@@ -113,6 +114,10 @@ jobs:
           grep -q "FORMAT_VERSION=1" "$tmp_dir/runtime/host-metrics.env"
           grep -q "DISK_ROOT_TOTAL_BYTES=" "$tmp_dir/runtime/host-metrics.env"
           grep -q "INODE_TOTAL=" "$tmp_dir/runtime/host-metrics.env"
+          test -s "$tmp_dir/runtime/agentmemory-health.json"
+
+      - name: Build pinned AgentMemory runtime image
+        run: docker build --build-arg AGENTMEMORY_VERSION=0.9.29 -t kitchen-agentmemory-ci vps/agentmemory
 
       - name: Validate Caddy configuration
         run: |
@@ -137,6 +142,9 @@ jobs:
           test -f vps/scripts/deploy-api.sh
           test -f vps/scripts/admin-action-runner.sh
           test -f vps/scripts/install-admin-action-runner.sh
+          test -f vps/scripts/install-agentmemory.sh
+          test -f vps/scripts/agentmemory-sync.mjs
+          test -f vps/agentmemory/Dockerfile
           test -f vps/scripts/stamp-frontend-release.mjs
           test -f vps/scripts/backup.sh
           test -f vps/scripts/migrate.sh

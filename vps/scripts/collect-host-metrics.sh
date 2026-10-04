@@ -7,9 +7,11 @@ OUT="${RUNTIME_DIR}/host-metrics.env"
 STATE="${RUNTIME_DIR}/host-metrics.state"
 TMP="${OUT}.tmp"
 STATE_TMP="${STATE}.tmp"
+AGENTMEMORY_HEALTH="${RUNTIME_DIR}/agentmemory-health.json"
+AGENTMEMORY_HEALTH_TMP="${AGENTMEMORY_HEALTH}.tmp"
 
 cleanup_metrics_tmp() {
-  rm -f "${TMP}" "${STATE_TMP}" "${TMP}.network" "${TMP}.services"
+  rm -f "${TMP}" "${STATE_TMP}" "${TMP}.network" "${TMP}.services" "${AGENTMEMORY_HEALTH_TMP}"
 }
 trap 'code=$?; echo "HOST_METRICS_COLLECTOR_FAILED line=${LINENO} command=${BASH_COMMAND}" >&2; exit "${code}"' ERR
 trap cleanup_metrics_tmp EXIT
@@ -124,7 +126,7 @@ while IFS= read -r iface; do
   net_count=$((net_count + 1))
 done < <(find /sys/class/net -mindepth 1 -maxdepth 1 -printf '%f\n' 2>/dev/null | sort)
 
-service_names=(kitchen-os-api kitchen-os-db kitchen-os-web)
+service_names=(kitchen-os-api kitchen-os-db kitchen-os-web kitchen-agentmemory)
 service_count=0
 : > "${TMP}.services"
 for service in "${service_names[@]}"; do
@@ -140,6 +142,15 @@ for service in "${service_names[@]}"; do
     "${service_count}" "$(safe_text "${health}")" >> "${TMP}.services"
   service_count=$((service_count + 1))
 done
+
+if curl -fsS --max-time 4 http://127.0.0.1:3111/agentmemory/health > "${AGENTMEMORY_HEALTH_TMP}" 2>/dev/null; then
+  chmod 0644 "${AGENTMEMORY_HEALTH_TMP}"
+  mv -f "${AGENTMEMORY_HEALTH_TMP}" "${AGENTMEMORY_HEALTH}"
+else
+  printf '{"status":"unavailable","captured_at":"%s"}\n' "${generated_at}" > "${AGENTMEMORY_HEALTH_TMP}"
+  chmod 0644 "${AGENTMEMORY_HEALTH_TMP}"
+  mv -f "${AGENTMEMORY_HEALTH_TMP}" "${AGENTMEMORY_HEALTH}"
+fi
 
 os_pretty="$(. /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-unknown}")"
 os_version="$(. /etc/os-release 2>/dev/null; printf '%s' "${VERSION_ID:-unknown}")"
