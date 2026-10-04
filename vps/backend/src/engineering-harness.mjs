@@ -6,12 +6,35 @@ const REQUIRED_WORKFLOWS = Object.freeze([
     name:"Deploy Kitchen OS to VPS",
     label:"Full regression / release gate",
     purpose:"Preflight + PostgreSQL/API + browser/full-device regression. On main, this workflow also performs the VPS deployment.",
+    always:true,
   },
   {
     id:"master-admin",
     name:"Master Data and Admin Panel Regression",
     label:"Master Data + Super Admin",
     purpose:"Protects Super Admin and master-data/database management surfaces.",
+    paths:["src/admin-panel","src/admin-panel-inventory","vps/backend/","docs/ENGINEERING_","docs/AGENT_START_","docs/FEATURE_REGISTRY","docs/VERIFICATION_MATRIX"],
+  },
+  {
+    id:"super-admin-browser",
+    name:"Super Admin Browser Regression",
+    label:"Super Admin browser behavior",
+    purpose:"Verifies protected Super Admin behavior on real browser/device profiles.",
+    paths:[".admindev.html","src/admin-panel","vps/backend/src/super-admin","vps/backend/src/engineering-harness"],
+  },
+  {
+    id:"api-load",
+    name:"Isolated CI API Load Smoke",
+    label:"API load / isolation smoke",
+    purpose:"Protects backend/API startup and isolated load behavior.",
+    paths:["vps/backend/"],
+  },
+  {
+    id:"workforce-approval",
+    name:"Workforce Approval Regression Diagnostic",
+    label:"Workforce approval diagnostic",
+    purpose:"Required only when workforce approval/request paths are changed.",
+    paths:["src/workforce","vps/backend/src/workforce","workforce"],
   },
 ]);
 
@@ -22,7 +45,7 @@ const QUALITY_MATRIX = Object.freeze([
   { id:"lists",label:"Lists / filter / sort / pagination",coverage:"partial",workflow:"Deploy Kitchen OS to VPS",evidence:"Module-specific coverage; changed list behavior must add/extend an assertion" },
   { id:"reload",label:"Unexpected SPA reload",coverage:"partial",workflow:"Deploy Kitchen OS to VPS",evidence:"Inventory warehouse switch currently asserts no full-document reload" },
   { id:"page-errors",label:"Page crash / uncaught JS",coverage:"covered",workflow:"Deploy Kitchen OS to VPS",evidence:"Browser and Super Admin pageerror collection" },
-  { id:"api-failures",label:"Same-origin API failures",coverage:"partial",workflow:"Deploy Kitchen OS to VPS",evidence:"Critical mutation response assertions; changed API path must be asserted" },
+  { id:"api-failures",label:"Same-origin API failures",coverage:"covered",workflow:"Deploy Kitchen OS to VPS",evidence:"Browser diagnostics fail on same-origin API 5xx/request failure plus critical mutation response assertions" },
   { id:"console",label:"Console error monitoring",coverage:"partial",workflow:"Deploy Kitchen OS to VPS",evidence:"Not globally enforced on every surface; add targeted monitoring where relevant" },
   { id:"persistence",label:"Persistence / F5",coverage:"partial",workflow:"Deploy Kitchen OS to VPS",evidence:"RBAC/master-data reload checks + DB round trips; every changed mutation needs proof" },
   { id:"sync",label:"Cross-view / realtime sync",coverage:"partial",workflow:"Deploy Kitchen OS to VPS",evidence:"Inventory/master-data peer/realtime coverage; expand for changed entities" },
@@ -81,6 +104,17 @@ function latestWorkflow(runs,name) {
   return (Array.isArray(runs) ? runs : []).find((run)=>value(run?.name)===name) || null;
 }
 
+function workflowApplies(spec,changedFiles,activePr) {
+  if (!activePr) return Boolean(spec.always);
+  if (spec.always) return true;
+  const paths=(Array.isArray(changedFiles) ? changedFiles : [])
+    .map((entry)=>value(typeof entry==="string" ? entry : entry?.path))
+    .filter(Boolean);
+  if (!paths.length) return true;
+  const prefixes=Array.isArray(spec.paths) ? spec.paths : [];
+  return prefixes.some((prefix)=>paths.some((path)=>path.includes(prefix)));
+}
+
 export function extractVerifiedProductionSha(content) {
   const source=String(content || "");
   const patterns=[
@@ -102,21 +136,27 @@ export function buildEngineeringHarnessState({ liveGithub=null,release="",schema
   const mainRuns=Array.isArray(github.main_workflows) ? github.main_workflows : [];
   const gateRuns=activePr ? activeRuns : mainRuns;
 
-  const requiredWorkflows=REQUIRED_WORKFLOWS.map((spec)=>{
-    const run=latestWorkflow(gateRuns,spec.name);
-    return {
-      ...spec,
-      status:runState(run),
-      run:run ? {
-        id:run.id,
-        run_number:run.run_number,
-        head_sha:value(run.head_sha),
-        status:value(run.status),
-        conclusion:run.conclusion || null,
-        url:value(run.url),
-      } : null,
-    };
-  });
+  const changedFiles=Array.isArray(github.changed_files) ? github.changed_files : [];
+  const requiredWorkflows=REQUIRED_WORKFLOWS
+    .filter((spec)=>workflowApplies(spec,changedFiles,activePr))
+    .map((spec)=>{
+      const run=latestWorkflow(gateRuns,spec.name);
+      return {
+        id:spec.id,
+        name:spec.name,
+        label:spec.label,
+        purpose:spec.purpose,
+        status:runState(run),
+        run:run ? {
+          id:run.id,
+          run_number:run.run_number,
+          head_sha:value(run.head_sha),
+          status:value(run.status),
+          conclusion:run.conclusion || null,
+          url:value(run.url),
+        } : null,
+      };
+    });
 
   const anyFail=requiredWorkflows.some((row)=>row.status==="fail");
   const allPass=requiredWorkflows.length>0 && requiredWorkflows.every((row)=>row.status==="pass");
