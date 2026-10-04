@@ -10,6 +10,7 @@ const routes=read("vps/backend/src/super-admin-routes.mjs");
 const panel=read("src/admin-panel.js");
 const page=read("handoff.html");
 const status=read("vps/backend/src/development-status.mjs");
+const handoffWorkflow=read(".github/workflows/engineering-handoff-regression.yml");
 
 assert.match(feed,/PUBLIC_HANDOFF_URL = "https:\/\/vial1307\.github\.io\/restaurant-management-system-demo\/handoff\.html"/);
 assert.match(feed,/CACHE_TTL_MS = 5 \* 60 \* 1000/);
@@ -25,6 +26,12 @@ assert.match(feed,/main_workflows:mainRuns/);
 assert.match(feed,/workflowGateSummary/);
 assert.match(feed,/workflow_summary:workflowGateSummary\(runs/);
 assert.match(feed,/main_workflow_summary:workflowGateSummary\(mainRuns/);
+assert.match(feed,/latestSuccessfulWorkflow/);
+assert.match(feed,/deploy-vps\.yml/);
+assert.match(feed,/inventory-site-production-audit\.yml/);
+assert.match(feed,/production_workflows:\{/);
+assert.match(feed,/deploy:productionDeploy/);
+assert.match(feed,/inventory_audit:inventoryAudit/);
 assert.match(feed,/latestByName/,"workflow dashboard must collapse obsolete reruns by workflow name");
 assert.match(feed,/\/actions\/runs\?branch=main/);
 assert.match(feed,/changed_files:files/);
@@ -48,7 +55,10 @@ assert.match(panel,/CI exact-head hiện tại/);
 assert.match(panel,/data-workflow-dashboard/);
 assert.match(panel,/workflow_summary/);
 assert.match(panel,/main_workflow_summary/);
-assert.match(panel,/Runtime ↔ main/,"Super Admin must distinguish deployed runtime from documentation-only/newer main commits");
+assert.match(panel,/Production deploy/,"Super Admin must show the latest successful production deploy workflow");
+assert.match(panel,/Inventory audit/,"Super Admin must show the latest successful Inventory audit workflow");
+assert.match(panel,/Runtime ↔ deploy/,"Super Admin must compare runtime release with deployed workflow evidence");
+assert.match(panel,/production_workflows/);
 assert.match(panel,/development-status\?refresh=1/);
 assert.match(panel,/live_github/);
 
@@ -71,5 +81,12 @@ assert.match(status,/canonical_handoff:\{/);
 assert.match(status,/url:PUBLIC_HANDOFF_URL/);
 assert.match(status,/workflow_run_id:"\d+"/);
 assert.match(status,/inventory_audit_run_id:"\d+"/);
+
+assert.match(handoffWorkflow,/name: Engineering Handoff Regression/);
+assert.match(handoffWorkflow,/pull_request:/);
+assert.match(handoffWorkflow,/push:/);
+assert.match(handoffWorkflow,/node tests\/live-handoff-contract-regression\.mjs/);
+assert.match(handoffWorkflow,/node tests\/admin-panel-static-regression\.mjs/);
+assert.match(handoffWorkflow,/node tests\/admin-panel-ui-v2-static-regression\.mjs/);
 
 console.log("LIVE_HANDOFF_CONTRACT_OK");
