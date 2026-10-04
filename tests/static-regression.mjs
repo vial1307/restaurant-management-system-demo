@@ -181,6 +181,10 @@ assert.match(app, /function renderWhenAuthorized\(\)/, "application rendering mu
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not rerender the full page");
 assert.match(app, /shitu:inventory-cloud-updated/, "actual inventory changes must still refresh the page");
 assert.doesNotMatch(read("src/auth-layer.js"), /data-warehouse[\s\S]{0,500}location\.reload\(\)/, "switching warehouses must not reload the entire application");
+const authLayerSwitching = read("src/auth-layer.js");
+assert.match(authLayerSwitching, /document\.addEventListener\("click"[\s\S]{0,700}\.warehouse-switch \[data-warehouse\][\s\S]{0,500}switchWarehouse\(/, "warehouse switching must use stable delegated click handling across rerenders");
+assert.doesNotMatch(authLayerSwitching, /content\.querySelectorAll\("\[data-warehouse\]"\)\.forEach\(b => b\.onclick/, "central warehouse buttons must not rely on transient per-node onclick bindings");
+assert.doesNotMatch(authLayerSwitching, /heading\.querySelectorAll\("\[data-warehouse\]"\)\.forEach[\s\S]{0,180}addEventListener\("click"/, "branch warehouse buttons must not rely on post-render per-node click bindings");
 
 const accountAdmin = read("src/account-admin.js");
 const authBridge = read("src/vps-auth-bridge.js");
