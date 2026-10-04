@@ -1,0 +1,47 @@
+name: One-time AgentMemory Handoff Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/one-time-agentmemory-handoff-sync.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Sync canonical handoff into private AgentMemory
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          REPO=/opt/kitchen-os/repo
+          cd "$REPO"
+          git fetch --prune origin main
+          git reset --hard origin/main
+          echo "VPS_REPO_HEAD=$(git rev-parse HEAD)"
+          docker exec kitchen-agentmemory node /workspace/vps/scripts/agentmemory-sync.mjs
+          docker exec kitchen-agentmemory node /workspace/vps/scripts/agentmemory-verify.mjs
+          curl -fsS http://127.0.0.1:8080/api/health
+          echo
+          REMOTE
