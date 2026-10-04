@@ -6,10 +6,10 @@ function github(path = "") {
 }
 
 export const DEVELOPMENT_STATUS = Object.freeze({
-  updated_at:"2026-09-25",
-  phase:"super-admin-account-scope",
+  updated_at:"2026-10-05",
+  phase:"engineering-harness-control-plane",
   status:"in_progress",
-  headline:"Production #843 đã verified trên schema 024. Đang sửa lỗi INVALID_LOCATION khi đổi Role/chi nhánh trong Super Admin; chờ CI của PR #140.",
+  headline:"Live GitHub handoff is primary. Engineering Harness enforces new-session startup, exact-head verification and production evidence.",
   repository:{
     name:"vial1307/restaurant-management-system-demo",
     url:REPOSITORY_URL,
@@ -46,6 +46,10 @@ export const DEVELOPMENT_STATUS = Object.freeze({
   },
   documents:[
     { label:"CURRENT_HANDOFF.md", purpose:"Trạng thái chuẩn và invariant để dev tiếp quản", url:github("/blob/main/docs/CURRENT_HANDOFF.md") },
+    { label:"ENGINEERING_CONTRACT.md", purpose:"Definition of Done, exact-head/reload/persistence/RBAC rules", url:github("/blob/main/docs/ENGINEERING_CONTRACT.md") },
+    { label:"AGENT_START_PROTOCOL.md", purpose:"Protocol bắt buộc cho chat/agent mới trước khi code", url:github("/blob/main/docs/AGENT_START_PROTOCOL.md") },
+    { label:"FEATURE_REGISTRY.md", purpose:"Map feature -> authority -> invariants -> minimum verification", url:github("/blob/main/docs/FEATURE_REGISTRY.md") },
+    { label:"VERIFICATION_MATRIX.md", purpose:"Coverage matrix cho buttons/list/reload/API/F5/RBAC/browser/production", url:github("/blob/main/docs/VERIFICATION_MATRIX.md") },
     { label:"WORK_LOG.md", purpose:"Nhật ký sửa lỗi / CI / deploy", url:github("/blob/main/docs/WORK_LOG.md") },
     { label:"STATUS.md", purpose:"Workboard ngắn hạn / việc đang làm", url:github("/blob/main/docs/STATUS.md") },
     { label:"DEVELOPMENT_RULES.md", purpose:"Quy tắc bắt buộc trước khi code", url:github("/blob/main/docs/DEVELOPMENT_RULES.md") },

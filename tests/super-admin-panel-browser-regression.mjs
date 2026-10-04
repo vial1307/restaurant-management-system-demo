@@ -22,6 +22,30 @@ const PROFILES = [
 
 const ENGINES = { chromium, webkit };
 
+function attachRuntimeDiagnostics(page, errors) {
+  const origin=new URL(BASE).origin;
+  const isSameOriginApi=(url)=>{
+    try {
+      const parsed=new URL(url);
+      return parsed.origin===origin && parsed.pathname.startsWith("/api/");
+    } catch {
+      return false;
+    }
+  };
+  page.on("pageerror",(error)=>errors.push(`pageerror: ${error.message}`));
+  page.on("requestfailed",(request)=>{
+    if(!isSameOriginApi(request.url()))return;
+    const parsed=new URL(request.url());
+    const errorText=request.failure()?.errorText||"";
+    const expectedStreamAbort=parsed.pathname==="/api/inventory/events" && /ERR_ABORTED|NS_BINDING_ABORTED|cancel/i.test(errorText);
+    if(expectedStreamAbort)return;
+    errors.push(`api request failed: ${request.method()} ${request.url()} ${errorText}`);
+  });
+  page.on("response",(response)=>{
+    if(isSameOriginApi(response.url())&&response.status()>=500)errors.push(`api ${response.status()}: ${response.request().method()} ${response.url()}`);
+  });
+}
+
 async function login(context, username) {
   const response = await context.request.post(`${API_BASE}/api/auth/login`, {
     data:{ username, password:PASSWORD },
@@ -133,7 +157,7 @@ async function runSuperAdminProfile(profile) {
   });
   const page = await context.newPage();
   const pageErrors = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  attachRuntimeDiagnostics(page,pageErrors);
 
   try {
     console.log("SUPER_ADMIN_DEVICE_START", profile.name);
@@ -157,13 +181,19 @@ async function runSuperAdminProfile(profile) {
 
     await gotoSection(page, "development");
     await page.locator(".sa-dev-summary").waitFor({ state:"visible", timeout:15000 });
+    await page.locator("[data-engineering-harness]").waitFor({ state:"visible", timeout:15000 });
+    await page.locator("[data-verification-matrix]").waitFor({ state:"visible", timeout:15000 });
+    assert.match(await page.locator("[data-engineering-harness]").textContent(), /Engineering Harness|Merge gate|Deploy gate|Production|Definition of Done/);
+    assert((await page.locator("[data-verification-matrix] tbody tr").count()) >= 10, "verification matrix is unexpectedly incomplete");
+    assert.match(await page.locator("[data-verification-matrix]").textContent(), /COVERED|PARTIAL/);
+    await page.locator("[data-copy-engineering-start]").waitFor({ state:"visible", timeout:10000 });
+    assert.equal(await page.locator("[data-copy-engineering-start]").isEnabled(),true,"new-chat start packet action disabled");
     assert.match(await page.locator(".sa-content").textContent(), /GitHub|Handoff|Current work|Công việc hiện tại/);
     assert.match(await page.locator(".sa-content").textContent(), /Live production|Production hiện tại/);
     assert((await page.locator('.sa-dev-link[href*="github.com/vial1307/restaurant-management-system-demo"]').count()) >= 3, `${profile.name}: handoff GitHub links missing`);
-    assert.match(
-      await page.locator(".sa-dev-stop").textContent(),
-      /Release #\d+|Inventory|schedule|relational|schema 0\d+|site isolation|relocation|branch switching/i
-    );
+    const stoppingPointText = String(await page.locator(".sa-dev-stop").textContent() || "").trim();
+    assert(stoppingPointText.length >= 20, `${profile.name}: current stopping point is missing or too short`);
+    assert.notEqual(stoppingPointText, "—", `${profile.name}: current stopping point must not be a placeholder`);
     await assertFit(page, `${profile.name} development handoff`);
 
     await gotoSection(page, "users");

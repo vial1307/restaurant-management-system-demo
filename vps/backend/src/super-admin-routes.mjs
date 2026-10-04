@@ -5,6 +5,7 @@ import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser } from "./auth.mjs";
 import { DEVELOPMENT_STATUS } from "./development-status.mjs";
 import { getLiveGitHubHandoff, PUBLIC_HANDOFF_URL } from "./github-handoff.mjs";
+import { buildEngineeringHarnessState } from "./engineering-harness.mjs";
 
 const CODE_RE = /^[a-z][a-z0-9._-]{1,39}$/;
 const DATASETS = {
@@ -876,6 +877,7 @@ export async function registerSuperAdminRoutes(app) {
     const releaseUrl = release && release !== "dev" ? `${repositoryUrl}/commit/${encodeURIComponent(release)}` : repositoryUrl;
     const activePr = liveGithub?.active_pr || null;
     const liveMain = liveGithub?.main || null;
+    const engineeringHarness = buildEngineeringHarnessState({ liveGithub,release,schema });
     const liveHandoff = liveGithub?.current_handoff || null;
     const mainSha = liveMain?.sha || release;
     const mainUrl = liveMain?.commit_url || releaseUrl;
@@ -923,6 +925,7 @@ export async function registerSuperAdminRoutes(app) {
       current_work:activeWork,
       live_github:liveGithub,
       agent_memory:agentMemory,
+      engineering_harness:engineeringHarness,
       live_production:{
         release,
         schema:schema?.version || null,

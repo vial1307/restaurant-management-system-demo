@@ -1,6 +1,46 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #188
+ACTIVE_PR: #196
+
+## ACTIVE — PR #196 Engineering Harness / Coding Control Plane, 2026-10-05
+
+Purpose:
+- make Super Admin → GitHub & Handoff the engineering control plane for a new chat/dev with no prior context;
+- define mandatory Engineering Contract, Agent Start Protocol, Feature Registry and Verification Matrix;
+- derive Merge/Deploy/Production/Definition-of-Done gates from live GitHub exact-head evidence plus VPS runtime release;
+- expose verification coverage without promoting PARTIAL areas to PASS;
+- seed the engineering standards into AgentMemory as project-scoped recall context.
+
+Scope:
+- docs + Super Admin engineering UI + protected development-status metadata + CI contract regression;
+- no Inventory/business handler rewrite;
+- no PostgreSQL schema/data/RBAC mutation;
+- no mutable business configuration hard-coded into frontend;
+- PostgreSQL/VPS remains runtime business-data authority; GitHub CURRENT_HANDOFF remains engineering workstream authority.
+
+New mandatory files:
+- `docs/ENGINEERING_CONTRACT.md`
+- `docs/AGENT_START_PROTOCOL.md`
+- `docs/FEATURE_REGISTRY.md`
+- `docs/VERIFICATION_MATRIX.md`
+
+New Super Admin behavior:
+- Engineering Harness panel under GitHub & Handoff;
+- Merge gate driven by exact active-PR workflow results;
+- Deploy gate blocks branch deploy before merge;
+- Production gate compares runtime release against verified production SHA recorded in CURRENT_HANDOFF;
+- one-click "new-chat start packet";
+- verification matrix for controls/lists/reload/page errors/API/F5/RBAC/responsive/full-device/production evidence.
+
+Release gate:
+1. exact PR #196 head must pass `Deploy Kitchen OS to VPS` and `Master Data and Admin Panel Regression`;
+2. merge only that tested head;
+3. deploy exact merge SHA;
+4. require release/schema health, `DATA_INTEGRITY_OK`, production UI smoke and existing post-deploy audits;
+5. confirm AgentMemory seeds/recalls the new engineering-standard documents;
+6. then close #196 and resume PR #188 only after rebasing it onto the new main.
+
+PR #188 remains open but is **paused/non-production** while #196 is the explicit active engineering workstream.
 
 ## CURRENT VERIFIED PRODUCTION — AgentMemory private dev memory + recall, 2026-10-04
 
@@ -35,9 +75,9 @@ AgentMemory production contract:
 - browser/API never receives the bearer secret; Super Admin receives filtered health and uses fixed audited host actions only;
 - GitHub CURRENT_HANDOFF.md plus PostgreSQL/VPS remain authoritative; AgentMemory is retrieval context only.
 
-## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
+## PAUSED — PR #188 Inventory Database performance, 2026-10-04
 
-PR #188 is the resumed engineering workstream after AgentMemory production closure.
+PR #188 is temporarily paused while PR #196 installs the Engineering Harness control plane. It must be rebased/revalidated against the new main before any later merge.
 
 Observed state:
 - branch: `perf/inventory-database-load-20261003`;
