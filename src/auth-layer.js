@@ -250,6 +250,18 @@ async function switchWarehouse(button, { centralContent = null } = {}) {
   }
 }
 
+function delegatedWarehouseContent(button) {
+  if (!button?.closest?.("[data-central-kitchen-shell]")) return null;
+  return button.closest(".page-content");
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target?.closest?.(".warehouse-switch [data-warehouse]");
+  if (!button || button.disabled) return;
+  event.preventDefault();
+  void switchWarehouse(button, { centralContent:delegatedWarehouseContent(button) });
+});
+
 function centralSiteRecord() {
   return inventorySites().find((site) => site.code === "central") || null;
 }
@@ -1086,9 +1098,6 @@ function bindCentral(user) {
     await syncInventoryNow("central",{reloadBranch:false,force:true});
     alert("盤點調整失敗，已重新載入資料庫實際數量。");
   });
-  content.querySelectorAll("[data-warehouse]").forEach(b => b.onclick = () => {
-    void switchWarehouse(b, { centralContent:content });
-  });
 }
 
 let patching = false;
@@ -1145,9 +1154,6 @@ function applyAccess() {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
         heading.insertAdjacentHTML("beforeend", branchSwitcher(user,selectedSite));
-        heading.querySelectorAll("[data-warehouse]").forEach((button)=>button.addEventListener("click",()=>{
-          void switchWarehouse(button);
-        }));
       }
     }
   } finally {
