@@ -130,6 +130,21 @@ async function siteSnapshot(site, includeInactive) {
   };
 }
 
+export async function readMasterDataSnapshotForUser(user, site, { includeInactiveRequested = false } = {}) {
+  const manageLocations = canManageLocations(user, site);
+  const manageWorkAreas = canManageWorkAreas(user, site);
+  const includeInactive = Boolean(includeInactiveRequested) && (manageLocations || manageWorkAreas || canManageAll(user));
+  const snapshot = await siteSnapshot(site, includeInactive);
+  return {
+    ...snapshot,
+    permissions:{
+      manageAll:canManageAll(user),
+      manageLocations,
+      manageWorkAreas,
+    },
+  };
+}
+
 async function assertLocationCanChangeKind(client, locationId) {
   const [stock, defaults] = await Promise.all([
     client.query(
@@ -208,19 +223,7 @@ export async function registerMasterDataRoutes(app) {
     if (!(await requireSiteRead(user, site, reply))) return;
 
     const includeInactiveRequested = ["1", "true", "yes"].includes(text(request.query?.includeInactive).toLowerCase());
-    const manageLocations = canManageLocations(user, site);
-    const manageWorkAreas = canManageWorkAreas(user, site);
-    const includeInactive = includeInactiveRequested && (manageLocations || manageWorkAreas || canManageAll(user));
-    const snapshot = await siteSnapshot(site, includeInactive);
-
-    return {
-      ...snapshot,
-      permissions: {
-        manageAll: canManageAll(user),
-        manageLocations,
-        manageWorkAreas,
-      },
-    };
+    return readMasterDataSnapshotForUser(user,site,{ includeInactiveRequested });
   });
 
   app.post("/api/master-data/locations", async (request, reply) => {
