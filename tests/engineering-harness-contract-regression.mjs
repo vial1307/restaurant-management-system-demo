@@ -22,12 +22,13 @@ for(const phrase of [
 ]) assert(contract.toLowerCase().includes(phrase.toLowerCase()),"Engineering Contract missing: "+phrase);
 
 for(const phrase of [
-  "Resolve the active PR",
   "Baseline before modification",
   "Verify the user path",
   "Exact-head gate",
   "Production gate",
 ]) assert(start.toLowerCase().includes(phrase.toLowerCase()),"Agent Start Protocol missing: "+phrase);
+assert(start.includes("ACTIVE_PR"),"Agent Start Protocol must resolve ACTIVE_PR explicitly");
+assert(start.toLowerCase().includes("do not infer the active pr from recency"),"Agent Start Protocol must forbid choosing an active PR by recency");
 
 for(const feature of ["Inventory / Kho","Users / RBAC","Super Admin","GitHub & Handoff","AgentMemory","Deployment"]){
   assert(registry.includes(feature),"Feature Registry missing "+feature);
