@@ -1,30 +1,24 @@
 # Kitchen OS Work Log
 
-## 2026-10-03 — Inventory Database performance candidate
+## 2026-10-04 — GitHub workflow + Super Admin handoff authority updated
 
-- User requested page-load optimization, especially the Inventory Database.
-- Audited current production and found:
-  - normal Inventory already has short burst caches, realtime SSE and 60-second visible-only polling;
-  - Super Admin Inventory Database still fetched base Inventory + Master Data on every main tab switch;
-  - initial Inventory boot hydrated once, then the first SSE `ready` forced the same base data again;
-  - Super Admin rendering repeatedly scanned stock/items/locations for per-row lookups;
-  - backend site reads used prefix `LIKE 'site:%'` despite an existing schema-031 expression index on site identity.
-- Created `perf/inventory-database-load-20261003`.
-- Implemented site/user-scoped memory cache in `src/admin-inventory-database.js`:
-  - 12-second base cache;
-  - 30-second History/Integrity cache;
-  - in-flight promise reuse;
-  - mutation/realtime invalidation;
-  - cached branch/site restoration;
-  - Map indexes for items, locations, stock-by-item and Work Area.
-- Added one combined Super Admin database snapshot endpoint and shared backend read-model helpers.
-- Added server/client timing visibility for the combined snapshot.
-- Extended realtime source-id tagging to master-data and Super Admin Inventory mutations so own mutation events do not cause a second fetch.
-- Updated Inventory SSE boot contract so only reconnect-ready events force a full reconciliation.
-- Updated backend site filters to `split_part(...)=site`, matching the existing schema-031 index.
-- Added/extended performance, static contract and isolated API regressions.
-- No database migration or Inventory business-rule change introduced.
-- Pending exact-head CI and production verification.
+- User requested the current workflow be updated on GitHub and Super Admin.
+- Root cause: the live handoff backend intentionally activates an open PR only when `docs/CURRENT_HANDOFF.md` on `main` contains an explicit `ACTIVE_PR: #...` marker. Main had no marker, so Super Admin GitHub & Handoff could fall back to main/historical status instead of the current Inventory Database performance PR.
+- Added `ACTIVE_PR: #188` to the main handoff authority.
+- This makes both public `handoff.html` and Super Admin → GitHub & Handoff resolve PR #188 dynamically from GitHub:
+  - current branch/head SHA;
+  - changed files;
+  - exact-head workflows;
+  - main/production release context.
+- No branch/head SHA is hard-coded into Super Admin runtime; the existing GitHub live feed remains authoritative with its short cache.
+- Latest observed PR #188 workflow state while recording the marker:
+  - Super Admin Browser #311 PASS;
+  - API Load Smoke #601 PASS;
+  - Master Data/Admin Panel #379 PASS;
+  - Workforce Approval #466 PASS;
+  - Deploy Kitchen OS PR run #1097 failed in regression on a WebKit mobile access-control/CORS page error for `/api/inventory/fuxing`; preflight PASS and production deploy/smoke did not run.
+- PR #188 remains non-production until exact-head release gates pass.
+- The user's physical stock-count list is not written into source-code docs or migrations; it must be imported through PostgreSQL Inventory lifecycle after site/location/unit reconciliation.
 
 ## 2026-10-02 — Inventory compact Pick + overflow hardening verified in production
 
