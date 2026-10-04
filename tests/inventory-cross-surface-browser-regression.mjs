@@ -42,12 +42,35 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);
       if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) {
+        await main.evaluate(() => {
+          window.__crossSurfaceSwitchEvents = [];
+          for (const eventName of ["shitu:active-site-changing","shitu:active-site-changed","shitu:active-site-change-failed"]) {
+            window.addEventListener(eventName,(event)=>{
+              window.__crossSurfaceSwitchEvents.push({
+                type:eventName,
+                detail:event.detail || null,
+                active:localStorage.getItem("shitu-admin-active-site-v1") || "",
+                at:Date.now(),
+              });
+            },{once:true});
+          }
+        });
         await main.locator(`[data-warehouse="${site}"]`).first().click();
-        await main.waitForFunction(
-          (targetSite) => localStorage.getItem("shitu-admin-active-site-v1") === targetSite,
-          site,
-          {timeout:20000}
-        );
+        try {
+          await main.waitForFunction(
+            (targetSite) => localStorage.getItem("shitu-admin-active-site-v1") === targetSite,
+            site,
+            {timeout:20000}
+          );
+        } catch (error) {
+          const diagnostic=await main.evaluate(()=>({
+            active:localStorage.getItem("shitu-admin-active-site-v1") || "",
+            events:window.__crossSurfaceSwitchEvents || [],
+            cloudState:localStorage.getItem("shitu-inventory-cloud-v2") || "",
+            alertText:document.querySelector(".alert,.toast,.notification")?.textContent || "",
+          }));
+          throw new Error(`${profile.name} ${site}: warehouse switch did not commit; diagnostic=${JSON.stringify(diagnostic)}; original=${error?.message || error}`);
+        }
       }
       // Certification is based on observable authoritative state rather than a
       // one-shot hydration event: the newly created PostgreSQL item must be
