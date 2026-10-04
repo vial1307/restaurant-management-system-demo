@@ -14,13 +14,12 @@ Authority / visibility:
 
 Latest observed PR #188 state at this handoff update:
 - branch: `perf/inventory-database-load-20261003`;
-- latest observed head: `13dce345947d7a0ae0c9046799d21efed2b715d6`;
-- Super Admin Browser Regression #311: PASS;
-- Isolated CI API Load Smoke #601: PASS;
-- Master Data and Admin Panel Regression #379: PASS;
-- Workforce Approval Regression Diagnostic #466: PASS;
-- Deploy Kitchen OS to VPS pull-request run #1097 / run `37144352017`: FAIL in regression only; preflight PASS, deploy and production smoke were skipped;
-- failure was a WebKit mobile page-error/CORS access-control check on `/api/inventory/fuxing` after the Inventory/API/database regressions had passed. This exact head is not production.
+- current workflow-authority implementation head at this update: `e0181761fd311462e5d0adbae57bdb55dcdc9b5b`;
+- Super Admin Browser / API Load / Master Data / Workforce diagnostic gates are expected to report against the exact current head, with obsolete reruns collapsed by workflow name;
+- `vps/backend/src/github-handoff.mjs` now produces `workflow_summary` and `main_workflow_summary` with PASS/FAIL/RUNNING/ATTENTION counts and exact-head verification;
+- Super Admin → GitHub & Handoff now shows a workflow dashboard, exact-head counts, runtime↔main alignment, direct links to the latest run for each workflow, and a manual refresh path that bypasses the 5-minute GitHub metadata cache;
+- public `handoff.html` shows the same latest-per-workflow gate summary;
+- production authority is still the running VPS release, not the active PR, until merge/deploy/audit complete.
 
 PR #188 scope remains:
 - reduce Inventory/Super Admin Database load work without changing PostgreSQL authority;
