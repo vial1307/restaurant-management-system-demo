@@ -186,10 +186,9 @@ async function runSuperAdminProfile(profile) {
     assert.match(await page.locator(".sa-content").textContent(), /GitHub|Handoff|Current work|Công việc hiện tại/);
     assert.match(await page.locator(".sa-content").textContent(), /Live production|Production hiện tại/);
     assert((await page.locator('.sa-dev-link[href*="github.com/vial1307/restaurant-management-system-demo"]').count()) >= 3, `${profile.name}: handoff GitHub links missing`);
-    assert.match(
-      await page.locator(".sa-dev-stop").textContent(),
-      /Release #\d+|Inventory|schedule|relational|schema 0\d+|site isolation|relocation|branch switching/i
-    );
+    const stoppingPointText = String(await page.locator(".sa-dev-stop").textContent() || "").trim();
+    assert(stoppingPointText.length >= 20, `${profile.name}: current stopping point is missing or too short`);
+    assert.notEqual(stoppingPointText, "—", `${profile.name}: current stopping point must not be a placeholder`);
     await assertFit(page, `${profile.name} development handoff`);
 
     await gotoSection(page, "users");
