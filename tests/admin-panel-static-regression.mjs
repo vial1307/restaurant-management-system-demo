@@ -39,6 +39,9 @@ assert.match(js, /system\.super_admin/, "Super Admin Panel must require the dedi
 assert.match(js, /\/api\/admin\/super\/overview/, "overview must read live VPS/PostgreSQL information");
 assert.match(js, /\/api\/admin\/super\/development-status/, "GitHub/handoff section must read the protected backend status API");
 assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engineering handoff section");
+assert.match(js, /liveGit\.main_workflows/, "Production evidence must prefer live workflows for the current main SHA");
+assert.match(js, /currentDeploy/, "Production card must derive current deploy evidence from live GitHub workflows");
+assert.match(js, /currentInventoryAudit/, "Production card must derive Inventory audit evidence from live GitHub workflows");
 assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
 assert.match(js, /data-server-action="marketing_deploy"/, "Marketing deploy must be an explicit UI action");
 assert.match(js, /AgentMemory · Dev memory/, "GitHub & Handoff must surface the private AgentMemory runtime");
@@ -85,6 +88,9 @@ assert.match(superRoutes, /system\.super_admin/, "all Super Admin routes must en
 assert.match(superRoutes, /\/api\/admin\/super\/development-status/, "engineering handoff metadata must be exposed only through Super Admin routes");
 assert.match(superRoutes, /DEVELOPMENT_STATUS/, "development status must come from a narrow server-side metadata contract");
 assert.match(superRoutes, /live_production/, "development status must expose live runtime release/schema separately from static handoff metadata");
+const developmentStatusSource = fs.readFileSync("vps/backend/src/development-status.mjs", "utf8");
+assert.doesNotMatch(developmentStatusSource, /pull\/140|schema 024|fix\/super-admin-role-location-20260925/, "Engineering fallback metadata must not retain stale historical PR/schema state");
+assert.match(developmentStatusSource, /Static fallback intentionally does not declare an active PR/, "Engineering fallback must explicitly defer to live handoff state");
 assert.match(superRoutes, /\/api\/admin\/super\/inventory-catalog-audit/, "cross-site catalog audit must be protected by Super Admin route");
 assert.match(superRoutes, /metadataVariants/, "catalog audit must report cross-site metadata variance");
 assert.match(superRoutes, /identityVariants/, "catalog audit must report cross-site identity drift");
