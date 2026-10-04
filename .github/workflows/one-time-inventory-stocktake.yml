@@ -31,9 +31,9 @@ jobs:
         run: |
           set -euo pipefail
           message="$(git log -1 --pretty=%B)"
-          payload_b64="$(printf '%s\n' "$message" | sed -n 's/^STOCKTAKE_B64=//p' | tail -n1)"
-          test -n "$payload_b64"
-          printf '%s' "$payload_b64" | base64 --decode > /tmp/stocktake.json
+          payload_json="$(printf '%s\n' "$message" | sed -n 's/^STOCKTAKE_JSON=//p' | tail -n1)"
+          test -n "$payload_json"
+          printf '%s' "$payload_json" > /tmp/stocktake.json
           node <<'NODE'
           const fs=require("fs");
           const payload=JSON.parse(fs.readFileSync("/tmp/stocktake.json","utf8"));
