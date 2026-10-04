@@ -51,6 +51,25 @@ async function seedRoleSession(page, context, username) {
   }
 }
 
+function attachRuntimeDiagnostics(page, errors, prefix="") {
+  const origin=new URL(BASE).origin;
+  const isSameOriginApi=(url)=>{
+    try {
+      const parsed=new URL(url);
+      return parsed.origin===origin && parsed.pathname.startsWith("/api/");
+    } catch {
+      return false;
+    }
+  };
+  page.on("pageerror",(error)=>errors.push(`${prefix}pageerror: ${error.message}`));
+  page.on("requestfailed",(request)=>{
+    if(isSameOriginApi(request.url()))errors.push(`${prefix}api request failed: ${request.method()} ${request.url()} ${request.failure()?.errorText||""}`);
+  });
+  page.on("response",(response)=>{
+    if(isSameOriginApi(response.url())&&response.status()>=500)errors.push(`${prefix}api ${response.status()}: ${response.request().method()} ${response.url()}`);
+  });
+}
+
 async function assertNoPageErrors(page, errors, label) {
   await page.waitForTimeout(80);
   assert.deepEqual(errors,[],`${label} page errors: ${errors.join(" | ")}`);
@@ -241,7 +260,7 @@ async function adminDesktop(browser) {
   const context = await browser.newContext({ viewport:{width:1440,height:900} });
   const page = await context.newPage();
   const errors=[];
-  page.on("pageerror",(error)=>errors.push(error.message));
+  attachRuntimeDiagnostics(page,errors);
   await login(page,"yangchuadmin");
 
   const session = await page.evaluate(()=>JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null"));
@@ -410,7 +429,7 @@ async function roleDesktop(browser, username, checks) {
   const context=await browser.newContext({viewport:{width:1280,height:800}});
   const page=await context.newPage();
   const errors=[];
-  page.on("pageerror",(error)=>errors.push(error.message));
+  attachRuntimeDiagnostics(page,errors);
   await seedRoleSession(page,context,username);
   await assertRoutePermissions(page,username);
   if(checks.dashboardEdit !== undefined){
@@ -578,7 +597,7 @@ async function roleDesktop(browser, username, checks) {
     }
     if(username === "employeefx" && checks.stocktake === true){
       const peer=await context.newPage();
-      peer.on("pageerror",(error)=>errors.push(`peer: ${error.message}`));
+      attachRuntimeDiagnostics(peer,errors,"peer: ");
       await peer.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
       await peer.locator(".app-shell").waitFor({state:"visible",timeout:15000});
       await setSite(peer,"fuxing");
@@ -667,7 +686,7 @@ async function responsiveAdmin(browser, viewport) {
   const context=await browser.newContext({viewport});
   const page=await context.newPage();
   const errors=[];
-  page.on("pageerror",(error)=>errors.push(error.message));
+  attachRuntimeDiagnostics(page,errors);
   await seedRoleSession(page,context,"yangchuadmin");
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
