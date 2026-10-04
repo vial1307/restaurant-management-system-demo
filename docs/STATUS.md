@@ -1,5 +1,18 @@
 # Kitchen OS Engineering Status
 
+## DONE — Fuxing 大冷凍 production stocktake, 2026-10-04
+
+- PostgreSQL production data operation completed for `fuxing-large-freezer`.
+- 51 supplied products matched 51 existing active Fuxing catalog items; 0 new catalog items were required.
+- Work Area configuration was not changed.
+- Import run `37178274266`: PASS; 45 quantities changed, 6 were already equal.
+- Before/after changes are preserved in `inventory_transactions`; the overall operation is recorded by `stocktake_import` audit metadata.
+- Mixed residual weights/pieces were retained as raw detail without inferred conversion; established `冷凍麵` 1箱 = 30片 was retained.
+- Pre-write DB backup: `/home/deploy/kitchen_os_pre_stocktake_20261004T045308Z.dump` (+ SHA-256).
+- Transactional verification confirmed all 51 requested target quantities before COMMIT.
+- No runtime source/migration was used as quantity authority; the one-time transport workflow was removed after success.
+- Production release remains the verified `337f5a2` / schema `031`; this was data-only and did not deploy application code.
+
 ## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
 
 - `ACTIVE_PR: #188` is now declared in `docs/CURRENT_HANDOFF.md` on main so Live Handoff and Super Admin resolve the same current workstream.
