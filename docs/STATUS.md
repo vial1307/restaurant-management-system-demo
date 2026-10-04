@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — GitHub workflow dashboard in Super Admin, 2026-10-04
+
+- Active PR authority remains `ACTIVE_PR: #188`.
+- Live GitHub backend now collapses multiple reruns to the latest run per workflow and exposes exact-head gate summary.
+- Super Admin → GitHub & Handoff shows PR gate state/counts, exact-head match, main workflow state and runtime↔main alignment.
+- Manual refresh on the Development section calls `development-status?refresh=1` and forces a GitHub metadata refresh without reducing the normal 5-minute cache globally.
+- Public `handoff.html` shows the same latest-per-workflow summary.
+- This is observability/control-plane only; it does not change Inventory quantities, database authority, RBAC, transfer or storage semantics.
+- NEXT: exact-head CI for PR #188 → merge only when green → production deploy/health/data-integrity/UI smoke/audit.
+
 ## ACTIVE — PR #188 Inventory Database performance, 2026-10-04
 
 - `ACTIVE_PR: #188` is now declared in `docs/CURRENT_HANDOFF.md` on main so Live Handoff and Super Admin resolve the same current workstream.
