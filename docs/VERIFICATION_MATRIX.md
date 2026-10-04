@@ -19,7 +19,7 @@ Status vocabulary used by Super Admin:
 | Lists/filter/sort/pagination | module-specific browser/API assertions | PARTIAL | touched list/search UI |
 | Unexpected full reload | Inventory warehouse switch assertion uses navigation-entry count | PARTIAL | SPA navigation/state interactions |
 | Page crash / uncaught JS | browser + Super Admin `pageerror` collection | COVERED | every browser change |
-| Same-origin API failures | explicit mutation response assertions on critical paths | PARTIAL | every changed API-driven interaction |
+| Same-origin API failures | browser diagnostics reject same-origin API 5xx/request failures + explicit mutation assertions | COVERED | every changed API-driven interaction |
 | Console error monitoring | not globally enforced on every browser surface | PARTIAL | add targeted guard when relevant |
 | Persistence / F5 | Super Admin RBAC and master-data reload checks; DB round-trip tests | PARTIAL | every persisted mutation |
 | Cross-view synchronization | Inventory/master-data realtime and peer-browser tests | PARTIAL | entity visible on multiple surfaces |
