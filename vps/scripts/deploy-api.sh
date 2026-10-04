@@ -69,6 +69,9 @@ cp "${REPO_DIR}/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 chown deploy:deploy "${APP_DIR}/docker-compose.yml"
 docker network inspect marketing_edge >/dev/null 2>&1 || docker network create marketing_edge >/dev/null
 
+echo "[2b/12] Installing private AgentMemory runtime..."
+bash "${REPO_DIR}/vps/scripts/install-agentmemory.sh"
+
 echo "[3/12] Installing filtered host metrics snapshot..."
 bash "${REPO_DIR}/vps/scripts/install-host-metrics-timer.sh"
 
@@ -81,7 +84,10 @@ docker run --rm -v "${REPO_DIR}:/repo:ro" node:22-alpine sh -lc '
   for file in /repo/src/*.js /repo/tests/*.mjs; do
     node --check "$file"
   done
+  node --check /repo/vps/scripts/agentmemory-sync.mjs
 '
+bash -n "${REPO_DIR}/vps/scripts/install-agentmemory.sh"
+bash -n "${REPO_DIR}/vps/scripts/admin-action-runner.sh"
 
 echo "[5/12] Building API image..."
 cd "${APP_DIR}"
@@ -155,7 +161,8 @@ docker compose --env-file .env up -d --force-recreate web
 for attempt in $(seq 1 30); do
   if curl -fsS http://127.0.0.1/api/health >/dev/null \
     && curl -fsS http://127.0.0.1/ >/dev/null \
-    && curl -fsS http://127.0.0.1/.admindev.html >/dev/null; then
+    && curl -fsS http://127.0.0.1/.admindev.html >/dev/null \
+    && curl -fsS http://127.0.0.1:3111/agentmemory/livez >/dev/null; then
     echo "Web/API/Super Admin edge healthy."
     echo "Release: ${APP_RELEASE}"
     docker compose --env-file .env ps
