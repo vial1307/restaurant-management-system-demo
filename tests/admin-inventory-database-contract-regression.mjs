@@ -5,6 +5,11 @@ import { INVENTORY_ADMIN_TEXT } from "../src/admin-inventory-i18n.js";
 const read=(file)=>fs.readFileSync(new URL(`../${file}`,import.meta.url),"utf8");
 const ui=read("src/admin-inventory-database.js");
 for(const path of ["/api/master-data/","/api/inventory/catalog/sync","/api/inventory/catalog/archive","/api/inventory/receive-default","/api/inventory/relocate-","/api/inventory/set-"])assert(ui.includes(path),path);
+assert.match(ui,/\/api\/admin\/inventory-database\//,"Super Admin Inventory must hydrate through the combined database snapshot endpoint");
+assert.match(ui,/const siteCache = new Map\(\)/,"Super Admin Inventory must cache read snapshots per site");
+assert.match(ui,/stockByItemIndex = new Map\(\)/,"Super Admin Inventory must index stock rows for rendering");
+assert.match(ui,/payload\?\.sourceClientId&&payload\.sourceClientId===clientId\)return;/,
+  "Super Admin Inventory must ignore its own realtime invalidation after an authoritative mutation refresh");
 assert.doesNotMatch(ui,/location\.reload|localStorage|MutationObserver/);
 assert.match(ui,/expectedRevision:revision\(row\)/);
 assert.match(ui,/appendLocations:true/);

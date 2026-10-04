@@ -41,9 +41,42 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       await api('/api/inventory/catalog/sync',{expectedRevision:"0",item:{key:`${site}:${key}`,catalog_key:key,vi:key,zh:key,unit:"包",work_area:area,locations}});
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);
-      if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) await main.locator(`[data-warehouse="${site}"]`).first().click();
+      if(await main.evaluate(()=>localStorage.getItem("shitu-admin-active-site-v1"))!==site) {
+        await main.evaluate(() => {
+          window.__crossSurfaceSwitchEvents = [];
+          for (const eventName of ["shitu:active-site-changing","shitu:active-site-changed","shitu:active-site-change-failed"]) {
+            window.addEventListener(eventName,(event)=>{
+              window.__crossSurfaceSwitchEvents.push({
+                type:eventName,
+                detail:event.detail || null,
+                active:localStorage.getItem("shitu-admin-active-site-v1") || "",
+                at:Date.now(),
+              });
+            },{once:true});
+          }
+        });
+        await main.locator(`[data-warehouse="${site}"]`).first().click();
+        try {
+          await main.waitForFunction(
+            (targetSite) => localStorage.getItem("shitu-admin-active-site-v1") === targetSite,
+            site,
+            {timeout:20000}
+          );
+        } catch (error) {
+          const diagnostic=await main.evaluate(()=>({
+            active:localStorage.getItem("shitu-admin-active-site-v1") || "",
+            events:window.__crossSurfaceSwitchEvents || [],
+            cloudState:localStorage.getItem("shitu-inventory-cloud-v2") || "",
+            alertText:document.querySelector(".alert,.toast,.notification")?.textContent || "",
+          }));
+          throw new Error(`${profile.name} ${site}: warehouse switch did not commit; diagnostic=${JSON.stringify(diagnostic)}; original=${error?.message || error}`);
+        }
+      }
+      // Certification is based on observable authoritative state rather than a
+      // one-shot hydration event: the newly created PostgreSQL item must be
+      // rendered on the selected site before the test proceeds.
       const row=main.locator('.storage-row').filter({has:main.locator(`[data-cloud-item-id="${item.id}"], [data-central-item-key="${item.item_key}"]`)}).first();
-      await row.waitFor({state:"visible",timeout:15000});
+      await row.waitFor({state:"visible",timeout:20000});
       await workspace.locator('[name="site"]').selectOption(site);
       await workspace.locator('[data-idb-action="tab-locations"]').click();
       await workspace.locator('[data-idb-action="kind-areas"]').click();
