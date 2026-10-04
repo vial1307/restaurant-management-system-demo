@@ -1,16 +1,24 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #196 Engineering Harness / Coding Control Plane, 2026-10-05
+## ACTIVE — PR #197 Engineering Harness stale-fallback cleanup, 2026-10-05
 
-- `ACTIVE_PR: #196` is the current engineering authority.
-- Adds Engineering Contract, Agent Start Protocol, Feature Registry and Verification Matrix.
-- Super Admin → GitHub & Handoff gains live Merge/Deploy/Production/Definition-of-Done gates.
-- Exact-head gate uses live GitHub workflows; PARTIAL test coverage remains explicitly PARTIAL.
-- AgentMemory seed expands from handoff/status/rules to include all four engineering-standard documents.
-- No Inventory business logic, PostgreSQL schema/data or RBAC mutation is in scope.
-- PR #188 is paused/non-production until #196 is production-verified.
-- NEXT: exact-head CI → merge tested head → exact production deploy → health/integrity/UI smoke → AgentMemory seed/recall → resume/rebase PR #188.
+- `ACTIVE_PR: #197` is the current engineering authority.
+- Removes old PR #140 / schema 024 / September RBAC fallback metadata.
+- Current work must come from live GitHub/CURRENT_HANDOFF; release/schema must come from VPS runtime.
+- Production evidence card now uses live main Deploy/Inventory Audit workflow evidence.
+- No Inventory business logic, database/schema/data or RBAC mutation.
+- Required gate: exact-head Deploy + Master/Admin + Super Admin Browser + API Load.
+- PR #188 remains paused until #197 is production-verified, then resumes only as BLOCKED/reconciliation-required.
 
+## DONE — Engineering Harness / Coding Control Plane, 2026-10-05
+
+- PR #196 exact head `56eddaeededb048f0223e4e71a376281b28d2b92` passed Deploy #1146, Master/Admin #428, Super Admin Browser #350 and API Load #641.
+- Merged as `d8e332f399f299476c939539e809a24b85e0a7e8`.
+- Main Deploy #1147 / `37220344400`: PASS after one unchanged-SHA rerun of a transient full-device permission-state timeout.
+- Production: release `d8e332f`, schema `031`, app/database healthy, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- AgentMemory: 7-file engineering seed; `AGENTMEMORY_RECALL_OK results=5`.
+- Inventory Audit #451 and Workforce parity/staff/schedule/attendance post-deploy workflows passed.
+- Engineering Contract, Agent Start Protocol, Feature Registry, Verification Matrix, live gates, known gaps and Evidence Center are now production runtime behavior.
 
 ## DONE — AgentMemory private VPS integration + authenticated recall, 2026-10-04
 
@@ -39,12 +47,12 @@
 
 ## PAUSED — PR #188 Inventory Database performance, 2026-10-04
 
-- PR #188 remains open but is paused while PR #196 establishes the Engineering Harness control plane.
+- PR #188 remains open but is paused while PR #197 removes stale Harness fallback metadata.
 - Branch: `perf/inventory-database-load-20261003`.
 - Current head: `f76a851536562eb8e096615c54d3797a5b1de1bf`.
-- PR remains open but is currently non-mergeable against current main `b61ef3837750a773294c1eb230bbb48393710cf3`.
+- PR remains open and stale/diverged/non-mergeable against current main `d8e332f399f299476c939539e809a24b85e0a7e8`.
 - Scope remains Inventory/Super Admin read-load reduction only; PostgreSQL/VPS stays authoritative and mutation/realtime semantics must remain unchanged.
-- Do not merge the stale head. First reconcile the intended performance changes onto current main while preserving the now-production AgentMemory/GitHub/Handoff code.
+- Do not merge the stale head. First reconcile only the intended Inventory performance changes onto current main while preserving the production Engineering Harness/AgentMemory/GitHub-Handoff code.
 - NEXT: fresh current-main reconciliation → exact-head CI/full-device → merge tested head only → exact production deploy/health/integrity/UI smoke/Inventory audit.
 
 ## DONE — Inventory compact Pick row + overflow hardening, 2026-10-02
