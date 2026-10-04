@@ -21,6 +21,7 @@ const agentMemorySync = fs.readFileSync("vps/scripts/agentmemory-sync.mjs", "utf
 const agentMemoryVerify = fs.readFileSync("vps/scripts/agentmemory-verify.mjs", "utf8");
 const agentMemoryDockerfile = fs.readFileSync("vps/agentmemory/Dockerfile", "utf8");
 const hostMetricsCollector = fs.readFileSync("vps/scripts/collect-host-metrics.sh", "utf8");
+const engineeringHarness = fs.readFileSync("vps/backend/src/engineering-harness.mjs", "utf8");
 
 assert.match(html, /id="admin-app"/);
 assert.match(html, /Kitchen OS · Super Admin/);
@@ -41,6 +42,9 @@ assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engine
 assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
 assert.match(js, /data-server-action="marketing_deploy"/, "Marketing deploy must be an explicit UI action");
 assert.match(js, /AgentMemory · Dev memory/, "GitHub & Handoff must surface the private AgentMemory runtime");
+assert.match(js, /Engineering Harness · Coding Control Plane/, "GitHub & Handoff must surface the Engineering Harness control plane");
+assert.match(js, /data-copy-engineering-start/, "Engineering Harness must provide a copyable new-chat start packet");
+assert.match(js, /Verification Matrix · 驗證矩陣/, "Engineering Harness must render verification coverage without hiding partial areas");
 const agentMemoryPanelSource = js.slice(js.indexOf("function renderAgentMemoryPanel"), js.indexOf("function renderDevelopment"));
 assert.doesNotMatch(agentMemoryPanelSource, /\\\`/, "AgentMemory panel must not contain escaped template delimiters that break browser module parsing");
 for (const action of ["agentmemory_status","agentmemory_recall_handoff","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(js, new RegExp(`data-server-action=["']${action}["']`));
@@ -103,6 +107,8 @@ assert.match(superRoutes, /const SERVER_ACTIONS = Object\.freeze/, "server actio
 for (const action of ["marketing_status","marketing_deploy","marketing_restart","marketing_logs","marketing_rollback","agentmemory_status","agentmemory_recall_handoff","agentmemory_sync_handoff","agentmemory_restart"]) assert.match(superRoutes, new RegExp(action));
 assert.match(superRoutes, /AGENTMEMORY_HEALTH_PATH/, "AgentMemory UI status must come from a filtered host health snapshot");
 assert.match(superRoutes, /readAgentMemoryHealth/, "development status must include AgentMemory runtime health");
+assert.match(superRoutes, /buildEngineeringHarnessState/, "development status must derive live engineering gates from GitHub/runtime evidence");
+assert.match(superRoutes, /engineering_harness:engineeringHarness/, "development status must return the Engineering Harness state");
 assert.match(superRoutes, /SERVER_ACTION_CONFIRMATION_REQUIRED/, "mutating host actions must require explicit confirmation");
 assert.match(superRoutes, /super_admin_server_action_requested/, "host actions must write audit logs");
 assert.doesNotMatch(superRoutes, /node:child_process|\bexec\(|\bspawn\(/, "API container must not execute host shell commands directly");
@@ -163,6 +169,7 @@ assert.match(agentMemorySync, /kitchen-os-handoff-hashes\.json/, "handoff seedin
 assert.match(agentMemorySync, /project:PROJECT/, "handoff memories must be scoped to the Kitchen OS project");
 assert.match(agentMemorySync, /MAX_SEED_CHARS = 40_000/, "handoff memory snapshots must be bounded");
 assert.match(agentMemorySync, /\/agentmemory\/remember/, "handoff seed must use AgentMemory's authenticated remember API");
+for (const doc of ["ENGINEERING_CONTRACT.md","AGENT_START_PROTOCOL.md","FEATURE_REGISTRY.md","VERIFICATION_MATRIX.md"]) assert.match(agentMemorySync, new RegExp(doc.replace(".", "\\.")), `AgentMemory seed must include ${doc}`);
 assert.match(agentMemoryInstaller, /agentmemory-verify\.mjs/, "AgentMemory install must run recall verification after seeding");
 assert.match(agentMemoryVerify, /\/agentmemory\/search/, "production recall verifier must use AgentMemory search API");
 assert.match(agentMemoryVerify, /project:"kitchen-os"/, "production recall verifier must stay scoped to Kitchen OS");
@@ -175,5 +182,8 @@ assert.match(hostActionRunner, /AGENTMEMORY_SEARCH_URL/, "host runner must expos
 assert.match(hostMetricsCollector, /agentmemory-health\.json/, "host metrics must publish a filtered AgentMemory health snapshot");
 assert.match(hostMetricsCollector, /Authorization: Bearer \$\{agentmemory_secret\}/, "filtered AgentMemory health collection must authenticate locally");
 assert.match(hostActionRunner, /Authorization: Bearer \$\{secret\}/, "AgentMemory host actions must authenticate local health/status requests");
+assert.match(engineeringHarness, /Deploy Kitchen OS to VPS/, "Engineering Harness must require the full regression workflow");
+assert.match(engineeringHarness, /Master Data and Admin Panel Regression/, "Engineering Harness must require the Super Admin/master-data workflow");
+assert.match(engineeringHarness, /coverage:"partial"/, "Engineering Harness must represent partial coverage explicitly rather than claiming universal coverage");
 
 console.log("SUPER_ADMIN_PANEL_STATIC_REGRESSION_OK");
