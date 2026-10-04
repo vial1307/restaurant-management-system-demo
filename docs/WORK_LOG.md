@@ -1,5 +1,24 @@
 # Kitchen OS Work Log
 
+## 2026-10-04 — AgentMemory production closure + PR #188 resumed
+
+- Closed the AgentMemory recovery chain after PRs #191/#192/#194/#195.
+- PR #194 added a required production recall verifier and fixed container-side Compose expansion for `AGENTMEMORY_SECRET`.
+- Main deploy `391e581...` proved AgentMemory health/seed but failed the new recall smoke with `AGENTMEMORY_RECALL_EMPTY`.
+- Root cause was a verifier false-negative, not missing memory: `format:narrative` plus `token_budget:2000` dropped each ~40k-character handoff snapshot from the response.
+- PR #195 switched the smoke to compact results, removed response token budgeting and added static guards.
+- Exact PR #195 head `8757390a035c3810c32dd5a94c724578ceb54db8` passed preflight, DB/API/concurrency, Chromium and full-device regression.
+- PR #195 merged as `b61ef3837750a773294c1eb230bbb48393710cf3`.
+- Deploy #1131 / `37192359669` passed:
+  - AgentMemory health healthy;
+  - seed complete: 3 records, unchanged;
+  - recall: `AGENTMEMORY_RECALL_OK results=3`;
+  - Kitchen OS release `b61ef38`, schema `031`, app/database OK;
+  - `DATA_INTEGRITY_OK`;
+  - production UI smoke PASS.
+- Inventory Site Production Audit #434 and Workforce Staff/Attendance/Schedule Backfill + Schedule Parity all passed.
+- PR #188 is now resumed as the active engineering workstream but remains stale/non-mergeable and must be reconciled onto current main before exact-head validation.
+
 ## 2026-10-04 — AgentMemory production deploy auth failure + PR #192 recovery
 
 - PR #191 merged to main as `6042a3761330226f8058255620854b1ccd80ebde` after exact-head CI passed.
