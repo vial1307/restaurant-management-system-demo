@@ -1,34 +1,51 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #202
+ACTIVE_PR: none
 
-## ACTIVE — PR #202 production evidence across docs-only main drift, 2026-10-06
+## CURRENT VERIFIED PRODUCTION — PR #202 production evidence across docs-only main drift, 2026-10-06
 
-Purpose:
-- keep Super Admin → GitHub & Handoff production evidence stable when repository main advances through documentation-only commits but VPS runtime remains on the last verified code release;
-- distinguish repository HEAD evidence from verified production-release evidence;
-- bind stable/no-active-PR Engineering Harness gates to workflows whose head SHA matches the recorded production SHA.
+PR #202 is merged, deployed and production-verified. There is currently **no active engineering PR**.
 
-Observed drift:
-- verified VPS runtime release: `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`, schema `031`;
-- docs-only closure PR #201 advanced main to `3920a84119e494f11867f6e5e5d4aaffd10b2896`;
-- current-main exact-head workflows on `3920a84` contain GitHub Pages only, while Deploy #1165 and Inventory Audit #473 belong to deployed SHA `2feb47e...`;
-- previous logic could therefore show missing production workflow evidence despite a healthy verified runtime.
+Problem closed:
+- repository main may advance through docs-only commits while VPS runtime legitimately remains on the last verified code release;
+- current-main exact-head workflow rows are still preserved for repository evidence;
+- a separate recent-main workflow history now allows the control plane to recover Deploy/Inventory evidence for the recorded production SHA;
+- Engineering Harness stable/no-active-PR gates bind to exact workflow runs for the verified production SHA instead of treating a docs-only main HEAD as the deployed release;
+- Super Admin Production card selects Deploy + Inventory Audit by verified production/runtime SHA.
 
-Scope:
-- GitHub/Handoff evidence plumbing + Engineering Harness + Super Admin rendering + regression tests;
-- no Inventory business logic;
-- no PostgreSQL schema/data;
-- no RBAC/workforce mutation;
-- no warehouse-switch behavior change.
+Exact-head PR evidence:
+- tested PR head: `153272303205a6ad62d04414b43290ed9fc3ac32`;
+- Deploy Kitchen OS #1168: PASS, including full-device cross-browser;
+- Master Data/Admin Panel #444: PASS;
+- Super Admin Browser #367: PASS;
+- API Load Smoke #657: PASS;
+- Workforce Approval Diagnostic #522: PASS.
 
-Required exact-head gate:
-1. Deploy Kitchen OS to VPS;
-2. Master Data and Admin Panel Regression;
-3. Super Admin Browser Regression;
-4. Isolated CI API Load Smoke;
-5. merge only the tested PR #202 head;
-6. deploy exact merge SHA and verify release/schema, DATA_INTEGRITY_OK, production UI smoke, Inventory audit and applicable workforce post-deploy checks.
+Merge and production:
+- merge commit: `8a89e1135e45329d30983424d38a75b2bac44d09`;
+- Deploy Kitchen OS #1169 / run `37342075459`: PASS;
+- full PostgreSQL/API/browser/full-device regression: PASS;
+- exact merge SHA deployed with backup/rollback path: PASS;
+- backup: `/opt/kitchen-os/backups/kitchen_os_20261005T164320Z.dump`;
+- production health: app/database healthy, schema `031`, release `8a89e11`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- AgentMemory deploy sync: `AGENTMEMORY_SEED_COMPLETE changed=2 total=7 project=kitchen-os`;
+- AgentMemory recall: `AGENTMEMORY_RECALL_OK results=5`.
+
+Post-deploy production audits on the same merge SHA:
+- Inventory Site Production Audit #477 / run `37343191024`: PASS;
+- Workforce Staff Production Backfill #718: PASS;
+- Workforce Attendance Production Backfill #692: PASS;
+- Workforce Schedule Production Backfill #702: PASS;
+- Workforce Schedule Production Parity #491: PASS.
+
+Authority after closure:
+- `ACTIVE_PR: none`;
+- GitHub CURRENT_HANDOFF + VPS/PostgreSQL runtime remain authoritative;
+- AgentMemory is recall-only; its last deploy seed occurred before this closure-doc commit, so the next manual sync or runtime deploy should refresh the final `ACTIVE_PR: none` snapshot;
+- docs-only commits above `8a89e113...` must not invalidate production evidence for release `8a89e11`;
+- a future feature/bug must start from current main and explicitly establish a fresh active workstream.
 
 ## CURRENT VERIFIED PRODUCTION — PR #200 live handoff metadata reconciliation, 2026-10-05
 
