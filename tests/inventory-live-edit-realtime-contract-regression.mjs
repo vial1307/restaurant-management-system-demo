@@ -24,11 +24,17 @@ assert.doesNotMatch(
   "legacy role-name stocktake gate must not override inventory.edit"
 );
 
-for(const route of ["set-quantity","set-minimum"]){
+for(const [route,actionKey] of [
+  ["set-quantity","inventory.quantity.set_absolute"],
+  ["set-minimum","inventory.minimum.edit"],
+]){
   const start=backend.indexOf(`app.post("/api/inventory/${route}"`);
   assert(start>=0,`${route} route missing`);
   const block=backend.slice(start,start+5200);
-  assert.match(block,/requireInventory\(user,\s*row\.site,\s*"edit",\s*reply\)/,`${route} must enforce explicit edit permission and site scope`);
+  assert(
+    block.includes(`"${actionKey}"`),
+    `${route} must enforce granular database action ${actionKey}`,
+  );
   assert.doesNotMatch(block,/requireStocktakeRole|STOCKTAKE_ROLE_REQUIRED/,`${route} still uses the legacy role-name gate`);
 }
 
@@ -50,7 +56,7 @@ const changeHandler=app.slice(app.indexOf('root.addEventListener("change"'),app.
 assert.match(changeHandler,/\}, true\);/,"inventory change delegation must run in capture phase so nested UI layers cannot swallow database writes");
 assert.match(cloud,/cloudSetMinimum\(\{[\s\S]{0,220}itemId = ""[\s\S]{0,220}locationId = ""[\s\S]{0,500}itemId && locationId/,"minimum writes must accept the PostgreSQL ids already present in the rendered snapshot");
 
-assert.match(realtime,/app\.get\("\/api\/inventory\/events"[\s\S]*?requireUser[\s\S]*?hasPermission\(user, "inventory", "view"\)/,"SSE stream must be authenticated and inventory-view authorized");
+assert.match(realtime,/app\.get\("\/api\/inventory\/events"[\s\S]*?requireUser[\s\S]*?inventoryAllowedSites\(user,"inventory\.view"\)/,"SSE stream must be authenticated and DB Inventory-view authorized");
 assert.match(realtime,/app\.addHook\("onResponse"[\s\S]*?route\.startsWith\("\/api\/inventory\/"\)[\s\S]*?publishInventoryInvalidation/,"successful inventory mutations must publish realtime invalidation");
 assert.match(server,/registerInventoryRealtime\(app\)[\s\S]*?registerInventoryExtraRoutes\(app\)/,"realtime hook must be registered before inventory mutation routes");
 assert.match(api,/X-Kitchen-Client-Id["']?: vpsInventoryClientId\(\)/,"inventory writes must identify their originating browser tab");
