@@ -861,6 +861,220 @@ function branchInventoryHistoryView(rows, language="vi", cloud=false) {
   return `<section class="central-card branch-history-card"><div class="history-title"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div><span>${rows?.length||0} ${language==="zh"?"筆":"mục"}</span></div><div class="central-history">${body||`<p class="central-empty">${language==="zh"?"目前尚無操作紀錄。":"Chưa có lịch sử thao tác."}</p>`}</div></section>`;
 }
 
+
+function inventoryLocationState(entry) {
+  const quantity=Math.max(0,Number(entry?.quantity)||0);
+  const minimum=Math.max(0,Number(entry?.minimum)||0);
+  const warning=entry?.warningQuantity == null ? null : Math.max(0,Number(entry.warningQuantity)||0);
+  if (quantity<=0) return "empty";
+  if ((entry?.minimumEnabled || minimum>0) && quantity<=minimum) return "low";
+  if (entry?.warningEnabled && warning!=null && quantity<=warning) return "near";
+  return "ok";
+}
+
+function inventoryProductModels(record, site = activeInventorySite()) {
+  const products=new Map();
+  const ensure=(entry)=>{
+    const key=String(entry?.stockKey || "");
+    if(!key) return null;
+    if(!products.has(key)){
+      products.set(key,{
+        stockKey:key,
+        label:entry.label || key,
+        labelVi:entry.labelVi || entry.label || key,
+        unit:entry.unit || "",
+        unitCode:entry.unitCode || entry.unit || "",
+        categoryCode:entry.categoryCode || "",
+        catalogKey:entry.catalogKey || "",
+        receiveZone:entry.receiveZone || "",
+        workArea:entry.workArea || "",
+        cloudItemId:entry.cloudItemId || "",
+        locations:[],
+      });
+    }
+    const product=products.get(key);
+    product.label=entry.label || product.label;
+    product.labelVi=entry.labelVi || product.labelVi;
+    product.unit=entry.unit || product.unit;
+    product.unitCode=entry.unitCode || product.unitCode;
+    product.categoryCode=entry.categoryCode || product.categoryCode;
+    product.catalogKey=entry.catalogKey || product.catalogKey;
+    product.receiveZone=entry.receiveZone || product.receiveZone;
+    product.workArea=entry.workArea || product.workArea;
+    product.cloudItemId=entry.cloudItemId || product.cloudItemId;
+    return product;
+  };
+
+  for(const entry of record?.inventory || []){
+    const product=ensure(entry);
+    if(!product) continue;
+    product.locations.push({
+      kind:"storage",
+      row:entry,
+      id:entry.id,
+      cloudLocationId:entry.cloudLocationId || "",
+      zone:entry.zone || "",
+      workArea:"",
+      labelVi:zoneLabel(entry.zone,"vi",site),
+      labelZh:zoneLabel(entry.zone,"zh",site),
+      quantity:Math.max(0,Number(entry.quantity)||0),
+      minimum:Math.max(0,Number(entry.minimum)||0),
+      minimumEnabled:entry.minimumEnabled === true,
+      warningEnabled:entry.warningEnabled === true,
+      warningQuantity:entry.warningQuantity == null ? null : Number(entry.warningQuantity),
+      isPrimary:entry.isPrimary === true,
+      displayOrder:Number(entry.displayOrder || 0),
+    });
+  }
+
+  for(const entry of record?.workInventory || []){
+    const product=ensure(entry);
+    if(!product) continue;
+    product.locations.push({
+      kind:"work",
+      row:entry,
+      id:entry.id,
+      cloudLocationId:entry.cloudLocationId || "",
+      zone:"",
+      workArea:entry.workArea || "",
+      labelVi:workAreaLabel(entry.workArea,"vi",site),
+      labelZh:workAreaLabel(entry.workArea,"zh",site),
+      quantity:Math.max(0,Number(entry.quantity)||0),
+      minimum:Math.max(0,Number(entry.minimum)||0),
+      minimumEnabled:entry.minimumEnabled === true,
+      warningEnabled:entry.warningEnabled === true,
+      warningQuantity:entry.warningQuantity == null ? null : Number(entry.warningQuantity),
+      isPrimary:false,
+      displayOrder:Number(entry.displayOrder || 0),
+    });
+  }
+
+  const storageSort=new Map(inventoryStorageGroups(site).map((row,index)=>[row.id,Number(row.sortOrder ?? index)]));
+  const workSort=new Map(inventoryWorkAreaGroups(site).map((row,index)=>[row.id,Number(row.sortOrder ?? index)]));
+  for(const product of products.values()){
+    product.locations.sort((a,b)=>{
+      const priority=(row)=>row.isPrimary ? 0 : row.kind==="work" ? 1 : 2;
+      return priority(a)-priority(b)
+        || (a.kind==="work" ? (workSort.get(a.workArea) ?? a.displayOrder) : (storageSort.get(a.zone) ?? a.displayOrder))
+          - (b.kind==="work" ? (workSort.get(b.workArea) ?? b.displayOrder) : (storageSort.get(b.zone) ?? b.displayOrder))
+        || String(a.labelZh).localeCompare(String(b.labelZh),"zh-Hant");
+    });
+    product.total=product.locations.reduce((sum,row)=>sum+row.quantity,0);
+    const states=product.locations.map(inventoryLocationState);
+    product.status=product.total<=0 ? "empty"
+      : states.includes("low") ? "low"
+      : states.includes("near") ? "near"
+      : "ok";
+  }
+  return [...products.values()].sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant"));
+}
+
+function inventoryLocationChip(location, product, context) {
+  const { language }=context;
+  const label=language==="zh" ? location.labelZh : location.labelVi;
+  const state=inventoryLocationState(location);
+  const prefix=location.isPrimary
+    ? (language==="zh" ? "主要" : "Chính")
+    : location.kind==="work"
+      ? "Work"
+      : "";
+  return `<button class="inventory-location-chip ${location.isPrimary?"primary":location.kind==="work"?"work":"storage"} state-${state}"
+    type="button" data-action="open-inventory-detail" data-stock-key="${escapeHtml(product.stockKey)}"
+    data-location-id="${escapeHtml(location.cloudLocationId)}">
+    <span>${prefix ? `<b>${escapeHtml(prefix)}</b>` : ""}${escapeHtml(label)}</span>
+    <strong>${escapeHtml(location.quantity)} <small>${escapeHtml(product.unit)}</small></strong>
+  </button>`;
+}
+
+function inventoryProductActions(product, context, compact=false) {
+  const { language }=context;
+  const site=activeInventorySite();
+  const canEdit=[
+    "inventory.product.identity.edit","inventory.product.location.attach",
+    "inventory.product.location.detach","inventory.product.primary_location.edit",
+    "inventory.product.unit.edit","inventory.product.category.edit","inventory.work_area.edit",
+  ].some((action)=>canInventoryAction(action,{site}));
+  const canTransfer=canInventoryAction("inventory.transfer.internal",{site});
+  const canShip=canInventoryAction("inventory.transfer.cross_site",{site});
+  const canHistory=canInventoryAction("inventory.history.full",{site});
+  const canArchive=canInventoryAction("inventory.product.archive",{site});
+  if(!canEdit&&!canTransfer&&!canShip&&!canHistory&&!canArchive) return "";
+  return `<details class="inventory-more-menu ${compact?"compact":""}">
+    <summary aria-label="${language==="zh"?"更多操作":"Thêm thao tác"}">•••</summary>
+    <div class="inventory-more-menu-popover">
+      ${canEdit?`<button type="button" data-action="open-edit-item" data-stock-key="${escapeHtml(product.stockKey)}">${language==="zh"?"編輯品項 / 儲位":"Sửa sản phẩm / vị trí"}</button>`:""}
+      ${canTransfer?`<button type="button" data-action="select-inventory-ops" data-mode="transfer">${language==="zh"?"庫存轉撥":"Điều chuyển nội bộ"}</button>`:""}
+      ${canShip?`<button type="button" data-action="select-inventory-ops" data-mode="ship">${language==="zh"?"跨據點出貨":"Xuất liên chi nhánh"}</button>`:""}
+      ${canHistory?`<button type="button" data-action="select-inventory-ops" data-mode="history">${language==="zh"?"操作紀錄":"Lịch sử thao tác"}</button>`:""}
+      ${canArchive?`<button type="button" class="danger" data-action="delete-item" data-stock-key="${escapeHtml(product.stockKey)}">${language==="zh"?"封存品項":"Archive sản phẩm"}</button>`:""}
+    </div>
+  </details>`;
+}
+
+function inventoryProductRow(product, context) {
+  const { language,text }=context;
+  // Latest UX rule: once a product has three or more locations, keep the row
+  // compact with Primary + Work/next location, then expose the rest via Xem thêm.
+  const visible=product.locations.length>=3 ? product.locations.slice(0,2) : product.locations;
+  const more=product.locations.length>=3
+    ? `<button class="inventory-location-more" type="button" data-action="open-inventory-detail" data-stock-key="${escapeHtml(product.stockKey)}">${language==="zh"?"查看更多":"Xem thêm"} <span>+${product.locations.length-visible.length}</span></button>`
+    : "";
+  const statusLabel=product.status==="empty" ? text.outOfStock
+    : product.status==="low" ? text.lowStock
+    : product.status==="near" ? (language==="zh"?"接近不足":"Gần hết")
+    : text.ready;
+  return `<article class="inventory-row inventory-product-row" data-stock-key="${escapeHtml(product.stockKey)}">
+    <div class="inventory-product-identity"><span class="inventory-status-dot ${product.status==="near"?"low":product.status}"></span><div><strong>${escapeHtml(language==="zh"?product.label:product.labelVi)}</strong><small>${escapeHtml(language==="zh"?product.labelVi:product.label)}${product.categoryCode?` · ${escapeHtml(product.categoryCode)}`:""}</small></div></div>
+    <div class="inventory-product-unit"><span class="mobile-field-label">${language==="zh"?"單位":"Đơn vị"}</span><strong>${escapeHtml(product.unit)}</strong></div>
+    <div class="inventory-product-total"><span class="mobile-field-label">${language==="zh"?"總量":"Tổng"}</span><strong>${escapeHtml(product.total)}</strong><small>${escapeHtml(product.unit)}</small></div>
+    <div class="inventory-location-chips">${visible.map((row)=>inventoryLocationChip(row,product,context)).join("")}${more}</div>
+    <div class="inventory-product-status"><span class="tag tag-${product.status==="near"?"low":product.status}">${escapeHtml(statusLabel)}</span>${inventoryProductActions(product,context,true)}</div>
+  </article>`;
+}
+
+function inventoryDetailQuantityControl(location, product) {
+  const site=activeInventorySite();
+  const workArea=location.kind==="work" ? location.workArea : "";
+  const scope={site,locationId:location.cloudLocationId,workArea};
+  const canQuick=canInventoryAction("inventory.quantity.adjust_quick",scope);
+  const canSet=canInventoryAction("inventory.quantity.set_absolute",scope);
+  const canMinimum=canInventoryAction("inventory.minimum.edit",scope);
+  const kind=location.kind==="work" ? "workItem" : "item";
+  const action=kind==="workItem" ? "adjust-work-item" : "adjust-item";
+  const identity=kind==="workItem"
+    ? `data-work-area="${escapeHtml(location.workArea)}"`
+    : `data-zone="${escapeHtml(location.zone)}"`;
+  const qty=canSet
+    ? numberInput(location.quantity,`data-field="${kind}" data-key="quantity" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}"`,"quantity-input")
+    : `<strong class="quantity-readonly">${escapeHtml(location.quantity)}</strong>`;
+  const minus=canQuick?`<button class="quantity-button" type="button" data-action="${action}" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}" data-delta="-1">${icon("minus")}</button>`:"";
+  const plus=canQuick?`<button class="quantity-button plus" type="button" data-action="${action}" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}" data-delta="1">${icon("plus")}</button>`:"";
+  const minimum=canMinimum
+    ? numberInput(location.minimum,`data-field="${kind}" data-key="minimum" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}"`,"minimum-input")
+    : `<strong>${escapeHtml(location.minimum)}</strong>`;
+  return `<div class="inventory-detail-control"><div class="quantity-control">${minus}${qty}${plus}<small>${escapeHtml(product.unit)}</small><span class="quantity-sync-status" data-quantity-sync-status></span></div><label><span>Minimum</span>${minimum}</label></div>`;
+}
+
+function inventoryProductDetailOverlay(context, record) {
+  const key=String(view.inventoryDetailStockKey || "");
+  if(!key) return "";
+  const product=inventoryProductModels(record,activeInventorySite()).find((row)=>row.stockKey===key);
+  if(!product) return "";
+  const { language }=context;
+  return `<div class="inventory-detail-backdrop"><section class="inventory-detail-sheet" role="dialog" aria-modal="true" aria-label="${escapeHtml(language==="zh"?"品項詳細":"Chi tiết sản phẩm")}">
+    <header><div><small>${language==="zh"?"品項詳細":"Chi tiết sản phẩm"}</small><h2>${escapeHtml(language==="zh"?product.label:product.labelVi)}</h2><p>${escapeHtml(language==="zh"?product.labelVi:product.label)} · ${escapeHtml(product.total)} ${escapeHtml(product.unit)}</p></div><button class="icon-button" type="button" data-action="close-inventory-detail">${icon("close")}</button></header>
+    <div class="inventory-detail-locations">
+      ${product.locations.map((location)=>{
+        const label=language==="zh"?location.labelZh:location.labelVi;
+        const state=inventoryLocationState(location);
+        const badge=location.isPrimary?(language==="zh"?"主要儲位":"Vị trí chính"):location.kind==="work"?"Work":"";
+        return `<article class="inventory-detail-location state-${state}"><div class="inventory-detail-location-head"><div><strong>${badge?`<span>${escapeHtml(badge)}</span>`:""}${escapeHtml(label)}</strong><small>${state==="empty"?(language==="zh"?"缺貨":"Hết hàng"):state==="low"?(language==="zh"?"低庫存":"Sắp hết"):state==="near"?(language==="zh"?"接近不足":"Gần hết"):(language==="zh"?"正常":"Bình thường")}</small></div></div>${inventoryDetailQuantityControl(location,product)}</article>`;
+      }).join("")}
+    </div>
+    <footer>${inventoryProductActions(product,context)}<button class="primary-button" type="button" data-action="close-inventory-detail">${language==="zh"?"完成":"Xong"}</button></footer>
+  </section></div>`;
+}
+
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language, state } = context;
   const site = activeInventorySite();
