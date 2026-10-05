@@ -1091,6 +1091,7 @@ function inventory(context) {
     : record;
   const effectiveRecord = isolatedCloudRecord;
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
+  const products=inventoryProductModels(effectiveRecord,site);
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
   const draftAlerts = effectiveRecord === record ? null : buildInventoryAlerts(effectiveRecord, inventoryStorageGroups(site));
@@ -1128,7 +1129,7 @@ function inventory(context) {
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Chỉ hỗ trợ VPS database · 僅支援 VPS 資料庫</strong><small>Vui lòng mở website từ máy chủ VPS. · 請從 VPS 伺服器開啟網站。</small></div>`;
   const opsAvailable = catalogManageVisible && cloudReady && globalThis.navigator?.onLine !== false && isBranchInventorySite(site);
   const opsEnabled = opsAvailable && !historical;
-  const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
+  const canViewHistory = canInventoryAction("inventory.history.full",{site});
   const tabsEnabled = (opsAvailable || canViewHistory || catalogManageVisible) && isBranchInventorySite(site);
   if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
   if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
@@ -1212,13 +1213,24 @@ function inventory(context) {
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
-  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice inventory-history-notice"><span>Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看。Các thao tác nhập/lấy/chuyển/xuất sẽ tự mở ngày hôm nay. · 庫存操作會自動切回今天。</span><button class="secondary-button" data-action="inventory-go-today">Về hôm nay · 回到今天</button></div>` : ""}${opsTabs}${opsGuide}
-    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${inventoryDistinctItemCount(entries)} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
+  const productFiltered=products.filter((product)=>{
+    if(storageView){
+      return view.zone==="all" || product.locations.some((row)=>row.kind==="storage" && row.zone===view.zone);
+    }
+    return view.workArea==="all" || product.locations.some((row)=>row.kind==="work" && row.workArea===view.workArea);
+  });
+  const nearLowCount=products.filter((product)=>["near","low","empty"].includes(product.status)).length;
+  const canCreate=canInventoryAction("inventory.product.create",{site});
+  const productColumns=language==="zh"
+    ? ["品項","單位","總量","位置分配","狀態 / 操作"]
+    : ["Sản phẩm","Đơn vị","Tổng","Phân bổ vị trí","Trạng thái / thao tác"];
+  return `${heading(text.inventory, text.inventorySubtitle, canCreate ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice inventory-history-notice"><span>Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看。Các thao tác nhập/lấy/chuyển/xuất sẽ tự mở ngày hôm nay. · 庫存操作會自動切回今天。</span><button class="secondary-button" data-action="inventory-go-today">Về hôm nay · 回到今天</button></div>` : ""}${opsTabs}${opsGuide}
+    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${products.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${nearLowCount} ${language==="zh"?"接近不足 / 低庫存":"gần hết / sắp hết"}</span></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
-    <div class="filters-row"><p class="inventory-view-description">${escapeHtml(storageView ? text.storageReport : text.workReport)}</p>
+    <div class="filters-row"><p class="inventory-view-description">${language==="zh"?"每個品項只顯示一列；位置依主要儲位 → Work → 其他儲位排序。":"Mỗi sản phẩm chỉ hiện một dòng; vị trí sắp xếp Chính → Work → vị trí khác."}</p>
       <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label></div>
-    <section class="inventory-table ${storageView ? "storage-table" : "work-table"}"><div class="inventory-table-head">${columns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${filtered.length ? groupRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
+    <section class="inventory-table inventory-product-table"><div class="inventory-table-head inventory-product-head">${productColumns.map((column)=>`<span>${escapeHtml(column)}</span>`).join("")}</div>${productFiltered.length ? productFiltered.map((product)=>inventoryProductRow(product,rowContext)).join("") : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
 }
 
 function reservationsPage(context) {
@@ -1474,7 +1486,7 @@ function render() {
   const topbarMarkup = topbar(context);
   const pageMarkup = `<main class="page-content">${pages[active](context)}</main>`;
   const mobileNavMarkup = `<nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav>`;
-  const overlaysMarkup = `${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  const overlaysMarkup = `${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}${route()==="inventory" ? inventoryProductDetailOverlay(context,context.record) : ""}`;
   if (typeof root.renderSections === "function") {
     root.renderSections({ sidebar: sidebarMarkup, topbar: topbarMarkup, page: pageMarkup, mobileNav: mobileNavMarkup, overlays: overlaysMarkup });
   } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;
