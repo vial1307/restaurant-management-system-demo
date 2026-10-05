@@ -223,7 +223,7 @@ async function runSuperAdminProfile(profile) {
     await roleSelect.selectOption("admin");
     await roleSelect.selectOption("employee");
     assert.equal(await locationSelect.inputValue(),"yongji",`${profile.name}: preserve chosen branch on role switch`);
-    const customBox=userForm.locator('[data-module="inventory"] [data-perm="view"]');
+    const customBox=userForm.locator('[data-module="procurement"] [data-perm="view"]');
     const changedPermission=!(await customBox.isChecked());
     await customBox.setChecked(changedPermission);
     await roleSelect.selectOption("admin");
@@ -231,6 +231,18 @@ async function runSuperAdminProfile(profile) {
     assert.equal(await customBox.isChecked(),changedPermission,`${profile.name}: role switch erased custom permissions`);
     await assertFit(page, `${profile.name} user modal`);
     await page.locator("[data-modal-close]").first().click();
+
+    const granularInventory=page.locator("[data-inventory-permission-admin]");
+    await granularInventory.locator("[data-inv-perm-user]").waitFor({state:"visible",timeout:15000});
+    assert.match(await granularInventory.textContent(),/Phân quyền Kho chi tiết|庫存細項權限/);
+    assert.match(await granularInventory.textContent(),/DB AUTHORITY/);
+    assert((await granularInventory.locator("[data-inv-perm-effect]").count()) >= 20,
+      `${profile.name}: granular Inventory action matrix incomplete`);
+    assert.equal(await granularInventory.locator('[data-inv-scope-mode="all"]').count(),1);
+    assert.equal(await granularInventory.locator('[data-inv-scope-mode="custom"]').count(),1);
+    assert.equal(await page.locator('[data-user-form] [data-module="inventory"]').count(),0,
+      "legacy user modal must not expose Inventory role-derived permission checkboxes");
+    await assertFit(page,`${profile.name} granular inventory permissions`);
 
     if(profile.name==="superadmin-laptop") {
       const username=`rbscope${Date.now().toString(36)}`;
@@ -244,7 +256,7 @@ async function runSuperAdminProfile(profile) {
         await edit.locator('[name="role"]').selectOption("admin");
         await edit.locator('[name="role"]').selectOption("manager");
         await edit.locator('[name="location"]').selectOption("central");
-        await edit.locator('[data-module="inventory"] [data-perm="edit"]').setChecked(true);
+        await edit.locator('[data-module="procurement"] [data-perm="edit"]').setChecked(true);
         await edit.locator('button[type="submit"]').click();
         await page.locator(`[data-user-edit]`).first().waitFor({state:"visible"});
         await page.waitForFunction((name)=>document.querySelector(".sa-content")?.textContent.includes(`@${name}`) && !document.querySelector("[data-user-form]"),username);
@@ -255,7 +267,7 @@ async function runSuperAdminProfile(profile) {
         id=saved.id;
         assert.equal(saved.role,"manager");
         assert.equal(saved.location,"central");
-        assert.equal(saved.permissions.inventory.edit,true);
+        assert.equal(saved.permissions.procurement.edit,true);
         await page.reload({waitUntil:"domcontentloaded"});
         await gotoSection(page,"users");
         await page.locator(`[data-user-edit="${id}"]`).click();
