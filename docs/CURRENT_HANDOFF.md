@@ -1,6 +1,46 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: none
+ACTIVE_PR: #205
+
+## ACTIVE — PR #205 granular Inventory access + Super Admin control, 2026-10-06
+
+Runtime implementation phase 1 of the approved Inventory redesign.
+
+Current candidate:
+- branch: `feat/inventory-access-db-superadmin-20261006`;
+- target schema: `032`;
+- production baseline before this PR: release `8a89e1135e45329d30983424d38a75b2bac44d09`, schema `031`.
+
+Implemented on the PR branch:
+- PostgreSQL Inventory action catalog, per-user rules, policy templates, arbitrary site scopes, location scopes, Work Area scopes and revision state;
+- Category and Unit master tables;
+- item-location presentation metadata with one primary storage location per site-scoped item;
+- minimum/warning metadata for low-stock follow-up;
+- compatibility seed for existing production accounts, while accounts created after schema 032 default-deny Inventory until configured from Super Admin;
+- runtime Inventory evaluator uses direct/policy DB rules and default deny; it does not derive authority from job title;
+- core quantity/history/internal transfer plus catalog, storage relocation, Work Area relocation, cross-site transfer and receive-default endpoints now enforce granular action keys;
+- Super Admin API reads/writes the rules transactionally with revision conflict protection and audit history;
+- Super Admin Users page now includes the approved granular Inventory permission editor: account + all/custom site combinations + action matrix + location/Work Area overrides;
+- legacy account modal no longer presents Inventory as a role-derived View/Edit checkbox;
+- regression contract and CI coverage added.
+
+Still outside PR #205:
+- Inventory Desktop one-row multi-location UI and Mobile Full Screen Detail;
+- Primary -> Work -> Other chip rendering / “Xem thêm”;
+- Category/Unit editor integration into the Add/Edit Product modal;
+- low-stock notification screen;
+- Handoff auto-polling/force-refresh;
+- VPS disk cleanup.
+
+Required before merge:
+1. Database Schema Regression;
+2. Master Data and Admin Panel Regression;
+3. Super Admin Browser Regression;
+4. Isolated CI API Load Smoke;
+5. Deploy Kitchen OS exact-head regression;
+6. merge only the exact tested head;
+7. deploy exact merge SHA, verify schema 032 + DATA_INTEGRITY_OK + production UI smoke + Inventory audit;
+8. update handoff/status/work log and AgentMemory closure.
 
 ## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign specification, 2026-10-06
 
