@@ -121,10 +121,12 @@ async function loadLiveGithubHandoff() {
     githubJson("/actions/runs?branch=main&per_page=30"),
   ]);
   const mainCommits=(Array.isArray(mainCommitRows) ? mainCommitRows : []).map(commitSummary);
-  const mainRuns=(Array.isArray(mainActionData?.workflow_runs) ? mainActionData.workflow_runs : [])
-    .filter((run)=>!mainSha || run.head_sha===mainSha)
-    .slice(0,20)
+  const recentMainRuns=(Array.isArray(mainActionData?.workflow_runs) ? mainActionData.workflow_runs : [])
+    .slice(0,30)
     .map(workflowSummary);
+  const mainRuns=recentMainRuns
+    .filter((run)=>!mainSha || run.head_sha===mainSha)
+    .slice(0,20);
 
   let commits=mainCommits;
   let files=[];
@@ -178,6 +180,7 @@ async function loadLiveGithubHandoff() {
     changed_files:files,
     workflows:runs,
     main_workflows:mainRuns,
+    recent_main_workflows:recentMainRuns,
   };
 }
 
@@ -199,6 +202,7 @@ function disabledResult(error="GITHUB_LIVE_HANDOFF_DISABLED") {
     changed_files:[],
     workflows:[],
     main_workflows:[],
+    recent_main_workflows:[],
     error,
   };
 }
