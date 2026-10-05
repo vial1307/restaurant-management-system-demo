@@ -376,7 +376,7 @@ with user_access as (
   )
   select
     g.user_id,g.action_key,'allow',
-    g.effective_location='all',
+    (g.effective_location='all' or g.action_key='inventory.receive'),
     true,'MIGRATION_032_COMPAT_SEED'
   from grants g
   where not exists (
