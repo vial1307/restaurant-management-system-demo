@@ -40,6 +40,8 @@ assert.match(js, /\/api\/admin\/super\/overview/, "overview must read live VPS/P
 assert.match(js, /\/api\/admin\/super\/development-status/, "GitHub/handoff section must read the protected backend status API");
 assert.match(js, /GitHub & Handoff/, "Super Admin must expose a dedicated engineering handoff section");
 assert.match(js, /liveGit\.main_workflows/, "Production evidence must prefer live workflows for the current main SHA");
+assert.match(js, /liveGit\.recent_main_workflows/, "Production evidence must retain recent main workflows for deployed SHAs after docs-only commits");
+assert.match(js, /productionWorkflowRows/, "Production card must select workflow evidence by verified production SHA rather than repository HEAD");
 assert.match(js, /currentDeploy/, "Production card must derive current deploy evidence from live GitHub workflows");
 assert.match(js, /currentInventoryAudit/, "Production card must derive Inventory audit evidence from live GitHub workflows");
 assert.match(js, /VPS Command Center/, "Development section must expose the allowlisted VPS Command Center");
