@@ -1,8 +1,8 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE DESIGN — PR #204 Inventory permission/database/UI redesign, 2026-10-06
+## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign, 2026-10-06
 
-- `ACTIVE_PR: #204` is documentation/design only; production runtime remains release `8a89e113...` / schema `031`.
+- `ACTIVE_PR: none`; PR #204 is documentation/design only and does not create a runtime workstream. Production runtime remains release `8a89e113...` / schema `031`.
 - Approved: Super Admin-managed per-user Inventory permissions, not job-title authority.
 - Site scope supports all sites or arbitrary combinations; no AB/AC/BC combinations hard-coded in source.
 - Scope can be narrowed to storage locations and Work Areas.
