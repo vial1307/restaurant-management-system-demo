@@ -68,6 +68,27 @@ async function insertUser(username, role, location, permissions) {
   return rows[0];
 }
 
+async function seedInventoryAccess(user, { sites=[], allSites=false, actions=[] } = {}) {
+  if (!user?.id || !actions.length) return;
+  for (const actionKey of actions) {
+    const { rows } = await client.query(
+      `insert into public.inventory_access_rules(
+         user_id,action_key,effect,applies_all_sites,active,note
+       ) values($1,$2,'allow',$3,true,'REGRESSION_FIXTURE')
+       returning id`,
+      [user.id,actionKey,allSites]
+    );
+    if (!allSites) {
+      for (const site of sites) {
+        await client.query(
+          "insert into public.inventory_access_rule_sites(rule_id,site_code) values($1,$2)",
+          [rows[0].id,site]
+        );
+      }
+    }
+  }
+}
+
 async function seedDatabaseDefinedRegressionRoles() {
   await client.query(
     `insert into public.account_roles(
@@ -139,6 +160,68 @@ try {
   users.parttimefx = await insertUser("parttimefx","parttime","fuxing",parttimePermissions);
   users.centralreg = await insertUser("centralreg","central","central",centralPermissions);
   users.remoteonly = await insertUser("remoteonly","remote_only","fuxing",remotePermissions);
+
+  // Migration 032 intentionally does not derive future Inventory authority from
+  // a job title. Regression users are created after migrations, so fixtures
+  // explicitly seed the rights each scenario expects.
+  await seedInventoryAccess(users.managerfx,{sites:["fuxing"],actions:[
+    "inventory.view","inventory.history.view",
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ]});
+  await seedInventoryAccess(users.manageryj,{sites:["yongji"],actions:[
+    "inventory.view","inventory.history.view",
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ]});
+  await seedInventoryAccess(users.assistantfx,{sites:["fuxing"],actions:[
+    "inventory.view","inventory.history.view",
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ]});
+  await seedInventoryAccess(users.supervisorfx,{sites:["fuxing"],actions:[
+    "inventory.view","inventory.history.view",
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ]});
+  await seedInventoryAccess(users.employeefx,{sites:["fuxing"],actions:[
+    "inventory.view","inventory.history.view",
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ]});
+  await seedInventoryAccess(users.parttimefx,{sites:["fuxing"],actions:["inventory.view","inventory.history.view"]});
+  await seedInventoryAccess(users.centralreg,{sites:["central"],actions:[
+    "inventory.view","inventory.history.view",
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ]});
+  // Preserve the legacy shipping test contract: an editor at Fuxing may ship
+  // from Fuxing and receive into Yongji, while still lacking Yongji view/edit.
+  await seedInventoryAccess(users.employeefx,{sites:["yongji"],actions:["inventory.receive"]});
 
   const locations = {};
   for (const entry of [
