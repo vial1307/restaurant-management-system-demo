@@ -243,6 +243,11 @@ export function vpsInventorySites() {
   return apiRequest("/api/inventory/sites");
 }
 
+export function vpsInventoryAccess(site) {
+  const params=new URLSearchParams({ site:String(site || "") });
+  return apiRequest(`/api/inventory/access?${params}`);
+}
+
 export function vpsMasterData(site, { includeInactive = false, force = false } = {}) {
   const normalizedSite = String(site || "");
   const key = `${normalizedSite}|${includeInactive ? "inactive" : "active"}`;
