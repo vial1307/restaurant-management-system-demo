@@ -1,15 +1,25 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #200 live production metadata reconciliation, 2026-10-05
+## STABLE — no active engineering PR, 2026-10-05
 
-- `ACTIVE_PR: #200` is the current engineering authority.
-- Baseline is current main `05183544fd4168332f6681c8e00f46b5d9f02527`, after PR #188 + #198 + #199.
-- Remove stale PR #140 / schema 024 / September RBAC fallback metadata from Super Admin GitHub & Handoff.
-- Current work must prefer live GitHub/CURRENT_HANDOFF; release/schema must prefer VPS runtime; Deploy/Inventory evidence must prefer live main workflows.
-- No Inventory business logic, PostgreSQL schema/data, RBAC or warehouse-switch semantics are changed.
-- Required exact-head gate: Deploy + Master/Admin + Super Admin Browser + API Load.
-- NEXT: exact-head CI → merge tested head only → exact production deploy → health/schema/integrity/UI smoke → applicable audits → handoff/AgentMemory closure.
+- `ACTIVE_PR: none` after PR #200 production closure.
+- Current production release: `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`; schema `031`.
+- Deploy #1165 / `37287279011`: PASS including exact-SHA deploy and production UI smoke.
+- `DATA_INTEGRITY_OK`; backup `/opt/kitchen-os/backups/kitchen_os_20261005T090831Z.dump`.
+- Inventory Site Production Audit #473: PASS.
+- Workforce Staff #714, Attendance #688, Schedule Backfill #698 and Schedule Parity #487: PASS.
+- AgentMemory seed/recall after deploy: PASS.
+- NEXT: a new feature/bug task must start from current main, create a fresh PR, set `ACTIVE_PR`, classify the feature through FEATURE_REGISTRY/VERIFICATION_MATRIX, then follow exact-head CI and production evidence rules.
 
+## DONE — PR #200 live handoff metadata reconciliation, 2026-10-05
+
+- Tested PR head `184585968ddc50d462c4fc1b98b70ea2353d1351`.
+- PR gates: Master/Admin #440 PASS; API Load #653 PASS; Super Admin Browser #364 PASS; Workforce Diagnostic #519 PASS.
+- Deploy #1164 attempt 1 hit a WebKit access-control page-error flake on `webkit-managerfx-390x844`; unchanged exact head rerun passed on attempt 2.
+- Merged as `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`.
+- Main Deploy #1165 PASS; release `2feb47e`, schema `031`, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Removed stale PR #140/schema 024/RBAC fallback state and made Super Admin production evidence prefer live runtime/main workflows.
+- No Inventory business logic, PostgreSQL schema/data, RBAC or warehouse-switch semantics changed.
 ## DONE — Inventory performance + warehouse-switch production closure, 2026-10-05
 
 - PR #188 merged as `1872a8daf8b5d59148de7d208519d736ceca75a5`.
