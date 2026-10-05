@@ -171,7 +171,7 @@ try {
     "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
     "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
     "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
-    "inventory.use","inventory.return","inventory.product.archive"
+    "inventory.use","inventory.return"
   ]});
   await seedInventoryAccess(users.manageryj,{sites:["yongji"],actions:[
     "inventory.view","inventory.history.view",
