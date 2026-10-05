@@ -1,5 +1,16 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #205 granular Inventory access + Super Admin control, 2026-10-06
+
+- `ACTIVE_PR: #205`.
+- Candidate schema: `032`; production remains `8a89e113...` / schema `031` until exact merge deploy completes.
+- Database authority added for Inventory actions, per-user rules, all/custom arbitrary site combinations, location/Work Area overrides, Unit/Category masters, item-location primary metadata and warning fields.
+- Existing production users receive one-time compatibility rules; users created after migration default-deny Inventory until Super Admin explicitly configures access.
+- Runtime Inventory authorization no longer derives from role/job title.
+- Super Admin granular Inventory permission editor is implemented and legacy Inventory View/Edit checkbox is removed from the role-derived user modal.
+- Core Inventory mutation endpoints are being certified against the same DB action model.
+- NEXT: exact-head CI → fix any regression → merge tested head only → production deploy/schema 032/integrity/UI smoke/audit → phase 2 Inventory multi-location UI.
+
 ## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign, 2026-10-06
 
 - `ACTIVE_PR: none`; PR #204 is documentation/design only and does not create a runtime workstream. Production runtime remains release `8a89e113...` / schema `031`.
