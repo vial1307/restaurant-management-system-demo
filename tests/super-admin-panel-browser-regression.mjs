@@ -272,7 +272,7 @@ async function runSuperAdminProfile(profile) {
         await gotoSection(page,"users");
         await page.locator(`[data-user-edit="${id}"]`).click();
         assert.equal(await page.locator('[data-user-form] [name="location"]').inputValue(),"central");
-        assert.equal(await page.locator('[data-user-form] [data-module="inventory"] [data-perm="edit"]').isChecked(),true);
+        assert.equal(await page.locator('[data-user-form] [data-module="procurement"] [data-perm="edit"]').isChecked(),true);
         await page.locator("[data-modal-close]").first().click();
       } finally {
         if(id) {
