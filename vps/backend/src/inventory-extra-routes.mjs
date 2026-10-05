@@ -778,6 +778,12 @@ export async function registerInventoryExtraRoutes(app) {
             && !(await inventoryActionAllowed(user,"inventory.product.primary_location.edit",{site},client))) {
           throw Object.assign(new Error("INVENTORY_PRIMARY_LOCATION_EDIT_NOT_ALLOWED"),{statusCode:403});
         }
+        if (primaryCode!==beforePrimary) {
+          await client.query(
+            "update public.inventory_item_locations set is_primary=false,updated_at=now() where item_id=$1 and is_primary=true",
+            [savedItem.id]
+          );
+        }
 
         for (const row of explicitStorageRows) {
           await attachLocation(row.id,{
