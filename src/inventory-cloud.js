@@ -978,11 +978,13 @@ export async function cloudAdjustQuantity({
   sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
   const resolved = itemId && locationId
     ? { item:{ id:itemId }, location:{ id:locationId, site } }
     : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryAction("inventory.quantity.adjust_quick",{
+    site:resolved.location.site,locationId:resolved.location.id,
+  })) return { ok:false,fallback:false,error:new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
   let data;
@@ -1015,11 +1017,13 @@ export async function cloudSetQuantity({
 }) {
   void allowInventoryEditor;
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = itemId && locationId
     ? { item:{ id:itemId }, location:{ id:locationId, site } }
     : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryAction("inventory.quantity.set_absolute",{
+    site:resolved.location.site,locationId:resolved.location.id,
+  })) return { ok:false,fallback:false,error:new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   try {
     await vpsSetQuantity({
       itemId: resolved.item.id,
@@ -1045,11 +1049,14 @@ export async function cloudSetMinimum({
   sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
   const resolved = itemId && locationId
     ? { item:{ id:itemId }, location:{ id:locationId, site } }
     : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryAction("inventory.minimum.edit",{
+    site:resolved.location.site,locationId:resolved.location.id,
+    workArea:String(resolved.location.metadata?.work_area || ""),
+  })) return { ok:false,fallback:false,error:new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   try {
     await vpsSetMinimum({
       itemId: resolved.item.id,
