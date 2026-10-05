@@ -844,11 +844,18 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
+        unitCode:row.item.unit_code || row.item.unit || "",
+        categoryCode:row.item.category_code || "",
         workArea:row.item.work_area||"",
         storageOnly:Boolean(row.item.storage_only),
         zone,
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
+        minimumEnabled:row.minimum_enabled === true,
+        warningEnabled:row.warning_enabled === true,
+        warningQuantity:row.warning_quantity == null ? null : Number(row.warning_quantity),
+        isPrimary:row.is_primary === true,
+        displayOrder:Number(row.display_order || 0),
         cloudItemId:row.item.id,
         cloudLocationId:row.location.id,
       });
@@ -862,9 +869,16 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
+        unitCode:row.item.unit_code || row.item.unit || "",
+        categoryCode:row.item.category_code || "",
         workArea:area||row.item.work_area||"",
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
+        minimumEnabled:row.minimum_enabled === true,
+        warningEnabled:row.warning_enabled === true,
+        warningQuantity:row.warning_quantity == null ? null : Number(row.warning_quantity),
+        isPrimary:false,
+        displayOrder:Number(row.display_order || 0),
         cloudItemId:row.item.id,
         cloudLocationId:row.location.id,
       });
@@ -889,7 +903,7 @@ function applyBranch(rows, site) {
 const reconciledInventorySnapshots = new Map();
 
 async function runInventorySync(site, { reloadBranch = false, force = false } = {}) {
-  if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
+  if (!site || !(await verifyMigration())) return false;
   await ensureSiteRegistry();
   if (!isKnownInventorySite(site)) return false;
   if (isBranchInventorySite(site) && !isCurrentBranchInventoryDate()) {
