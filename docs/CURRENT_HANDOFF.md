@@ -1,10 +1,10 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #204
+ACTIVE_PR: none
 
-## ACTIVE — PR #204 Inventory permission/database/UI redesign specification, 2026-10-06
+## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign specification, 2026-10-06
 
-This is a documentation/design workstream. It does **not** change the verified production runtime yet.
+PR #204 is a documentation/design workstream and is ready to merge. It does **not** change the verified production runtime. No runtime engineering PR is active.
 
 Approved direction:
 - Inventory mutation authority must be configured from Super Admin and persisted in PostgreSQL; job title/role name is not the final authority.
