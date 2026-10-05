@@ -19,6 +19,9 @@ assert(source.includes(oldSupervisorReceiveDefaultAssertion), "supervisor receiv
 const oldParttimeMinimumError = 'assert.equal(parttimeMinimum.data.error,"INVENTORY_EDIT_NOT_ALLOWED");';
 assert(source.includes(oldParttimeMinimumError), "view-only minimum denial contract changed; update v6 runner explicitly");
 
+const oldCreatedCentralInventoryAssertion = 'assert.equal((await inventory(createdCentralSession.cookie,"central")).response.status,200);';
+assert(source.includes(oldCreatedCentralInventoryAssertion), "post-migration central account Inventory assertion changed; update v6 runner explicitly");
+
 const oldAllSiteViewAssertion = `for (const site of ["fuxing","yongji","central"]) {\n  assert.equal((await inventory(admin.cookie,site)).response.status,200,\`admin cannot view \${site}\`);\n}`;
 assert(source.includes(oldAllSiteViewAssertion), "all-site inventory regression changed; update snapshot integrity injection explicitly");
 
@@ -110,6 +113,7 @@ const allSiteSnapshotRegression = `${oldAllSiteViewAssertion}\n\nfunction assert
 const migrated = source
   .replace(oldSchemaAssertion, 'assert.equal(health.data.schema,"032");')
   .replace(oldParttimeMinimumError, 'assert.equal(parttimeMinimum.data.error,"INVENTORY_ACTION_NOT_ALLOWED");')
+  .replace(oldCreatedCentralInventoryAssertion, 'assert.equal((await inventory(createdCentralSession.cookie,"central")).response.status,403);')
   .replace(oldSharedStaffFixture, scopedSharedStaffFixture)
   .replace(oldEmployeeStateRegression, scopedEmployeeStateRegression)
   .replace(oldAllSiteViewAssertion, allSiteSnapshotRegression)
