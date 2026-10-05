@@ -505,10 +505,42 @@ export async function registerInventoryExtraRoutes(app) {
         if (!(await inventoryActionAllowed(user,identityAction,{site},client))) {
           throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
         }
-        const requestedUnit=String(item.unit || "個");
-        if ((!current || requestedUnit!==String(current.unit||""))
+        const requestedUnit=String(item.unit || "個").trim() || "個";
+        const requestedUnitCode=String(item.unit_code || requestedUnit).trim() || requestedUnit;
+        const requestedCategoryCode=String(item.category_code || "").trim();
+        const unitChanged=!current
+          || requestedUnit!==String(current.unit||"")
+          || requestedUnitCode!==String(current.unit_code||current.unit||"");
+        if (unitChanged
             && !(await inventoryActionAllowed(user,"inventory.product.unit.edit",{site},client))) {
           throw Object.assign(new Error("INVENTORY_UNIT_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
+        const categoryChanged=String(current?.category_code||"")!==requestedCategoryCode;
+        if (categoryChanged
+            && !(await inventoryActionAllowed(user,"inventory.product.category.edit",{site},client))) {
+          throw Object.assign(new Error("INVENTORY_CATEGORY_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
+        if (unitChanged) {
+          await client.query(
+            `insert into public.inventory_units(
+               code,symbol,name_vi,name_zh_tw,unit_type,active,created_by
+             ) values($1,$2,$2,$2,'custom',true,$3)
+             on conflict(code) do update set active=true,updated_at=now()`,
+            [requestedUnitCode,requestedUnit,user.id]
+          );
+        } else {
+          const knownUnit=await client.query(
+            "select 1 from public.inventory_units where code=$1 and active=true limit 1",
+            [requestedUnitCode]
+          );
+          if (!knownUnit.rowCount) throw Object.assign(new Error("INVENTORY_UNIT_NOT_FOUND"),{statusCode:409});
+        }
+        if (requestedCategoryCode) {
+          const knownCategory=await client.query(
+            "select 1 from public.inventory_categories where code=$1 and active=true limit 1",
+            [requestedCategoryCode]
+          );
+          if (!knownCategory.rowCount) throw Object.assign(new Error("INVENTORY_CATEGORY_NOT_FOUND"),{statusCode:409});
         }
         if (current && String(item.work_area||"")!==String(current.work_area||"")
             && !(await inventoryActionAllowed(user,"inventory.work_area.edit",{site,workArea:String(item.work_area||"")},client))) {
@@ -534,9 +566,13 @@ export async function registerInventoryExtraRoutes(app) {
         const locationSnapshot = async (itemId) => {
           if (!itemId) return [];
           const rows = await client.query(
-            `select l.id,l.code,l.kind,l.active
+            `select l.id,l.code,l.kind,l.active,
+                    coalesce(il.is_primary,false) as is_primary,
+                    coalesce(il.display_order,l.sort_order,0) as display_order
              from public.inventory_stock s
              join public.inventory_locations l on l.id=s.location_id
+             left join public.inventory_item_locations il
+               on il.item_id=s.item_id and il.location_id=l.id
              where s.item_id=$1 and l.site=$2
              order by l.code,l.id`,
             [itemId,site]
@@ -546,6 +582,8 @@ export async function registerInventoryExtraRoutes(app) {
             location_code:row.code,
             kind:row.kind,
             active:Boolean(row.active),
+            is_primary:Boolean(row.is_primary),
+            display_order:Number(row.display_order || 0),
           }));
         };
 
@@ -555,6 +593,8 @@ export async function registerInventoryExtraRoutes(app) {
           name_zh_tw:row.name_zh_tw,
           name_vi:row.name_vi,
           unit:row.unit,
+          unit_code:row.unit_code || row.unit,
+          category_code:row.category_code || "",
           work_area:row.work_area,
           storage_only:Boolean(row.storage_only),
           active:Boolean(row.active),
@@ -568,7 +608,9 @@ export async function registerInventoryExtraRoutes(app) {
           catalog_key:String(item.catalog_key || ""),
           name_zh_tw:String(item.zh || itemKey),
           name_vi:String(item.vi || item.zh || itemKey),
-          unit:String(item.unit || "個"),
+          unit:requestedUnit,
+          unit_code:requestedUnitCode,
+          category_code:requestedCategoryCode || null,
           work_area:String(item.work_area || ""),
           storage_only:Boolean(item.storage_only),
         };
@@ -579,6 +621,8 @@ export async function registerInventoryExtraRoutes(app) {
           current.name_zh_tw !== target.name_zh_tw ||
           current.name_vi !== target.name_vi ||
           current.unit !== target.unit ||
+          String(current.unit_code || current.unit || "") !== target.unit_code ||
+          String(current.category_code || "") !== String(target.category_code || "") ||
           current.work_area !== target.work_area ||
           Boolean(current.storage_only) !== target.storage_only ||
           !current.active;
@@ -586,8 +630,8 @@ export async function registerInventoryExtraRoutes(app) {
         if (!current) {
           savedItem = (await client.query(
             `insert into public.inventory_items(
-               item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
-             ) values($1,$2,$3,$4,$5,$6,$7,true)
+               item_key,catalog_key,name_zh_tw,name_vi,unit,unit_code,category_code,work_area,storage_only,active
+             ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
              returning *`,
             [
               itemKey,
@@ -595,6 +639,8 @@ export async function registerInventoryExtraRoutes(app) {
               target.name_zh_tw,
               target.name_vi,
               target.unit,
+              target.unit_code,
+              target.category_code,
               target.work_area,
               target.storage_only,
             ]
@@ -606,8 +652,10 @@ export async function registerInventoryExtraRoutes(app) {
                  name_zh_tw=$3,
                  name_vi=$4,
                  unit=$5,
-                 work_area=$6,
-                 storage_only=$7,
+                 unit_code=$6,
+                 category_code=$7,
+                 work_area=$8,
+                 storage_only=$9,
                  active=true
              where id=$1
              returning *`,
@@ -617,6 +665,8 @@ export async function registerInventoryExtraRoutes(app) {
               target.name_zh_tw,
               target.name_vi,
               target.unit,
+              target.unit_code,
+              target.category_code,
               target.work_area,
               target.storage_only,
             ]
