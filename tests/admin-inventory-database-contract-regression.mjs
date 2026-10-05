@@ -57,8 +57,8 @@ assert.match(routes,/siteMode === "branch"[\s\S]{0,900}metadata->>'work_area'=\$
 // Execute the real SSE hook: successful master writes invalidate, reads/failures do not.
 const events=[],hooks={},clients=[];
 const app={get:(path,handler)=>{clients.push(handler);},addHook:(name,fn)=>{hooks[name]=fn;}};
-const realtime=read("vps/backend/src/inventory-realtime.mjs").replace(/^import .*;\n/,"").replace("export async function registerInventoryRealtime","async function registerInventoryRealtime");
-const context=vm.createContext({Set,Date,JSON,String,Math,setInterval:()=>({unref(){}}),clearInterval(){},requireUser:async()=>({}),hasPermission:()=>true});
+const realtime=read("vps/backend/src/inventory-realtime.mjs").replace(/^(?:import .*;\n)+/,"").replace("export async function registerInventoryRealtime","async function registerInventoryRealtime");
+const context=vm.createContext({Set,Date,JSON,String,Math,setInterval:()=>({unref(){}}),clearInterval(){},requireUser:async()=>({}),inventoryAllowedSites:async()=>["fuxing"]});
 vm.runInContext(`${realtime}\nthis.register=registerInventoryRealtime;`,context);
 await context.register(app);
 await clients[0]({raw:{on(){}}},{hijack(){},raw:{writeHead(){},flushHeaders(){},write:(data)=>events.push(data)}});

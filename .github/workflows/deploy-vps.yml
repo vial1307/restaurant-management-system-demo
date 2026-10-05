@@ -66,6 +66,7 @@ jobs:
         run: |
           node tests/static-regression.mjs
           node tests/engineering-harness-contract-regression.mjs
+          node tests/inventory-access-control-contract-regression.mjs
 
       - name: Super Admin command center regression
         run: node tests/admin-panel-static-regression.mjs
@@ -142,6 +143,7 @@ jobs:
           test -f manifest.webmanifest
           test -f sw.js
           test -f src/business-recovery-notice.js
+          test -f src/admin-inventory-permissions.js
           test -f src/business-recovery-notice.css
           test -f src/business-persistence-status.js
           test -f src/business-persistence-status.css
@@ -165,6 +167,8 @@ jobs:
           test -f vps/scripts/install-host-metrics-timer.sh
           test -f vps/backend/scripts/fixtures/host-metrics.env
           test -f vps/backend/src/workforce-approval-routes.mjs
+          test -f vps/backend/src/inventory-access.mjs
+          test -f vps/backend/src/inventory-access-admin-routes.mjs
           test -f vps/backend/src/workforce-lock-policy.mjs
           test -f vps/backend/src/workforce-schedule-relational-shadow.mjs
           test -f vps/backend/src/workforce-schedule-read-authority.mjs
@@ -183,6 +187,7 @@ jobs:
           test -f vps/database/migrations/027_branch_legacy_catalog_materialization.sql
           test -f vps/database/migrations/030_inventory_shared_workarea_atomicity.sql
           test -f vps/database/migrations/031_site_scoped_workarea.sql
+          test -f vps/database/migrations/032_inventory_access_and_catalog_master.sql
           test -f tests/branch-legacy-catalog-materialization-contract-regression.mjs
           test -f tests/inventory-archive-integrity-contract-regression.mjs
           test -f tests/inventory-location-archive-integrity-contract-regression.mjs

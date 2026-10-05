@@ -10,6 +10,7 @@ on:
       - "admin.html"
       - "src/admin-panel.js"
       - "src/admin-panel-inventory.js"
+      - "src/admin-inventory-permissions.js"
       - "src/admin-panel.css"
       - "src/admin-panel-v2.css"
       - "src/admin-panel-ui-v2.js"
@@ -25,6 +26,8 @@ on:
       - "vps/backend/src/master-data-routes.mjs"
       - "vps/backend/src/access-control.mjs"
       - "vps/backend/src/auth.mjs"
+      - "vps/backend/src/inventory-access.mjs"
+      - "vps/backend/src/inventory-access-admin-routes.mjs"
       - "vps/backend/scripts/master-data-regression-client.mjs"
       - "vps/backend/scripts/super-admin-regression-client.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
@@ -39,6 +42,7 @@ on:
       - "admin.html"
       - "src/admin-panel.js"
       - "src/admin-panel-inventory.js"
+      - "src/admin-inventory-permissions.js"
       - "src/admin-panel.css"
       - "src/admin-panel-v2.css"
       - "src/admin-panel-ui-v2.js"
@@ -54,6 +58,8 @@ on:
       - "vps/backend/src/master-data-routes.mjs"
       - "vps/backend/src/access-control.mjs"
       - "vps/backend/src/auth.mjs"
+      - "vps/backend/src/inventory-access.mjs"
+      - "vps/backend/src/inventory-access-admin-routes.mjs"
       - "vps/backend/scripts/master-data-regression-client.mjs"
       - "vps/backend/scripts/super-admin-regression-client.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
@@ -113,6 +119,7 @@ jobs:
         run: |
           node --check src/admin-panel.js
           node --check src/admin-panel-inventory.js
+          node --check src/admin-inventory-permissions.js
           node --check src/admin-panel-ui-v2.js
           node --check src/admin-panel-sections-v2.js
           node --check tests/admin-panel-static-regression.mjs
@@ -122,6 +129,8 @@ jobs:
           node --check vps/backend/src/master-data-routes.mjs
           node --check vps/backend/src/access-control.mjs
           node --check vps/backend/src/auth.mjs
+          node --check vps/backend/src/inventory-access.mjs
+          node --check vps/backend/src/inventory-access-admin-routes.mjs
           node --check vps/backend/scripts/master-data-regression-client.mjs
           node --check vps/backend/scripts/super-admin-regression-client.mjs
           node --check vps/backend/scripts/regression-setup.mjs
@@ -130,6 +139,7 @@ jobs:
         run: |
           node tests/admin-panel-static-regression.mjs
           node tests/admin-panel-ui-v2-static-regression.mjs
+          node tests/inventory-access-control-contract-regression.mjs
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs

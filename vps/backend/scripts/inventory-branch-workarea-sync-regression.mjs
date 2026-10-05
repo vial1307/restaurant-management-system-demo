@@ -17,7 +17,7 @@ const branchItemKey="fuxing:workarea-site-scope-regression";
 await client.connect();
 try {
   const schema=await client.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"031","schema 031 must be active");
+  assert.equal(schema.rows[0]?.version,"032","schema 032 must be active");
 
   const catalogGuard=await client.query(
     `select count(*)::int as count

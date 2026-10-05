@@ -73,7 +73,7 @@ await db.connect();
 try{
   await cleanup();
   const schema=await db.query("select max(version) as version from public.schema_migrations");
-  assert.equal(schema.rows[0]?.version,"031","schema 031 must be active");
+  assert.equal(schema.rows[0]?.version,"032","schema 032 must be active");
 
   const admin=await login("yangchuadmin");
 

@@ -1,6 +1,8 @@
 import { apiRequest, vpsListUsers, vpsMe } from "./vps-api.js";
 import { createInventoryDatabase } from "./admin-inventory-database.js";
+import { createInventoryPermissionAdmin } from "./admin-inventory-permissions.js";
 const inventoryDatabase = createInventoryDatabase();
+const inventoryPermissionAdmin = createInventoryPermissionAdmin();
 
 const root = document.querySelector("#admin-app");
 const SECTIONS = ["overview","development","users","content","data","stores","settings","logs"];
@@ -467,12 +469,13 @@ function renderDevelopment() {
 }
 
 function renderUsers() {
-  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Users & RBAC</h2><p>Role + quyền override theo từng user, đọc/ghi trực tiếp PostgreSQL.</p></div><button class="sa-btn primary" type="button" data-user-new>＋ Thêm user</button></div>
-  <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>User</th><th>Vai trò</th><th>Chi nhánh</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+  return `<article class="sa-card"><div class="sa-card-head"><div><h2>Users & RBAC</h2><p>Role mô tả tổ chức/tài khoản. Quyền thao tác Kho được cấu hình riêng phía dưới và lưu trực tiếp PostgreSQL.</p></div><button class="sa-btn primary" type="button" data-user-new>＋ Thêm user</button></div>
+  <div class="sa-table-wrap"><table class="sa-table"><thead><tr><th>User</th><th>Vai trò</th><th>Chi nhánh mặc định</th><th>Module legacy</th><th>Trạng thái</th><th></th></tr></thead><tbody>
   ${state.users.map((user)=>`<tr><td><strong>${esc(user.display_name)}</strong><small>@${esc(user.username)}</small></td><td>${esc(user.role_name_vi||user.role)}<small>${esc(user.role)}</small></td><td>${esc(siteName(user.location))}</td>
   <td><span class="sa-pill">${esc(Object.values(user.permissions||{}).filter((p)=>p?.view).length)} view</span> <span class="sa-pill">${esc(Object.values(user.permissions||{}).filter((p)=>p?.edit).length)} edit</span></td>
-  <td><span class="sa-pill ${user.active?"ok":"off"}">${user.active?"Active":"Disabled"}</span></td><td><div class="sa-row-actions"><button class="sa-btn small" type="button" data-user-edit="${esc(user.id)}">Sửa</button>${user.id!==state.me?.id?`<button class="sa-btn small danger" type="button" data-user-delete="${esc(user.id)}">Archive</button>`:""}</div></td></tr>`).join("")}
-  </tbody></table></div></article>`;
+  <td><span class="sa-pill ${user.active?"ok":"off"}">${user.active?"Active":"Disabled"}</span></td><td><div class="sa-row-actions"><button class="sa-btn small" type="button" data-user-edit="${esc(user.id)}">Sửa tài khoản</button>${user.id!==state.me?.id?`<button class="sa-btn small danger" type="button" data-user-delete="${esc(user.id)}">Archive</button>`:""}</div></td></tr>`).join("")}
+  </tbody></table></div></article>
+  <div data-inventory-permission-admin></div>`;
 }
 
 function renderContent() {
@@ -574,8 +577,9 @@ function openUserEditor(user=null) {
     <label><span>Ngôn ngữ · 語言</span><select name="preferred_language"><option value="vi" ${user?.preferred_language==="vi"?"selected":""}>Tiếng Việt</option><option value="zh-TW" ${user?.preferred_language==="zh-TW"?"selected":""}>繁體中文</option></select></label>
     <label><span>${user?"Mật khẩu mới (để trống nếu giữ nguyên)":"Mật khẩu"}</span><input name="password" type="password" ${user?"":"required"} minlength="10"></label>
     <label class="sa-check wide"><input type="checkbox" name="active" ${user?.active!==false?"checked":""}><span>Active</span></label>
-  </div><div class="sa-permission-head"><div><h3>Quyền module · 模組權限</h3><p>View/Edit hiệu lực theo từng user.</p></div><button class="sa-btn small" type="button" data-role-defaults>Dùng mặc định Role</button></div>
-  <div class="sa-permission-grid">${state.accessModel.modules.map((m)=>{const p=effective[m.module_key]||{};return `<div class="sa-permission-row" data-module="${esc(m.module_key)}"><div><strong>${esc(m.name_vi)}</strong><small>${esc(m.name_zh_tw)} · ${esc(m.module_key)}</small></div><label><input type="checkbox" data-perm="view" ${p.view?"checked":""}> View</label><label><input type="checkbox" data-perm="edit" ${p.edit?"checked":""}> Edit</label></div>`;}).join("")}</div>
+  </div><div class="sa-permission-head"><div><h3>Quyền module · 模組權限</h3><p>View/Edit legacy cho các module ngoài Kho. Quyền Kho không còn suy ra từ Role hoặc checkbox này.</p></div><button class="sa-btn small" type="button" data-role-defaults>Dùng mặc định Role</button></div>
+  <div class="sa-alert success">Kho · 庫存: cấu hình quyền chi tiết theo tài khoản + chi nhánh + vị trí tại bảng “Phân quyền Kho chi tiết” phía dưới danh sách user.</div>
+  <div class="sa-permission-grid">${state.accessModel.modules.filter((m)=>m.module_key!=="inventory").map((m)=>{const p=effective[m.module_key]||{};return `<div class="sa-permission-row" data-module="${esc(m.module_key)}"><div><strong>${esc(m.name_vi)}</strong><small>${esc(m.name_zh_tw)} · ${esc(m.module_key)}</small></div><label><input type="checkbox" data-perm="view" ${p.view?"checked":""}> View</label><label><input type="checkbox" data-perm="edit" ${p.edit?"checked":""}> Edit</label></div>`;}).join("")}</div>
   <p class="sa-form-error" data-form-error role="alert"></p><div class="sa-modal-actions"><button class="sa-btn" type="button" data-modal-close>Hủy</button><button class="sa-btn primary" type="submit">Lưu vào Database</button></div></form>`);
   const form=host.querySelector("[data-user-form]");
   const roleSelect=form.querySelector('[name="role"]');
@@ -693,6 +697,8 @@ async function switchSection(section) {
 function bind() {
   const inventoryHost=root.querySelector("[data-inventory-database]");
   if(inventoryHost)inventoryDatabase.mount(inventoryHost,{sites:state.sites,me:state.me});
+  const permissionHost=root.querySelector("[data-inventory-permission-admin]");
+  if(permissionHost)inventoryPermissionAdmin.mount(permissionHost,{users:state.users,sites:state.sites,me:state.me});
   root.querySelectorAll("[data-section]").forEach((button)=>button.addEventListener("click",()=>void switchSection(button.dataset.section)));
   root.querySelector("[data-refresh]")?.addEventListener("click",()=>void refreshCurrent()); root.querySelector("[data-toggle-nav]")?.addEventListener("click",()=>root.classList.toggle("nav-open"));
   root.querySelector("[data-copy-handoff]")?.addEventListener("click",async(event)=>{const button=event.currentTarget;const url=String(button.dataset.handoffUrl||"");if(!url)return;try{await navigator.clipboard.writeText(url);button.textContent="Đã copy ✓";}catch{window.prompt("Copy handoff link:",url);}});

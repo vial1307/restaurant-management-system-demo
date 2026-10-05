@@ -5,6 +5,7 @@ import { hydrateUserAccess, listAccessModel, resolveRoleProfile } from "./access
 import { registerMasterDataRoutes } from "./master-data-routes.mjs";
 import { registerInventoryMasterRoutes } from "./inventory-master-routes.mjs";
 import { registerSuperAdminRoutes } from "./super-admin-routes.mjs";
+import { registerInventoryAccessAdminRoutes } from "./inventory-access-admin-routes.mjs";
 import { activeSite } from "./site-registry.mjs";
 
 function requireAdmin(user, reply) {
@@ -96,6 +97,7 @@ export async function registerAdminRoutes(app) {
   await registerMasterDataRoutes(app);
   await registerInventoryMasterRoutes(app);
   await registerSuperAdminRoutes(app);
+  await registerInventoryAccessAdminRoutes(app);
 
   app.get("/api/admin/access-model", async (request, reply) => {
     const user = await requireUser(request, reply);

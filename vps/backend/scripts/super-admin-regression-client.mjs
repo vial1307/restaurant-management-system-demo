@@ -45,7 +45,7 @@ async function removeUser(cookie, id) {
 await DB.connect();
 try {
   const schema = await DB.query("select version from public.schema_migrations order by version desc limit 1");
-  assert.equal(schema.rows[0]?.version, "031");
+  assert.equal(schema.rows[0]?.version, "032");
 
   const ownerDb = await DB.query("select role,location,permission_overrides from public.app_users where username='yangchuadmin'");
   assert.equal(ownerDb.rows[0]?.role, "superadmin");
@@ -62,7 +62,7 @@ try {
   const overview = await request("/api/admin/super/overview", { cookie:owner.cookie });
   assert.equal(overview.response.status, 200, JSON.stringify(overview.data));
   assert.equal(overview.data.database.database_name, process.env.POSTGRES_DB || "kitchen_test");
-  assert.equal(overview.data.schema.version, "031");
+  assert.equal(overview.data.schema.version, "032");
   assert(Number(overview.data.api.uptime_seconds) >= 0);
 
   const development = await request("/api/admin/super/development-status", { cookie:owner.cookie });
@@ -72,9 +72,9 @@ try {
   assert(["stable","in_progress"].includes(development.data.status));
   assert.equal(typeof development.data.current_work.branch, "string");
   assert(development.data.current_work.branch.length > 0);
-  assert.equal(development.data.current_work.candidate_schema, "031");
-  assert.equal(development.data.runtime.schema.version, "031");
-  assert.equal(development.data.live_production.schema, "031");
+  assert.equal(development.data.current_work.candidate_schema, "032");
+  assert.equal(development.data.runtime.schema.version, "032");
+  assert.equal(development.data.live_production.schema, "032");
   const evidence = development.data.release_evidence;
   assert.equal(evidence.schema, null, "static fallback must not advertise a historical schema");
   assert.equal(evidence.workflow_run_id, null, "static fallback must not advertise a historical deploy run");
@@ -144,6 +144,106 @@ try {
   const ordinaryDenied = await request("/api/admin/super/overview", { cookie:ordinary.cookie });
   assert.equal(ordinaryDenied.response.status, 403);
   assert.equal(ordinaryDenied.data.error, "SUPER_ADMIN_REQUIRED");
+
+  const inventoryAccessModel = await request("/api/admin/super/inventory-access-model", { cookie:owner.cookie });
+  assert.equal(inventoryAccessModel.response.status,200,JSON.stringify(inventoryAccessModel.data));
+  assert(inventoryAccessModel.data.actions.some((row)=>row.actionKey==="inventory.quantity.set_absolute"));
+  assert(inventoryAccessModel.data.actions.some((row)=>row.actionKey==="inventory.transfer.cross_site"));
+  assert(inventoryAccessModel.data.sites.some((row)=>row.code==="fuxing"));
+  assert(inventoryAccessModel.data.sites.some((row)=>row.code==="yongji"));
+  assert(inventoryAccessModel.data.locations.some((row)=>row.code==="fuxing-freezer"));
+
+  const newUserInventoryAccess = await request(
+    `/api/admin/super/inventory-access/${encodeURIComponent(ordinaryAdminId)}`,
+    { cookie:owner.cookie }
+  );
+  assert.equal(newUserInventoryAccess.response.status,200,JSON.stringify(newUserInventoryAccess.data));
+  assert.deepEqual(newUserInventoryAccess.data.rules,[],
+    "new account must default-deny Inventory until Super Admin writes explicit DB rules");
+  const preGrantInventory = await request("/api/inventory/fuxing",{cookie:ordinary.cookie});
+  assert.equal(preGrantInventory.response.status,403,
+    "job title must not silently grant Inventory to a post-migration account");
+
+  const fuxingFreezer = inventoryAccessModel.data.locations.find((row)=>row.code==="fuxing-freezer");
+  const fuxingFour = inventoryAccessModel.data.locations.find((row)=>row.code==="fuxing-four");
+  assert(fuxingFreezer && fuxingFour,"Inventory permission fixture locations missing");
+
+  const accessSave = await request(
+    `/api/admin/super/inventory-access/${encodeURIComponent(ordinaryAdminId)}`,
+    {
+      method:"PUT",cookie:owner.cookie,
+      body:{
+        revision:newUserInventoryAccess.data.revision,
+        rules:[
+          {
+            actionKey:"inventory.view",effect:"allow",allSites:false,
+            sites:["fuxing","yongji"],locations:[],workAreas:[],note:"SUPER_ADMIN_BASE",
+          },
+          {
+            actionKey:"inventory.quantity.set_absolute",effect:"allow",allSites:false,
+            sites:["fuxing"],locations:[],workAreas:[],note:"SUPER_ADMIN_BASE",
+          },
+          {
+            actionKey:"inventory.quantity.set_absolute",effect:"deny",allSites:false,
+            sites:["fuxing"],locations:[fuxingFreezer.id],workAreas:[],note:"SUPER_ADMIN_OVERRIDE",
+          },
+        ],
+      },
+    }
+  );
+  assert.equal(accessSave.response.status,200,JSON.stringify(accessSave.data));
+  assert.equal(accessSave.data.revision,newUserInventoryAccess.data.revision+1);
+  assert.equal(accessSave.data.rules.length,3);
+
+  const postGrantFuxing = await request("/api/inventory/fuxing",{cookie:ordinary.cookie});
+  const postGrantYongji = await request("/api/inventory/yongji",{cookie:ordinary.cookie});
+  const postGrantCentral = await request("/api/inventory/central",{cookie:ordinary.cookie});
+  assert.equal(postGrantFuxing.response.status,200,"custom A+B site combination lost Fuxing");
+  assert.equal(postGrantYongji.response.status,200,"custom A+B site combination lost Yongji");
+  assert.equal(postGrantCentral.response.status,403,"custom A+B site combination leaked Central");
+
+  const beef = await DB.query("select id from public.inventory_items where item_key='fuxing:beef'");
+  const deniedQuantity = await request("/api/inventory/set-quantity",{
+    method:"POST",cookie:ordinary.cookie,
+    body:{itemId:beef.rows[0].id,locationId:fuxingFreezer.id,quantity:11},
+  });
+  assert.equal(deniedQuantity.response.status,403,
+    "location-specific DENY must override broad site ALLOW");
+
+  const allowedQuantity = await request("/api/inventory/set-quantity",{
+    method:"POST",cookie:ordinary.cookie,
+    body:{itemId:beef.rows[0].id,locationId:fuxingFour.id,quantity:2},
+  });
+  assert.equal(allowedQuantity.response.status,200,
+    "broad site ALLOW must remain effective outside the denied location");
+
+  const reloadedInventoryAccess = await request(
+    `/api/admin/super/inventory-access/${encodeURIComponent(ordinaryAdminId)}`,
+    { cookie:owner.cookie }
+  );
+  assert.equal(reloadedInventoryAccess.response.status,200);
+  assert.equal(reloadedInventoryAccess.data.revision,accessSave.data.revision);
+  assert(reloadedInventoryAccess.data.rules.some((row)=>
+    row.actionKey==="inventory.quantity.set_absolute"
+    && row.effect==="deny"
+    && row.locations.includes(String(fuxingFreezer.id))
+  ),"F5/API reload did not reproduce granular location deny from PostgreSQL");
+
+  const staleAccessSave = await request(
+    `/api/admin/super/inventory-access/${encodeURIComponent(ordinaryAdminId)}`,
+    {
+      method:"PUT",cookie:owner.cookie,
+      body:{revision:newUserInventoryAccess.data.revision,rules:[]},
+    }
+  );
+  assert.equal(staleAccessSave.response.status,409);
+  assert.equal(staleAccessSave.data.error,"INVENTORY_ACCESS_STALE");
+
+  const inventoryAccessAudit = await DB.query(
+    "select action,before_data,after_data from public.audit_logs where action='inventory_access_replace' and entity_id=$1 order by created_at desc limit 1",
+    [ordinaryAdminId]
+  );
+  assert.equal(inventoryAccessAudit.rowCount,1,"Inventory access change must be audited");
   const ordinaryMetricsDenied = await request("/api/admin/super/system-metrics", { cookie:ordinary.cookie });
   assert.equal(ordinaryMetricsDenied.response.status, 403);
   assert.equal(ordinaryMetricsDenied.data.error, "SUPER_ADMIN_REQUIRED");

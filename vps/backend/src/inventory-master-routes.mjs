@@ -1,5 +1,6 @@
 import { pool } from "./db.mjs";
-import { requireUser, siteAllowed } from "./auth.mjs";
+import { requireUser } from "./auth.mjs";
+import { inventoryActionAllowed, inventoryActionSnapshot } from "./inventory-access.mjs";
 
 export async function registerInventoryMasterRoutes(app) {
   app.get("/api/inventory/sites", async (request, reply) => {
@@ -13,8 +14,18 @@ export async function registerInventoryMasterRoutes(app) {
        order by sort_order,code`
     );
 
-    return {
-      sites: rows.filter((site) => siteAllowed(user, site.code)),
-    };
+    const visible=[];
+    for (const site of rows) {
+      if (await inventoryActionAllowed(user,"inventory.view",{site:site.code})) visible.push(site);
+    }
+    return { sites:visible };
   });
+  app.get("/api/inventory/access", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+    const site=String(request.query?.site || "").trim();
+    if (!site) return reply.code(400).send({ error:"SITE_REQUIRED" });
+    return inventoryActionSnapshot(user,site);
+  });
+
 }
