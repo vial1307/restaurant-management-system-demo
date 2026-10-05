@@ -1,5 +1,26 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #205 granular Inventory permission runtime implementation
+
+- Opened runtime PR #205 from current main after the approved PR #204 design.
+- Added schema `032_inventory_access_and_catalog_master.sql`.
+- Added granular action keys for view, quantity, minimum, catalog identity/unit/category, item-location attach/detach, primary location, receive default, Work Area edit, internal/cross-site movement, receive/pick/use/return, history, archive and location master management.
+- Added normalized per-user site/location/Work Area rules. Arbitrary A+B/A+C/B+C combinations are represented by database rows, never frontend constants.
+- Added optional reusable policy/site-group tables while keeping direct per-user rules authoritative for the first UI.
+- Added Category/Unit database masters and item-location primary/display metadata for phase 2 UI.
+- Added low-stock metadata fields (`minimum_enabled`, `warning_enabled`, `warning_quantity`).
+- Added one-time compatibility seeding for existing accounts. New accounts after schema 032 intentionally receive no Inventory rule until Super Admin configures them.
+- Added `inventory-access.mjs`: direct rules first, then policy rules, specific Location/Work Area scope above Site/All-sites, explicit DENY wins at equal specificity, default DENY.
+- Converted core Inventory APIs and extra catalog/relocation/cross-site routes to granular action checks.
+- Removed hard-coded Admin requirement for catalog archive; archive is now the `inventory.product.archive` action.
+- Added Super Admin Inventory permission API with full transactional replacement, validation, revision/stale-write protection and `inventory_access_replace` audit history.
+- Added the approved Super Admin permission UI: account selector, All/Custom site scope, action matrix, location/Work Area override builder and DB revision indicator.
+- Removed Inventory from the old role-derived module checkbox editor to prevent contradictory authority.
+- Added static/access contract regression and extended Super Admin API/browser regression.
+- VPS disk cleanup remains explicitly deferred.
+- NEXT: run all exact-head gates on PR #205 and fix failures before merge.
+
+
 ## 2026-10-06 — Inventory permission/database/UI redesign decisions locked + Handoff live-sync audit
 
 ### Approved Super Admin permission UI
