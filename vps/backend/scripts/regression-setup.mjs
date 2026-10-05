@@ -219,6 +219,9 @@ try {
     "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
     "inventory.use","inventory.return","inventory.product.archive"
   ]});
+  // Central shipping regression needs explicit destination-side receive scope.
+  // It still does not grant branch inventory.view or branch catalog editing.
+  await seedInventoryAccess(users.centralreg,{sites:["fuxing","yongji"],actions:["inventory.receive"]});
   // Preserve the legacy shipping test contract: an editor at Fuxing may ship
   // from Fuxing and receive into Yongji, while still lacking Yongji view/edit.
   await seedInventoryAccess(users.employeefx,{sites:["yongji"],actions:["inventory.receive"]});
