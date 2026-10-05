@@ -207,10 +207,9 @@ function addLogout(user) {
 }
 
 function branchSwitcher(user, active = activeInventorySite()) {
-  if (user.location !== "all" && user.role !== "admin") return "";
   const language = document.documentElement.lang === "vi" ? "vi" : "zh";
   const sites = inventorySites().filter((site) => site.active !== false);
-  if (!sites.length) return "";
+  if (sites.length <= 1) return "";
   return `<div class="warehouse-switch">${sites.map((site) => {
     const zh = site.name_zh_tw || site.name_zh || site.code;
     const vi = site.name_vi || zh;
@@ -388,10 +387,9 @@ function centralPage(user) {
   const uiGroups = inventoryUiGroups("central");
   const storageCount = uiGroups.storage.length;
   const workAreaCount = uiGroups.workAreas.length;
-  const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
   const catalogManageVisible = editGranted && activeInventorySite()==="central";
   const canManageCatalog = catalogManageVisible && canManageCentralCatalog();
-  const canViewHistory = accountRole === "admin";
+  const canViewHistory = canInventoryAction("inventory.history.full",{site:"central"});
   if (mode === "manage" && !catalogManageVisible) { mode = "overview"; content.dataset.centralMode = mode; }
   if (mode === "history" && !canViewHistory) { mode = "overview"; content.dataset.centralMode = mode; }
   const log = [];
@@ -988,7 +986,7 @@ function bindCentral(user) {
   };
   content.querySelectorAll("[data-central-product-delete]").forEach((button) => {
     button.onclick = async () => {
-      if (user.role !== "admin" && user.accountRole !== "admin") return;
+      if (!canInventoryAction("inventory.product.archive",{site:"central"})) return;
       const key = button.dataset.centralProductDelete;
       const oldItems = loadStock();
       const rows = oldItems.filter((row) => centralProductKey(row) === key);
