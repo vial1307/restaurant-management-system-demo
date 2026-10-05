@@ -22,6 +22,7 @@ assert.doesNotMatch(feed,/candidates\.find\(\(pr\) => !pr\.draft\)/,
   "newest open PR must not automatically become the current handoff");
 assert.match(feed,/authority:"main-current-handoff"/);
 assert.match(feed,/main_workflows:mainRuns/);
+assert.match(feed,/recent_main_workflows:recentMainRuns/,"live handoff must retain recent main workflow evidence for deployed production SHAs");
 assert.match(feed,/\/actions\/runs\?branch=main/);
 assert.match(feed,/changed_files:files/);
 assert.match(feed,/GITHUB_LIVE_HANDOFF_DISABLED/);
