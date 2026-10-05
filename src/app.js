@@ -1402,24 +1402,95 @@ function addItemModal(context) {
   const uiGroups = inventoryUiGroups(site);
   const storageGroups = uiGroups.storage;
   const workAreas = uiGroups.workAreas;
+  const masters=inventoryCatalogMasters(site);
   const activeZone = view.zone !== "all" && storageGroups.some((zone) => zone.id === view.zone) ? view.zone : storageGroups[0]?.id || "";
-  const units = inventoryUnitSuggestions(record, item.unit);
-  const selectedUnit = item.unit || units[0] || "";
+  const selectedPrimaryZone=existing.find((entry)=>entry.isPrimary)?.zone || existing[0]?.zone || activeZone;
   const selectedWorkArea = item.workArea || (view.workArea !== "all" && workAreas.some((area) => area.id === view.workArea) ? view.workArea : workAreas[0]?.id || "");
-  const stocktakeEditable = canDirectInventoryAdjust();
+
+  const canIdentity=editing
+    ? canInventoryAction("inventory.product.identity.edit",{site})
+    : canInventoryAction("inventory.product.create",{site});
+  const canUnit=canInventoryAction("inventory.product.unit.edit",{site});
+  const canCategory=canInventoryAction("inventory.product.category.edit",{site});
+  const canWorkArea=canInventoryAction("inventory.work_area.edit",{site,workArea:selectedWorkArea});
+  const canPrimary=canInventoryAction("inventory.product.primary_location.edit",{site});
   const receiveDefaultEditable = canManageReceiveDefault(site);
-  const locations = storageGroups.map((zone) => {
+
+  const unitRows=(masters.units||[]);
+  const currentUnit=item.unit || "";
+  const unitSuggestions=[...new Set([
+    currentUnit,
+    ...unitRows.flatMap((row)=>[row.symbol,row.code]).filter(Boolean),
+  ].map((value)=>String(value||"").trim()).filter(Boolean))];
+  const selectedUnit=currentUnit || unitSuggestions[0] || "";
+  const categoryRows=masters.categories||[];
+  const selectedCategory=item.categoryCode || "";
+
+  const locations = storageGroups.map((zone,index) => {
     const stored = existing.find((entry) => entry.zone === zone.id);
     const checked = editing ? Boolean(stored) : zone.id === activeZone;
-    return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label></div>`;
+    const locationId=stored?.cloudLocationId || zone.locationId || "";
+    const canAttach=canInventoryAction("inventory.product.location.attach",{site,locationId});
+    const canDetach=stored ? canInventoryAction("inventory.product.location.detach",{site,locationId}) : canAttach;
+    const canToggle=stored ? canDetach : canAttach;
+    const canQuantity=canInventoryAction("inventory.quantity.set_absolute",{site,locationId});
+    const canMinimum=canInventoryAction("inventory.minimum.edit",{site,locationId});
+    const primaryChecked=(checked && zone.id===selectedPrimaryZone);
+    return `<div class="modal-location-row inventory-location-config" data-location-zone="${escapeHtml(zone.id)}">
+      <label class="modal-location-choice">
+        <input type="checkbox" name="zones" value="${escapeHtml(zone.id)}" ${checked ? "checked" : ""} ${canToggle ? "" : "disabled"} />
+        <span>${escapeHtml(zone[language])}</span>
+      </label>
+      <label class="inventory-primary-choice" title="${language==="zh"?"主要儲位":"Vị trí chính"}">
+        <input type="radio" name="primaryZone" value="${escapeHtml(zone.id)}" ${primaryChecked?"checked":""} ${canPrimary && checked ? "" : "disabled"} />
+        <span>${language==="zh"?"主要":"Chính"}</span>
+      </label>
+      <label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${escapeHtml(zone.id)}" value="${stored?.quantity ?? 0}" ${canQuantity ? "" : 'readonly aria-readonly="true"'} /></label>
+      <label><span>${language==="zh"?"最低量":"Minimum"}</span><input type="number" min="0" name="minimum:${escapeHtml(zone.id)}" value="${stored?.minimum ?? 0}" ${canMinimum ? "" : 'readonly aria-readonly="true"'} /></label>
+      <input type="hidden" name="displayOrder:${escapeHtml(zone.id)}" value="${Number(stored?.displayOrder ?? zone.sortOrder ?? index)}" />
+    </div>`;
   }).join("");
+
   const receiveZone=item.receiveZone||"";
-  const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／尚未指定":"Tự động nếu chỉ có 1 vị trí · 尚未指定"}</option>`]
-    .concat(storageGroups.map((zone)=>`<option value="${zone.id}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
+  const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／每次選擇":"Tự động nếu chỉ có 1 vị trí · nếu nhiều vị trí sẽ hỏi"}</option>`]
+    .concat(storageGroups.map((zone)=>`<option value="${escapeHtml(zone.id)}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
+    .join("");
+  const categoryOptions=[`<option value="">${language==="zh"?"未分類":"Chưa phân loại"}</option>`]
+    .concat(categoryRows.map((row)=>`<option value="${escapeHtml(row.code)}" ${selectedCategory===row.code?"selected":""}>${escapeHtml(language==="zh"?(row.name_zh_tw||row.code):(row.name_vi||row.name_zh_tw||row.code))}</option>`))
     .join("");
 
   const saveLabel = editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項";
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div><form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea" required>${workAreas.map((area) => `<option value="${area.id}" ${selectedWorkArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<input name="unit" list="inventory-unit-suggestions" required value="${escapeHtml(selectedUnit)}" placeholder="包 / 盒 / kg" /><datalist id="inventory-unit-suggestions">${units.map((unit) => `<option value="${escapeHtml(unit)}"></option>`).join("")}</datalist></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div>
+    <form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}">
+      <div class="modal-grid modal-identity-grid">
+        <label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" ${canIdentity?"":'readonly aria-readonly="true"'} /></label>
+        <label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" ${canIdentity?"":'readonly aria-readonly="true"'} /></label>
+      </div>
+      <div class="modal-grid modal-meta-grid">
+        <label>${language==="zh"?"分類":"Danh mục · 分類"}<select name="categoryCode" ${canCategory?"":'disabled aria-disabled="true"'}>${categoryOptions}</select>${canCategory?"":`<input type="hidden" name="categoryCode" value="${escapeHtml(selectedCategory)}" />`}</label>
+        <label>${escapeHtml(text.quantity)}
+          <input name="unit" list="inventory-unit-suggestions" required value="${escapeHtml(selectedUnit)}" placeholder="包 / 盒 / kg" ${canUnit?"":'readonly aria-readonly="true"'} />
+          <datalist id="inventory-unit-suggestions">${unitSuggestions.map((unit)=>`<option value="${escapeHtml(unit)}"></option>`).join("")}</datalist>
+          <small class="ingredient-form-guide">${canUnit ? (language==="zh"?"可選既有單位，也可輸入新單位；新單位會寫入資料庫。":"Có thể chọn hoặc tự nhập đơn vị mới; đơn vị mới sẽ được lưu vào Database.") : (language==="zh"?"此帳號沒有編輯單位權限。":"Tài khoản này không có quyền sửa đơn vị.")}</small>
+        </label>
+      </div>
+      <label>${escapeHtml(text.workstation)}
+        <select name="workArea" required ${canWorkArea || !editing ? "" : 'disabled aria-disabled="true"'}>${workAreas.map((area) => `<option value="${escapeHtml(area.id)}" ${selectedWorkArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>
+        ${canWorkArea || !editing ? "" : `<input type="hidden" name="workArea" value="${escapeHtml(selectedWorkArea)}" />`}
+        <small class="ingredient-form-guide">${language === "zh" ? "工作區依據點獨立設定，不會強制與其他據點相同。" : "Work Area được cấu hình riêng theo từng chi nhánh, không ép giống site khác."}</small>
+      </label>
+      <fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend>
+        <p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放位置並設定主要儲位。位置排序：主要 → Work → 其他。" : "Chọn nơi thực tế lưu hàng và đặt Vị trí chính. Thứ tự hiển thị: Chính → Work → vị trí khác."}</p>
+        ${locations}
+      </fieldset>
+      <div class="modal-grid modal-meta-grid">
+        <label>${escapeHtml(text.workInventory)} · Minimum<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 0}" ${working?.cloudLocationId && canInventoryAction("inventory.minimum.edit",{site,locationId:working.cloudLocationId,workArea:selectedWorkArea}) ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "可留 0；設定後用於工作區低庫存提醒。" : "Có thể để 0; nếu đặt sẽ dùng cho cảnh báo thiếu tại Work Area."}</small></label>
+        <label>${language==="zh"?"預設收貨儲位":"Vị trí nhận hàng mặc định · 預設收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"只有一個儲位時可自動；多個儲位若有預設就自動入該位置，若沒有則收貨／跨店調撥時必須選擇目的儲位。":"Nếu chỉ có 1 vị trí hệ thống tự chọn; nếu có nhiều vị trí và đặt mặc định thì hàng đến sẽ vào đó, còn chưa đặt thì khi nhận/chuyển liên chi nhánh phải chọn vị trí đích."}</small></label>
+      </div>
+      <div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div>
+    </form>
+  </section></div>`;
 }
 
 function syncReceiveZoneOptions(form) {
