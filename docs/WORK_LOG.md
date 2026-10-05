@@ -1,5 +1,17 @@
 # Kitchen OS Work Log
 
+## 2026-10-05 — PR #200 production closure
+
+- PR #200 exact tested head `184585968ddc50d462c4fc1b98b70ea2353d1351` passed Master/Admin #440, API Load #653, Super Admin Browser #364 and Workforce Diagnostic #519.
+- Deploy #1164 attempt 1 failed only at full-device WebKit `webkit-managerfx-390x844`: `/api/inventory/fuxing` surfaced as an access-control page error. Chromium and all earlier regressions passed, the touched PR paths did not include Inventory/access control, and baseline #1160 had passed the same production Inventory code.
+- Per Engineering Contract, reran failed workflow on the unchanged exact PR head; Deploy #1164 attempt 2 passed without weakening tests.
+- PR #200 merged as `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`.
+- Main Deploy #1165 / `37287279011`: PASS. Backup `/opt/kitchen-os/backups/kitchen_os_20261005T090831Z.dump`; schema `031`; `DATA_INTEGRITY_OK`; production health release `2feb47e`; production UI smoke PASS.
+- AgentMemory deploy sync: `AGENTMEMORY_SEED_COMPLETE changed=2 total=7`; recall `AGENTMEMORY_RECALL_OK results=5`.
+- Post-deploy: Inventory Audit #473, Workforce Staff #714, Attendance #688, Schedule Backfill #698 and Schedule Parity #487 all PASS.
+- Production now uses neutral static handoff fallback and live main/runtime evidence. Historical PR #140/schema 024 fallback is removed.
+- Handoff closure sets `ACTIVE_PR: none`; old PR #188/#197 branches are historical only and must not be reused as current authority.
+
 ## 2026-10-05 — Resume after Inventory production closure: PR #200
 
 - Verified current main is `05183544fd4168332f6681c8e00f46b5d9f02527` after PR #188, #198 and #199.
