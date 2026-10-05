@@ -385,6 +385,10 @@ function renderDevelopment() {
   if(!d)return `<article class="sa-card"><div class="sa-card-head"><div><h2>GitHub & Handoff</h2><p>Metadata bàn giao hiện chưa tải được. Các chức năng quản trị khác vẫn hoạt động bình thường.</p></div><span class="sa-pill off">UNAVAILABLE</span></div></article>`;
   const work=d.current_work||{}; const incident=work.resolved_incident||{}; const live=d.live_production||{}; const evidence=d.release_evidence||{}; const runtime=d.runtime||{}; const repo=d.repository||{};
   const liveGit=d.live_github||{}; const pr=liveGit.active_pr||work.pull_request||null; const canonical=d.canonical_handoff||{};
+  const mainWorkflowRows=liveGit.main_workflows||[];
+  const currentDeploy=mainWorkflowRows.find((row)=>row.name==="Deploy Kitchen OS to VPS"&&row.status==="completed"&&row.conclusion==="success")||null;
+  const currentInventoryAudit=mainWorkflowRows.find((row)=>row.name==="Inventory Site Production Audit"&&row.status==="completed"&&row.conclusion==="success")||null;
+  const recordedProduction=d.engineering_harness?.gates?.production?.recorded_sha||"";
   const status=String(d.status||"unknown").toLowerCase();
   const liveState=liveGit.available?(liveGit.stale?"STALE":"LIVE"):"FALLBACK";
   const workflowRows=(liveGit.workflows||[]).slice(0,12);
@@ -404,9 +408,9 @@ function renderDevelopment() {
       <div class="sa-kv-grid">
         <div><small>Phase</small><strong>${esc(d.phase||"—")}</strong></div>
         <div><small>GitHub refresh</small><strong>${esc(liveGit.generated_at||d.updated_at||"—")}</strong></div>
-        <div><small>Branch</small><strong class="mono">${esc(work.branch||"—")}</strong></div>
+        <div><small>Branch</small><strong class="mono">${esc(pr?.branch||work.branch||"main")}</strong></div>
         <div><small>Head SHA</small><strong class="mono">${esc(String(pr?.head_sha||"").slice(0,12)||"—")}</strong></div>
-        <div><small>${status==="stable"?"Current schema":"Candidate schema"}</small><strong>${esc(work.candidate_schema||runtime.schema?.version||"—")}</strong></div>
+        <div><small>${status==="stable"?"Current schema":"Candidate schema"}</small><strong>${esc(runtime.schema?.version||work.candidate_schema||"—")}</strong></div>
         <div><small>PR</small><strong>${pr?.number?`#${esc(pr.number)}`:"—"}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
@@ -420,13 +424,13 @@ function renderDevelopment() {
       <div class="sa-kv-grid">
         <div><small>Live release</small><strong class="mono">${esc(live.release||runtime.release||"—")}</strong></div>
         <div><small>Live schema</small><strong>${esc(live.schema||runtime.schema?.version||"—")}</strong></div>
-        <div><small>Release milestone</small><strong class="mono">${esc(String(evidence.milestone_sha||"").slice(0,12)||"—")}</strong></div>
-        <div><small>Inventory audit</small><strong>${esc(evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:"—")}</strong></div>
+        <div><small>Verified production SHA</small><strong class="mono">${esc(String(recordedProduction||live.release||runtime.release||"").slice(0,12)||"—")}</strong></div>
+        <div><small>Inventory audit</small><strong>${esc(currentInventoryAudit?.run_number?`#${currentInventoryAudit.run_number}`:"—")}</strong></div>
       </div>
       <div class="sa-dev-link-grid">
         ${live.commit_url?devLink(live.commit_url,"Live release commit",live.release||""):""}
-        ${evidence.url?devLink(evidence.url,"Release evidence",evidence.workflow_run_id?`run ${evidence.workflow_run_id}`:""):""}
-        ${evidence.inventory_audit_url?devLink(evidence.inventory_audit_url,"Inventory production audit",evidence.inventory_audit_run_id?`run ${evidence.inventory_audit_run_id}`:""):""}
+        ${currentDeploy?.url?devLink(currentDeploy.url,"Current deploy evidence",currentDeploy.run_number?`#${currentDeploy.run_number}`:""):""}
+        ${currentInventoryAudit?.url?devLink(currentInventoryAudit.url,"Inventory production audit",currentInventoryAudit.run_number?`#${currentInventoryAudit.run_number}`:""):""}
         ${devLink(repo.actions_url,"GitHub Actions","CI / deploy / audit")}
       </div>
       <p class="sa-dev-note">${esc(live.note||evidence.note||"")}</p>
