@@ -140,7 +140,9 @@ export async function registerInventoryExtraRoutes(app) {
     const candidates=requestedSites.length ? requestedSites : [...allowedSites];
     const sites=[];
     for (const site of candidates) {
-      if (await inventoryActionAllowed(user,"inventory.view",{site})) sites.push(site);
+      const canView = await inventoryActionAllowed(user,"inventory.view",{site});
+      const canReceive = canView ? true : await inventoryActionAllowed(user,"inventory.receive",{site});
+      if (canView || canReceive) sites.push(site);
     }
     if (!sites.length) return { defaults:[] };
     const catalogKeys = String(request.query?.catalogKeys || "")
