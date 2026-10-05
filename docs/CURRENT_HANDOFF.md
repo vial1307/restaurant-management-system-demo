@@ -1,46 +1,63 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #205
+ACTIVE_PR: none
 
-## ACTIVE — PR #205 granular Inventory access + Super Admin control, 2026-10-06
+## CURRENT VERIFIED PRODUCTION — PR #205 granular Inventory access + Super Admin control, 2026-10-06
 
-Runtime implementation phase 1 of the approved Inventory redesign.
+PR #205 is merged, deployed and production-verified. There is currently **no active engineering PR**.
 
-Current candidate:
-- branch: `feat/inventory-access-db-superadmin-20261006`;
-- target schema: `032`;
-- production baseline before this PR: release `8a89e1135e45329d30983424d38a75b2bac44d09`, schema `031`.
+Delivered:
+- schema `032` is live;
+- Inventory mutation authority is now database-driven by account + action + site/location/Work Area scope rather than inferred from job title;
+- arbitrary site combinations are normalized rows, not AB/AC/BC source constants;
+- Super Admin has the granular Inventory permission editor with all/custom site scope and location/Work Area overrides;
+- explicit allow/deny, default deny for post-migration accounts, revision-safe saves and audit history are active;
+- Unit/Category masters, item-location primary/display metadata and low-stock metadata are now persisted in PostgreSQL for the next Inventory UI phase;
+- legacy user modal no longer exposes Inventory as a role-derived module permission.
 
-Implemented on the PR branch:
-- PostgreSQL Inventory action catalog, per-user rules, policy templates, arbitrary site scopes, location scopes, Work Area scopes and revision state;
-- Category and Unit master tables;
-- item-location presentation metadata with one primary storage location per site-scoped item;
-- minimum/warning metadata for low-stock follow-up;
-- compatibility seed for existing production accounts, while accounts created after schema 032 default-deny Inventory until configured from Super Admin;
-- runtime Inventory evaluator uses direct/policy DB rules and default deny; it does not derive authority from job title;
-- core quantity/history/internal transfer plus catalog, storage relocation, Work Area relocation, cross-site transfer and receive-default endpoints now enforce granular action keys;
-- Super Admin API reads/writes the rules transactionally with revision conflict protection and audit history;
-- Super Admin Users page now includes the approved granular Inventory permission editor: account + all/custom site combinations + action matrix + location/Work Area overrides;
-- legacy account modal no longer presents Inventory as a role-derived View/Edit checkbox;
-- regression contract and CI coverage added.
+Exact-head PR evidence:
+- tested PR head: `df2abcab9680170a46622d44ff68e654f96d5619`;
+- Deploy Kitchen OS #1191: PASS;
+- Database Schema #333: PASS;
+- Master Data/Admin Panel #467: PASS;
+- Super Admin Browser #389: PASS;
+- API Load #680: PASS after rerun of a cancelled concurrency attempt;
+- Workforce Schedule Relational #318: PASS after rerun of a cancelled concurrency attempt;
+- Workforce Relational #306: PASS;
+- Workforce Approval Diagnostic #544: PASS.
 
-Still outside PR #205:
-- Inventory Desktop one-row multi-location UI and Mobile Full Screen Detail;
-- Primary -> Work -> Other chip rendering / “Xem thêm”;
-- Category/Unit editor integration into the Add/Edit Product modal;
-- low-stock notification screen;
-- Handoff auto-polling/force-refresh;
-- VPS disk cleanup.
+Merge and production:
+- merge commit: `36e0fbc0703262cc2b61f0cd7dba2fe44abc3358`;
+- Deploy Kitchen OS #1192 / run `37377566436`: PASS;
+- exact merge SHA deployed with backup/rollback path;
+- backup: `/opt/kitchen-os/backups/kitchen_os_20261005T214747Z.dump`;
+- production health: app/database healthy, schema `032`, release `36e0fbc`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: PASS;
+- AgentMemory deploy sync: `AGENTMEMORY_SEED_COMPLETE changed=2 total=7 project=kitchen-os`;
+- AgentMemory recall: `AGENTMEMORY_RECALL_OK results=5`.
 
-Required before merge:
-1. Database Schema Regression;
-2. Master Data and Admin Panel Regression;
-3. Super Admin Browser Regression;
-4. Isolated CI API Load Smoke;
-5. Deploy Kitchen OS exact-head regression;
-6. merge only the exact tested head;
-7. deploy exact merge SHA, verify schema 032 + DATA_INTEGRITY_OK + production UI smoke + Inventory audit;
-8. update handoff/status/work log and AgentMemory closure.
+Post-deploy production audits:
+- Inventory Site Production Audit #500: PASS;
+- Workforce Staff Production Backfill #741: PASS;
+- Workforce Attendance Production Backfill #715: PASS;
+- Workforce Schedule Production Backfill #725: PASS;
+- Workforce Schedule Production Parity #514: first attempt failed only because SSH was reset before parity execution; unchanged release rerun attempt 2: PASS and production remained healthy.
+
+Next approved runtime phase:
+- Inventory multi-location Desktop/Mobile UI;
+- one product = one row/card;
+- chip order Primary -> Work -> other;
+- >3 locations = first 3 + “Xem thêm”;
+- Mobile Full Screen Detail + permission-controlled minus/direct-number/plus;
+- Add/Edit Product integration for Category/Unit/Primary/Receive Default;
+- low-stock notification UI.
+
+Authority after closure:
+- `ACTIVE_PR: none`;
+- verified production SHA is `36e0fbc0703262cc2b61f0cd7dba2fe44abc3358`;
+- schema is `032`;
+- VPS/PostgreSQL + CURRENT_HANDOFF remain authoritative.
 
 ## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign specification, 2026-10-06
 
