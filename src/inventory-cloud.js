@@ -174,17 +174,22 @@ async function ensureSiteRegistry({ force = false } = {}) {
       siteRegistryLoaded = true;
       siteRegistryUserId = userId;
 
-      const currentSession = session();
-      if (currentSession?.location === "all") {
-        const previousSite = String(localStorage.getItem(ACTIVE_SITE_KEY) || "");
-        const nextSite = isActiveInventorySite(previousSite) ? previousSite : firstInventorySite();
-        if (nextSite) localStorage.setItem(ACTIVE_SITE_KEY, nextSite);
-        else localStorage.removeItem(ACTIVE_SITE_KEY);
-        if (nextSite !== previousSite) {
-          window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
-            detail:{ site:nextSite, previousSite, reason:"site-registry", hydrated:false },
-          }));
-        }
+      // The backend registry is already filtered by inventory.view. The active
+      // site therefore follows the user's database permission scope, including
+      // arbitrary combinations such as A+B/A+C, regardless of session.location.
+      const previousSite = String(localStorage.getItem(ACTIVE_SITE_KEY) || "");
+      const assignedSite = String(session()?.location || "");
+      const nextSite = isActiveInventorySite(previousSite)
+        ? previousSite
+        : isActiveInventorySite(assignedSite)
+          ? assignedSite
+          : firstInventorySite();
+      if (nextSite) localStorage.setItem(ACTIVE_SITE_KEY, nextSite);
+      else localStorage.removeItem(ACTIVE_SITE_KEY);
+      if (nextSite !== previousSite) {
+        window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
+          detail:{ site:nextSite, previousSite, reason:"site-registry", hydrated:false },
+        }));
       }
       return next;
     })
