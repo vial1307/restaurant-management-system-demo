@@ -199,13 +199,16 @@ alter table public.inventory_items
 alter table public.inventory_items
   add column if not exists unit_code text references public.inventory_units(code) on update cascade on delete restrict;
 
+-- Create indexes before the unit backfill. The backfill fires FK trigger events;
+-- PostgreSQL refuses CREATE INDEX on the same relation while those events are
+-- pending inside this transaction.
+create index if not exists inventory_items_category_idx on public.inventory_items(category_code) where active=true;
+create index if not exists inventory_items_unit_code_idx on public.inventory_items(unit_code) where active=true;
+
 update public.inventory_items
 set unit_code=btrim(unit)
 where unit_code is null and btrim(coalesce(unit,''))<>''
   and exists(select 1 from public.inventory_units u where u.code=btrim(inventory_items.unit));
-
-create index if not exists inventory_items_category_idx on public.inventory_items(category_code) where active=true;
-create index if not exists inventory_items_unit_code_idx on public.inventory_items(unit_code) where active=true;
 
 -- Storage configuration is separate from stock quantity. This table controls
 -- configured locations, primary location and display ordering.
