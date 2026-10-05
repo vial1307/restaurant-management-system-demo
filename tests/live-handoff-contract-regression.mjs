@@ -54,7 +54,8 @@ assert.doesNotMatch(page,/candidates\.find\(\(row\)=>!row\.draft\)/,
 
 assert.match(status,/canonical_handoff:\{/);
 assert.match(status,/url:PUBLIC_HANDOFF_URL/);
-assert.match(status,/workflow_run_id:"\d+"/);
-assert.match(status,/inventory_audit_run_id:"\d+"/);
+assert.match(status,/workflow_run_id:null/,"static handoff fallback must not pin a historical deploy run");
+assert.match(status,/inventory_audit_run_id:null/,"static handoff fallback must not pin a historical Inventory audit");
+assert.match(status,/Fallback only\. Current production release\/schema come from VPS runtime/,"fallback must defer production authority to live runtime/GitHub");
 
 console.log("LIVE_HANDOFF_CONTRACT_OK");

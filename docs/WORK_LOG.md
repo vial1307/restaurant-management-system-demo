@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-10-05 — Resume after Inventory production closure: PR #200
+
+- Verified current main is `05183544fd4168332f6681c8e00f46b5d9f02527` after PR #188, #198 and #199.
+- Main Deploy Kitchen OS #1160 / `37254253521` passed preflight, regression, deploy and production-ui-smoke.
+- Inventory Site Production Audit #467 / `37254828622` passed; Workforce Staff #708, Attendance #682, Schedule Backfill #692 and Schedule Parity #481 also passed.
+- Found handoff drift: CURRENT_HANDOFF/STATUS still described PR #188 as active even though it had already merged, while `development-status.mjs` still carried historical PR #140 / schema 024 / September RBAC fallback metadata.
+- Old PR #197 had the correct cleanup intent and had previously passed its own exact-head gates, but it was 29 commits behind the current main after Inventory performance and warehouse-switch fixes. It was not merged.
+- Created PR #200 from the current main and ported only the stale-fallback/live-evidence cleanup.
+- Runtime scope in PR #200: neutral static fallback; Current work prefers live active PR; Production evidence prefers live main Deploy/Inventory Audit workflows and VPS runtime release/schema.
+- Added regression guards so historical PR/schema/run metadata cannot silently return.
+- No Inventory handler, PostgreSQL schema/data, RBAC, AgentMemory authority or PR #188/#198/#199 warehouse behavior was rewritten.
+- NEXT: exact-head Deploy + Master/Admin + Super Admin Browser + API Load for PR #200, then merge/deploy exact tested SHA and close handoff/AgentMemory.
+
+
 ## 2026-10-05 — Engineering Harness production closure
 
 - PR #196 exact tested head `56eddaeededb048f0223e4e71a376281b28d2b92` passed the required Harness gates:
