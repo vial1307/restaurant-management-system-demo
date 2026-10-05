@@ -539,8 +539,11 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
+        unit_code: entry.unitCode || entry.unit || "個",
+        category_code: entry.categoryCode || "",
         work_area: entry.workArea || "",
         storage_only: Boolean(entry.storageOnly),
+        primary_location_code:"",
         locations: [],
       });
     }
@@ -549,31 +552,26 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
     item.vi = entry.labelVi || item.vi;
     item.catalog_key = entry.catalogKey || item.catalog_key || catalogKey(item.zh);
     item.unit = entry.unit || item.unit;
+    item.unit_code = entry.unitCode || item.unit_code || item.unit;
+    item.category_code = entry.categoryCode || item.category_code || "";
     item.work_area = entry.workArea || item.work_area;
     item.storage_only = Boolean(entry.storageOnly);
     const code = branchLocationCode(site, entry.zone);
     if (code) {
       item.locations.push({
         code,
+        is_primary:Boolean(entry.isPrimary),
+        display_order:Number(entry.displayOrder || 0),
         quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
         minimum: Math.max(0, Number(entry.minimum) || 0),
       });
+      if (entry.isPrimary) item.primary_location_code=code;
     }
   }
 
-  for (const entry of work) {
-    const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
-    const item = grouped.get(stockKey);
-    if (!item) continue;
-    const area = entry.workArea || item.work_area || "";
-    const code = branchWorkLocationCode(site, area);
-    if (!code) continue;
-    item.locations.push({
-      code,
-      quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
-      minimum: Math.max(0, Number(entry.minimum) || 0),
-    });
-  }
+  // Work Location is derived server-side from work_area. It is not a storage
+  // association and must never be sent as an explicit catalog location.
+  void work;
 
   return [...grouped.values()];
 }
@@ -1216,12 +1214,15 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
   const item = draft ? {
     key:branchItemKey(site,stockKey), catalog_key:draft.catalogKey,
     zh:draft.label, vi:draft.labelVi, unit:draft.unit,
+    unit_code:draft.unitCode || draft.unit,
+    category_code:draft.categoryCode || "",
     work_area:draft.workArea, storage_only:Boolean(draft.storageOnly),
-    locations:[
-      ...draft.locations.map((location) => ({ code:branchLocationCode(site,location.zone) })),
-      ...(branchWorkLocationCode(site,draft.workArea)
-        ? [{ code:branchWorkLocationCode(site,draft.workArea) }] : []),
-    ],
+    primary_location_code:branchLocationCode(site,draft.primaryZone || ""),
+    locations:draft.locations.map((location,index) => ({
+      code:branchLocationCode(site,location.zone),
+      is_primary:location.zone === draft.primaryZone,
+      display_order:Number(location.displayOrder ?? index),
+    })),
   } : buildBranchCatalog(site).find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
@@ -1254,7 +1255,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
 
 export async function cloudArchiveCentralItem(itemKey) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
+  if (!canInventoryAction("inventory.product.archive",{site:"central"})) return { ok: false, fallback: false, error: new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
   try {
     const data = await vpsArchiveCatalogItem(itemKey);
@@ -1268,7 +1269,7 @@ export async function cloudArchiveCentralItem(itemKey) {
 
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
+  if (!canInventoryAction("inventory.product.archive",{site})) return { ok: false, fallback: false, error: new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const itemKey = branchItemKey(site,stockKey);
