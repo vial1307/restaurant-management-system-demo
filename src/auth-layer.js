@@ -255,12 +255,24 @@ function delegatedWarehouseContent(button) {
   return button.closest(".page-content");
 }
 
-document.addEventListener("click", (event) => {
+let warehousePointerActivation = { site:"", at:0 };
+function activateWarehouseFromEvent(event) {
   const button = event.target?.closest?.(".warehouse-switch [data-warehouse]");
-  if (!button || button.disabled) return;
+  if (!button || button.disabled) return false;
+  const site = String(button.dataset.warehouse || "");
+  if (!site) return false;
   event.preventDefault();
+  if (event.type === "click" && warehousePointerActivation.site === site && Date.now() - warehousePointerActivation.at < 1200) {
+    warehousePointerActivation = { site:"", at:0 };
+    return true;
+  }
+  if (event.type === "pointerdown") warehousePointerActivation = { site, at:Date.now() };
   void switchWarehouse(button, { centralContent:delegatedWarehouseContent(button) });
-}, { capture:true });
+  return true;
+}
+
+document.addEventListener("pointerdown", activateWarehouseFromEvent, { capture:true });
+document.addEventListener("click", activateWarehouseFromEvent, { capture:true });
 
 function centralSiteRecord() {
   return inventorySites().find((site) => site.code === "central") || null;
