@@ -25,12 +25,12 @@ assert.equal(
   "both add/edit product save paths must require successful stock persistence and receiving-default authority before writing"
 );
 
-assert(backend.includes("async function canManageReceiveDefault(user, site)"), "backend receiving-default permission boundary missing");
-assert.match(backend,/canManageReceiveDefault[\s\S]{0,220}siteAllowed\(user, site\) && hasPermission\(user, "inventory", "edit"\)/, "backend receiving-default boundary must follow explicit edit permission and site scope");
-assert.doesNotMatch(backend,/canManageReceiveDefault[\s\S]{0,220}user\.role === "manager"/, "backend receiving-default writes must not be re-denied by role name");
+assert.match(backend,/async function canManageReceiveDefault\(user, site, client = pool\)/, "backend receiving-default permission boundary missing");
+assert.match(backend,/canManageReceiveDefault[\s\S]{0,220}inventoryActionAllowed\(user,"inventory\.receive_default\.edit",\{site\},client\)/, "backend receiving-default boundary must use granular database action and site scope");
+assert.doesNotMatch(backend,/canManageReceiveDefault[\s\S]{0,260}user\.role|hasPermission\(user, "inventory"/, "backend receiving-default writes must not derive authority from role/module permission");
 assert(!backend.includes('["fuxing","yongji"].includes(site)'), "backend receiving-default permission must not hard-code branch site names");
 assert(backend.includes('if (!(await requireReceiveDefaultManager(user, site, reply))) return;') || backend.includes('if (!await requireReceiveDefaultManager(user, site, reply)) return;'), "receive-default endpoint is not using its dedicated permission boundary");
 
-assert(spec.includes("receiving-default writes require explicit `inventory.edit`"), "canonical receiving-location ownership rule is not explicit about edit permission authority");
+assert(spec.includes("receiving-default writes require explicit `inventory.receive_default.edit`"), "canonical receiving-location ownership rule is not explicit about granular permission authority");
 
 console.log("receiving-default permission contract passed");
