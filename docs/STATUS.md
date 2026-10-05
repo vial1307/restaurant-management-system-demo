@@ -1,14 +1,26 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #202 production evidence across docs-only main drift, 2026-10-06
+## STABLE — no active engineering PR, 2026-10-06
 
-- `ACTIVE_PR: #202`.
-- Baseline main: `3920a84119e494f11867f6e5e5d4aaffd10b2896`.
-- Verified runtime remains release `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`, schema `031`.
-- Fix: preserve recent main workflow history and select production Deploy/Audit evidence by recorded production SHA instead of docs-only repository HEAD.
-- Engineering Harness stable gates use verified production-SHA runs when no active runtime candidate exists.
-- No Inventory/DB/RBAC/workforce business behavior changes.
-- NEXT: exact-head CI → merge tested head → exact merge deploy → production verification/audits → close ACTIVE_PR.
+- `ACTIVE_PR: none` after PR #202 production closure.
+- Verified runtime release: `8a89e1135e45329d30983424d38a75b2bac44d09`; schema `031`.
+- Deploy #1169 / `37342075459`: PASS including full-device, exact-SHA deploy and production UI smoke.
+- `DATA_INTEGRITY_OK`; backup `/opt/kitchen-os/backups/kitchen_os_20261005T164320Z.dump`.
+- Inventory Site Production Audit #477: PASS.
+- Workforce Staff #718, Attendance #692, Schedule Backfill #702, Schedule Parity #491: PASS.
+- Production evidence remains valid if later main commits are docs-only because workflows are resolved by recorded production SHA.
+- AgentMemory is recall-only; final closure-doc snapshot will refresh on the next manual sync or runtime deploy.
+- NEXT: new work must branch from current main, explicitly set a new active workstream and follow Engineering Contract exact-head/production gates.
+
+## DONE — PR #202 production evidence docs-drift repair, 2026-10-06
+
+- Exact PR head `153272303205a6ad62d04414b43290ed9fc3ac32`.
+- PR gates: Deploy #1168 PASS; Master/Admin #444 PASS; Super Admin Browser #367 PASS; API Load #657 PASS; Workforce Diagnostic #522 PASS.
+- Merged as `8a89e1135e45329d30983424d38a75b2bac44d09`.
+- Added recent-main workflow history while preserving current-main exact-head workflows.
+- Stable Engineering Harness now evaluates workflow evidence against the recorded production SHA when there is no active PR.
+- Super Admin production Deploy/Inventory links now survive docs-only main commits.
+- No Inventory business logic, PostgreSQL schema/data, RBAC/workforce mutation or warehouse-switch behavior changed.
 
 ## STABLE — no active engineering PR, 2026-10-05
 
