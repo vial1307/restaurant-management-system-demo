@@ -11,6 +11,7 @@ import { readMasterDataSnapshotForUser } from "./master-data-routes.mjs";
 import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
 import { hydrateUserAccess } from "./access-control.mjs";
 import { activeSite } from "./site-registry.mjs";
+import { inventoryActionAllowed } from "./inventory-access.mjs";
 import {
   createSession,
   destroySession,
@@ -149,7 +150,7 @@ app.get("/api/inventory/:site", async (request, reply) => {
   if (!(await activeSite(site))) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
-  if (!siteAllowed(user, site) || !hasPermission(user, "inventory", "view")) {
+  if (!(await inventoryActionAllowed(user,"inventory.view",{site}))) {
     return reply.code(403).send({ error: "INVENTORY_VIEW_NOT_ALLOWED" });
   }
 
@@ -201,8 +202,11 @@ app.get("/api/inventory/:site/transactions", async (request, reply) => {
   if (!(await activeSite(site))) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
-  if (!hasCapability(user, "inventory.history.full")) {
-    return reply.code(403).send({ error: "ADMIN_REQUIRED" });
+  const historyAllowed =
+    await inventoryActionAllowed(user,"inventory.history.full",{site})
+    || await inventoryActionAllowed(user,"inventory.history.view",{site});
+  if (!historyAllowed) {
+    return reply.code(403).send({ error: "INVENTORY_HISTORY_NOT_ALLOWED" });
   }
 
   const limit = Math.min(Math.max(Number(request.query?.limit || 100), 1), 500);
@@ -248,8 +252,13 @@ app.post("/api/inventory/adjust", async (request, reply) => {
       );
       const row = ctx.rows[0];
       if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode: 404 });
-      if (!siteAllowed(user, row.site) || !hasPermission(user, "inventory", "edit")) {
-        throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode: 403 });
+      if (!(await inventoryActionAllowed(
+        user,
+        "inventory.quantity.adjust_quick",
+        { site:row.site,locationId:row.location_id },
+        client
+      ))) {
+        throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode: 403 });
       }
       if (!String(row.item_key || "").startsWith(row.site + ":")) {
         throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode: 400 });
@@ -349,8 +358,14 @@ app.post("/api/inventory/transfer", async (request, reply) => {
       if (row.source_site !== row.destination_site) {
         throw Object.assign(new Error("CROSS_SITE_TRANSFER_REQUIRES_SHIP"), { statusCode: 400 });
       }
-      if (!siteAllowed(user, row.source_site) || !hasPermission(user, "inventory", "edit")) {
-        throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode: 403 });
+      const transferAllowed=await inventoryActionAllowed(
+        user,
+        "inventory.transfer.internal",
+        { site:row.source_site,locationId:sourceLocationId },
+        client
+      );
+      if (!transferAllowed) {
+        throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode: 403 });
       }
       if (!String(row.item_key || "").startsWith(row.source_site + ":")) {
         throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode: 400 });
