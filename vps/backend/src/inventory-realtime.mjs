@@ -1,4 +1,5 @@
-import { hasPermission, requireUser } from "./auth.mjs";
+import { requireUser } from "./auth.mjs";
+import { inventoryAllowedSites } from "./inventory-access.mjs";
 
 const clients = new Set();
 let revision = Date.now();
@@ -39,7 +40,8 @@ export async function registerInventoryRealtime(app) {
   app.get("/api/inventory/events", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
-    if (!hasPermission(user, "inventory", "view")) {
+    const visibleSites=await inventoryAllowedSites(user,"inventory.view");
+    if (!visibleSites.length) {
       return reply.code(403).send({ error: "INVENTORY_VIEW_NOT_ALLOWED" });
     }
 
