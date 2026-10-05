@@ -1,43 +1,54 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #200
+ACTIVE_PR: none
 
-## ACTIVE — PR #200 live production metadata reconciliation, 2026-10-05
+## CURRENT VERIFIED PRODUCTION — PR #200 live handoff metadata reconciliation, 2026-10-05
 
-PR #200 is the current engineering workstream on top of the latest verified Inventory production baseline.
+PR #200 is merged, deployed and production-verified. There is currently **no active engineering PR**.
 
-Purpose:
-- remove historical PR #140 / schema 024 / September RBAC fallback metadata from Super Admin → GitHub & Handoff;
-- make Current work prefer live ACTIVE_PR/GitHub state rather than a stale static branch;
-- make Production evidence prefer live main Deploy + Inventory Site Production Audit workflows and VPS runtime release/schema;
-- keep static fallback intentionally neutral when GitHub live metadata is unavailable.
+Change result:
+- removed historical PR #140 / schema 024 / September RBAC fallback metadata from Super Admin → GitHub & Handoff;
+- Current work now prefers live GitHub/CURRENT_HANDOFF authority;
+- Production evidence now prefers live main Deploy + Inventory Site Production Audit workflows and VPS runtime release/schema;
+- static fallback is intentionally neutral when GitHub live metadata is unavailable;
+- no Inventory business handler, PostgreSQL schema/data, RBAC, AgentMemory authority or warehouse-switch behavior changed.
 
-Baseline inherited unchanged:
-- main before this PR: `05183544fd4168332f6681c8e00f46b5d9f02527`;
-- Inventory performance PR #188 is merged;
-- warehouse-switch rerender fixes PR #198 and capture/pointer hardening PR #199 are merged;
-- Deploy Kitchen OS #1160 / run `37254253521`: PASS;
-- production-ui-smoke job: PASS;
-- Inventory Site Production Audit #467 / run `37254828622`: PASS;
-- Workforce Staff #708, Attendance #682, Schedule Backfill #692 and Schedule Parity #481: PASS;
-- schema remains `031`.
+Exact-head PR evidence:
+- tested PR head: 184585968ddc50d462c4fc1b98b70ea2353d1351;
+- Master Data/Admin Panel #440: PASS;
+- API Load Smoke #653: PASS;
+- Super Admin Browser #364: PASS;
+- Workforce Approval Diagnostic #519: PASS;
+- Deploy #1164 attempt 1 failed only in full-device WebKit webkit-managerfx-390x844 because one /api/inventory/fuxing request was reported as an access-control page error;
+- the same Inventory/access-control code had already passed production baseline #1160, Chromium on the same run passed, and PR #200 did not touch that path;
+- per Engineering Contract the failed workflow was rerun on the **unchanged exact head**; Deploy #1164 attempt 2: PASS.
 
-Strict scope:
-- metadata/UI evidence + regression only;
-- no Inventory business handler rewrite;
-- no PostgreSQL schema/data/RBAC mutation;
-- no rollback of PR #188/#198/#199 behavior;
-- AgentMemory and Engineering Harness authority model remain unchanged.
+Merge and production:
+- merge commit: 2feb47e7a204ee5834aa5a45ea57f8eb349b853b;
+- Deploy Kitchen OS #1165 / run 37287279011: PASS;
+- preflight: PASS;
+- full PostgreSQL/API/browser/full-device regression: PASS;
+- exact tested merge SHA deployed with backup/rollback path: PASS;
+- backup: /opt/kitchen-os/backups/kitchen_os_20261005T090831Z.dump;
+- production health: {"app":"ok","database":"ok","schema":"031","release":"2feb47e"};
+- schema verification: 031;
+- DATA_INTEGRITY_OK;
+- production UI smoke: PASS;
+- AgentMemory: AGENTMEMORY_SEED_COMPLETE changed=2 total=7 project=kitchen-os;
+- AgentMemory recall: AGENTMEMORY_RECALL_OK results=5.
 
-Required exact-head gate:
-1. Deploy Kitchen OS to VPS;
-2. Master Data and Admin Panel Regression;
-3. Super Admin Browser Regression;
-4. Isolated CI API Load Smoke;
-5. merge only the exact tested PR #200 head;
-6. deploy exact merge SHA and require release/schema, `DATA_INTEGRITY_OK`, production UI smoke and applicable production audits;
-7. update handoff/status/work log and AgentMemory after production closure.
+Post-deploy production audits on the same merge SHA:
+- Inventory Site Production Audit #473 / run 37288251722: PASS;
+- Workforce Staff Production Backfill #714: PASS;
+- Workforce Attendance Production Backfill #688: PASS;
+- Workforce Schedule Production Backfill #698: PASS;
+- Workforce Schedule Production Parity #487: PASS.
 
+Continuation authority:
+- ACTIVE_PR: none;
+- a future coding task must create/reconcile a fresh branch/PR from current main and explicitly update ACTIVE_PR;
+- do not revive old PR #188/#197 branches or historical fallback metadata;
+- keep PostgreSQL/VPS authoritative for Inventory and follow Engineering Contract exact-head + production evidence requirements.
 ## CURRENT VERIFIED INVENTORY PRODUCTION — PR #188 + warehouse-switch hotfixes, 2026-10-05
 
 - PR #188 was rebuilt on current Harness/AgentMemory main and merged as `1872a8daf8b5d59148de7d208519d736ceca75a5`.
@@ -108,25 +119,9 @@ Scope safety:
 - no PostgreSQL schema/data/RBAC mutation;
 - no mutable product/site/role configuration moved into frontend hard-code.
 
-## ACTIVE — PR #188 Inventory Database performance, resumed after Harness production closure
+## CLOSED HISTORY — PR #188 Inventory Database performance
 
-PR #188 is again the explicit active engineering workstream, but its existing head is **stale/non-mergeable and must not be merged as-is**.
-
-Observed live PR state:
-- branch: `perf/inventory-database-load-20261003`;
-- head: `f76a851536562eb8e096615c54d3797a5b1de1bf`;
-- open, currently non-mergeable against current main;
-- verified production runtime authority is now `d8e332f399f299476c939539e809a24b85e0a7e8` / schema `031`.
-
-Mandatory continuation:
-1. recover the intended Inventory performance delta from PR #188 without overwriting newer AgentMemory/Harness/Handoff work;
-2. reconcile/rebase that delta onto current main;
-3. preserve PostgreSQL/VPS Inventory authority and existing mutation/realtime semantics;
-4. establish a fresh baseline and use the Engineering Contract + Feature Registry + Verification Matrix;
-5. run exact-head static/API/PostgreSQL/browser/full-device gates;
-6. merge only the tested reconciled head;
-7. deploy exact merge SHA and require release/schema, `DATA_INTEGRITY_OK`, production UI smoke and Inventory production audit before closure.
-
+The stale pre-reconciliation description is replaced by this closure note. PR #188 was rebuilt on current main, merged as 1872a8daf8b5d59148de7d208519d736ceca75a5, and production-verified before warehouse-switch hotfixes #198/#199. It is **not** an active workstream and must not be reused as a branch baseline.
 ## CURRENT VERIFIED PRODUCTION — AgentMemory private dev memory + recall, 2026-10-04
 
 AgentMemory recovery/integration is now production-verified.
