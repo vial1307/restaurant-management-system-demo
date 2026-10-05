@@ -1,13 +1,26 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #188 Inventory Database performance, 2026-10-05
+## ACTIVE — PR #200 live production metadata reconciliation, 2026-10-05
 
-- `ACTIVE_PR: #188` is again the current engineering authority after Harness production closure.
-- Branch `perf/inventory-database-load-20261003`; current head `f76a851536562eb8e096615c54d3797a5b1de1bf`.
-- PR is open but currently non-mergeable against verified production/main `d8e332f399f299476c939539e809a24b85e0a7e8` / schema `031`.
-- Do **not** merge the stale head. Recover only the intended Inventory read-load/performance delta onto current main.
-- Preserve PostgreSQL/VPS authority, mutation/realtime semantics, AgentMemory and Engineering Harness code.
-- NEXT: reconcile onto current main → baseline → exact-head CI/full-device → merge tested head only → exact production deploy/release/integrity/UI smoke/Inventory audit.
+- `ACTIVE_PR: #200` is the current engineering authority.
+- Baseline is current main `05183544fd4168332f6681c8e00f46b5d9f02527`, after PR #188 + #198 + #199.
+- Remove stale PR #140 / schema 024 / September RBAC fallback metadata from Super Admin GitHub & Handoff.
+- Current work must prefer live GitHub/CURRENT_HANDOFF; release/schema must prefer VPS runtime; Deploy/Inventory evidence must prefer live main workflows.
+- No Inventory business logic, PostgreSQL schema/data, RBAC or warehouse-switch semantics are changed.
+- Required exact-head gate: Deploy + Master/Admin + Super Admin Browser + API Load.
+- NEXT: exact-head CI → merge tested head only → exact production deploy → health/schema/integrity/UI smoke → applicable audits → handoff/AgentMemory closure.
+
+## DONE — Inventory performance + warehouse-switch production closure, 2026-10-05
+
+- PR #188 merged as `1872a8daf8b5d59148de7d208519d736ceca75a5`.
+- PR #198 fixed warehouse switching across rerenders with stable delegated handling.
+- PR #199 hardened capture/pointer activation so switch intent is observed before rerender can replace the clicked node.
+- Current main after PR #199: `05183544fd4168332f6681c8e00f46b5d9f02527`.
+- Deploy Kitchen OS #1160 / `37254253521`: PASS, including production-ui-smoke.
+- Inventory Site Production Audit #467 / `37254828622`: PASS.
+- Workforce Staff #708, Attendance #682, Schedule Backfill #692 and Schedule Parity #481: PASS.
+- Schema remains `031`.
+- The old PR #188 ACTIVE/BLOCKED state is closed and must not be used as current authority.
 
 ## DONE — Engineering Harness / Coding Control Plane, 2026-10-05
 
