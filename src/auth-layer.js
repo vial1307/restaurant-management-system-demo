@@ -260,7 +260,7 @@ document.addEventListener("click", (event) => {
   if (!button || button.disabled) return;
   event.preventDefault();
   void switchWarehouse(button, { centralContent:delegatedWarehouseContent(button) });
-});
+}, { capture:true });
 
 function centralSiteRecord() {
   return inventorySites().find((site) => site.code === "central") || null;
