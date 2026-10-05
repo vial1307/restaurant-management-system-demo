@@ -394,8 +394,8 @@ The receiving branch owns its own product storage configuration.
 If the destination branch already has a product:
 
 - exactly one configured storage location -> shipment must use it automatically
-- multiple configured storage locations -> an account with receiving-site `inventory.edit` must configure `央廚出貨收貨儲位` / default receiving location
-- receiving-default writes require explicit `inventory.edit` within the receiving site's allowed scope; role names do not override that grant, while view-only and foreign-site accounts remain denied
+- multiple configured storage locations -> an account with receiving-site `inventory.receive_default.edit` must configure `央廚出貨收貨儲位` / default receiving location
+- receiving-default writes require explicit `inventory.receive_default.edit` within the receiving site's allowed scope; role names do not override that grant, while view-only and foreign-site accounts remain denied
 - multiple locations + no receiving default -> shipment is blocked
 
 Factory/central-kitchen staff may not arbitrarily choose a different location when the branch already owns the configuration.
