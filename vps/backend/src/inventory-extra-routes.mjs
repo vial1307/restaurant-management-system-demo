@@ -437,7 +437,7 @@ export async function registerInventoryExtraRoutes(app) {
         }
 
         await client.query(
-          "update public.inventory_stock set minimum_quantity=$3,updated_at=now() where item_id=$1 and location_id=$2",
+          "update public.inventory_stock set minimum_quantity=$3,minimum_enabled=($3>0),updated_at=now() where item_id=$1 and location_id=$2",
           [itemId,locationId,minimum]
         );
 
