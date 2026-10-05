@@ -1,5 +1,79 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — Inventory permission/database/UI redesign decisions locked + Handoff live-sync audit
+
+### Approved Super Admin permission UI
+
+![Approved Super Admin Inventory Permission UI](./mockups/super-admin-inventory-permissions-approved.svg)
+
+Locked decisions:
+- Inventory edit authority is configured in Super Admin and persisted by account/policy/scope; do not infer mutation authority from job title.
+- Site scope supports “all sites” or any arbitrary combination such as A+B, A+C, A+D, B+C, etc.
+- Combination membership must be normalized database rows, not JavaScript constants.
+- Permission scope can target site, storage location and Work Area.
+- Explicit allow/deny is supported; backend API must enforce the same effective permission shown by the UI.
+- Three-dot Inventory actions are built from effective permission so employees cannot trigger actions they were not granted.
+
+### Approved Inventory multi-location UI
+
+![Approved Inventory multi-location UI](./mockups/inventory-ui-multilocation-approved.svg)
+
+Locked decisions:
+- one product = one Desktop row / one Mobile card;
+- chip order: Primary Location -> Work Location -> other locations;
+- more than 3 configured locations: show first 3 chips + “Xem thêm / 查看更多”;
+- Mobile opens Full Screen Detail;
+- permitted quick edit uses minus / direct number / plus;
+- advanced actions live in the three-dot menu and are permission-controlled.
+
+### Add/Edit Product / master-data decisions
+
+- Category must be database master data, not a frontend array.
+- Unit must be database master data. A user granted unit-edit permission may type/create a new unit, which must be persisted to PostgreSQL.
+- Minimum is optional/soft. If configured, database thresholds drive Near-low / Low / Out-of-stock alerts.
+- Primary Location is presentation/operational priority.
+- Work Location is site-scoped and derived from Work Area.
+- Receive Default is the destination used when inventory arrives at a site and the product has multiple valid storage locations:
+  - one storage location -> auto resolve;
+  - multiple + configured receive default -> auto select;
+  - multiple + no default -> transaction must ask for destination before commit.
+- Primary, Work and Receive Default are separate concepts.
+
+### Database authority rule
+
+All stored or transferred business data must pass backend + PostgreSQL:
+- product/category/unit/location/Work Area configuration;
+- item-location assignment/primary/default receiving;
+- quantity/minimum/warning;
+- internal transfer;
+- Work Area pick/use/return;
+- cross-site shipping/receiving;
+- Inventory permission policy and scope;
+- audit history.
+
+Frontend/localStorage is allowed only for ephemeral UI state, filters, unsaved drafts and short-lived cache.
+
+Canonical design spec:
+- `docs/spec-deltas/2026-10-06-inventory-permission-ui-database-redesign.md`
+
+### GitHub & Handoff real-time audit
+
+Source inspection result:
+- one-link `handoff.html` fetches current main, CURRENT_HANDOFF, STATUS, PRs and Actions; raw docs use `cache:"no-store"`;
+- it refreshes when loaded/reloaded, but has no periodic polling loop;
+- Super Admin development panel loads `/api/admin/super/development-status` and supports manual refresh;
+- backend GitHub handoff has `CACHE_TTL_MS = 5 minutes`;
+- Super Admin Development has no dedicated periodic polling loop.
+
+Therefore the current wording should be:
+**Live GitHub on load/manual refresh / near-live**, not strict continuous real-time.
+
+Checklist and proposed runtime follow-up:
+- `docs/HANDOFF_REALTIME_CHECKLIST.md`
+
+PR #204 is documentation/design only; verified production remains release `8a89e113...` / schema `031`.
+
+
 ## 2026-10-06 — PR #202 production closure
 
 - Exact PR head `153272303205a6ad62d04414b43290ed9fc3ac32` passed Deploy #1168, Master/Admin #444, Super Admin Browser #367, API Load #657 and Workforce Diagnostic #522.

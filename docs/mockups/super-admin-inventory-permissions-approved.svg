@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+<style>
+text{font-family:Arial,"Noto Sans",sans-serif;fill:#16302b}.h{font-weight:700}.muted{fill:#6b7d78}.small{font-size:13px}.m{font-size:16px}.l{font-size:22px}.xl{font-size:30px}.card{fill:#fff;stroke:#dbe9e4;stroke-width:1.3}.chip{fill:#eef8f4;stroke:#b9dfd1}.sel{fill:#dff4ea;stroke:#168a63}.on{fill:#15835f}.off{fill:#edf2f0}.blue{fill:#eaf3ff;stroke:#7fb0ff}.warn{fill:#fff5d8;stroke:#e4b94c}
+</style>
+<rect width="1440" height="900" fill="#f5f9f7"/>
+<rect x="0" y="0" width="230" height="900" fill="#0d352e"/>
+<text x="28" y="48" fill="#fff" class="xl h">Super Admin</text>
+<text x="28" y="100" fill="#b9d9cf" class="m">Nhân sự &amp; Phân quyền</text>
+<rect x="16" y="126" rx="10" width="198" height="44" fill="#155847"/><text x="32" y="154" fill="#fff" class="m h">Phân quyền chi tiết</text>
+<text x="28" y="224" fill="#b9d9cf" class="m">Kho &amp; Nguyên liệu</text><text x="44" y="260" fill="#fff" class="small">Danh mục sản phẩm</text><text x="44" y="290" fill="#fff" class="small">Vị trí kho</text><text x="44" y="320" fill="#fff" class="small">Khu làm việc</text><text x="44" y="350" fill="#fff" class="small">Quy tắc tồn kho</text>
+<text x="260" y="54" class="xl h">Phân quyền chi tiết · 角色權限管理</text><text x="260" y="82" class="m muted">Quyền thao tác kho do Super Admin cấu hình, không suy ra từ chức vụ.</text>
+
+<rect x="260" y="112" width="260" height="250" rx="14" class="card"/><text x="282" y="143" class="l h">1. Đối tượng áp dụng</text>
+<rect x="282" y="165" width="216" height="40" rx="9" class="sel"/><text x="302" y="191" class="m h">Theo tài khoản</text>
+<text x="292" y="234" class="m h">Nguyễn A</text><text x="292" y="256" class="small muted">Kho · Fuxing/Yongji</text>
+<text x="292" y="300" class="m">Có thể dùng preset nhưng</text><text x="292" y="322" class="m">quyền hiệu lực lưu theo user.</text>
+
+<rect x="540" y="112" width="570" height="250" rx="14" class="card"/><text x="562" y="143" class="l h">2. Phạm vi chi nhánh</text>
+<rect x="562" y="165" width="166" height="42" rx="9" class="chip"/><text x="582" y="191" class="m">Toàn bộ chi nhánh</text>
+<rect x="742" y="165" width="155" height="42" rx="9" class="sel"/><text x="765" y="191" class="m h">Tùy chọn</text>
+<text x="562" y="235" class="small muted">Chọn bất kỳ tổ hợp: AB, AC, AD, BC…</text>
+<g class="small h"><rect x="562" y="255" width="72" height="42" rx="9" class="sel"/><text x="585" y="281">A ✓</text><rect x="644" y="255" width="72" height="42" rx="9" class="sel"/><text x="667" y="281">B ✓</text><rect x="726" y="255" width="72" height="42" rx="9" class="sel"/><text x="749" y="281">C ✓</text><rect x="808" y="255" width="72" height="42" rx="9" class="chip"/><text x="831" y="281">D</text><rect x="890" y="255" width="72" height="42" rx="9" class="chip"/><text x="913" y="281">E</text><rect x="972" y="255" width="72" height="42" rx="9" class="chip"/><text x="995" y="281">F</text></g>
+<text x="562" y="327" class="m">Đã chọn: A + B + C</text>
+
+<rect x="1130" y="112" width="280" height="250" rx="14" class="card"/><text x="1152" y="143" class="l h">3. Phạm vi dữ liệu</text>
+<text x="1152" y="190" class="m">● Chỉ dữ liệu site đã chọn</text><text x="1152" y="226" class="m">○ Xem tất cả, sửa site đã chọn</text><text x="1152" y="262" class="m">○ Toàn bộ dữ liệu</text><text x="1152" y="316" class="small muted">Backend kiểm tra scope ở mỗi API.</text>
+
+<rect x="260" y="386" width="1150" height="468" rx="14" class="card"/><text x="282" y="422" class="l h">4. Ma trận quyền Kho &amp; Nguyên liệu</text><text x="282" y="447" class="small muted">Có thể cấp theo user + site + vị trí/khu làm việc; toggle chỉ là UI của rule trong Database.</text>
+<text x="300" y="492" class="m h">Chức năng</text><text x="654" y="492" class="m h">A</text><text x="772" y="492" class="m h">B</text><text x="890" y="492" class="m h">C</text><text x="1010" y="492" class="m h">D</text><text x="1130" y="492" class="m h">Vị trí</text>
+<line x1="282" y1="508" x2="1386" y2="508" stroke="#dbe9e4"/>
+<g class="m">
+<text x="300" y="548">Xem danh sách tồn kho</text><text x="300" y="590">Chỉnh số lượng (+ / - / nhập số)</text><text x="300" y="632">Chỉnh minimum / cảnh báo gần hết</text><text x="300" y="674">Thêm / sửa sản phẩm &amp; đơn vị</text><text x="300" y="716">Chuyển kho nội bộ</text><text x="300" y="758">Điều chuyển liên chi nhánh</text><text x="300" y="800">Archive / xóa vị trí</text>
+</g>
+<g>
+<rect x="642" y="530" width="34" height="22" rx="11" class="on"/><rect x="760" y="530" width="34" height="22" rx="11" class="on"/><rect x="878" y="530" width="34" height="22" rx="11" class="on"/>
+<rect x="642" y="572" width="34" height="22" rx="11" class="on"/><rect x="760" y="572" width="34" height="22" rx="11" class="on"/><rect x="878" y="572" width="34" height="22" rx="11" class="off"/>
+<rect x="642" y="614" width="34" height="22" rx="11" class="on"/><rect x="760" y="614" width="34" height="22" rx="11" class="off"/><rect x="878" y="614" width="34" height="22" rx="11" class="off"/>
+<rect x="642" y="656" width="34" height="22" rx="11" class="on"/><rect x="760" y="656" width="34" height="22" rx="11" class="on"/><rect x="878" y="656" width="34" height="22" rx="11" class="off"/>
+<rect x="642" y="698" width="34" height="22" rx="11" class="on"/><rect x="760" y="698" width="34" height="22" rx="11" class="on"/><rect x="878" y="698" width="34" height="22" rx="11" class="off"/>
+<rect x="642" y="740" width="34" height="22" rx="11" class="off"/><rect x="760" y="740" width="34" height="22" rx="11" class="off"/><rect x="878" y="740" width="34" height="22" rx="11" class="off"/>
+<rect x="642" y="782" width="34" height="22" rx="11" class="off"/><rect x="760" y="782" width="34" height="22" rx="11" class="off"/><rect x="878" y="782" width="34" height="22" rx="11" class="off"/>
+</g>
+<rect x="1115" y="530" width="240" height="42" rx="9" class="blue"/><text x="1132" y="556" class="small h">Tủ đông lớn + Khu mì</text>
+<rect x="1115" y="582" width="240" height="42" rx="9" class="warn"/><text x="1132" y="608" class="small h">Tủ bếp: chỉ xem</text>
+<rect x="1115" y="634" width="240" height="42" rx="9" class="chip"/><text x="1132" y="660" class="small h">+ Thêm scope vị trí</text>
+<rect x="1115" y="712" width="240" height="52" rx="11" fill="#0f7355"/><text x="1170" y="744" fill="#fff" class="m h">Lưu quyền</text>
+</svg>

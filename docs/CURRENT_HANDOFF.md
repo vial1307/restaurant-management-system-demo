@@ -2,6 +2,43 @@
 
 ACTIVE_PR: none
 
+## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign specification, 2026-10-06
+
+PR #204 is a documentation/design workstream and is ready to merge. It does **not** change the verified production runtime. No runtime engineering PR is active.
+
+Approved direction:
+- Inventory mutation authority must be configured from Super Admin and persisted in PostgreSQL; job title/role name is not the final authority.
+- Permission scope may be all inventory sites or any arbitrary site combination (A+B, A+C, A+D, B+C, etc.) without source-coded combinations.
+- Permissions may be narrowed by site, storage location and Work Area; explicit allow/deny and effective-permission preview are required.
+- Desktop Inventory: one product = one row; location chip order is Primary -> Work -> other locations; with more than 3 locations show the first 3 plus “Xem thêm / 查看更多”.
+- Mobile: chip/product opens Full Screen Detail; permitted users can quick-edit quantity using minus / direct number / plus.
+- Three-dot menu is permission-driven; frontend visibility and backend mutation authorization must use the same effective database policy.
+- Unit/category/location/minimum/warning/receive-default/primary-location and all inventory movements are database-backed; no mutable business list may be hard-coded in frontend source.
+- Unit can be freely entered/created only with the corresponding Inventory permission, and the new unit must be persisted as database master data.
+- Minimum is optional/soft, but when configured the system supports Near-low / Low / Out-of-stock alerts from database thresholds.
+- Receive Default is routing metadata for inbound/cross-site stock when one item has multiple valid storage locations; it is distinct from Primary Location and Work Location.
+
+Durable design references:
+- `docs/spec-deltas/2026-10-06-inventory-permission-ui-database-redesign.md`
+- `docs/mockups/super-admin-inventory-permissions-approved.svg`
+- `docs/mockups/inventory-ui-multilocation-approved.svg`
+- `docs/HANDOFF_REALTIME_CHECKLIST.md`
+
+Handoff sync audit finding:
+- one-link Handoff is fresh on page load/reload and raw handoff/status reads are no-store;
+- Super Admin GitHub & Handoff is correct on authority and manual refresh;
+- neither surface is continuously auto-refreshing while left open;
+- Super Admin GitHub feed currently uses a 5-minute backend cache;
+- therefore current behavior is **near-live / refresh-based**, not strict real-time.
+- true near-real-time polling + authorized force-refresh should be a separate runtime PR with full regression/deploy gates.
+
+Production baseline remains:
+- runtime release `8a89e1135e45329d30983424d38a75b2bac44d09`;
+- schema `031`;
+- Deploy #1169 PASS;
+- Inventory Audit #477 PASS;
+- no Inventory/database/RBAC runtime mutation is part of PR #204.
+
 ## CURRENT VERIFIED PRODUCTION — PR #202 production evidence across docs-only main drift, 2026-10-06
 
 PR #202 is merged, deployed and production-verified. There is currently **no active engineering PR**.

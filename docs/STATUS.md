@@ -1,5 +1,20 @@
 # Kitchen OS Engineering Status
 
+## APPROVED DESIGN — PR #204 Inventory permission/database/UI redesign, 2026-10-06
+
+- `ACTIVE_PR: none`; PR #204 is documentation/design only and does not create a runtime workstream. Production runtime remains release `8a89e113...` / schema `031`.
+- Approved: Super Admin-managed per-user Inventory permissions, not job-title authority.
+- Site scope supports all sites or arbitrary combinations; no AB/AC/BC combinations hard-coded in source.
+- Scope can be narrowed to storage locations and Work Areas.
+- Approved Inventory UI: one product/row, chips ordered Primary -> Work -> other; >3 locations shows first 3 + “Xem thêm”.
+- Mobile opens Full Screen Detail and uses permission-controlled quick minus/number/plus editing.
+- Category and Unit become database master data; permitted unit editors may create new units through DB.
+- Minimum is optional but database warning thresholds drive Near-low/Low/Out-of-stock UI.
+- Receive Default is inbound routing metadata and is distinct from Primary/Work.
+- All stored/moved Inventory data must pass backend + PostgreSQL; localStorage is cache/draft only.
+- Handoff live-sync audit: current system is refresh-based near-live, not continuous real-time; see `docs/HANDOFF_REALTIME_CHECKLIST.md`.
+- NEXT after design merge: separate runtime PR(s) for permission schema/Super Admin UI, Inventory multi-location UI, and handoff polling/force-refresh as independently gated changes.
+
 ## STABLE — no active engineering PR, 2026-10-06
 
 - `ACTIVE_PR: none` after PR #202 production closure.

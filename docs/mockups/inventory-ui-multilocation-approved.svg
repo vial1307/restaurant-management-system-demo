@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+<style>
+text{font-family:Arial,"Noto Sans",sans-serif;fill:#16302b}.h{font-weight:700}.muted{fill:#6b7d78}.small{font-size:13px}.m{font-size:16px}.l{font-size:22px}.xl{font-size:30px}.card{fill:#fff;stroke:#dbe9e4;stroke-width:1.3}.chip{fill:#eef8f4;stroke:#b9dfd1}.blue{fill:#edf5ff;stroke:#9fc2ff}.green{fill:#e8f8f1;stroke:#82d2b2}.orange{fill:#fff3df;stroke:#e4b76a}.dark{fill:#0f7355}.red{fill:#fff0f0;stroke:#ef9a9a}
+</style>
+<rect width="1440" height="900" fill="#f6faf8"/>
+<text x="40" y="58" class="xl h">Inventory UI · Desktop + Mobile</text><text x="40" y="88" class="m muted">1 sản phẩm = 1 dòng/card · Primary → Work → Other · từ vị trí thứ 4 hiện “Xem thêm”.</text>
+<rect x="40" y="120" width="970" height="650" rx="16" class="card"/>
+<text x="68" y="160" class="l h">Danh sách tồn kho · 庫存清單</text>
+<rect x="700" y="138" width="190" height="40" rx="10" fill="#f1f5f3"/><text x="722" y="164" class="small muted">Tìm sản phẩm…</text><rect x="900" y="138" width="90" height="40" rx="10" class="dark"/><text x="919" y="164" fill="#fff" class="small h">+ Thêm</text>
+<text x="70" y="214" class="small h">SẢN PHẨM</text><text x="330" y="214" class="small h">ĐƠN VỊ</text><text x="420" y="214" class="small h">TỔNG</text><text x="520" y="214" class="small h">PHÂN BỔ VỊ TRÍ</text><text x="870" y="214" class="small h">TRẠNG THÁI</text>
+<line x1="65" y1="228" x2="985" y2="228" stroke="#dbe9e4"/>
+<text x="74" y="276" class="m h">牛肉 · Thịt bò</text><text x="74" y="300" class="small muted">肉類 · 冷凍</text><text x="342" y="286" class="m">斤</text><text x="430" y="286" class="l h">35</text>
+<rect x="516" y="246" width="106" height="60" rx="10" class="blue"/><text x="530" y="270" class="small h">👑 Tủ đông lớn</text><text x="553" y="294" class="l h">15</text>
+<rect x="630" y="246" width="106" height="60" rx="10" class="green"/><text x="646" y="270" class="small h">Work · Khu mì</text><text x="667" y="294" class="l h">10</text>
+<rect x="744" y="246" width="106" height="60" rx="10" class="chip"/><text x="760" y="270" class="small h">Tủ mát lớn</text><text x="784" y="294" class="l h">8</text>
+<rect x="858" y="246" width="86" height="60" rx="10" fill="#f5f7f6" stroke="#bacbc5"/><text x="872" y="282" class="small h">Xem thêm</text>
+<text x="950" y="286" class="m" fill="#13845f">● 正常</text>
+<line x1="65" y1="328" x2="985" y2="328" stroke="#edf2f0"/>
+<text x="74" y="382" class="m h">細麵 · Mì sợi nhỏ</text><text x="342" y="390" class="m">包</text><text x="430" y="390" class="l h">120</text>
+<rect x="516" y="350" width="106" height="60" rx="10" class="blue"/><text x="538" y="374" class="small h">👑 Tủ đông 2</text><text x="554" y="398" class="l h">60</text>
+<rect x="630" y="350" width="106" height="60" rx="10" class="green"/><text x="649" y="374" class="small h">Work · Khu mì</text><text x="667" y="398" class="l h">40</text>
+<rect x="744" y="350" width="106" height="60" rx="10" class="chip"/><text x="764" y="374" class="small h">Tủ mát lớn</text><text x="784" y="398" class="l h">20</text>
+<text x="950" y="390" class="m" fill="#13845f">● 正常</text>
+<rect x="80" y="468" width="890" height="256" rx="14" fill="#f8fbfa" stroke="#dbe9e4"/>
+<text x="104" y="505" class="l h">Popover “Xem thêm” / Desktop</text>
+<text x="104" y="544" class="small h">Vị trí</text><text x="420" y="544" class="small h">Hiện có</text><text x="540" y="544" class="small h">Minimum</text><text x="690" y="544" class="small h">Quyền hiệu lực</text>
+<text x="104" y="586" class="m">Tủ bếp</text><text x="438" y="586" class="m">2</text><text x="560" y="586" class="m">1</text><text x="690" y="586" class="small">Chỉ xem</text>
+<text x="104" y="628" class="m">Tủ lạnh 4 cánh</text><text x="438" y="628" class="m">0</text><text x="560" y="628" class="m">0</text><text x="690" y="628" class="small">Sửa số lượng</text>
+<rect x="104" y="660" width="250" height="42" rx="10" class="dark"/><text x="145" y="686" fill="#fff" class="small h">Quản lý tất cả vị trí</text>
+
+<rect x="1040" y="120" width="360" height="650" rx="34" fill="#111"/>
+<rect x="1054" y="136" width="332" height="618" rx="26" fill="#fff"/>
+<text x="1080" y="180" class="l h">Chi tiết sản phẩm</text><text x="1080" y="216" class="m h">牛肉 · Thịt bò</text><text x="1320" y="216" class="m h">35 斤</text>
+<text x="1080" y="260" class="small h">Phân bổ theo vị trí</text>
+<rect x="1076" y="282" width="286" height="74" rx="12" class="blue"/><text x="1094" y="307" class="small h">👑 Tủ đông lớn</text><text x="1094" y="337" class="small muted">Minimum: 10</text><text x="1260" y="330" class="l h">− 15 +</text>
+<rect x="1076" y="366" width="286" height="74" rx="12" class="green"/><text x="1094" y="391" class="small h">Work · Khu mì</text><text x="1094" y="421" class="small muted">Minimum: 5</text><text x="1260" y="414" class="l h">− 10 +</text>
+<rect x="1076" y="450" width="286" height="74" rx="12" class="chip"/><text x="1094" y="475" class="small h">Tủ mát lớn</text><text x="1094" y="505" class="small muted">Minimum: 5</text><text x="1260" y="498" class="l h">− 8 +</text>
+<rect x="1076" y="534" width="286" height="74" rx="12" class="orange"/><text x="1094" y="559" class="small h">Tủ bếp</text><text x="1094" y="589" class="small muted">Gần hết · Near low</text><text x="1260" y="582" class="l h">− 2 +</text>
+<rect x="1076" y="628" width="286" height="46" rx="11" fill="#f4f6f5" stroke="#cdd9d5"/><text x="1096" y="657" class="m h">⋯ Tất cả thao tác được phép</text>
+<rect x="1076" y="688" width="286" height="44" rx="11" class="dark"/><text x="1166" y="716" fill="#fff" class="m h">Lưu</text>
+<text x="40" y="822" class="m h">Receive default:</text><text x="178" y="822" class="m">vị trí đích tự chọn khi hàng được nhập/chuyển đến site và sản phẩm có nhiều vị trí lưu.</text>
+<text x="40" y="852" class="small muted">Nếu chỉ có 1 vị trí lưu: tự động. Nếu có nhiều vị trí mà chưa cấu hình: bắt buộc người thao tác chọn đích trước khi ghi transaction.</text>
+</svg>
