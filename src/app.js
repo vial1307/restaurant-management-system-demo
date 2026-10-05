@@ -1595,25 +1595,28 @@ root.addEventListener("click", (event) => {
     }
     render();
   }
+  if (action === "open-inventory-detail") { view.inventoryDetailStockKey = target.dataset.stockKey || ""; render(); return; }
+  if (action === "close-inventory-detail") { view.inventoryDetailStockKey = null; render(); return; }
   if (action === "select-work-area") { view.workArea = target.dataset.area; render(); }
   if (action === "select-zone") { view.zone = target.dataset.zone; render(); }
   if (action === "select-task-filter") { view.taskFilter = target.dataset.filter; render(); }
   if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
     const site=activeInventorySite();
-    const manageAdjust = target.dataset.manageAdjust === "true" && canManageBranchCatalog(site);
-    if (!canDirectInventoryAdjust() && !manageAdjust) return;
     const item = inventoryControlItem(target,branchInventoryMutationRecord(state,site),"item");
-    if (item) {
+    if (item && canInventoryAction("inventory.quantity.adjust_quick",{
+      site,locationId:item.cloudLocationId
+    })) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"item",delta});
     }
   }
   if (action === "adjust-work-item") {
     const site=activeInventorySite();
-    if (!canDirectInventoryAdjust()) return;
     const item = inventoryControlItem(target,branchInventoryMutationRecord(state,site),"workItem");
-    if (item) {
+    if (item && canInventoryAction("inventory.quantity.adjust_quick",{
+      site,locationId:item.cloudLocationId,workArea:item.workArea
+    })) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"workItem",delta});
     }
@@ -1654,14 +1657,21 @@ root.addEventListener("click", (event) => {
     return;
   }
   if (action === "open-add-item") {
-    if (!canManageBranchCatalog(activeInventorySite())) return;
+    const site=activeInventorySite();
+    if (!canInventoryAction("inventory.product.create",{site})) return;
     view.editingStockKey = null; view.modal = "add-item"; render();
   }
   if (action === "open-edit-item") {
-    if (!canManageBranchCatalog(activeInventorySite())) return;
+    const site=activeInventorySite();
+    const canEditProduct=[
+      "inventory.product.identity.edit","inventory.product.unit.edit","inventory.product.category.edit",
+      "inventory.product.location.attach","inventory.product.location.detach",
+      "inventory.product.primary_location.edit","inventory.work_area.edit","inventory.receive_default.edit"
+    ].some((key)=>canInventoryAction(key,{site}));
+    if (!canEditProduct) return;
     view.editingStockKey = target.dataset.stockKey; view.modal = "add-item"; render();
   }
-  if (action === "delete-item" && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") && window.confirm(translate(state.settings.language).deleteConfirm)) {
+  if (action === "delete-item" && canInventoryAction("inventory.product.archive",{site:activeInventorySite()}) && window.confirm(translate(state.settings.language).deleteConfirm)) {
     const stockKey = target.dataset.stockKey;
     void cloudArchiveBranchItem(stockKey,activeInventorySite()).then((result) => {
       if (result.ok) {
@@ -2181,6 +2191,7 @@ window.addEventListener("hashchange", () => {
   renderWhenAuthorized();
 });
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && view.inventoryDetailStockKey) { view.inventoryDetailStockKey = null; render(); return; }
   if (event.key === "Escape" && view.modal) { view.modal = null; view.editingStockKey = null; render(); }
   if (event.key === "Escape" && view.managementModal) { view.managementModal = null; render(); }
   if (event.key === "Escape" && view.calendarOpen) { view.calendarOpen = false; render(); }
