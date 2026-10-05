@@ -20,8 +20,13 @@ for (const name of ["cloudArchiveCentralItem", "cloudArchiveBranchItem"]) {
 
 assert.match(
   backend,
-  /app\.post\(["']\/api\/inventory\/catalog\/archive["'][\s\S]*?user\.role\s*!==\s*["']admin["'][\s\S]*?ADMIN_REQUIRED/,
-  "backend catalog archive must remain admin-only"
+  /app\.post\(["']\/api\/inventory\/catalog\/archive["'][\s\S]*?inventoryActionAllowed\(user,"inventory\.product\.archive",\{site\},client\)/,
+  "backend catalog archive must enforce inventory.product.archive from the database policy"
+);
+assert.doesNotMatch(
+  backend,
+  /app\.post\(["']\/api\/inventory\/catalog\/archive["'][\s\S]{0,900}?user\.role\s*!==\s*["']admin["']/,
+  "backend catalog archive must not derive authority from job title"
 );
 
-console.log("CATALOG_ARCHIVE_ADMIN_BOUNDARY_OK");
+console.log("CATALOG_ARCHIVE_PERMISSION_BOUNDARY_OK");
