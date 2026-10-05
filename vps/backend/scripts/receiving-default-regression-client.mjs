@@ -87,7 +87,7 @@ const wrongSite = await request("/api/inventory/receive-default", {
   body: { site:"yongji", catalogKey:"beef", locationCode:"yongji-four" },
 });
 assert.equal(wrongSite.response.status, 403, "branch manager unexpectedly changed another site's receiving default");
-assert.equal(wrongSite.data?.error, "INVENTORY_EDIT_NOT_ALLOWED");
+assert.equal(wrongSite.data?.error, "INVENTORY_ACTION_NOT_ALLOWED");
 
 const adminCentral = await request("/api/inventory/receive-default", {
   method: "POST",
