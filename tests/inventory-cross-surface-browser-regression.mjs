@@ -58,6 +58,11 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
         await main.locator(`[data-warehouse="${site}"]`).first().click();
         try {
           await main.waitForFunction(
+            (targetSite) => (window.__crossSurfaceSwitchEvents || []).some((entry)=>entry.type==="shitu:active-site-changing" && entry.detail?.site===targetSite),
+            site,
+            {timeout:5000}
+          );
+          await main.waitForFunction(
             (targetSite) => localStorage.getItem("shitu-admin-active-site-v1") === targetSite,
             site,
             {timeout:20000}
