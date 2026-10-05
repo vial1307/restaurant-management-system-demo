@@ -233,6 +233,7 @@ export function inventorySiteForLocationCode(code) {
 export function inventoryUiGroups(siteCode) {
   const storage = inventoryLocations(siteCode, "storage").map((location) => ({
     id:inventoryLocationUiKey(location),
+    locationId:String(location.id || ""),
     zh:location.name_zh_tw || inventoryLocationUiKey(location),
     vi:location.name_vi || location.name_zh_tw || inventoryLocationUiKey(location),
     code:location.code,
