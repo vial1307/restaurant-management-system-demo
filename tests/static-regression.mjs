@@ -182,7 +182,9 @@ assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged in
 assert.match(app, /shitu:inventory-cloud-updated/, "actual inventory changes must still refresh the page");
 assert.doesNotMatch(read("src/auth-layer.js"), /data-warehouse[\s\S]{0,500}location\.reload\(\)/, "switching warehouses must not reload the entire application");
 const authLayerSwitching = read("src/auth-layer.js");
-assert.match(authLayerSwitching, /document\.addEventListener\("click"[\s\S]{0,700}\.warehouse-switch \[data-warehouse\][\s\S]{0,500}switchWarehouse\([\s\S]{0,260}capture:true/, "warehouse switching must use capture-phase delegated click handling across rerenders");
+assert.match(authLayerSwitching, /document\.addEventListener\("pointerdown", activateWarehouseFromEvent, \{ capture:true \}\)/, "warehouse switching must capture pointer activation before rerender can replace the button");
+assert.match(authLayerSwitching, /document\.addEventListener\("click", activateWarehouseFromEvent, \{ capture:true \}\)/, "warehouse switching must retain capture-phase click activation for keyboard/accessibility");
+assert.match(authLayerSwitching, /warehousePointerActivation[\s\S]{0,700}Date\.now\(\) - warehousePointerActivation\.at < 1200/, "warehouse switching must deduplicate pointerdown followed by click");
 assert.doesNotMatch(authLayerSwitching, /content\.querySelectorAll\("\[data-warehouse\]"\)\.forEach\(b => b\.onclick/, "central warehouse buttons must not rely on transient per-node onclick bindings");
 assert.doesNotMatch(authLayerSwitching, /heading\.querySelectorAll\("\[data-warehouse\]"\)\.forEach[\s\S]{0,180}addEventListener\("click"/, "branch warehouse buttons must not rely on post-render per-node click bindings");
 
