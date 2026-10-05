@@ -202,11 +202,8 @@ app.get("/api/inventory/:site/transactions", async (request, reply) => {
   if (!(await activeSite(site))) {
     return reply.code(400).send({ error: "INVALID_SITE" });
   }
-  const historyAllowed =
-    await inventoryActionAllowed(user,"inventory.history.full",{site})
-    || await inventoryActionAllowed(user,"inventory.history.view",{site});
-  if (!historyAllowed) {
-    return reply.code(403).send({ error: "INVENTORY_HISTORY_NOT_ALLOWED" });
+  if (!(await inventoryActionAllowed(user,"inventory.history.full",{site}))) {
+    return reply.code(403).send({ error: "INVENTORY_HISTORY_FULL_NOT_ALLOWED" });
   }
 
   const limit = Math.min(Math.max(Number(request.query?.limit || 100), 1), 500);
