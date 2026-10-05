@@ -386,9 +386,16 @@ function renderDevelopment() {
   const work=d.current_work||{}; const incident=work.resolved_incident||{}; const live=d.live_production||{}; const evidence=d.release_evidence||{}; const runtime=d.runtime||{}; const repo=d.repository||{};
   const liveGit=d.live_github||{}; const pr=liveGit.active_pr||work.pull_request||null; const canonical=d.canonical_handoff||{};
   const mainWorkflowRows=liveGit.main_workflows||[];
-  const currentDeploy=mainWorkflowRows.find((row)=>row.name==="Deploy Kitchen OS to VPS"&&row.status==="completed"&&row.conclusion==="success")||null;
-  const currentInventoryAudit=mainWorkflowRows.find((row)=>row.name==="Inventory Site Production Audit"&&row.status==="completed"&&row.conclusion==="success")||null;
   const recordedProduction=d.engineering_harness?.gates?.production?.recorded_sha||"";
+  const productionSha=recordedProduction||live.release||runtime.release||"";
+  const recentMainWorkflowRows=liveGit.recent_main_workflows||mainWorkflowRows;
+  const productionWorkflowRows=recentMainWorkflowRows.filter((row)=>{
+    const head=String(row?.head_sha||"").toLowerCase();
+    const target=String(productionSha||"").toLowerCase();
+    return Boolean(head&&target&&(head===target||head.startsWith(target)||target.startsWith(head)));
+  });
+  const currentDeploy=productionWorkflowRows.find((row)=>row.name==="Deploy Kitchen OS to VPS"&&row.status==="completed"&&row.conclusion==="success")||null;
+  const currentInventoryAudit=productionWorkflowRows.find((row)=>row.name==="Inventory Site Production Audit"&&row.status==="completed"&&row.conclusion==="success")||null;
   const status=String(d.status||"unknown").toLowerCase();
   const liveState=liveGit.available?(liveGit.stale?"STALE":"LIVE"):"FALLBACK";
   const workflowRows=(liveGit.workflows||[]).slice(0,12);

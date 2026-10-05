@@ -119,6 +119,8 @@ export function extractVerifiedProductionSha(content) {
   const source=String(content || "");
   const patterns=[
     /final production merge:\s*`?([0-9a-f]{40})`?/i,
+    /merge commit:\s*`?([0-9a-f]{40})`?/i,
+    /current production release:\s*`?([0-9a-f]{40})`?/i,
     /production merge\s+`([0-9a-f]{40})`/i,
     /current verified production[\s\S]{0,2500}?\b([0-9a-f]{40})\b/i,
   ];
@@ -134,7 +136,13 @@ export function buildEngineeringHarnessState({ liveGithub=null,release="",schema
   const activePr=github.active_pr || null;
   const activeRuns=Array.isArray(github.workflows) ? github.workflows : [];
   const mainRuns=Array.isArray(github.main_workflows) ? github.main_workflows : [];
-  const gateRuns=activePr ? activeRuns : mainRuns;
+  const recentMainRuns=Array.isArray(github.recent_main_workflows) ? github.recent_main_workflows : mainRuns;
+  const handoffContent=value(github.current_handoff?.content);
+  const verifiedProductionSha=extractVerifiedProductionSha(handoffContent);
+  const productionRuns=verifiedProductionSha
+    ? recentMainRuns.filter((run)=>sameSha(run?.head_sha,verifiedProductionSha))
+    : [];
+  const gateRuns=activePr ? activeRuns : (productionRuns.length ? productionRuns : mainRuns);
 
   const changedFiles=Array.isArray(github.changed_files) ? github.changed_files : [];
   const requiredWorkflows=REQUIRED_WORKFLOWS
@@ -172,8 +180,6 @@ export function buildEngineeringHarnessState({ liveGithub=null,release="",schema
       }
     : { status:"n/a",label:"NO ACTIVE PR",reason:"CURRENT_HANDOFF.md does not name an active PR." };
 
-  const handoffContent=value(github.current_handoff?.content);
-  const verifiedProductionSha=extractVerifiedProductionSha(handoffContent);
   const productionVerified=Boolean(verifiedProductionSha && sameSha(release,verifiedProductionSha));
   const deployGate=activePr
     ? { status:"blocked",label:"DEPLOY AFTER MERGE",reason:"Runtime deploy must use the exact merge SHA, never the PR branch SHA." }

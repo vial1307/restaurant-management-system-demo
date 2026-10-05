@@ -1,5 +1,17 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #202 production-evidence docs-drift repair
+
+- After PR #200 production closure, docs-only PR #201 advanced GitHub main from deployed release `2feb47e...` to `3920a84...` without changing runtime code.
+- Found a control-plane drift: `main_workflows` intentionally filtered to current repository HEAD, so Deploy #1165 / Inventory Audit #473 for the still-current production SHA disappeared from the Super Admin production card and stable Engineering Harness workflow evidence.
+- Created PR #202 from current main.
+- Added `recent_main_workflows` while preserving exact current-main `main_workflows`.
+- Engineering Harness now resolves recorded production SHA first and, with no active PR, evaluates runtime-required workflows against recent main runs matching that production SHA.
+- Super Admin Production card selects Deploy/Inventory Audit by recorded production/runtime SHA rather than repository HEAD.
+- Added regression coverage for a docs-only main commit above a still-valid deployed production release.
+- No Inventory business logic, PostgreSQL schema/data, RBAC/workforce or warehouse-switch behavior changed.
+
+
 ## 2026-10-05 — PR #200 production closure
 
 - PR #200 exact tested head `184585968ddc50d462c4fc1b98b70ea2353d1351` passed Master/Admin #440, API Load #653, Super Admin Browser #364 and Workforce Diagnostic #519.

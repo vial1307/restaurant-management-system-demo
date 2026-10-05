@@ -1,6 +1,34 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: none
+ACTIVE_PR: #202
+
+## ACTIVE — PR #202 production evidence across docs-only main drift, 2026-10-06
+
+Purpose:
+- keep Super Admin → GitHub & Handoff production evidence stable when repository main advances through documentation-only commits but VPS runtime remains on the last verified code release;
+- distinguish repository HEAD evidence from verified production-release evidence;
+- bind stable/no-active-PR Engineering Harness gates to workflows whose head SHA matches the recorded production SHA.
+
+Observed drift:
+- verified VPS runtime release: `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`, schema `031`;
+- docs-only closure PR #201 advanced main to `3920a84119e494f11867f6e5e5d4aaffd10b2896`;
+- current-main exact-head workflows on `3920a84` contain GitHub Pages only, while Deploy #1165 and Inventory Audit #473 belong to deployed SHA `2feb47e...`;
+- previous logic could therefore show missing production workflow evidence despite a healthy verified runtime.
+
+Scope:
+- GitHub/Handoff evidence plumbing + Engineering Harness + Super Admin rendering + regression tests;
+- no Inventory business logic;
+- no PostgreSQL schema/data;
+- no RBAC/workforce mutation;
+- no warehouse-switch behavior change.
+
+Required exact-head gate:
+1. Deploy Kitchen OS to VPS;
+2. Master Data and Admin Panel Regression;
+3. Super Admin Browser Regression;
+4. Isolated CI API Load Smoke;
+5. merge only the tested PR #202 head;
+6. deploy exact merge SHA and verify release/schema, DATA_INTEGRITY_OK, production UI smoke, Inventory audit and applicable workforce post-deploy checks.
 
 ## CURRENT VERIFIED PRODUCTION — PR #200 live handoff metadata reconciliation, 2026-10-05
 

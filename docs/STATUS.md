@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #202 production evidence across docs-only main drift, 2026-10-06
+
+- `ACTIVE_PR: #202`.
+- Baseline main: `3920a84119e494f11867f6e5e5d4aaffd10b2896`.
+- Verified runtime remains release `2feb47e7a204ee5834aa5a45ea57f8eb349b853b`, schema `031`.
+- Fix: preserve recent main workflow history and select production Deploy/Audit evidence by recorded production SHA instead of docs-only repository HEAD.
+- Engineering Harness stable gates use verified production-SHA runs when no active runtime candidate exists.
+- No Inventory/DB/RBAC/workforce business behavior changes.
+- NEXT: exact-head CI → merge tested head → exact merge deploy → production verification/audits → close ACTIVE_PR.
+
 ## STABLE — no active engineering PR, 2026-10-05
 
 - `ACTIVE_PR: none` after PR #200 production closure.
