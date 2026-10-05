@@ -1442,7 +1442,7 @@ function addItemModal(context) {
         <span>${escapeHtml(zone[language])}</span>
       </label>
       <label class="inventory-primary-choice" title="${language==="zh"?"主要儲位":"Vị trí chính"}">
-        <input type="radio" name="primaryZone" value="${escapeHtml(zone.id)}" ${primaryChecked?"checked":""} ${canPrimary && checked ? "" : "disabled"} />
+        <input type="radio" name="primaryZone" value="${escapeHtml(zone.id)}" ${primaryChecked?"checked":""} ${canPrimary && checked ? "" : "disabled"} ${canPrimary ? "" : 'data-permission-denied="true"'} />
         <span>${language==="zh"?"主要":"Chính"}</span>
       </label>
       <label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${escapeHtml(zone.id)}" value="${stored?.quantity ?? 0}" ${canQuantity ? "" : 'readonly aria-readonly="true"'} /></label>
@@ -1495,14 +1495,27 @@ function addItemModal(context) {
 
 function syncReceiveZoneOptions(form) {
   if(!form?.matches?.('[data-form="add-item"],[data-form="edit-item"]')) return;
-  const receive=form.querySelector('select[name="receiveZone"]');
-  if(!receive)return;
   const selected=new Set([...form.querySelectorAll('input[name="zones"]:checked')].map((input)=>input.value));
-  for(const option of receive.options){
-    if(!option.value){ option.disabled=false; continue; }
-    option.disabled=!selected.has(option.value);
+  const receive=form.querySelector('select[name="receiveZone"]');
+  if(receive){
+    for(const option of receive.options){
+      if(!option.value){ option.disabled=false; continue; }
+      option.disabled=!selected.has(option.value);
+    }
+    if(receive.value && !selected.has(receive.value)) receive.value="";
   }
-  if(receive.value && !selected.has(receive.value)) receive.value="";
+
+  const primaryRadios=[...form.querySelectorAll('input[name="primaryZone"]')];
+  for(const radio of primaryRadios){
+    const permitted=!radio.hasAttribute("data-permission-denied");
+    radio.disabled=!selected.has(radio.value) || !permitted;
+    radio.closest(".inventory-primary-choice")?.classList.toggle("is-disabled",radio.disabled);
+  }
+  const checked=primaryRadios.find((radio)=>radio.checked && !radio.disabled);
+  if(!checked){
+    const fallback=primaryRadios.find((radio)=>selected.has(radio.value) && !radio.disabled);
+    if(fallback) fallback.checked=true;
+  }
 }
 
 async function persistCatalogStocktakeFields({ site, stockKey, locations, workArea, workMinimum }) {
@@ -2091,13 +2104,18 @@ root.addEventListener("submit", async (event) => {
     if (title) store.addTask({ title, quantity: data.get("quantity"), area: data.get("area"), assigneeId, assigneeName: assignee?.name || "", dueAt: data.get("dueAt") });
   }
   if (["add-item", "edit-item"].includes(form.dataset.form)) {
-    if (!canManageBranchCatalog(activeInventorySite())) { view.modal = null; render(); return; }
     const site = activeInventorySite();
+    const requiredCatalogAction=form.dataset.form==="add-item"
+      ? "inventory.product.create"
+      : "inventory.product.identity.edit";
+    if (!canInventoryAction(requiredCatalogAction,{site})
+        && !canManageBranchCatalog(site)) { view.modal = null; render(); return; }
     const inventoryRecord = branchInventoryMutationRecord(state,site);
-    const locations = data.getAll("zones").map((zone) => ({
+    const locations = data.getAll("zones").map((zone,index) => ({
       zone: String(zone),
       quantity: Number(data.get(`quantity:${zone}`)),
       minimum: Number(data.get(`minimum:${zone}`)),
+      displayOrder:Number(data.get(`displayOrder:${zone}`) ?? index),
     }));
     if (!locations.length) {
       window.alert("Hãy chọn ít nhất một vị trí lưu. · 請至少選擇一個存放位置。");
@@ -2112,13 +2130,20 @@ root.addEventListener("submit", async (event) => {
     }
     const label=String(data.get("label") ?? "").trim();
     const catalogKey=existingItem?.catalogKey || inventoryCatalogKey(label);
+    const requestedPrimary=String(data.get("primaryZone") || "");
+    const primaryZone=locations.some((entry)=>entry.zone===requestedPrimary)
+      ? requestedPrimary
+      : locations[0]?.zone || "";
     const item = {
       label,
       labelVi: String(data.get("labelVi") ?? "").trim(),
       catalogKey,
       receiveZone,
+      categoryCode:String(data.get("categoryCode") || "").trim(),
       workArea: String(data.get("workArea")),
-      unit: String(data.get("unit")),
+      unit: String(data.get("unit") || "").trim(),
+      unitCode:String(data.get("unit") || "").trim(),
+      primaryZone,
       workMinimum: Number(data.get("workMinimum")),
       storageOnly: Boolean(existingItem?.storageOnly),
       locations,
