@@ -346,7 +346,8 @@ with user_access as (
       select c.allowed
       from public.resolve_role_capabilities(u.role) c
       where c.capability_key='system.super_admin'
-    ),false) as super_admin
+    ),false) as super_admin,
+    (u.role in ('admin','superadmin')) as catalog_archive
   from public.app_users u
   where u.active=true
 ), grants as (
@@ -362,9 +363,10 @@ with user_access as (
         'inventory.product.category.edit','inventory.product.location.attach','inventory.product.location.detach',
         'inventory.product.primary_location.edit','inventory.receive_default.edit','inventory.work_area.edit',
         'inventory.transfer.internal','inventory.transfer.cross_site','inventory.receive','inventory.pick',
-        'inventory.use','inventory.return','inventory.product.archive'
+        'inventory.use','inventory.return'
       ) and ua.can_edit
     )
+    or (a.action_key='inventory.product.archive' and ua.catalog_archive)
     or (a.action_key='inventory.history.full' and ua.history_full)
     or (
       a.action_key in ('inventory.location.create','inventory.location.edit','inventory.location.archive')
