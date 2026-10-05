@@ -1,18 +1,17 @@
 import crypto from "node:crypto";
 import { pool, withTransaction } from "./db.mjs";
-import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
+import { requireUser } from "./auth.mjs";
 import { activeSite, activeSiteCodes, isBranchSite } from "./site-registry.mjs";
+import { inventoryActionAllowed } from "./inventory-access.mjs";
 
-function requireInventory(user, site, action, reply) {
-  if (siteAllowed(user, site) && hasPermission(user, "inventory", action)) return true;
-  reply.code(403).send({ error: action === "view" ? "INVENTORY_VIEW_NOT_ALLOWED" : "INVENTORY_EDIT_NOT_ALLOWED" });
+async function requireInventory(user, site, actionKey, reply, scope = {}, client = pool) {
+  if (await inventoryActionAllowed(user,actionKey,{ site,...scope },client)) return true;
+  reply.code(403).send({ error:"INVENTORY_ACTION_NOT_ALLOWED",action:actionKey,site });
   return false;
 }
 
-function requireCatalogManager(user, site, reply) {
-  // Catalogue access follows the explicit inventory edit permission. Role
-  // names must not silently override a permission granted by an administrator.
-  return requireInventory(user, site, "edit", reply);
+async function requireCatalogManager(user, site, reply, client = pool) {
+  return requireInventory(user,site,"inventory.product.identity.edit",reply,{},client);
 }
 
 function catalogWorkAreaConflict(error) {
@@ -28,14 +27,13 @@ function catalogWorkAreaConflict(error) {
 }
 
 
-async function canManageReceiveDefault(user, site) {
-  return siteAllowed(user, site) && hasPermission(user, "inventory", "edit");
+async function canManageReceiveDefault(user, site, client = pool) {
+  return inventoryActionAllowed(user,"inventory.receive_default.edit",{site},client);
 }
 
-async function requireReceiveDefaultManager(user, site, reply) {
-  if (!requireInventory(user, site, "edit", reply)) return false;
-  if (await canManageReceiveDefault(user, site)) return true;
-  reply.code(403).send({ error: "RECEIVE_DEFAULT_MANAGER_REQUIRED" });
+async function requireReceiveDefaultManager(user, site, reply, client = pool) {
+  if (await canManageReceiveDefault(user,site,client)) return true;
+  reply.code(403).send({ error:"INVENTORY_ACTION_NOT_ALLOWED",action:"inventory.receive_default.edit",site });
   return false;
 }
 
@@ -57,8 +55,12 @@ export async function registerInventoryExtraRoutes(app) {
       .map((value) => value.trim())
       .filter((value) => allowedSites.has(value) && value !== source))];
     if (!(await activeSite(source))) return reply.code(400).send({ error:"INVALID_SITE" });
-    if (!requireInventory(user, source, "edit", reply)) return;
-    if (!sites.length) return { locations:[], catalog:[], receiveDefaults:[] };
+    if (!(await requireInventory(user,source,"inventory.transfer.cross_site",reply))) return;
+    const permittedSites=[];
+    for (const site of sites) {
+      if (await inventoryActionAllowed(user,"inventory.receive",{site})) permittedSites.push(site);
+    }
+    if (!permittedSites.length) return { locations:[], catalog:[], receiveDefaults:[] };
 
     // Shipping users only receive routing metadata for other sites. Quantities
     // remain protected by the normal site-scoped inventory endpoint.
@@ -68,7 +70,7 @@ export async function registerInventoryExtraRoutes(app) {
          from public.inventory_locations
          where site=any($1::text[]) and kind='storage' and active=true
          order by site,sort_order,code`,
-        [sites]
+        [permittedSites]
       ),
       pool.query(
         `select i.id as item_id,i.item_key,i.catalog_key,i.name_zh_tw,i.name_vi,
@@ -80,7 +82,7 @@ export async function registerInventoryExtraRoutes(app) {
          where i.active=true and l.active=true and l.kind='storage'
            and l.site=any($1::text[])
          order by l.site,i.name_zh_tw,l.sort_order,l.code`,
-        [sites]
+        [permittedSites]
       ),
       pool.query(
         `select d.site,d.catalog_key,d.location_id,d.updated_at,
@@ -92,7 +94,7 @@ export async function registerInventoryExtraRoutes(app) {
            and l.kind='storage'
            and l.active=true
          order by d.site,d.catalog_key`,
-        [sites]
+        [permittedSites]
       ),
     ]);
 
@@ -130,15 +132,17 @@ export async function registerInventoryExtraRoutes(app) {
   app.get("/api/inventory/receive-defaults", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
-    if (!hasPermission(user, "inventory", "view")) {
-      return reply.code(403).send({ error: "INVENTORY_VIEW_NOT_ALLOWED" });
-    }
-
     const allowedSites = new Set(await activeSiteCodes());
-    const sites = String(request.query?.sites || "")
+    const requestedSites = String(request.query?.sites || "")
       .split(",")
       .map((value) => value.trim())
       .filter((value) => allowedSites.has(value));
+    const candidates=requestedSites.length ? requestedSites : [...allowedSites];
+    const sites=[];
+    for (const site of candidates) {
+      if (await inventoryActionAllowed(user,"inventory.view",{site})) sites.push(site);
+    }
+    if (!sites.length) return { defaults:[] };
     const catalogKeys = String(request.query?.catalogKeys || "")
       .split(",")
       .map((value) => value.trim())
@@ -324,8 +328,10 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireInventory(user, row.site, "edit", reply)) {
-          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        if (!(await requireInventory(
+          user,row.site,"inventory.quantity.set_absolute",reply,{locationId},client
+        ))) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
         }
         if (!String(row.item_key || "").startsWith(row.site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
@@ -404,8 +410,10 @@ export async function registerInventoryExtraRoutes(app) {
         );
         const row = ctx.rows[0];
         if (!row) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"), { statusCode:404 });
-        if (!requireInventory(user,row.site,"edit",reply)) {
-          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        if (!(await requireInventory(
+          user,row.site,"inventory.minimum.edit",reply,{locationId},client
+        ))) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
         }
         if (!String(row.item_key || "").startsWith(row.site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
@@ -475,8 +483,6 @@ export async function registerInventoryExtraRoutes(app) {
     if (!item || !(await activeSite(site))) {
       return reply.code(400).send({ error: "INVALID_CATALOG_ITEM" });
     }
-    if (!requireCatalogManager(user,site,reply)) return;
-
     try {
       const result = await withTransaction(async (client) => {
         await client.query(
@@ -493,6 +499,19 @@ export async function registerInventoryExtraRoutes(app) {
           [itemKey]
         );
         const current = currentResult.rows[0] || null;
+        const identityAction=current ? "inventory.product.identity.edit" : "inventory.product.create";
+        if (!(await inventoryActionAllowed(user,identityAction,{site},client))) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
+        }
+        const requestedUnit=String(item.unit || "個");
+        if ((!current || requestedUnit!==String(current.unit||""))
+            && !(await inventoryActionAllowed(user,"inventory.product.unit.edit",{site},client))) {
+          throw Object.assign(new Error("INVENTORY_UNIT_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
+        if (current && String(item.work_area||"")!==String(current.work_area||"")
+            && !(await inventoryActionAllowed(user,"inventory.work_area.edit",{site,workArea:String(item.work_area||"")},client))) {
+          throw Object.assign(new Error("INVENTORY_WORK_AREA_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
 
         if (request.body?.expectedRevision !== undefined &&
             String(current?.revision || "0") !== String(request.body.expectedRevision)) {
@@ -751,7 +770,6 @@ export async function registerInventoryExtraRoutes(app) {
   app.post("/api/inventory/catalog/archive", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
-    if (user.role !== "admin") return reply.code(403).send({ error:"ADMIN_REQUIRED" });
 
     const itemKey = String(request.body?.itemKey || "").trim();
     if (!itemKey) return reply.code(400).send({ error:"ITEM_KEY_REQUIRED" });
@@ -775,6 +793,9 @@ export async function registerInventoryExtraRoutes(app) {
         const site = String(item.item_key || "").split(":")[0];
         if (!(await activeSite(site))) {
           throw Object.assign(new Error("INVALID_SITE"), { statusCode:400 });
+        }
+        if (!(await inventoryActionAllowed(user,"inventory.product.archive",{site},client))) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
         }
 
         const stock = await client.query(
@@ -913,8 +934,14 @@ export async function registerInventoryExtraRoutes(app) {
         if (row.source_site !== row.destination_site) {
           throw Object.assign(new Error("RELOCATION_MUST_STAY_IN_SITE"), { statusCode:400 });
         }
-        if (!requireCatalogManager(user,row.source_site,reply)) {
-          throw Object.assign(new Error("CATALOG_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        const detachAllowed=await inventoryActionAllowed(
+          user,"inventory.product.location.detach",{site:row.source_site,locationId:sourceLocationId},client
+        );
+        const attachAllowed=await inventoryActionAllowed(
+          user,"inventory.product.location.attach",{site:row.source_site,locationId:destinationLocationId},client
+        );
+        if (!detachAllowed || !attachAllowed) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode:403 });
         }
         if (!String(row.item_key || "").startsWith(row.source_site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
@@ -1096,8 +1123,14 @@ export async function registerInventoryExtraRoutes(app) {
         if (!row.source_work_area || !row.destination_work_area) {
           throw Object.assign(new Error("INVALID_WORK_AREA_LOCATION"), { statusCode:400 });
         }
-        if (!requireCatalogManager(user,row.source_site,reply)) {
-          throw Object.assign(new Error("CATALOG_EDIT_NOT_ALLOWED"), { statusCode:403, alreadySent:true });
+        const workSourceAllowed=await inventoryActionAllowed(
+          user,"inventory.work_area.edit",{site:row.source_site,workArea:row.source_work_area},client
+        );
+        const workDestinationAllowed=await inventoryActionAllowed(
+          user,"inventory.work_area.edit",{site:row.source_site,workArea:row.destination_work_area},client
+        );
+        if (!workSourceAllowed || !workDestinationAllowed) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode:403 });
         }
         if (!String(row.item_key || "").startsWith(row.source_site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
@@ -1356,8 +1389,14 @@ export async function registerInventoryExtraRoutes(app) {
         if (!String(sourceItem.item_key || "").startsWith(sourceItem.from_site + ":")) {
           throw Object.assign(new Error("ITEM_SITE_MISMATCH"), { statusCode:400 });
         }
-        if (!(siteAllowed(user,sourceItem.from_site) && hasPermission(user,"inventory","edit"))) {
-          throw Object.assign(new Error("INVENTORY_EDIT_NOT_ALLOWED"), { statusCode:403 });
+        const sourceAllowed=await inventoryActionAllowed(
+          user,"inventory.transfer.cross_site",{site:sourceItem.from_site,locationId:sourceLocationId},client
+        );
+        const destinationAllowed=await inventoryActionAllowed(
+          user,"inventory.receive",{site:sourceItem.to_site,locationId:destinationLocationId},client
+        );
+        if (!sourceAllowed || !destinationAllowed) {
+          throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"), { statusCode:403 });
         }
 
         await client.query(
