@@ -35,7 +35,7 @@ assert.match(migration,/inventory\.product\.unit\.edit/);
 assert.match(migration,/inventory\.product\.category\.edit/);
 assert.match(migration,/inventory\.product\.primary_location\.edit/);
 assert.match(migration,/inventory\.receive_default\.edit/);
-assert.match(migration,/inventory\.access_rule_sites/);
+assert.match(migration,/inventory_access_rule_sites/);
 assert.doesNotMatch(migration,/\bAB\b|\bAC\b|\bBC\b/,"site combinations must be normalized DB rows, not coded presets");
 assert.match(migration,/minimum_enabled/);
 assert.match(migration,/warning_enabled/);
