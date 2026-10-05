@@ -1,6 +1,52 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #188
+ACTIVE_PR: #200
+
+## ACTIVE — PR #200 live production metadata reconciliation, 2026-10-05
+
+PR #200 is the current engineering workstream on top of the latest verified Inventory production baseline.
+
+Purpose:
+- remove historical PR #140 / schema 024 / September RBAC fallback metadata from Super Admin → GitHub & Handoff;
+- make Current work prefer live ACTIVE_PR/GitHub state rather than a stale static branch;
+- make Production evidence prefer live main Deploy + Inventory Site Production Audit workflows and VPS runtime release/schema;
+- keep static fallback intentionally neutral when GitHub live metadata is unavailable.
+
+Baseline inherited unchanged:
+- main before this PR: `05183544fd4168332f6681c8e00f46b5d9f02527`;
+- Inventory performance PR #188 is merged;
+- warehouse-switch rerender fixes PR #198 and capture/pointer hardening PR #199 are merged;
+- Deploy Kitchen OS #1160 / run `37254253521`: PASS;
+- production-ui-smoke job: PASS;
+- Inventory Site Production Audit #467 / run `37254828622`: PASS;
+- Workforce Staff #708, Attendance #682, Schedule Backfill #692 and Schedule Parity #481: PASS;
+- schema remains `031`.
+
+Strict scope:
+- metadata/UI evidence + regression only;
+- no Inventory business handler rewrite;
+- no PostgreSQL schema/data/RBAC mutation;
+- no rollback of PR #188/#198/#199 behavior;
+- AgentMemory and Engineering Harness authority model remain unchanged.
+
+Required exact-head gate:
+1. Deploy Kitchen OS to VPS;
+2. Master Data and Admin Panel Regression;
+3. Super Admin Browser Regression;
+4. Isolated CI API Load Smoke;
+5. merge only the exact tested PR #200 head;
+6. deploy exact merge SHA and require release/schema, `DATA_INTEGRITY_OK`, production UI smoke and applicable production audits;
+7. update handoff/status/work log and AgentMemory after production closure.
+
+## CURRENT VERIFIED INVENTORY PRODUCTION — PR #188 + warehouse-switch hotfixes, 2026-10-05
+
+- PR #188 was rebuilt on current Harness/AgentMemory main and merged as `1872a8daf8b5d59148de7d208519d736ceca75a5`.
+- PR #198 replaced transient per-node warehouse click listeners with stable document delegation after production reproduced a lost switch during rerender.
+- PR #199 hardened warehouse activation further so capture/pointer activation records the requested site before rerender can replace the clicked node.
+- Current main after PR #199: `05183544fd4168332f6681c8e00f46b5d9f02527`.
+- Deploy #1160 passed all jobs: preflight, regression, deploy and production-ui-smoke.
+- Inventory Site Production Audit #467 passed on the same main SHA.
+- This closes the old `ACTIVE_PR: #188` state; #188 must no longer appear as the current workstream.
 
 ## CURRENT VERIFIED PRODUCTION — Engineering Harness / Coding Control Plane, 2026-10-05
 
