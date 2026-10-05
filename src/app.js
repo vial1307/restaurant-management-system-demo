@@ -1718,12 +1718,22 @@ root.addEventListener("change", (event) => {
   if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
   if (field === "item") {
     const site = activeInventorySite();
-    const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(site) && canDirectInventoryAdjust();
-    const catalogMetadataEdit = ["zone","workArea"].includes(key) && canManageBranchCatalog(site);
-    if (!canDirectInventoryAdjust() && !manageQuantityEdit && !catalogMetadataEdit) { render(); return; }
     const record = branchInventoryMutationRecord(state,site);
     const item = inventoryControlItem(element,record,"item");
     if (!item) return;
+    if (key === "quantity" && !canInventoryAction("inventory.quantity.set_absolute",{
+      site,locationId:item.cloudLocationId
+    })) { render(); return; }
+    if (key === "minimum" && !canInventoryAction("inventory.minimum.edit",{
+      site,locationId:item.cloudLocationId
+    })) { render(); return; }
+    if (key === "zone" && !(
+      canInventoryAction("inventory.product.location.detach",{site,locationId:item.cloudLocationId})
+      && canInventoryAction("inventory.product.location.attach",{site})
+    )) { render(); return; }
+    if (key === "workArea" && !canInventoryAction("inventory.work_area.edit",{
+      site,workArea:String(element.value || "")
+    })) { render(); return; }
     if (key === "zone") {
       const previousZone = String(item.zone || "");
       const nextZone = String(element.value || "");
@@ -1789,7 +1799,7 @@ root.addEventListener("change", (event) => {
         locationCode: branchLocationCode(site, item.zone),
         quantity: next,
         note: "盤點調整 / Điều chỉnh kiểm kê",
-        allowInventoryEditor:manageQuantityEdit,
+        allowInventoryEditor:true,
         sync:false,
       }).then(async(result) => {
         await syncInventoryNow(site,{reloadBranch:false,force:true});
@@ -1799,7 +1809,6 @@ root.addEventListener("change", (event) => {
       return;
     }
     if (key === "minimum") {
-      if (!canDirectInventoryAdjust()) { render(); return; }
       const next = Math.max(0, Number(element.value) || 0);
       element.disabled = true;
       void cloudSetMinimum({
@@ -1830,10 +1839,17 @@ root.addEventListener("change", (event) => {
   }
   if (field === "workItem") {
     const site = activeInventorySite();
-    const catalogWorkAreaEdit = key === "workArea" && canManageBranchCatalog(site);
-    if (!canDirectInventoryAdjust() && !catalogWorkAreaEdit) { render(); return; }
     const item = inventoryControlItem(element,branchInventoryMutationRecord(state,site),"workItem");
     if (!item) return;
+    if (key === "quantity" && !canInventoryAction("inventory.quantity.set_absolute",{
+      site,locationId:item.cloudLocationId,workArea:item.workArea
+    })) { render(); return; }
+    if (key === "minimum" && !canInventoryAction("inventory.minimum.edit",{
+      site,locationId:item.cloudLocationId,workArea:item.workArea
+    })) { render(); return; }
+    if (key === "workArea" && !canInventoryAction("inventory.work_area.edit",{
+      site,workArea:String(element.value || "")
+    })) { render(); return; }
     if (key === "workArea") {
       const previousArea = String(item.workArea || "");
       const nextArea = String(element.value || "");
@@ -1858,7 +1874,6 @@ root.addEventListener("change", (event) => {
       return;
     }
     if (key === "quantity") {
-      if (!canDirectInventoryAdjust()) { render(); return; }
       const next = Math.max(0, Number(element.value) || 0);
       element.disabled = true;
       void cloudSetQuantity({
@@ -1878,7 +1893,6 @@ root.addEventListener("change", (event) => {
       return;
     }
     if (key === "minimum") {
-      if (!canDirectInventoryAdjust()) { render(); return; }
       const next = Math.max(0, Number(element.value) || 0);
       element.disabled = true;
       void cloudSetMinimum({
