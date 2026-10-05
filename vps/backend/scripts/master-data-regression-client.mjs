@@ -244,7 +244,11 @@ try {
   const centralManager = await login("managercentralreg");
   assert.equal(centralManager.user.location, "central");
   assert.equal(centralManager.user.roleCode, "manager");
-  assert.equal((await request("/api/inventory/central",{cookie:centralManager.cookie})).response.status,200);
+  assert.equal(
+    (await request("/api/inventory/central",{cookie:centralManager.cookie})).response.status,
+    403,
+    "post-schema-032 accounts must default-deny Inventory until Super Admin grants explicit DB rules"
+  );
   assert.equal((await request("/api/inventory/fuxing",{cookie:centralManager.cookie})).response.status,403);
   const unknownAssigned = await request("/api/admin/users", {
     method:"POST",cookie:admin.cookie,
