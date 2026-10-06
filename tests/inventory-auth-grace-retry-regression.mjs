@@ -128,6 +128,17 @@ Object.defineProperty(globalThis, "fetch", {
     if (url === "/api/inventory/sites") {
       return new Response(JSON.stringify({ sites: [site] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (url === "/api/inventory/access?site=fuxing") {
+      return new Response(JSON.stringify({
+        site:"fuxing",
+        actions:{
+          "inventory.view":{ allowed:true,reason:"TEST_ALLOW",source:"fixture" },
+          "inventory.quantity.set_absolute":{ allowed:true,reason:"TEST_ALLOW",source:"fixture" },
+        },
+        locations:{},
+        workAreas:{},
+      }), { status:200,headers:{ "content-type":"application/json" } });
+    }
     if (url === "/api/master-data/fuxing") {
       return new Response(JSON.stringify({ site, locations, workAreas }), { status: 200, headers: { "content-type": "application/json" } });
     }
