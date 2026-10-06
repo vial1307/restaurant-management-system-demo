@@ -685,8 +685,6 @@ export async function registerInventoryExtraRoutes(app) {
         } = {}) => {
           const id=String(locationId || "");
           if (!wantedLocationIds.some((value)=>String(value)===id)) wantedLocationIds.push(locationId);
-          // Catalog sync owns association metadata only. Quantity/minimum still
-          // flow through dedicated auditable stocktake endpoints.
           await client.query(
             `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
              values($1,$2,0,0,now())
@@ -705,6 +703,111 @@ export async function registerInventoryExtraRoutes(app) {
                    updated_at=now()`,
               [savedItem.id,locationId,Boolean(isPrimary),Number(displayOrder||0)]
             );
+          }
+        };
+
+        const applyCatalogStockFields = async (locationId, locationDraft = {}, workArea = "") => {
+          const hasQuantity=Object.prototype.hasOwnProperty.call(locationDraft,"quantity");
+          const hasMinimum=Object.prototype.hasOwnProperty.call(locationDraft,"minimum");
+          if (!hasQuantity && !hasMinimum) return;
+
+          const locked=(await client.query(
+            `select quantity,minimum_quantity
+             from public.inventory_stock
+             where item_id=$1 and location_id=$2
+             for update`,
+            [savedItem.id,locationId]
+          )).rows[0];
+          if (!locked) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"),{statusCode:404});
+
+          if (hasQuantity) {
+            const quantity=Number(locationDraft.quantity);
+            if (!Number.isFinite(quantity) || quantity<0) {
+              throw Object.assign(new Error("INVALID_QUANTITY"),{statusCode:400});
+            }
+            if (!(await inventoryActionAllowed(
+              user,"inventory.quantity.set_absolute",
+              {site,locationId:String(locationId),workArea},client
+            ))) {
+              throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
+            }
+            const before=Number(locked.quantity || 0);
+            if (before!==quantity) {
+              await client.query(
+                `update public.inventory_stock
+                 set quantity=$3::numeric,updated_at=now()
+                 where item_id=$1 and location_id=$2`,
+                [savedItem.id,locationId,quantity]
+              );
+              await client.query(
+                `insert into public.inventory_transactions(
+                   item_id,source_location_id,destination_location_id,action,amount,note,
+                   actor_user_id,actor_username,metadata
+                 ) values(
+                   $1,$2,$3,'adjust',$4,$5,$6,$7,
+                   jsonb_build_object(
+                     'operation','catalog_form_set_quantity',
+                     'before_quantity',$8::numeric,
+                     'after_quantity',$9::numeric
+                   )
+                 )`,
+                [
+                  savedItem.id,
+                  quantity<before ? locationId : null,
+                  quantity>=before ? locationId : null,
+                  Math.abs(quantity-before),
+                  "品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
+                  user.id,user.username,before,quantity
+                ]
+              );
+              locked.quantity=quantity;
+            }
+          }
+
+          if (hasMinimum) {
+            const minimum=Number(locationDraft.minimum);
+            if (!Number.isFinite(minimum) || minimum<0) {
+              throw Object.assign(new Error("INVALID_MINIMUM"),{statusCode:400});
+            }
+            if (!(await inventoryActionAllowed(
+              user,"inventory.minimum.edit",
+              {site,locationId:String(locationId),workArea},client
+            ))) {
+              throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
+            }
+            const before=Number(locked.minimum_quantity || 0);
+            if (before!==minimum) {
+              await client.query(
+                `update public.inventory_stock
+                 set minimum_quantity=$3::numeric,
+                     minimum_enabled=($3::numeric>0),
+                     updated_at=now()
+                 where item_id=$1 and location_id=$2`,
+                [savedItem.id,locationId,minimum]
+              );
+              await client.query(
+                `insert into public.inventory_transactions(
+                   item_id,source_location_id,destination_location_id,action,amount,note,
+                   actor_user_id,actor_username,metadata
+                 ) values(
+                   $1,$2,$3,'adjust',$4,$5,$6,$7,
+                   jsonb_build_object(
+                     'operation','catalog_form_set_minimum',
+                     'before_minimum',$8::numeric,
+                     'after_minimum',$9::numeric
+                   )
+                 )`,
+                [
+                  savedItem.id,
+                  minimum<before ? locationId : null,
+                  minimum>=before ? locationId : null,
+                  Math.abs(minimum-before),
+                  "品項表單最低量調整 / Điều chỉnh minimum từ biểu mẫu sản phẩm",
+                  user.id,user.username,before,minimum
+                ]
+              );
+              locked.minimum_quantity=minimum;
+            }
           }
         };
 
@@ -733,6 +836,13 @@ export async function registerInventoryExtraRoutes(app) {
             throw Object.assign(new Error("WORK_LOCATION_NOT_FOUND"), { statusCode:409 });
           }
           await attachLocation(workLocation.rows[0].id,{kind:"work"});
+          if (Object.prototype.hasOwnProperty.call(item,"work_minimum")) {
+            await applyCatalogStockFields(
+              workLocation.rows[0].id,
+              { minimum:item.work_minimum },
+              target.work_area
+            );
+          }
         }
 
         const requestedPrimaryCode=String(
@@ -786,11 +896,13 @@ export async function registerInventoryExtraRoutes(app) {
         }
 
         for (const row of explicitStorageRows) {
+          const locationDraft=explicitLocations[row.index] || {};
           await attachLocation(row.id,{
             kind:"storage",
             isPrimary:row.code===primaryCode,
-            displayOrder:Number(explicitLocations[row.index]?.display_order ?? row.index),
+            displayOrder:Number(locationDraft.display_order ?? row.index),
           });
+          await applyCatalogStockFields(row.id,locationDraft);
         }
 
         if (explicitLocations.length && !request.body?.appendLocations) {
