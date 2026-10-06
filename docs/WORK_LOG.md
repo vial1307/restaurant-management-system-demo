@@ -2290,3 +2290,12 @@ The separate read-cutover candidate:
 - Added static guards to ensure the visual-parity layer remains present while existing runtime contracts remain untouched.
 - No JS/API/schema/quantity/minimum/transaction/RBAC/site-scope mutation.
 - Next: exact-head PR CI/full-device browser validation, then merge/deploy/audit only if green.
+
+
+### PR #213 responsive gate repair
+
+- Exact head `e2261e648314b80da5879ced9741dd1baf6d858f`: Master/Admin #525 PASS, Super Admin Browser #452 PASS, Workforce Diagnostic #600 PASS.
+- Deploy/full-device #1260 failed only at Desktop/mobile Chromium regression: Inventory viewport 844x390 had 308px document horizontal overflow.
+- Root cause: the final visual-parity desktop `grid-template-columns` declaration loaded after the pre-existing <=1100px card media rule and therefore overrode the tablet card grid.
+- Fix: restated the responsive product-row/card structure inside a final <=1100px media block and added a static regression guard for the tablet grid.
+- No data/API/schema/RBAC/transaction change.
