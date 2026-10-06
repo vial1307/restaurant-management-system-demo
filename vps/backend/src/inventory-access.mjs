@@ -200,22 +200,73 @@ export async function inventoryAllowedSites(user, actionKey, client = pool) {
 }
 
 export async function inventoryActionSnapshot(user, site, client = pool) {
-  const { rows }=await client.query(
-    "select action_key,name_vi,name_zh_tw,category,risk_level,sort_order from public.inventory_permission_actions where active=true order by sort_order,action_key"
-  );
+  const [{ rows:actionRows },{ rows:locationRows },{ rows:workAreaRows }]=await Promise.all([
+    client.query(
+      "select action_key,name_vi,name_zh_tw,category,risk_level,sort_order from public.inventory_permission_actions where active=true order by sort_order,action_key"
+    ),
+    client.query(
+      "select id::text,code,kind,metadata from public.inventory_locations where site=$1 and active=true order by sort_order,code",
+      [site]
+    ),
+    client.query(
+      "select code from public.work_areas where site_code=$1 and active=true order by sort_order,code",
+      [site]
+    ),
+  ]);
+
+  const shapeDecision=(decision,row)=>({
+    allowed:decision.allowed,
+    reason:decision.reason,
+    source:decision.source,
+    ruleId:decision.ruleId,
+    name_vi:row.name_vi,
+    name_zh_tw:row.name_zh_tw,
+    category:row.category,
+    risk_level:row.risk_level,
+  });
+
   const actions={};
-  for (const row of rows) {
-    const decision=await inventoryAccessDecision(user,row.action_key,{site},client);
-    actions[row.action_key]={
-      allowed:decision.allowed,
-      reason:decision.reason,
-      source:decision.source,
-      ruleId:decision.ruleId,
-      name_vi:row.name_vi,
-      name_zh_tw:row.name_zh_tw,
-      category:row.category,
-      risk_level:row.risk_level,
+  for (const row of actionRows) {
+    actions[row.action_key]=shapeDecision(
+      await inventoryAccessDecision(user,row.action_key,{site},client),
+      row
+    );
+  }
+
+  const locations={};
+  for (const location of locationRows) {
+    const scoped={};
+    const workArea=String(location.metadata?.work_area || "").trim();
+    for (const row of actionRows) {
+      scoped[row.action_key]=shapeDecision(
+        await inventoryAccessDecision(
+          user,row.action_key,
+          {site,locationId:location.id,workArea},
+          client
+        ),
+        row
+      );
+    }
+    locations[location.id]={
+      id:location.id,
+      code:location.code,
+      kind:location.kind,
+      workArea:workArea || null,
+      actions:scoped,
     };
   }
-  return { site,actions };
+
+  const workAreas={};
+  for (const area of workAreaRows) {
+    const scoped={};
+    for (const row of actionRows) {
+      scoped[row.action_key]=shapeDecision(
+        await inventoryAccessDecision(user,row.action_key,{site,workArea:area.code},client),
+        row
+      );
+    }
+    workAreas[area.code]={ code:area.code,actions:scoped };
+  }
+
+  return { site,actions,locations,workAreas };
 }

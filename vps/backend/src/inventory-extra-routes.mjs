@@ -437,7 +437,7 @@ export async function registerInventoryExtraRoutes(app) {
         }
 
         await client.query(
-          "update public.inventory_stock set minimum_quantity=$3,updated_at=now() where item_id=$1 and location_id=$2",
+          "update public.inventory_stock set minimum_quantity=$3::numeric,minimum_enabled=($3::numeric>0),updated_at=now() where item_id=$1 and location_id=$2",
           [itemId,locationId,minimum]
         );
 
@@ -505,10 +505,42 @@ export async function registerInventoryExtraRoutes(app) {
         if (!(await inventoryActionAllowed(user,identityAction,{site},client))) {
           throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
         }
-        const requestedUnit=String(item.unit || "個");
-        if ((!current || requestedUnit!==String(current.unit||""))
+        const requestedUnit=String(item.unit || "個").trim() || "個";
+        const requestedUnitCode=String(item.unit_code || requestedUnit).trim() || requestedUnit;
+        const requestedCategoryCode=String(item.category_code || "").trim();
+        const unitChanged=!current
+          || requestedUnit!==String(current.unit||"")
+          || requestedUnitCode!==String(current.unit_code||current.unit||"");
+        if (unitChanged
             && !(await inventoryActionAllowed(user,"inventory.product.unit.edit",{site},client))) {
           throw Object.assign(new Error("INVENTORY_UNIT_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
+        const categoryChanged=String(current?.category_code||"")!==requestedCategoryCode;
+        if (categoryChanged
+            && !(await inventoryActionAllowed(user,"inventory.product.category.edit",{site},client))) {
+          throw Object.assign(new Error("INVENTORY_CATEGORY_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
+        if (unitChanged) {
+          await client.query(
+            `insert into public.inventory_units(
+               code,symbol,name_vi,name_zh_tw,unit_type,active,created_by
+             ) values($1,$2,$2,$2,'custom',true,$3)
+             on conflict(code) do update set active=true,updated_at=now()`,
+            [requestedUnitCode,requestedUnit,user.id]
+          );
+        } else {
+          const knownUnit=await client.query(
+            "select 1 from public.inventory_units where code=$1 and active=true limit 1",
+            [requestedUnitCode]
+          );
+          if (!knownUnit.rowCount) throw Object.assign(new Error("INVENTORY_UNIT_NOT_FOUND"),{statusCode:409});
+        }
+        if (requestedCategoryCode) {
+          const knownCategory=await client.query(
+            "select 1 from public.inventory_categories where code=$1 and active=true limit 1",
+            [requestedCategoryCode]
+          );
+          if (!knownCategory.rowCount) throw Object.assign(new Error("INVENTORY_CATEGORY_NOT_FOUND"),{statusCode:409});
         }
         if (current && String(item.work_area||"")!==String(current.work_area||"")
             && !(await inventoryActionAllowed(user,"inventory.work_area.edit",{site,workArea:String(item.work_area||"")},client))) {
@@ -534,9 +566,13 @@ export async function registerInventoryExtraRoutes(app) {
         const locationSnapshot = async (itemId) => {
           if (!itemId) return [];
           const rows = await client.query(
-            `select l.id,l.code,l.kind,l.active
+            `select l.id,l.code,l.kind,l.active,
+                    coalesce(il.is_primary,false) as is_primary,
+                    coalesce(il.display_order,l.sort_order,0) as display_order
              from public.inventory_stock s
              join public.inventory_locations l on l.id=s.location_id
+             left join public.inventory_item_locations il
+               on il.item_id=s.item_id and il.location_id=l.id
              where s.item_id=$1 and l.site=$2
              order by l.code,l.id`,
             [itemId,site]
@@ -546,6 +582,8 @@ export async function registerInventoryExtraRoutes(app) {
             location_code:row.code,
             kind:row.kind,
             active:Boolean(row.active),
+            is_primary:Boolean(row.is_primary),
+            display_order:Number(row.display_order || 0),
           }));
         };
 
@@ -555,6 +593,8 @@ export async function registerInventoryExtraRoutes(app) {
           name_zh_tw:row.name_zh_tw,
           name_vi:row.name_vi,
           unit:row.unit,
+          unit_code:row.unit_code || row.unit,
+          category_code:row.category_code || "",
           work_area:row.work_area,
           storage_only:Boolean(row.storage_only),
           active:Boolean(row.active),
@@ -568,7 +608,9 @@ export async function registerInventoryExtraRoutes(app) {
           catalog_key:String(item.catalog_key || ""),
           name_zh_tw:String(item.zh || itemKey),
           name_vi:String(item.vi || item.zh || itemKey),
-          unit:String(item.unit || "個"),
+          unit:requestedUnit,
+          unit_code:requestedUnitCode,
+          category_code:requestedCategoryCode || null,
           work_area:String(item.work_area || ""),
           storage_only:Boolean(item.storage_only),
         };
@@ -579,6 +621,8 @@ export async function registerInventoryExtraRoutes(app) {
           current.name_zh_tw !== target.name_zh_tw ||
           current.name_vi !== target.name_vi ||
           current.unit !== target.unit ||
+          String(current.unit_code || current.unit || "") !== target.unit_code ||
+          String(current.category_code || "") !== String(target.category_code || "") ||
           current.work_area !== target.work_area ||
           Boolean(current.storage_only) !== target.storage_only ||
           !current.active;
@@ -586,8 +630,8 @@ export async function registerInventoryExtraRoutes(app) {
         if (!current) {
           savedItem = (await client.query(
             `insert into public.inventory_items(
-               item_key,catalog_key,name_zh_tw,name_vi,unit,work_area,storage_only,active
-             ) values($1,$2,$3,$4,$5,$6,$7,true)
+               item_key,catalog_key,name_zh_tw,name_vi,unit,unit_code,category_code,work_area,storage_only,active
+             ) values($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
              returning *`,
             [
               itemKey,
@@ -595,6 +639,8 @@ export async function registerInventoryExtraRoutes(app) {
               target.name_zh_tw,
               target.name_vi,
               target.unit,
+              target.unit_code,
+              target.category_code,
               target.work_area,
               target.storage_only,
             ]
@@ -606,8 +652,10 @@ export async function registerInventoryExtraRoutes(app) {
                  name_zh_tw=$3,
                  name_vi=$4,
                  unit=$5,
-                 work_area=$6,
-                 storage_only=$7,
+                 unit_code=$6,
+                 category_code=$7,
+                 work_area=$8,
+                 storage_only=$9,
                  active=true
              where id=$1
              returning *`,
@@ -617,6 +665,8 @@ export async function registerInventoryExtraRoutes(app) {
               target.name_zh_tw,
               target.name_vi,
               target.unit,
+              target.unit_code,
+              target.category_code,
               target.work_area,
               target.storage_only,
             ]
@@ -626,18 +676,139 @@ export async function registerInventoryExtraRoutes(app) {
         const explicitLocations = (Array.isArray(item.locations) ? item.locations : [])
           .filter((loc) => String(loc?.code || "").trim());
         const wantedLocationIds = [];
-        const attachLocation = async (locationId) => {
-          if (!wantedLocationIds.includes(locationId)) wantedLocationIds.push(locationId);
-          // Catalog sync owns only catalog/location association metadata.
-          // Physical quantity and minimum configuration must use the dedicated
-          // stocktake endpoints so quantity changes remain auditable and cannot
-          // be replayed from a stale browser/catalog snapshot.
+        const beforeLocationIds=new Set(beforeLocations.map((row)=>String(row.location_id)));
+        const beforePrimary=beforeLocations.find((row)=>row.kind==="storage" && row.is_primary)?.location_code || "";
+        const attachLocation = async (locationId, {
+          kind="storage",
+          isPrimary=false,
+          displayOrder=0,
+        } = {}) => {
+          const id=String(locationId || "");
+          if (!wantedLocationIds.some((value)=>String(value)===id)) wantedLocationIds.push(locationId);
           await client.query(
             `insert into public.inventory_stock(item_id,location_id,quantity,minimum_quantity,updated_at)
              values($1,$2,0,0,now())
              on conflict(item_id,location_id) do nothing`,
             [savedItem.id,locationId]
           );
+          if (kind==="storage") {
+            await client.query(
+              `insert into public.inventory_item_locations(
+                 item_id,location_id,is_primary,display_order,active
+               ) values($1,$2,$3,$4,true)
+               on conflict(item_id,location_id) do update
+               set is_primary=excluded.is_primary,
+                   display_order=excluded.display_order,
+                   active=true,
+                   updated_at=now()`,
+              [savedItem.id,locationId,Boolean(isPrimary),Number(displayOrder||0)]
+            );
+          }
+        };
+
+        const applyCatalogStockFields = async (locationId, locationDraft = {}, workArea = "") => {
+          const hasQuantity=Object.prototype.hasOwnProperty.call(locationDraft,"quantity");
+          const hasMinimum=Object.prototype.hasOwnProperty.call(locationDraft,"minimum");
+          if (!hasQuantity && !hasMinimum) return;
+
+          const locked=(await client.query(
+            `select quantity,minimum_quantity
+             from public.inventory_stock
+             where item_id=$1 and location_id=$2
+             for update`,
+            [savedItem.id,locationId]
+          )).rows[0];
+          if (!locked) throw Object.assign(new Error("ITEM_LOCATION_NOT_FOUND"),{statusCode:404});
+
+          if (hasQuantity) {
+            const quantity=Number(locationDraft.quantity);
+            if (!Number.isFinite(quantity) || quantity<0) {
+              throw Object.assign(new Error("INVALID_QUANTITY"),{statusCode:400});
+            }
+            if (!(await inventoryActionAllowed(
+              user,"inventory.quantity.set_absolute",
+              {site,locationId:String(locationId),workArea},client
+            ))) {
+              throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
+            }
+            const before=Number(locked.quantity || 0);
+            if (before!==quantity) {
+              await client.query(
+                `update public.inventory_stock
+                 set quantity=$3::numeric,updated_at=now()
+                 where item_id=$1 and location_id=$2`,
+                [savedItem.id,locationId,quantity]
+              );
+              await client.query(
+                `insert into public.inventory_transactions(
+                   item_id,source_location_id,destination_location_id,action,amount,note,
+                   actor_user_id,actor_username,metadata
+                 ) values(
+                   $1,$2,$3,'adjust',$4,$5,$6,$7,
+                   jsonb_build_object(
+                     'operation','catalog_form_set_quantity',
+                     'before_quantity',$8::numeric,
+                     'after_quantity',$9::numeric
+                   )
+                 )`,
+                [
+                  savedItem.id,
+                  quantity<before ? locationId : null,
+                  quantity>=before ? locationId : null,
+                  Math.abs(quantity-before),
+                  "品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
+                  user.id,user.username,before,quantity
+                ]
+              );
+              locked.quantity=quantity;
+            }
+          }
+
+          if (hasMinimum) {
+            const minimum=Number(locationDraft.minimum);
+            if (!Number.isFinite(minimum) || minimum<0) {
+              throw Object.assign(new Error("INVALID_MINIMUM"),{statusCode:400});
+            }
+            if (!(await inventoryActionAllowed(
+              user,"inventory.minimum.edit",
+              {site,locationId:String(locationId),workArea},client
+            ))) {
+              throw Object.assign(new Error("INVENTORY_ACTION_NOT_ALLOWED"),{statusCode:403});
+            }
+            const before=Number(locked.minimum_quantity || 0);
+            if (before!==minimum) {
+              await client.query(
+                `update public.inventory_stock
+                 set minimum_quantity=$3::numeric,
+                     minimum_enabled=($3::numeric>0),
+                     updated_at=now()
+                 where item_id=$1 and location_id=$2`,
+                [savedItem.id,locationId,minimum]
+              );
+              await client.query(
+                `insert into public.inventory_transactions(
+                   item_id,source_location_id,destination_location_id,action,amount,note,
+                   actor_user_id,actor_username,metadata
+                 ) values(
+                   $1,$2,$3,'adjust',$4,$5,$6,$7,
+                   jsonb_build_object(
+                     'operation','catalog_form_set_minimum',
+                     'before_minimum',$8::numeric,
+                     'after_minimum',$9::numeric
+                   )
+                 )`,
+                [
+                  savedItem.id,
+                  minimum<before ? locationId : null,
+                  minimum>=before ? locationId : null,
+                  Math.abs(minimum-before),
+                  "品項表單最低量調整 / Điều chỉnh minimum từ biểu mẫu sản phẩm",
+                  user.id,user.username,before,minimum
+                ]
+              );
+              locked.minimum_quantity=minimum;
+            }
+          }
         };
 
         const siteMode = (await client.query(
@@ -664,10 +835,24 @@ export async function registerInventoryExtraRoutes(app) {
           if (workLocation.rowCount !== 1) {
             throw Object.assign(new Error("WORK_LOCATION_NOT_FOUND"), { statusCode:409 });
           }
-          await attachLocation(workLocation.rows[0].id);
+          await attachLocation(workLocation.rows[0].id,{kind:"work"});
+          if (request.body?.applyStockFields === true && Object.prototype.hasOwnProperty.call(item,"work_minimum")) {
+            await applyCatalogStockFields(
+              workLocation.rows[0].id,
+              { minimum:item.work_minimum },
+              target.work_area
+            );
+          }
         }
 
-        for (const loc of explicitLocations) {
+        const requestedPrimaryCode=String(
+          item.primary_location_code
+          || explicitLocations.find((loc)=>loc?.is_primary)?.code
+          || ""
+        ).trim();
+        const explicitStorageRows=[];
+        for (let index=0; index<explicitLocations.length; index+=1) {
+          const loc=explicitLocations[index];
           const code = String(loc.code || "");
           if (!code) continue;
 
@@ -678,10 +863,48 @@ export async function registerInventoryExtraRoutes(app) {
           if (!location.rowCount) {
             throw Object.assign(new Error("CATALOG_LOCATION_NOT_FOUND"), { statusCode:404 });
           }
-          if (location.rows[0].site !== site) {
+          const row=location.rows[0];
+          if (row.site !== site) {
             throw Object.assign(new Error("CATALOG_LOCATION_SITE_MISMATCH"), { statusCode:400 });
           }
-          await attachLocation(location.rows[0].id);
+          if (row.kind!=="storage") {
+            throw Object.assign(new Error("CATALOG_STORAGE_LOCATION_REQUIRED"), { statusCode:400 });
+          }
+          if (!beforeLocationIds.has(String(row.id))
+              && !(await inventoryActionAllowed(
+                user,"inventory.product.location.attach",{site,locationId:String(row.id)},client
+              ))) {
+            throw Object.assign(new Error("INVENTORY_LOCATION_ATTACH_NOT_ALLOWED"),{statusCode:403});
+          }
+          explicitStorageRows.push({ ...row,code,index });
+        }
+
+        const primaryCode=requestedPrimaryCode
+          || (explicitStorageRows.some((row)=>row.code===beforePrimary) ? beforePrimary : explicitStorageRows[0]?.code || "");
+        if (primaryCode && !explicitStorageRows.some((row)=>row.code===primaryCode)) {
+          throw Object.assign(new Error("PRIMARY_LOCATION_NOT_CONFIGURED"),{statusCode:409});
+        }
+        if (primaryCode!==beforePrimary
+            && !(await inventoryActionAllowed(user,"inventory.product.primary_location.edit",{site},client))) {
+          throw Object.assign(new Error("INVENTORY_PRIMARY_LOCATION_EDIT_NOT_ALLOWED"),{statusCode:403});
+        }
+        if (primaryCode!==beforePrimary) {
+          await client.query(
+            "update public.inventory_item_locations set is_primary=false,updated_at=now() where item_id=$1 and is_primary=true",
+            [savedItem.id]
+          );
+        }
+
+        for (const row of explicitStorageRows) {
+          const locationDraft=explicitLocations[row.index] || {};
+          await attachLocation(row.id,{
+            kind:"storage",
+            isPrimary:row.code===primaryCode,
+            displayOrder:Number(locationDraft.display_order ?? row.index),
+          });
+          if (request.body?.applyStockFields === true) {
+            await applyCatalogStockFields(row.id,locationDraft);
+          }
         }
 
         if (explicitLocations.length && !request.body?.appendLocations) {
@@ -709,6 +932,25 @@ export async function registerInventoryExtraRoutes(app) {
             });
           }
 
+          const removableRows=await client.query(
+            `select s.location_id,l.kind
+             from public.inventory_stock s
+             join public.inventory_locations l on l.id=s.location_id
+             where s.item_id=$1 and l.site=$2
+               and not(s.location_id=any($3::uuid[]))
+               and s.quantity=0 and s.minimum_quantity=0`,
+            [savedItem.id,site,wantedLocationIds]
+          );
+          for (const removable of removableRows.rows) {
+            if (removable.kind==="storage"
+                && !(await inventoryActionAllowed(
+                  user,"inventory.product.location.detach",
+                  {site,locationId:String(removable.location_id)},client
+                ))) {
+              throw Object.assign(new Error("INVENTORY_LOCATION_DETACH_NOT_ALLOWED"),{statusCode:403});
+            }
+          }
+
           await client.query(
             `delete from public.inventory_stock
              where item_id=$1
@@ -718,6 +960,15 @@ export async function registerInventoryExtraRoutes(app) {
                and not(location_id=any($3::uuid[]))
                and quantity=0
                and minimum_quantity=0`,
+            [savedItem.id,site,wantedLocationIds]
+          );
+          await client.query(
+            `delete from public.inventory_item_locations
+             where item_id=$1
+               and location_id in (
+                 select l.id from public.inventory_locations l where l.site=$2
+               )
+               and not(location_id=any($3::uuid[]))`,
             [savedItem.id,site,wantedLocationIds]
           );
         }

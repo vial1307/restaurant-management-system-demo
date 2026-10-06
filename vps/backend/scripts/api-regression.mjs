@@ -492,7 +492,7 @@ for (const fixture of [
     body:{item:{
       key:itemKey,catalog_key:catalogKey,zh:"工作區移動測試",vi:`Kiểm thử đổi khu ${fixture.site}`,
       unit:"包",work_area:"noodles",storage_only:false,
-      locations:[{code:fixture.storage.code},{code:fixture.source.code}],
+      locations:[{code:fixture.storage.code}],
     }}
   });
   assert.equal(saved.response.status,200,`work-area fixture create failed for ${fixture.site}`);

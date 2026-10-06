@@ -1,6 +1,47 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: none
+ACTIVE_PR: #207
+
+## ACTIVE — PR #207 Inventory multi-location Desktop/Mobile UI, 2026-10-06
+
+Runtime phase 2 of the approved Inventory redesign.
+
+Production baseline:
+- release `36e0fbc0703262cc2b61f0cd7dba2fe44abc3358`;
+- schema `032`;
+- PR #205 granular Inventory permissions are already production authority.
+
+Current PR #207 implementation:
+- one inventory product is rendered as one Desktop row / one Mobile card instead of one row per storage location;
+- location order is database-driven: Primary Location -> Work Location -> other configured storage locations;
+- latest approved UX rule: when a product has **3 or more locations**, show the first **2** location chips plus `Xem thêm / 查看更多`;
+- a location chip opens product detail; on Mobile the detail is full-screen;
+- per-location quick edit uses minus / direct number / plus only when the effective granular permission allows it;
+- three-dot action menu is generated from the effective Inventory permission snapshot instead of Role names;
+- Inventory site switcher follows the database-visible site list, supporting arbitrary site combinations from Super Admin;
+- Add/Edit Product integrates Category, Unit, Primary Location and Receive Default from PostgreSQL;
+- permitted unit editors may type a new unit and the backend persists it to `inventory_units`;
+- Inventory read model hydrates category/unit, primary/display metadata and low-stock fields;
+- catalog sync persists item-location presentation metadata and validates granular attach/detach/primary/category/unit/Work Area permissions.
+
+Important terminology:
+- Primary Location = first/primary storage location for presentation/operations;
+- Work Location = site-scoped Work Area stock location;
+- Receive Default = inbound/cross-site routing destination when a product has multiple valid storage locations;
+- these three concepts remain separate.
+
+Not in PR #207:
+- VPS disk cleanup;
+- GitHub/Handoff auto-polling/force-refresh.
+
+Required exact-head gates before merge:
+1. Database Schema Regression;
+2. Master Data and Admin Panel Regression;
+3. Super Admin Browser Regression;
+4. Isolated CI API Load Smoke;
+5. Deploy Kitchen OS to VPS regression/full-device;
+6. merge only the tested exact head;
+7. deploy exact merge SHA and verify release/schema 032, `DATA_INTEGRITY_OK`, production UI smoke and Inventory Site Production Audit.
 
 ## CURRENT VERIFIED PRODUCTION — PR #205 granular Inventory access + Super Admin control, 2026-10-06
 

@@ -13,8 +13,13 @@ function functionBody(name) {
 
 for (const name of ["cloudArchiveCentralItem", "cloudArchiveBranchItem"]) {
   const body = functionBody(name);
-  assert.match(body, /role\(\)\s*!==\s*["']admin["']/, `${name} must enforce admin-only archive at the frontend boundary`);
-  assert.doesNotMatch(body, /canDirectInventoryAdjust\(\)/, `${name} must not reuse the broader stocktake role boundary`);
+  assert.match(
+    body,
+    /canInventoryAction\("inventory\.product\.archive",\{site(?::"central")?\}\)/,
+    `${name} must enforce the database-backed inventory.product.archive action at the frontend boundary`
+  );
+  assert.doesNotMatch(body, /role\(\)|accountRole|canDirectInventoryAdjust\(\)/,
+    `${name} must not derive archive authority from role or the broader stocktake boundary`);
   assert.match(body, /vpsArchiveCatalogItem\(/, `${name} must keep using the canonical VPS archive endpoint`);
 }
 

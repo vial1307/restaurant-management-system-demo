@@ -15,34 +15,49 @@ const catalogSync = backend.slice(
 
 assert.match(
   app,
-  /manageQuantityEdit:canDirectInventoryAdjust\(\)/,
-  "Manage tab must not grant direct quantity editing from catalog permission alone"
+  /function quantityControl[\s\S]{0,500}inventory\.quantity\.adjust_quick[\s\S]{0,220}inventory\.quantity\.set_absolute/,
+  "all quantity controls must derive +/- and direct-number editing from granular database actions"
 );
 assert.match(
   app,
-  /element\.dataset\.manageAdjust === "true" && canManageBranchCatalog\((?:activeInventorySite\(\)|site)\) && canDirectInventoryAdjust\(\)/,
-  "quantity change handler must retain the stocktake role guard"
+  /key === "quantity"[\s\S]{0,220}canInventoryAction\("inventory\.quantity\.set_absolute",\{[\s\S]{0,120}locationId:item\.cloudLocationId/,
+  "quantity change handler must enforce the location-scoped database action"
 );
 assert.match(
   app,
-  /const stocktakeEditable = canDirectInventoryAdjust\(\);/,
-  "product modal must derive stock fields from the stocktake guard"
+  /key === "minimum"[\s\S]{0,220}canInventoryAction\("inventory\.minimum\.edit",\{[\s\S]{0,120}locationId:item\.cloudLocationId/,
+  "minimum change handler must enforce the location-scoped database action"
 );
 assert.match(
   app,
-  /name="quantity:\$\{zone\.id\}"[^>]+readonly aria-readonly=/,
-  "non-stocktake catalog editors must see quantity as read-only in the product modal"
+  /const canQuantity=canInventoryAction\("inventory\.quantity\.set_absolute",\{site,locationId\}\)/,
+  "product modal must derive quantity editing from the location-scoped database action"
 );
 assert.match(
   app,
-  /name="minimum:\$\{zone\.id\}"[^>]+readonly aria-readonly=/,
-  "non-stocktake catalog editors must see minimum as read-only in the product modal"
+  /const canMinimum=canInventoryAction\("inventory\.minimum\.edit",\{site,locationId\}\)/,
+  "product modal must derive minimum editing from the location-scoped database action"
+);
+assert.match(
+  app,
+  /name="quantity:\$\{escapeHtml\(zone\.id\)\}"[\s\S]{0,260}canQuantity \? "" : 'readonly aria-readonly="true"'/,
+  "product modal must render quantity read-only when the location action is denied"
+);
+assert.match(
+  app,
+  /name="minimum:\$\{escapeHtml\(zone\.id\)\}"[\s\S]{0,260}canMinimum \? "" : 'readonly aria-readonly="true"'/,
+  "product modal must render minimum read-only when the location action is denied"
 );
 
 assert.match(
   cloud,
-  /if \(!canDirectInventoryAdjust\(\)\) return \{ ok: false, fallback: false, error: new Error\("DIRECT_ADJUST_NOT_ALLOWED"\) \};/,
-  "frontend VPS set-quantity wrapper must not honor an inventory-editor bypass"
+  /cloudSetQuantity[\s\S]{0,1500}canInventoryAction\("inventory\.quantity\.set_absolute",[\s\S]{0,180}locationId:resolved\.location\.id/,
+  "frontend VPS set-quantity wrapper must enforce the concrete location database action"
+);
+assert.match(
+  cloud,
+  /cloudSetMinimum[\s\S]{0,1500}canInventoryAction\("inventory\.minimum\.edit",[\s\S]{0,200}locationId:resolved\.location\.id/,
+  "frontend VPS set-minimum wrapper must enforce the concrete location database action"
 );
 assert.doesNotMatch(
   cloud,

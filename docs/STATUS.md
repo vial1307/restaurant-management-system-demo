@@ -1,5 +1,19 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #207 Inventory multi-location UI, 2026-10-06
+
+- `ACTIVE_PR: #207`.
+- Production baseline remains release `36e0fbc...` / schema `032`.
+- Desktop: one product = one row.
+- Mobile: one product = one card; chip opens Full Screen Detail.
+- Location order: Primary -> Work -> Other.
+- Latest approved rule: 3+ locations => first 2 chips + `Xem thêm`.
+- Quick - / number / + controls are filtered by per-location effective database permission.
+- Three-dot actions use granular Inventory permission snapshots, not role names.
+- Add/Edit Product now uses database Category/Unit/Primary/Receive Default metadata.
+- Site switching follows database-visible Inventory sites and arbitrary Super Admin site combinations.
+- NEXT: exact-head CI → fix regression → merge tested head → production deploy/audit.
+
 ## STABLE — PR #205 production-verified, 2026-10-06
 
 - `ACTIVE_PR: none`.

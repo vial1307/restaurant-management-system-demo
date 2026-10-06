@@ -68,19 +68,22 @@ assert.equal(supervisorWorkMinimum.response.status, 200);
 
 const seeded = await request("/api/inventory/fuxing", { cookie: admin });
 const locations = seeded.data.stock
-  .filter((row) => row.item_id === beef.id)
+  .filter((row) => {
+    if (row.item_id !== beef.id) return false;
+    const location = seeded.data.locations.find((candidate) => candidate.id === row.location_id);
+    return location?.kind === "storage";
+  })
   .map((row) => {
     const location = seeded.data.locations.find((candidate) => candidate.id === row.location_id);
     return {
       code: location.code,
       quantity: row.location_id === freezer.id ? 999 : Number(row.quantity),
-      minimum: row.location_id === freezer.id || row.location_id === workAreaLocation.id
-        ? 999
-        : Number(row.minimum_quantity),
+      minimum: row.location_id === freezer.id ? 999 : Number(row.minimum_quantity),
     };
   });
 assert(locations.some((entry) => entry.code === freezer.code));
-assert(locations.some((entry) => entry.code === workAreaLocation.code));
+assert(!locations.some((entry) => entry.code === workAreaLocation.code),
+  "catalog metadata payload must not submit the database-derived Work Location");
 
 // Even a stocktake-capable role must not use catalog sync as a hidden quantity
 // write path. Product metadata saves can contain stale local quantities.

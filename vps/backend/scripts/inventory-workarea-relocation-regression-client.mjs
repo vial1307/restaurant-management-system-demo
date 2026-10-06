@@ -120,10 +120,9 @@ try{
         unit:"包",
         work_area:sourceArea,
         storage_only:site!=="central",
-        locations:[
-          {code:fixtures[site].storage.code},
-          ...(site==="central" ? [{code:fixtures[site].sourceWork.code}] : []),
-        ],
+        // Catalog locations are storage-only. Branch Work stock is projected
+        // automatically from work_area; Central remains a metadata peer here.
+        locations:[{code:fixtures[site].storage.code}],
       }},
     });
     assert.equal(saved.response.status,200,`${site} catalog create failed: ${JSON.stringify(saved.data)}`);
@@ -142,6 +141,10 @@ try{
     const workRow=snapshot.data.stock.find(
       (row)=>row.item_id===item.id && row.location_id===fixtures[site].sourceWork.id
     );
+    if(site==="central") {
+      assert.equal(workRow,undefined,"Central catalog sync must not treat Work Location as an explicit storage association");
+      continue;
+    }
     assert(workRow,`${site} source Work Area projection missing`);
 
     const quantity=await request("/api/inventory/set-quantity",{
@@ -199,10 +202,14 @@ try{
         location:snapshot.data.locations.find((location)=>location.id===row.location_id),
       }))
       .filter((entry)=>entry.location?.kind==="work");
-    assert.equal(workRows.length,1,`${site} has duplicate/missing Work Area projection`);
-    assert.equal(workRows[0].location.metadata?.work_area,expectedArea);
-    assert.equal(Number(workRows[0].stock.quantity),quantities[site],`${site} quantity changed during relocation`);
-    assert.equal(Number(workRows[0].stock.minimum_quantity),minimums[site],`${site} minimum changed during relocation`);
+    if(site==="central") {
+      assert.equal(workRows.length,0,"Central metadata peer unexpectedly gained a branch-style Work projection");
+    } else {
+      assert.equal(workRows.length,1,`${site} has duplicate/missing Work Area projection`);
+      assert.equal(workRows[0].location.metadata?.work_area,expectedArea);
+      assert.equal(Number(workRows[0].stock.quantity),quantities[site],`${site} quantity changed during relocation`);
+      assert.equal(Number(workRows[0].stock.minimum_quantity),minimums[site],`${site} minimum changed during relocation`);
+    }
   }
 
   const audits=await db.query(

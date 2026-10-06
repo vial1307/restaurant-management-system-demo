@@ -80,7 +80,9 @@ function mirrorVpsSession(user) {
     // Backend authorization already validates the assigned site. Any site-scoped
     // account therefore repairs a stale/tampered active-site preference without
     // requiring the frontend to know the list of branch codes.
-    if (normalized.location && normalized.location !== "all") {
+    if (normalized.location && normalized.location !== "all" && !localStorage.getItem(ACTIVE_SITE_KEY)) {
+      // Initial hint only. The Inventory site registry is database-authoritative
+      // and will validate/repair this value against the user's actual site scope.
       localStorage.setItem(ACTIVE_SITE_KEY, normalized.location);
     }
   }

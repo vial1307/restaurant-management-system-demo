@@ -118,6 +118,18 @@ Object.defineProperty(globalThis, "fetch", {
         headers: { "content-type": "application/json" },
       });
     }
+    const accessMatch=url.match(/^\/api\/inventory\/access\?site=(fuxing|central)$/);
+    if (accessMatch) {
+      return new Response(JSON.stringify({
+        site:accessMatch[1],
+        actions:{ "inventory.view":{ allowed:true,reason:"TEST_ALLOW",source:"fixture" } },
+        locations:{},
+        workAreas:{},
+      }), {
+        status:200,
+        headers:{ "content-type":"application/json" },
+      });
+    }
     const masterMatch = url.match(/^\/api\/master-data\/(fuxing|central)$/);
     if (masterMatch) {
       return new Response(JSON.stringify(masterData(masterMatch[1])), {

@@ -2,6 +2,7 @@ import { mountInventoryOperations, operationTabLabels } from "./inventory-operat
 import {
   activeInventorySite,
   canDirectInventoryAdjust,
+  canInventoryAction,
   canInventoryEdit,
   canManageCentralCatalog,
   centralItemKey,
@@ -206,10 +207,9 @@ function addLogout(user) {
 }
 
 function branchSwitcher(user, active = activeInventorySite()) {
-  if (user.location !== "all" && user.role !== "admin") return "";
   const language = document.documentElement.lang === "vi" ? "vi" : "zh";
   const sites = inventorySites().filter((site) => site.active !== false);
-  if (!sites.length) return "";
+  if (sites.length <= 1) return "";
   return `<div class="warehouse-switch">${sites.map((site) => {
     const zh = site.name_zh_tw || site.name_zh || site.code;
     const vi = site.name_vi || zh;
@@ -361,7 +361,11 @@ function centralPage(user) {
   const content = document.querySelector(".page-content");
   if (!content) return;
   const items = loadStock();
-  const editGranted = user.role === "admin" || user.accountRole === "admin" || Boolean(user.permissions?.inventory?.edit);
+  const editGranted = [
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.location.attach",
+    "inventory.product.location.detach","inventory.product.primary_location.edit","inventory.work_area.edit"
+  ].some((action)=>canInventoryAction(action,{site:"central"}));
   const cloudState = inventoryCloudState();
   const cloudReady = cloudState === "ready";
   const directAdjust = canDirectInventoryAdjust();
@@ -383,10 +387,9 @@ function centralPage(user) {
   const uiGroups = inventoryUiGroups("central");
   const storageCount = uiGroups.storage.length;
   const workAreaCount = uiGroups.workAreas.length;
-  const accountRole = user.accountRole || (user.role === "admin" ? "admin" : user.role);
-  const catalogManageVisible = editGranted && ["central","all"].includes(user.location);
+  const catalogManageVisible = editGranted && activeInventorySite()==="central";
   const canManageCatalog = catalogManageVisible && canManageCentralCatalog();
-  const canViewHistory = accountRole === "admin";
+  const canViewHistory = canInventoryAction("inventory.history.full",{site:"central"});
   if (mode === "manage" && !catalogManageVisible) { mode = "overview"; content.dataset.centralMode = mode; }
   if (mode === "history" && !canViewHistory) { mode = "overview"; content.dataset.centralMode = mode; }
   const log = [];
@@ -983,7 +986,7 @@ function bindCentral(user) {
   };
   content.querySelectorAll("[data-central-product-delete]").forEach((button) => {
     button.onclick = async () => {
-      if (user.role !== "admin" && user.accountRole !== "admin") return;
+      if (!canInventoryAction("inventory.product.archive",{site:"central"})) return;
       const key = button.dataset.centralProductDelete;
       const oldItems = loadStock();
       const rows = oldItems.filter((row) => centralProductKey(row) === key);
@@ -1149,7 +1152,7 @@ function applyAccess() {
 
     const centralOnlyRole = user.accountRole === "central" || user.role === "central";
     const selectedSite = activeInventorySite();
-    const centralWorkplace = user.location === "central" || (user.location === "all" && selectedSite === "central");
+    const centralWorkplace = selectedSite === "central";
 
     // 央廚 is a site context, not only a job title.
     if (centralOnlyRole) {
@@ -1162,7 +1165,7 @@ function applyAccess() {
       // render it again here or async operation panels are replaced in a loop
       // before their controls finish loading.
       if (!document.querySelector("[data-central-kitchen-shell]")) centralPage(user);
-    } else if ((user.role === "admin" || user.location === "all") && location.hash.startsWith("#inventory")) {
+    } else if (location.hash.startsWith("#inventory")) {
       const heading = document.querySelector(".page-heading");
       if (heading && !heading.querySelector(".warehouse-switch")) {
         heading.insertAdjacentHTML("beforeend", branchSwitcher(user,selectedSite));
@@ -1193,13 +1196,13 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (event.detail?.site !== "central" || !location.hash.startsWith("#inventory")) return;
   if (preserveInventoryEditor(document.querySelector('[data-central-editor-form]'))) return;
   const user = session();
-  if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
+  if (activeInventorySite()==="central") centralPage(user);
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
   if (event.detail?.status === "synced") return;
   if (!location.hash.startsWith("#inventory") || !document.querySelector("[data-central-kitchen-shell]")) return;
   if (preserveInventoryEditor(document.querySelector('[data-central-editor-form]'))) return;
   const user = session();
-  if (user?.location === "central" || (user?.location === "all" && activeInventorySite()==="central")) centralPage(user);
+  if (activeInventorySite()==="central") centralPage(user);
 });
 scheduleAccess();

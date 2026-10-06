@@ -23,6 +23,7 @@ import { createStore } from "./store.js";
 import {
   inventorySite,
   inventoryUiGroups,
+  inventoryWorkLocation,
   isBranchInventorySite,
 } from "./inventory-master-data.js";
 import { assessShiftCapacity, currentStaff, roleLabel } from "./operations.js";
@@ -36,6 +37,7 @@ import {
   branchLocationCode,
   branchWorkLocationCode,
   canDirectInventoryAdjust,
+  canInventoryAction,
   canManageBranchCatalog,
   canManageReceiveDefault,
   canViewBranchCatalogManagement,
@@ -51,6 +53,7 @@ import {
   cloudTransferInventory,
   getCloudInventoryHistory,
   inventoryBranchSnapshot,
+  inventoryCatalogMasters,
   inventoryCatalogKey,
   inventoryCloudState,
   refreshInventoryCloudState,
@@ -76,6 +79,7 @@ const view = {
   taskFilter: "all",
   modal: null,
   editingStockKey: null,
+  inventoryDetailStockKey: null,
   calendarOpen: false,
   calendarMonth: null,
   calendarYear: null,
@@ -737,17 +741,19 @@ async function runCloudTransferPlan(steps, note) {
 
 function quantityControl(item, kind = "item", manageAdjust = false) {
   const action = kind === "workItem" ? "adjust-work-item" : "adjust-item";
-  const editable = canInventoryEdit();
-  const direct = canDirectInventoryAdjust() || (manageAdjust && canInventoryEdit());
+  const site = activeInventorySite();
+  const scope = { site, locationId:item.cloudLocationId || "", workArea:kind === "workItem" ? item.workArea || "" : "" };
+  const canQuick = canInventoryAction("inventory.quantity.adjust_quick",scope);
+  const canSet = canInventoryAction("inventory.quantity.set_absolute",scope);
   const manageAttribute = manageAdjust ? ' data-manage-adjust="true"' : "";
   const identityAttributes = ` data-stock-key="${escapeHtml(item.stockKey)}" ${kind === "workItem"
     ? `data-work-area="${escapeHtml(item.workArea)}"`
     : `data-zone="${escapeHtml(item.zone)}"`} data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`;
-  const value = direct
+  const value = canSet
     ? numberInput(item.quantity, `data-field="${kind}" data-key="quantity" data-id="${escapeHtml(item.id)}"${identityAttributes}${manageAttribute}`, "quantity-input")
     : `<strong class="quantity-readonly" aria-label="Current quantity">${escapeHtml(item.quantity)}</strong>`;
-  const decrease = direct ? `<button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}"${identityAttributes} data-delta="-1"${manageAttribute} aria-label="Decrease">${icon("minus")}</button>` : "";
-  const increase = direct ? `<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}"${identityAttributes} data-delta="1"${manageAttribute} aria-label="Increase">${icon("plus")}</button>` : "";
+  const decrease = canQuick ? `<button class="quantity-button" data-action="${action}" data-id="${escapeHtml(item.id)}"${identityAttributes} data-delta="-1"${manageAttribute} aria-label="Decrease">${icon("minus")}</button>` : "";
+  const increase = canQuick ? `<button class="quantity-button plus" data-action="${action}" data-id="${escapeHtml(item.id)}"${identityAttributes} data-delta="1"${manageAttribute} aria-label="Increase">${icon("plus")}</button>` : "";
   return `<div class="quantity-control">${decrease}${value}${increase}<small>${escapeHtml(item.unit)}</small><span class="quantity-sync-status" data-quantity-sync-status role="status" aria-live="polite"></span></div>`;
 }
 
@@ -759,9 +765,15 @@ function inventoryStatusBadge(item, text) {
 
 function storageInventoryRow(item, context) {
   const { language, text, record } = context;
-  const editable = canInventoryEdit();
-  const catalogManage = context.catalogManageWritable ?? canManageBranchCatalog(activeInventorySite());
+  const site = activeInventorySite();
+  const locationId = item.cloudLocationId || "";
+  const catalogManage = context.catalogManageWritable ?? canManageBranchCatalog(site);
   const catalogManageVisible = context.catalogManageVisible ?? catalogManage;
+  const canMinimum = canInventoryAction("inventory.minimum.edit",{site,locationId});
+  const canRelocate = canInventoryAction("inventory.product.location.detach",{site,locationId}) && canInventoryAction("inventory.product.location.attach",{site});
+  const canWorkAreaEdit = canInventoryAction("inventory.work_area.edit",{site,workArea:item.workArea || ""});
+  const canInternalTransfer = canInventoryAction("inventory.transfer.internal",{site,locationId});
+  const canArchive = canInventoryAction("inventory.product.archive",{site});
   const status = inventoryStatus(item);
   const workAreas = inventoryWorkAreaGroups(activeInventorySite());
   const storageGroups = inventoryStorageGroups(activeInventorySite());
@@ -769,15 +781,19 @@ function storageInventoryRow(item, context) {
   const source = storageSources(item, record, item.zone)[0];
   const canRestock = inventoryRestock(item) > 0 && source;
   return `<article class="inventory-row storage-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
-    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
-    <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${catalogManage ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${storageGroups.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
-    <div class="inventory-storage">${quantityControl(item, "item", Boolean(context.manageQuantityEdit))}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-zone="${escapeHtml(item.zone)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}<div class="inventory-item-tools">${editable && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManageVisible ? `<button class="inventory-action-button ${catalogManage ? "" : "sql-pending-action"}" data-action="${catalogManage ? "open-edit-item" : "inventory-edit-sql-pending"}" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${catalogManage && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></div></article>`;
+    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
+    <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${canRelocate ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${storageGroups.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
+    <div class="inventory-storage">${quantityControl(item, "item", Boolean(context.manageQuantityEdit))}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canMinimum ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-zone="${escapeHtml(item.zone)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}<div class="inventory-item-tools">${canInternalTransfer && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManageVisible ? `<button class="inventory-action-button ${catalogManage ? "" : "sql-pending-action"}" data-action="${catalogManage ? "open-edit-item" : "inventory-edit-sql-pending"}" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${canArchive ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></div></article>`;
 }
 
 function workInventoryRow(item, context) {
   const { language, text, record } = context;
-  const editable = canInventoryEdit();
-  const catalogManage = canManageBranchCatalog(activeInventorySite());
+  const site = activeInventorySite();
+  const locationId = item.cloudLocationId || "";
+  const catalogManage = canManageBranchCatalog(site);
+  const canMinimum = canInventoryAction("inventory.minimum.edit",{site,locationId,workArea:item.workArea || ""});
+  const canWorkAreaEdit = canInventoryAction("inventory.work_area.edit",{site,workArea:item.workArea || ""});
+  const canPick = canInventoryAction("inventory.pick",{site,locationId,workArea:item.workArea || ""});
   const status = inventoryStatus(item);
   const sources = storageSources(item, record);
   const source = sources[0];
@@ -791,10 +807,10 @@ function workInventoryRow(item, context) {
       .reduce((total, entry) => total + entry.quantity, 0),
   }));
   return `<article class="inventory-row work-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
-    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${catalogManage ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
-    ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canDirectInventoryAdjust() ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-work-area="${escapeHtml(item.workArea)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
+    <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
+    ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canMinimum ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-work-area="${escapeHtml(item.workArea)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
     <div class="inventory-source"><div class="source-quantities">${mainSources.map((entry) => `<span class="source-quantity ${entry.quantity === 0 ? "source-empty" : ""}" data-source-zone="${entry.zone}">${escapeHtml(zoneLabel(entry.zone, language))} <strong>${entry.quantity}</strong></span>`).join("")}</div><small>${escapeHtml(source ? `${text.takeFrom} ${zoneLabel(source.zone, language)}` : text.noSource)}</small></div>
-    <div class="inventory-transfer">${needed > 0 && editable ? `<button class="restock-button" data-action="restock-work-item" data-id="${escapeHtml(item.id)}" ${available <= 0 ? "disabled" : ""}>${icon("plus")}${Math.min(needed, available) || needed}</button>` : needed > 0 ? `<span class="tag tag-low">${escapeHtml(text.restock)}</span>` : `<span class="tag tag-ok">${escapeHtml(text.ready)}</span>`}</div></article>`;
+    <div class="inventory-transfer">${needed > 0 && canPick ? `<button class="restock-button" data-action="restock-work-item" data-id="${escapeHtml(item.id)}" ${available <= 0 ? "disabled" : ""}>${icon("plus")}${Math.min(needed, available) || needed}</button>` : needed > 0 ? `<span class="tag tag-low">${escapeHtml(text.restock)}</span>` : `<span class="tag tag-ok">${escapeHtml(text.ready)}</span>`}</div></article>`;
 }
 
 function inventoryGroups(items, groups, key, context, rowRenderer) {
@@ -858,6 +874,220 @@ function branchInventoryHistoryView(rows, language="vi", cloud=false) {
   return `<section class="central-card branch-history-card"><div class="history-title"><div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(subtitle)}</p></div><span>${rows?.length||0} ${language==="zh"?"筆":"mục"}</span></div><div class="central-history">${body||`<p class="central-empty">${language==="zh"?"目前尚無操作紀錄。":"Chưa có lịch sử thao tác."}</p>`}</div></section>`;
 }
 
+
+function inventoryLocationState(entry) {
+  const quantity=Math.max(0,Number(entry?.quantity)||0);
+  const minimum=Math.max(0,Number(entry?.minimum)||0);
+  const warning=entry?.warningQuantity == null ? null : Math.max(0,Number(entry.warningQuantity)||0);
+  if (quantity<=0) return "empty";
+  if ((entry?.minimumEnabled || minimum>0) && quantity<=minimum) return "low";
+  if (entry?.warningEnabled && warning!=null && quantity<=warning) return "near";
+  return "ok";
+}
+
+function inventoryProductModels(record, site = activeInventorySite()) {
+  const products=new Map();
+  const ensure=(entry)=>{
+    const key=String(entry?.stockKey || "");
+    if(!key) return null;
+    if(!products.has(key)){
+      products.set(key,{
+        stockKey:key,
+        label:entry.label || key,
+        labelVi:entry.labelVi || entry.label || key,
+        unit:entry.unit || "",
+        unitCode:entry.unitCode || entry.unit || "",
+        categoryCode:entry.categoryCode || "",
+        catalogKey:entry.catalogKey || "",
+        receiveZone:entry.receiveZone || "",
+        workArea:entry.workArea || "",
+        cloudItemId:entry.cloudItemId || "",
+        locations:[],
+      });
+    }
+    const product=products.get(key);
+    product.label=entry.label || product.label;
+    product.labelVi=entry.labelVi || product.labelVi;
+    product.unit=entry.unit || product.unit;
+    product.unitCode=entry.unitCode || product.unitCode;
+    product.categoryCode=entry.categoryCode || product.categoryCode;
+    product.catalogKey=entry.catalogKey || product.catalogKey;
+    product.receiveZone=entry.receiveZone || product.receiveZone;
+    product.workArea=entry.workArea || product.workArea;
+    product.cloudItemId=entry.cloudItemId || product.cloudItemId;
+    return product;
+  };
+
+  for(const entry of record?.inventory || []){
+    const product=ensure(entry);
+    if(!product) continue;
+    product.locations.push({
+      kind:"storage",
+      row:entry,
+      id:entry.id,
+      cloudLocationId:entry.cloudLocationId || "",
+      zone:entry.zone || "",
+      workArea:"",
+      labelVi:zoneLabel(entry.zone,"vi",site),
+      labelZh:zoneLabel(entry.zone,"zh",site),
+      quantity:Math.max(0,Number(entry.quantity)||0),
+      minimum:Math.max(0,Number(entry.minimum)||0),
+      minimumEnabled:entry.minimumEnabled === true,
+      warningEnabled:entry.warningEnabled === true,
+      warningQuantity:entry.warningQuantity == null ? null : Number(entry.warningQuantity),
+      isPrimary:entry.isPrimary === true,
+      displayOrder:Number(entry.displayOrder || 0),
+    });
+  }
+
+  for(const entry of record?.workInventory || []){
+    const product=ensure(entry);
+    if(!product) continue;
+    product.locations.push({
+      kind:"work",
+      row:entry,
+      id:entry.id,
+      cloudLocationId:entry.cloudLocationId || "",
+      zone:"",
+      workArea:entry.workArea || "",
+      labelVi:workAreaLabel(entry.workArea,"vi",site),
+      labelZh:workAreaLabel(entry.workArea,"zh",site),
+      quantity:Math.max(0,Number(entry.quantity)||0),
+      minimum:Math.max(0,Number(entry.minimum)||0),
+      minimumEnabled:entry.minimumEnabled === true,
+      warningEnabled:entry.warningEnabled === true,
+      warningQuantity:entry.warningQuantity == null ? null : Number(entry.warningQuantity),
+      isPrimary:false,
+      displayOrder:Number(entry.displayOrder || 0),
+    });
+  }
+
+  const storageSort=new Map(inventoryStorageGroups(site).map((row,index)=>[row.id,Number(row.sortOrder ?? index)]));
+  const workSort=new Map(inventoryWorkAreaGroups(site).map((row,index)=>[row.id,Number(row.sortOrder ?? index)]));
+  for(const product of products.values()){
+    product.locations.sort((a,b)=>{
+      const priority=(row)=>row.isPrimary ? 0 : row.kind==="work" ? 1 : 2;
+      return priority(a)-priority(b)
+        || (a.kind==="work" ? (workSort.get(a.workArea) ?? a.displayOrder) : (storageSort.get(a.zone) ?? a.displayOrder))
+          - (b.kind==="work" ? (workSort.get(b.workArea) ?? b.displayOrder) : (storageSort.get(b.zone) ?? b.displayOrder))
+        || String(a.labelZh).localeCompare(String(b.labelZh),"zh-Hant");
+    });
+    product.total=product.locations.reduce((sum,row)=>sum+row.quantity,0);
+    const states=product.locations.map(inventoryLocationState);
+    product.status=product.total<=0 ? "empty"
+      : states.includes("low") ? "low"
+      : states.includes("near") ? "near"
+      : "ok";
+  }
+  return [...products.values()].sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant"));
+}
+
+function inventoryLocationChip(location, product, context) {
+  const { language }=context;
+  const label=language==="zh" ? location.labelZh : location.labelVi;
+  const state=inventoryLocationState(location);
+  const prefix=location.isPrimary
+    ? (language==="zh" ? "主要" : "Chính")
+    : location.kind==="work"
+      ? "Work"
+      : "";
+  return `<button class="inventory-location-chip ${location.isPrimary?"primary":location.kind==="work"?"work":"storage"} state-${state}"
+    type="button" data-action="open-inventory-detail" data-stock-key="${escapeHtml(product.stockKey)}"
+    data-location-id="${escapeHtml(location.cloudLocationId)}">
+    <span>${prefix ? `<b>${escapeHtml(prefix)}</b>` : ""}${escapeHtml(label)}</span>
+    <strong>${escapeHtml(location.quantity)} <small>${escapeHtml(product.unit)}</small></strong>
+  </button>`;
+}
+
+function inventoryProductActions(product, context, compact=false) {
+  const { language }=context;
+  const site=activeInventorySite();
+  const canEdit=[
+    "inventory.product.identity.edit","inventory.product.location.attach",
+    "inventory.product.location.detach","inventory.product.primary_location.edit",
+    "inventory.product.unit.edit","inventory.product.category.edit","inventory.work_area.edit",
+  ].some((action)=>canInventoryAction(action,{site}));
+  const canTransfer=canInventoryAction("inventory.transfer.internal",{site});
+  const canShip=canInventoryAction("inventory.transfer.cross_site",{site});
+  const canHistory=canInventoryAction("inventory.history.full",{site});
+  const canArchive=canInventoryAction("inventory.product.archive",{site});
+  if(!canEdit&&!canTransfer&&!canShip&&!canHistory&&!canArchive) return "";
+  return `<details class="inventory-more-menu ${compact?"compact":""}">
+    <summary aria-label="${language==="zh"?"更多操作":"Thêm thao tác"}">•••</summary>
+    <div class="inventory-more-menu-popover">
+      ${canEdit?`<button type="button" data-action="open-edit-item" data-stock-key="${escapeHtml(product.stockKey)}">${language==="zh"?"編輯品項 / 儲位":"Sửa sản phẩm / vị trí"}</button>`:""}
+      ${canTransfer?`<button type="button" data-action="select-inventory-ops" data-mode="transfer">${language==="zh"?"庫存轉撥":"Điều chuyển nội bộ"}</button>`:""}
+      ${canShip?`<button type="button" data-action="select-inventory-ops" data-mode="ship">${language==="zh"?"跨據點出貨":"Xuất liên chi nhánh"}</button>`:""}
+      ${canHistory?`<button type="button" data-action="select-inventory-ops" data-mode="history">${language==="zh"?"操作紀錄":"Lịch sử thao tác"}</button>`:""}
+      ${canArchive?`<button type="button" class="danger" data-action="delete-item" data-stock-key="${escapeHtml(product.stockKey)}">${language==="zh"?"封存品項":"Archive sản phẩm"}</button>`:""}
+    </div>
+  </details>`;
+}
+
+function inventoryProductRow(product, context) {
+  const { language,text }=context;
+  // Latest UX rule: once a product has three or more locations, keep the row
+  // compact with Primary + Work/next location, then expose the rest via Xem thêm.
+  const visible=product.locations.length>=3 ? product.locations.slice(0,2) : product.locations;
+  const more=product.locations.length>=3
+    ? `<button class="inventory-location-more" type="button" data-action="open-inventory-detail" data-stock-key="${escapeHtml(product.stockKey)}">${language==="zh"?"查看更多":"Xem thêm"} <span>+${product.locations.length-visible.length}</span></button>`
+    : "";
+  const statusLabel=product.status==="empty" ? text.outOfStock
+    : product.status==="low" ? text.lowStock
+    : product.status==="near" ? (language==="zh"?"接近不足":"Gần hết")
+    : text.ready;
+  return `<article class="inventory-row inventory-product-row" data-stock-key="${escapeHtml(product.stockKey)}">
+    <div class="inventory-product-identity"><span class="inventory-status-dot ${product.status==="near"?"low":product.status}"></span><div><strong>${escapeHtml(language==="zh"?product.label:product.labelVi)}</strong><small>${escapeHtml(language==="zh"?product.labelVi:product.label)}${product.categoryCode?` · ${escapeHtml(product.categoryCode)}`:""}</small></div></div>
+    <div class="inventory-product-unit"><span class="mobile-field-label">${language==="zh"?"單位":"Đơn vị"}</span><strong>${escapeHtml(product.unit)}</strong></div>
+    <div class="inventory-product-total"><span class="mobile-field-label">${language==="zh"?"總量":"Tổng"}</span><strong>${escapeHtml(product.total)}</strong><small>${escapeHtml(product.unit)}</small></div>
+    <div class="inventory-location-chips">${visible.map((row)=>inventoryLocationChip(row,product,context)).join("")}${more}</div>
+    <div class="inventory-product-status"><span class="tag tag-${product.status==="near"?"low":product.status}">${escapeHtml(statusLabel)}</span>${inventoryProductActions(product,context,true)}</div>
+  </article>`;
+}
+
+function inventoryDetailQuantityControl(location, product) {
+  const site=activeInventorySite();
+  const workArea=location.kind==="work" ? location.workArea : "";
+  const scope={site,locationId:location.cloudLocationId,workArea};
+  const canQuick=canInventoryAction("inventory.quantity.adjust_quick",scope);
+  const canSet=canInventoryAction("inventory.quantity.set_absolute",scope);
+  const canMinimum=canInventoryAction("inventory.minimum.edit",scope);
+  const kind=location.kind==="work" ? "workItem" : "item";
+  const action=kind==="workItem" ? "adjust-work-item" : "adjust-item";
+  const identity=kind==="workItem"
+    ? `data-work-area="${escapeHtml(location.workArea)}"`
+    : `data-zone="${escapeHtml(location.zone)}"`;
+  const qty=canSet
+    ? numberInput(location.quantity,`data-field="${kind}" data-key="quantity" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}"`,"quantity-input")
+    : `<strong class="quantity-readonly">${escapeHtml(location.quantity)}</strong>`;
+  const minus=canQuick?`<button class="quantity-button" type="button" data-action="${action}" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}" data-delta="-1">${icon("minus")}</button>`:"";
+  const plus=canQuick?`<button class="quantity-button plus" type="button" data-action="${action}" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}" data-delta="1">${icon("plus")}</button>`:"";
+  const minimum=canMinimum
+    ? numberInput(location.minimum,`data-field="${kind}" data-key="minimum" data-id="${escapeHtml(location.id)}" data-stock-key="${escapeHtml(product.stockKey)}" ${identity} data-cloud-item-id="${escapeHtml(product.cloudItemId)}" data-cloud-location-id="${escapeHtml(location.cloudLocationId)}"`,"minimum-input")
+    : `<strong>${escapeHtml(location.minimum)}</strong>`;
+  return `<div class="inventory-detail-control"><div class="quantity-control">${minus}${qty}${plus}<small>${escapeHtml(product.unit)}</small><span class="quantity-sync-status" data-quantity-sync-status></span></div><label><span>Minimum</span>${minimum}</label></div>`;
+}
+
+function inventoryProductDetailOverlay(context, record) {
+  const key=String(view.inventoryDetailStockKey || "");
+  if(!key) return "";
+  const product=inventoryProductModels(record,activeInventorySite()).find((row)=>row.stockKey===key);
+  if(!product) return "";
+  const { language }=context;
+  return `<div class="inventory-detail-backdrop"><section class="inventory-detail-sheet" role="dialog" aria-modal="true" aria-label="${escapeHtml(language==="zh"?"品項詳細":"Chi tiết sản phẩm")}">
+    <header><div><small>${language==="zh"?"品項詳細":"Chi tiết sản phẩm"}</small><h2>${escapeHtml(language==="zh"?product.label:product.labelVi)}</h2><p>${escapeHtml(language==="zh"?product.labelVi:product.label)} · ${escapeHtml(product.total)} ${escapeHtml(product.unit)}</p></div><button class="icon-button" type="button" data-action="close-inventory-detail">${icon("close")}</button></header>
+    <div class="inventory-detail-locations">
+      ${product.locations.map((location)=>{
+        const label=language==="zh"?location.labelZh:location.labelVi;
+        const state=inventoryLocationState(location);
+        const badge=location.isPrimary?(language==="zh"?"主要儲位":"Vị trí chính"):location.kind==="work"?"Work":"";
+        return `<article class="inventory-detail-location state-${state}"><div class="inventory-detail-location-head"><div><strong>${badge?`<span>${escapeHtml(badge)}</span>`:""}${escapeHtml(label)}</strong><small>${state==="empty"?(language==="zh"?"缺貨":"Hết hàng"):state==="low"?(language==="zh"?"低庫存":"Sắp hết"):state==="near"?(language==="zh"?"接近不足":"Gần hết"):(language==="zh"?"正常":"Bình thường")}</small></div></div>${inventoryDetailQuantityControl(location,product)}</article>`;
+      }).join("")}
+    </div>
+    <footer>${inventoryProductActions(product,context)}<button class="primary-button" type="button" data-action="close-inventory-detail">${language==="zh"?"完成":"Xong"}</button></footer>
+  </section></div>`;
+}
+
 function inventory(context) {
   const { text, record, reserveAlerts, workAlerts, language, state } = context;
   const site = activeInventorySite();
@@ -874,6 +1104,7 @@ function inventory(context) {
     : record;
   const effectiveRecord = isolatedCloudRecord;
   const rowContext = effectiveRecord === record ? context : { ...context, record: effectiveRecord };
+  const products=inventoryProductModels(effectiveRecord,site);
   const storageView = view.inventoryView === "storage";
   const entries = storageView ? effectiveRecord.inventory : effectiveRecord.workInventory;
   const draftAlerts = effectiveRecord === record ? null : buildInventoryAlerts(effectiveRecord, inventoryStorageGroups(site));
@@ -911,7 +1142,7 @@ function inventory(context) {
     : `<div class="inventory-cloud-notice inventory-fallback-notice"><strong>Chỉ hỗ trợ VPS database · 僅支援 VPS 資料庫</strong><small>Vui lòng mở website từ máy chủ VPS. · 請從 VPS 伺服器開啟網站。</small></div>`;
   const opsAvailable = catalogManageVisible && cloudReady && globalThis.navigator?.onLine !== false && isBranchInventorySite(site);
   const opsEnabled = opsAvailable && !historical;
-  const canViewHistory = Boolean(accountSession()?.role === "admin" || accountSession()?.accountRole === "admin");
+  const canViewHistory = canInventoryAction("inventory.history.full",{site});
   const tabsEnabled = (opsAvailable || canViewHistory || catalogManageVisible) && isBranchInventorySite(site);
   if (view.inventoryOpsMode === "receive") view.inventoryOpsMode = "overview";
   if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
@@ -995,13 +1226,24 @@ function inventory(context) {
   if (opsMode !== "overview") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section class="inventory-operations-host" data-branch-inventory-operations data-site="${escapeHtml(site)}" data-mode="${escapeHtml(opsMode)}"></section>`;
   }
-  return `${heading(text.inventory, text.inventorySubtitle, catalogManage ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice inventory-history-notice"><span>Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看。Các thao tác nhập/lấy/chuyển/xuất sẽ tự mở ngày hôm nay. · 庫存操作會自動切回今天。</span><button class="secondary-button" data-action="inventory-go-today">Về hôm nay · 回到今天</button></div>` : ""}${opsTabs}${opsGuide}
-    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${inventoryDistinctItemCount(entries)} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${activeAlerts.length} ${escapeHtml(text.lowStock.toLowerCase())}</span></div>
+  const productFiltered=products.filter((product)=>{
+    if(storageView){
+      return view.zone==="all" || product.locations.some((row)=>row.kind==="storage" && row.zone===view.zone);
+    }
+    return view.workArea==="all" || product.locations.some((row)=>row.kind==="work" && row.workArea===view.workArea);
+  });
+  const nearLowCount=products.filter((product)=>["near","low","empty"].includes(product.status)).length;
+  const canCreate=canInventoryAction("inventory.product.create",{site});
+  const productColumns=language==="zh"
+    ? ["品項","單位","總量","位置分配","狀態 / 操作"]
+    : ["Sản phẩm","Đơn vị","Tổng","Phân bổ vị trí","Trạng thái / thao tác"];
+  return `${heading(text.inventory, text.inventorySubtitle, canCreate ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice inventory-history-notice"><span>Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看。Các thao tác nhập/lấy/chuyển/xuất sẽ tự mở ngày hôm nay. · 庫存操作會自動切回今天。</span><button class="secondary-button" data-action="inventory-go-today">Về hôm nay · 回到今天</button></div>` : ""}${opsTabs}${opsGuide}
+    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${products.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${nearLowCount} ${language==="zh"?"接近不足 / 低庫存":"gần hết / sắp hết"}</span></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
-    <div class="filters-row"><p class="inventory-view-description">${escapeHtml(storageView ? text.storageReport : text.workReport)}</p>
+    <div class="filters-row"><p class="inventory-view-description">${language==="zh"?"每個品項只顯示一列；位置依主要儲位 → Work → 其他儲位排序。":"Mỗi sản phẩm chỉ hiện một dòng; vị trí sắp xếp Chính → Work → vị trí khác."}</p>
       <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label></div>
-    <section class="inventory-table ${storageView ? "storage-table" : "work-table"}"><div class="inventory-table-head">${columns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${filtered.length ? groupRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
+    <section class="inventory-table inventory-product-table"><div class="inventory-table-head inventory-product-head">${productColumns.map((column)=>`<span>${escapeHtml(column)}</span>`).join("")}</div>${productFiltered.length ? productFiltered.map((product)=>inventoryProductRow(product,rowContext)).join("") : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
 }
 
 function reservationsPage(context) {
@@ -1173,67 +1415,168 @@ function addItemModal(context) {
   const uiGroups = inventoryUiGroups(site);
   const storageGroups = uiGroups.storage;
   const workAreas = uiGroups.workAreas;
+  const masters=inventoryCatalogMasters(site);
   const activeZone = view.zone !== "all" && storageGroups.some((zone) => zone.id === view.zone) ? view.zone : storageGroups[0]?.id || "";
-  const units = inventoryUnitSuggestions(record, item.unit);
-  const selectedUnit = item.unit || units[0] || "";
+  const selectedPrimaryZone=existing.find((entry)=>entry.isPrimary)?.zone || existing[0]?.zone || activeZone;
   const selectedWorkArea = item.workArea || (view.workArea !== "all" && workAreas.some((area) => area.id === view.workArea) ? view.workArea : workAreas[0]?.id || "");
-  const stocktakeEditable = canDirectInventoryAdjust();
+
+  const canIdentity=editing
+    ? canInventoryAction("inventory.product.identity.edit",{site})
+    : canInventoryAction("inventory.product.create",{site});
+  const canUnit=canInventoryAction("inventory.product.unit.edit",{site});
+  const canCategory=canInventoryAction("inventory.product.category.edit",{site});
+  const canWorkArea=canInventoryAction("inventory.work_area.edit",{site,workArea:selectedWorkArea});
+  const canPrimary=canInventoryAction("inventory.product.primary_location.edit",{site});
+  const selectedWorkLocation=inventoryWorkLocation(site,selectedWorkArea);
+  const workMinimumLocationId=String(working?.cloudLocationId || selectedWorkLocation?.id || "");
+  const canWorkMinimum=workMinimumLocationId
+    ? canInventoryAction("inventory.minimum.edit",{site,locationId:workMinimumLocationId,workArea:selectedWorkArea})
+    : canInventoryAction("inventory.minimum.edit",{site,workArea:selectedWorkArea});
   const receiveDefaultEditable = canManageReceiveDefault(site);
-  const locations = storageGroups.map((zone) => {
+
+  const unitRows=(masters.units||[]);
+  const currentUnit=item.unit || "";
+  const unitSuggestions=[...new Set([
+    currentUnit,
+    ...unitRows.flatMap((row)=>[row.symbol,row.code]).filter(Boolean),
+  ].map((value)=>String(value||"").trim()).filter(Boolean))];
+  const selectedUnit=currentUnit || unitSuggestions[0] || "";
+  const categoryRows=masters.categories||[];
+  const selectedCategory=item.categoryCode || "";
+
+  const locations = storageGroups.map((zone,index) => {
     const stored = existing.find((entry) => entry.zone === zone.id);
     const checked = editing ? Boolean(stored) : zone.id === activeZone;
-    return `<div class="modal-location-row"><label class="modal-location-choice"><input type="checkbox" name="zones" value="${zone.id}" ${checked ? "checked" : ""} /><span>${escapeHtml(zone[language])}</span></label><label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${zone.id}" value="${stored?.quantity ?? 0}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label><label><span>${escapeHtml(text.standard)}</span><input type="number" min="0" name="minimum:${zone.id}" value="${stored?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /></label></div>`;
+    const locationId=stored?.cloudLocationId || zone.locationId || "";
+    const canAttach=canInventoryAction("inventory.product.location.attach",{site,locationId});
+    const canDetach=stored ? canInventoryAction("inventory.product.location.detach",{site,locationId}) : canAttach;
+    const canToggle=stored ? canDetach : canAttach;
+    const canQuantity=canInventoryAction("inventory.quantity.set_absolute",{site,locationId});
+    const canMinimum=canInventoryAction("inventory.minimum.edit",{site,locationId});
+    const primaryChecked=(checked && zone.id===selectedPrimaryZone);
+    return `<div class="modal-location-row inventory-location-config" data-location-zone="${escapeHtml(zone.id)}">
+      <label class="modal-location-choice">
+        <input type="checkbox" name="zones" value="${escapeHtml(zone.id)}" ${checked ? "checked" : ""} ${canToggle ? "" : "disabled"} />
+        <span>${escapeHtml(zone[language])}</span>
+      </label>
+      <label class="inventory-primary-choice" title="${language==="zh"?"主要儲位":"Vị trí chính"}">
+        <input type="radio" name="primaryZone" value="${escapeHtml(zone.id)}" ${primaryChecked?"checked":""} ${canPrimary && checked ? "" : "disabled"} ${canPrimary ? "" : 'data-permission-denied="true"'} />
+        <span>${language==="zh"?"主要":"Chính"}</span>
+      </label>
+      <label><span>${escapeHtml(text.current)}</span><input type="number" min="0" name="quantity:${escapeHtml(zone.id)}" value="${stored?.quantity ?? 0}" ${canQuantity ? "" : 'readonly aria-readonly="true"'} /></label>
+      <label><span>${language==="zh"?"最低量":"Minimum"}</span><input type="number" min="0" name="minimum:${escapeHtml(zone.id)}" value="${stored?.minimum ?? 0}" ${canMinimum ? "" : 'readonly aria-readonly="true"'} /></label>
+      <input type="hidden" name="displayOrder:${escapeHtml(zone.id)}" value="${Number(stored?.displayOrder ?? zone.sortOrder ?? index)}" />
+    </div>`;
   }).join("");
+
   const receiveZone=item.receiveZone||"";
-  const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／尚未指定":"Tự động nếu chỉ có 1 vị trí · 尚未指定"}</option>`]
-    .concat(storageGroups.map((zone)=>`<option value="${zone.id}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
+  const receiveOptions=[`<option value="">${language==="zh"?"自動（只有一個儲位）／每次選擇":"Tự động nếu chỉ có 1 vị trí · nếu nhiều vị trí sẽ hỏi"}</option>`]
+    .concat(storageGroups.map((zone)=>`<option value="${escapeHtml(zone.id)}" ${receiveZone===zone.id?"selected":""}>${escapeHtml(zone[language])}</option>`))
+    .join("");
+  const categoryOptions=[`<option value="">${language==="zh"?"未分類":"Chưa phân loại"}</option>`]
+    .concat(categoryRows.map((row)=>`<option value="${escapeHtml(row.code)}" ${selectedCategory===row.code?"selected":""}>${escapeHtml(language==="zh"?(row.name_zh_tw||row.code):(row.name_vi||row.name_zh_tw||row.code))}</option>`))
     .join("");
 
   const saveLabel = editing ? "Lưu thay đổi · 儲存變更" : "Lưu sản phẩm · 儲存品項";
-  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div><form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}"><label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" /></label><label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" /></label><label>${escapeHtml(text.workstation)}<select name="workArea" required>${workAreas.map((area) => `<option value="${area.id}" ${selectedWorkArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select><small class="ingredient-form-guide">${language === "zh" ? "工作區代表此食材主要由哪個崗位使用。" : "Khu làm việc là khu chính sử dụng nguyên liệu này."}</small></label><fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend><p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放的儲位；「現有」是目前實際數量，「標準量」是低於此數量時需補貨的基準。" : "Chọn nơi thực tế có cất hàng; 現有 là số lượng thực tế, 標準量 là mức dùng để cảnh báo/bổ hàng."}</p>${locations}</fieldset><div class="modal-grid modal-meta-grid"><label>${escapeHtml(text.workInventory)} · ${escapeHtml(text.standard)}<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? (stocktakeEditable ? 1 : 0)}" ${stocktakeEditable ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "工作區希望維持的最低數量。" : "Mức tối thiểu nên duy trì tại khu sử dụng."}</small></label><label>${escapeHtml(text.quantity)}<input name="unit" list="inventory-unit-suggestions" required value="${escapeHtml(selectedUnit)}" placeholder="包 / 盒 / kg" /><datalist id="inventory-unit-suggestions">${units.map((unit) => `<option value="${escapeHtml(unit)}"></option>`).join("")}</datalist></label></div><label>${language==="zh"?"央廚出貨收貨儲位":"Vị trí nhận hàng từ xưởng · 央廚出貨收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"若此品項只有一個存放儲位可留空，系統會自動帶入；若有多個儲位，請主管指定央廚出貨時固定收貨的位置。":"Nếu nguyên liệu chỉ có 1 vị trí lưu có thể để trống và hệ thống sẽ tự chọn; nếu có nhiều vị trí, quản lý hãy chỉ định nơi nhận hàng từ xưởng."}</small></label><div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div></form></section></div>`;
+  return `<div class="modal-backdrop" data-action="close-modal"><section class="modal-card ingredient-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="card-heading"><h2 id="modal-title">${escapeHtml(editing ? text.editItem : text.addItem)}</h2><div class="modal-heading-actions"><button class="secondary-button modal-header-save" type="submit" form="ingredient-product-form" data-save-item>${icon("check")}<span>${escapeHtml(saveLabel)}</span></button><button class="icon-button" type="button" data-action="close-modal">${icon("close")}</button></div></div>
+    <form id="ingredient-product-form" data-form="${editing ? "edit-item" : "add-item"}">
+      <div class="modal-grid modal-identity-grid">
+        <label>中文<input required name="label" placeholder="牛肉" value="${escapeHtml(item.label ?? "")}" ${canIdentity?"":'readonly aria-readonly="true"'} /></label>
+        <label>Tiếng Việt<input required name="labelVi" placeholder="Thịt bò" value="${escapeHtml(item.labelVi ?? "")}" ${canIdentity?"":'readonly aria-readonly="true"'} /></label>
+      </div>
+      <div class="modal-grid modal-meta-grid">
+        <label>${language==="zh"?"分類":"Danh mục · 分類"}<select name="categoryCode" ${canCategory?"":'disabled aria-disabled="true"'}>${categoryOptions}</select>${canCategory?"":`<input type="hidden" name="categoryCode" value="${escapeHtml(selectedCategory)}" />`}</label>
+        <label>${escapeHtml(text.quantity)}
+          <input name="unit" list="inventory-unit-suggestions" required value="${escapeHtml(selectedUnit)}" placeholder="包 / 盒 / kg" ${canUnit?"":'readonly aria-readonly="true"'} />
+          <datalist id="inventory-unit-suggestions">${unitSuggestions.map((unit)=>`<option value="${escapeHtml(unit)}"></option>`).join("")}</datalist>
+          <small class="ingredient-form-guide">${canUnit ? (language==="zh"?"可選既有單位，也可輸入新單位；新單位會寫入資料庫。":"Có thể chọn hoặc tự nhập đơn vị mới; đơn vị mới sẽ được lưu vào Database.") : (language==="zh"?"此帳號沒有編輯單位權限。":"Tài khoản này không có quyền sửa đơn vị.")}</small>
+        </label>
+      </div>
+      <label>${escapeHtml(text.workstation)}
+        <select name="workArea" required ${canWorkArea || !editing ? "" : 'disabled aria-disabled="true"'}>${workAreas.map((area) => `<option value="${escapeHtml(area.id)}" ${selectedWorkArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>
+        ${canWorkArea || !editing ? "" : `<input type="hidden" name="workArea" value="${escapeHtml(selectedWorkArea)}" />`}
+        <small class="ingredient-form-guide">${language === "zh" ? "工作區依據點獨立設定，不會強制與其他據點相同。" : "Work Area được cấu hình riêng theo từng chi nhánh, không ép giống site khác."}</small>
+      </label>
+      <fieldset class="modal-locations"><legend>${escapeHtml(text.selectLocations)}</legend>
+        <p class="ingredient-form-guide">${language === "zh" ? "勾選實際存放位置並設定主要儲位。位置排序：主要 → Work → 其他。" : "Chọn nơi thực tế lưu hàng và đặt Vị trí chính. Thứ tự hiển thị: Chính → Work → vị trí khác."}</p>
+        ${locations}
+      </fieldset>
+      <div class="modal-grid modal-meta-grid">
+        <label>${escapeHtml(text.workInventory)} · Minimum<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 0}" ${canWorkMinimum ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "可留 0；設定後用於工作區低庫存提醒。" : "Có thể để 0; nếu đặt sẽ dùng cho cảnh báo thiếu tại Work Area."}</small></label>
+        <label>${language==="zh"?"預設收貨儲位":"Vị trí nhận hàng mặc định · 預設收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"只有一個儲位時可自動；多個儲位若有預設就自動入該位置，若沒有則收貨／跨店調撥時必須選擇目的儲位。":"Nếu chỉ có 1 vị trí hệ thống tự chọn; nếu có nhiều vị trí và đặt mặc định thì hàng đến sẽ vào đó, còn chưa đặt thì khi nhận/chuyển liên chi nhánh phải chọn vị trí đích."}</small></label>
+      </div>
+      <div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div>
+    </form>
+  </section></div>`;
 }
 
 function syncReceiveZoneOptions(form) {
   if(!form?.matches?.('[data-form="add-item"],[data-form="edit-item"]')) return;
-  const receive=form.querySelector('select[name="receiveZone"]');
-  if(!receive)return;
   const selected=new Set([...form.querySelectorAll('input[name="zones"]:checked')].map((input)=>input.value));
-  for(const option of receive.options){
-    if(!option.value){ option.disabled=false; continue; }
-    option.disabled=!selected.has(option.value);
+  const receive=form.querySelector('select[name="receiveZone"]');
+  if(receive){
+    for(const option of receive.options){
+      if(!option.value){ option.disabled=false; continue; }
+      option.disabled=!selected.has(option.value);
+    }
+    if(receive.value && !selected.has(receive.value)) receive.value="";
   }
-  if(receive.value && !selected.has(receive.value)) receive.value="";
+
+  const primaryRadios=[...form.querySelectorAll('input[name="primaryZone"]')];
+  for(const radio of primaryRadios){
+    const permitted=!radio.hasAttribute("data-permission-denied");
+    radio.disabled=!selected.has(radio.value) || !permitted;
+    radio.closest(".inventory-primary-choice")?.classList.toggle("is-disabled",radio.disabled);
+  }
+  const checked=primaryRadios.find((radio)=>radio.checked && !radio.disabled);
+  if(!checked){
+    const fallback=primaryRadios.find((radio)=>selected.has(radio.value) && !radio.disabled);
+    if(fallback) fallback.checked=true;
+  }
 }
 
 async function persistCatalogStocktakeFields({ site, stockKey, locations, workArea, workMinimum }) {
-  if (!canDirectInventoryAdjust()) return { ok:true, skipped:true };
   const itemKey=branchItemKey(site,stockKey);
   if (!itemKey) return { ok:false, fallback:false, error:new Error("CATALOG_ITEM_NOT_FOUND") };
 
+  const storageByZone=new Map(inventoryUiGroups(site).storage.map((row)=>[row.id,row]));
+  let wrote=false;
   for (const location of locations) {
-    const locationCode=branchLocationCode(site,location.zone);
+    const master=storageByZone.get(location.zone);
+    const locationCode=master?.code || branchLocationCode(site,location.zone);
+    const locationId=master?.locationId || "";
     if (!locationCode) return { ok:false, fallback:false, error:new Error("INVALID_LOCATION") };
 
-    const quantityResult=await cloudSetQuantity({
-      itemKey,
-      locationCode,
-      quantity:location.quantity,
-      note:"品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
-      sync:false,
-    });
-    if (!quantityResult.ok) return quantityResult;
+    if (location.quantityEditable === true) {
+      const quantityResult=await cloudSetQuantity({
+        itemKey,
+        locationCode,
+        quantity:location.quantity,
+        note:"品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
+        sync:false,
+      });
+      if (!quantityResult.ok) return quantityResult;
+      wrote=true;
+    }
 
-    const minimumResult=await cloudSetMinimum({
-      itemKey,
-      locationCode,
-      minimum:location.minimum,
-      sync:false,
-    });
-    if (!minimumResult.ok) return minimumResult;
+    if (location.minimumEditable === true) {
+      const minimumResult=await cloudSetMinimum({
+        itemKey,
+        locationCode,
+        minimum:location.minimum,
+        sync:false,
+      });
+      if (!minimumResult.ok) return minimumResult;
+      wrote=true;
+    }
   }
 
-  const workLocationCode=branchWorkLocationCode(site,workArea);
-  if (workLocationCode) {
+  const workMaster=inventoryWorkLocation(site,workArea);
+  const workLocationCode=workMaster?.code || branchWorkLocationCode(site,workArea);
+  const workLocationId=String(workMaster?.id || "");
+  const workMinimumInput=root.querySelector('#ingredient-product-form input[name="workMinimum"]');
+  if (workLocationCode && workMinimumInput && !workMinimumInput.readOnly && !workMinimumInput.disabled) {
     const workMinimumResult=await cloudSetMinimum({
       itemKey,
       locationCode:workLocationCode,
@@ -1241,9 +1584,10 @@ async function persistCatalogStocktakeFields({ site, stockKey, locations, workAr
       sync:false,
     });
     if (!workMinimumResult.ok) return workMinimumResult;
+    wrote=true;
   }
 
-  return { ok:true };
+  return { ok:true,skipped:!wrote };
 }
 
 function render() {
@@ -1257,7 +1601,7 @@ function render() {
   const topbarMarkup = topbar(context);
   const pageMarkup = `<main class="page-content">${pages[active](context)}</main>`;
   const mobileNavMarkup = `<nav class="mobile-nav">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</nav>`;
-  const overlaysMarkup = `${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}`;
+  const overlaysMarkup = `${mobileMenu}${view.modal === "add-item" ? addItemModal(context) : ""}${view.managementModal ? management.managementModal(context) : ""}${route()==="inventory" ? inventoryProductDetailOverlay(context,context.record) : ""}`;
   if (typeof root.renderSections === "function") {
     root.renderSections({ sidebar: sidebarMarkup, topbar: topbarMarkup, page: pageMarkup, mobileNav: mobileNavMarkup, overlays: overlaysMarkup });
   } else root.innerHTML = `<div class="app-shell">${sidebarMarkup}<div class="main-shell">${topbarMarkup}${pageMarkup}</div>${mobileNavMarkup}</div>${overlaysMarkup}`;
@@ -1366,25 +1710,28 @@ root.addEventListener("click", (event) => {
     }
     render();
   }
+  if (action === "open-inventory-detail") { view.inventoryDetailStockKey = target.dataset.stockKey || ""; render(); return; }
+  if (action === "close-inventory-detail") { view.inventoryDetailStockKey = null; render(); return; }
   if (action === "select-work-area") { view.workArea = target.dataset.area; render(); }
   if (action === "select-zone") { view.zone = target.dataset.zone; render(); }
   if (action === "select-task-filter") { view.taskFilter = target.dataset.filter; render(); }
   if (action === "procurement-toggle-closed") store.toggleProcurementClosedDay(target.dataset.category, target.dataset.day);
   if (action === "adjust-item") {
     const site=activeInventorySite();
-    const manageAdjust = target.dataset.manageAdjust === "true" && canManageBranchCatalog(site);
-    if (!canDirectInventoryAdjust() && !manageAdjust) return;
     const item = inventoryControlItem(target,branchInventoryMutationRecord(state,site),"item");
-    if (item) {
+    if (item && canInventoryAction("inventory.quantity.adjust_quick",{
+      site,locationId:item.cloudLocationId
+    })) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"item",delta});
     }
   }
   if (action === "adjust-work-item") {
     const site=activeInventorySite();
-    if (!canDirectInventoryAdjust()) return;
     const item = inventoryControlItem(target,branchInventoryMutationRecord(state,site),"workItem");
-    if (item) {
+    if (item && canInventoryAction("inventory.quantity.adjust_quick",{
+      site,locationId:item.cloudLocationId,workArea:item.workArea
+    })) {
       const delta = Number(target.dataset.delta);
       queueBranchQuickAdjustment({site,item,kind:"workItem",delta});
     }
@@ -1425,14 +1772,21 @@ root.addEventListener("click", (event) => {
     return;
   }
   if (action === "open-add-item") {
-    if (!canManageBranchCatalog(activeInventorySite())) return;
+    const site=activeInventorySite();
+    if (!canInventoryAction("inventory.product.create",{site})) return;
     view.editingStockKey = null; view.modal = "add-item"; render();
   }
   if (action === "open-edit-item") {
-    if (!canManageBranchCatalog(activeInventorySite())) return;
+    const site=activeInventorySite();
+    const canEditProduct=[
+      "inventory.product.identity.edit","inventory.product.unit.edit","inventory.product.category.edit",
+      "inventory.product.location.attach","inventory.product.location.detach",
+      "inventory.product.primary_location.edit","inventory.work_area.edit","inventory.receive_default.edit"
+    ].some((key)=>canInventoryAction(key,{site}));
+    if (!canEditProduct) return;
     view.editingStockKey = target.dataset.stockKey; view.modal = "add-item"; render();
   }
-  if (action === "delete-item" && (accountSession()?.role === "admin" || accountSession()?.accountRole === "admin") && window.confirm(translate(state.settings.language).deleteConfirm)) {
+  if (action === "delete-item" && canInventoryAction("inventory.product.archive",{site:activeInventorySite()}) && window.confirm(translate(state.settings.language).deleteConfirm)) {
     const stockKey = target.dataset.stockKey;
     void cloudArchiveBranchItem(stockKey,activeInventorySite()).then((result) => {
       if (result.ok) {
@@ -1479,12 +1833,22 @@ root.addEventListener("change", (event) => {
   if (field === "procurementOrderDate") store.updateProcurementOrderDate(element.dataset.category, element.value);
   if (field === "item") {
     const site = activeInventorySite();
-    const manageQuantityEdit = key === "quantity" && element.dataset.manageAdjust === "true" && canManageBranchCatalog(site) && canDirectInventoryAdjust();
-    const catalogMetadataEdit = ["zone","workArea"].includes(key) && canManageBranchCatalog(site);
-    if (!canDirectInventoryAdjust() && !manageQuantityEdit && !catalogMetadataEdit) { render(); return; }
     const record = branchInventoryMutationRecord(state,site);
     const item = inventoryControlItem(element,record,"item");
     if (!item) return;
+    if (key === "quantity" && !canInventoryAction("inventory.quantity.set_absolute",{
+      site,locationId:item.cloudLocationId
+    })) { render(); return; }
+    if (key === "minimum" && !canInventoryAction("inventory.minimum.edit",{
+      site,locationId:item.cloudLocationId
+    })) { render(); return; }
+    if (key === "zone" && !(
+      canInventoryAction("inventory.product.location.detach",{site,locationId:item.cloudLocationId})
+      && canInventoryAction("inventory.product.location.attach",{site})
+    )) { render(); return; }
+    if (key === "workArea" && !canInventoryAction("inventory.work_area.edit",{
+      site,workArea:String(element.value || "")
+    })) { render(); return; }
     if (key === "zone") {
       const previousZone = String(item.zone || "");
       const nextZone = String(element.value || "");
@@ -1550,7 +1914,7 @@ root.addEventListener("change", (event) => {
         locationCode: branchLocationCode(site, item.zone),
         quantity: next,
         note: "盤點調整 / Điều chỉnh kiểm kê",
-        allowInventoryEditor:manageQuantityEdit,
+        allowInventoryEditor:true,
         sync:false,
       }).then(async(result) => {
         await syncInventoryNow(site,{reloadBranch:false,force:true});
@@ -1560,7 +1924,6 @@ root.addEventListener("change", (event) => {
       return;
     }
     if (key === "minimum") {
-      if (!canDirectInventoryAdjust()) { render(); return; }
       const next = Math.max(0, Number(element.value) || 0);
       element.disabled = true;
       void cloudSetMinimum({
@@ -1591,10 +1954,17 @@ root.addEventListener("change", (event) => {
   }
   if (field === "workItem") {
     const site = activeInventorySite();
-    const catalogWorkAreaEdit = key === "workArea" && canManageBranchCatalog(site);
-    if (!canDirectInventoryAdjust() && !catalogWorkAreaEdit) { render(); return; }
     const item = inventoryControlItem(element,branchInventoryMutationRecord(state,site),"workItem");
     if (!item) return;
+    if (key === "quantity" && !canInventoryAction("inventory.quantity.set_absolute",{
+      site,locationId:item.cloudLocationId,workArea:item.workArea
+    })) { render(); return; }
+    if (key === "minimum" && !canInventoryAction("inventory.minimum.edit",{
+      site,locationId:item.cloudLocationId,workArea:item.workArea
+    })) { render(); return; }
+    if (key === "workArea" && !canInventoryAction("inventory.work_area.edit",{
+      site,workArea:String(element.value || "")
+    })) { render(); return; }
     if (key === "workArea") {
       const previousArea = String(item.workArea || "");
       const nextArea = String(element.value || "");
@@ -1619,7 +1989,6 @@ root.addEventListener("change", (event) => {
       return;
     }
     if (key === "quantity") {
-      if (!canDirectInventoryAdjust()) { render(); return; }
       const next = Math.max(0, Number(element.value) || 0);
       element.disabled = true;
       void cloudSetQuantity({
@@ -1639,7 +2008,6 @@ root.addEventListener("change", (event) => {
       return;
     }
     if (key === "minimum") {
-      if (!canDirectInventoryAdjust()) { render(); return; }
       const next = Math.max(0, Number(element.value) || 0);
       element.disabled = true;
       void cloudSetMinimum({
@@ -1767,14 +2135,26 @@ root.addEventListener("submit", async (event) => {
     if (title) store.addTask({ title, quantity: data.get("quantity"), area: data.get("area"), assigneeId, assigneeName: assignee?.name || "", dueAt: data.get("dueAt") });
   }
   if (["add-item", "edit-item"].includes(form.dataset.form)) {
-    if (!canManageBranchCatalog(activeInventorySite())) { view.modal = null; render(); return; }
     const site = activeInventorySite();
+    const requiredCatalogAction=form.dataset.form==="add-item"
+      ? "inventory.product.create"
+      : "inventory.product.identity.edit";
+    if (!canInventoryAction(requiredCatalogAction,{site})
+        && !canManageBranchCatalog(site)) { view.modal = null; render(); return; }
     const inventoryRecord = branchInventoryMutationRecord(state,site);
-    const locations = data.getAll("zones").map((zone) => ({
-      zone: String(zone),
-      quantity: Number(data.get(`quantity:${zone}`)),
-      minimum: Number(data.get(`minimum:${zone}`)),
-    }));
+    const locations = data.getAll("zones").map((zone,index) => {
+      const zoneKey=String(zone);
+      const quantityInput=form.elements.namedItem(`quantity:${zoneKey}`);
+      const minimumInput=form.elements.namedItem(`minimum:${zoneKey}`);
+      return {
+        zone:zoneKey,
+        quantity:Number(data.get(`quantity:${zoneKey}`)),
+        minimum:Number(data.get(`minimum:${zoneKey}`)),
+        displayOrder:Number(data.get(`displayOrder:${zoneKey}`) ?? index),
+        quantityEditable:Boolean(quantityInput && !quantityInput.readOnly && !quantityInput.disabled),
+        minimumEditable:Boolean(minimumInput && !minimumInput.readOnly && !minimumInput.disabled),
+      };
+    });
     if (!locations.length) {
       window.alert("Hãy chọn ít nhất một vị trí lưu. · 請至少選擇一個存放位置。");
       return;
@@ -1788,14 +2168,26 @@ root.addEventListener("submit", async (event) => {
     }
     const label=String(data.get("label") ?? "").trim();
     const catalogKey=existingItem?.catalogKey || inventoryCatalogKey(label);
+    const requestedPrimary=String(data.get("primaryZone") || "");
+    const primaryZone=locations.some((entry)=>entry.zone===requestedPrimary)
+      ? requestedPrimary
+      : locations[0]?.zone || "";
     const item = {
       label,
       labelVi: String(data.get("labelVi") ?? "").trim(),
       catalogKey,
       receiveZone,
+      categoryCode:String(data.get("categoryCode") || "").trim(),
       workArea: String(data.get("workArea")),
-      unit: String(data.get("unit")),
+      unit: String(data.get("unit") || "").trim(),
+      unitCode:String(data.get("unit") || "").trim(),
+      primaryZone,
       workMinimum: Number(data.get("workMinimum")),
+      workMinimumEditable:Boolean(
+        form.elements.namedItem("workMinimum")
+        && !form.elements.namedItem("workMinimum").readOnly
+        && !form.elements.namedItem("workMinimum").disabled
+      ),
       storageOnly: Boolean(existingItem?.storageOnly),
       locations,
     };
@@ -1952,6 +2344,7 @@ window.addEventListener("hashchange", () => {
   renderWhenAuthorized();
 });
 window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && view.inventoryDetailStockKey) { view.inventoryDetailStockKey = null; render(); return; }
   if (event.key === "Escape" && view.modal) { view.modal = null; view.editingStockKey = null; render(); }
   if (event.key === "Escape" && view.managementModal) { view.managementModal = null; render(); }
   if (event.key === "Escape" && view.calendarOpen) { view.calendarOpen = false; render(); }
@@ -1974,16 +2367,33 @@ window.addEventListener("shitu:active-site-changed", () => {
   taskDerivationCache.clear();
   renderWhenAuthorized();
 });
+const INVENTORY_REACTIVE_ROUTES = new Set(["dashboard","inventory","procurement","preparation"]);
+function inventoryRouteNeedsLiveRender(activeRoute = route()) {
+  return INVENTORY_REACTIVE_ROUTES.has(String(activeRoute || ""));
+}
+
 window.addEventListener("shitu:inventory-sites-changed", () => {
   taskDerivationCache.clear();
-  renderWhenAuthorized();
+  // Site-registry changes affect Inventory-derived operational pages and the
+  // branch label in Settings. Do not replace unrelated interactive workspaces
+  // such as Schedule/Workforce while a background Inventory hydration finishes.
+  if (inventoryRouteNeedsLiveRender() || route() === "settings") renderWhenAuthorized();
 });
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
-  if (route() === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
+  // Invalidate derived Inventory tasks for every route so a later navigation
+  // never reuses stale replenishment decisions. Rendering is isolated below.
+  taskDerivationCache.clear();
+  const activeRoute=route();
+  if (activeRoute === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
+  if (!inventoryRouteNeedsLiveRender(activeRoute)) {
+    // Inventory realtime is independent from Workforce/Attendance/SOP forms.
+    // Re-rendering those pages here can discard an in-progress form between
+    // pointer down and submit when Inventory access/master-data hydration returns.
+    return;
+  }
   const site = activeInventorySite();
   if (event.detail?.site && event.detail.site !== site) return;
-  taskDerivationCache.clear();
-  if (route() === "inventory" && view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
+  if (activeRoute === "inventory" && view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
   renderWhenAuthorized();
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {

@@ -350,7 +350,7 @@ async function adminDesktop(browser) {
     }
   }
 
-  await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
+  await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="manage"]').first().click();
   assert((await page.locator('[data-manage-adjust="true"]').count()) > 0,"branch management quantity controls missing");
   const add=page.locator('[data-action="open-add-item"]').first();
   await add.waitFor({state:"visible"});
@@ -615,26 +615,41 @@ async function roleDesktop(browser, username, checks) {
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
     }
     if(username === "employeefx" && checks.stocktake === true){
+      const overview=page.locator('[data-action="select-inventory-ops"][data-mode="overview"]').first();
+      if(await overview.count()) {
+        await overview.click();
+        await page.locator(".inventory-product-table").waitFor({state:"visible",timeout:12000});
+      }
       const peer=await context.newPage();
       attachRuntimeDiagnostics(peer,errors,"peer: ");
       await peer.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
       await peer.locator(".app-shell").waitFor({state:"visible",timeout:15000});
       await setSite(peer,"fuxing");
 
-      const sourceRow=page.locator(".inventory-table.storage-table .storage-row").first();
-      const peerRow=peer.locator(".inventory-table.storage-table .storage-row").first();
+      const sourceRow=page.locator(".inventory-product-table .inventory-product-row").first();
+      const peerRow=peer.locator(".inventory-product-table .inventory-product-row").first();
       await sourceRow.waitFor({state:"visible"});
       await peerRow.waitFor({state:"visible"});
-      const zone=await sourceRow.locator('select[data-field="item"][data-key="zone"]').inputValue();
-      const stockKey=await sourceRow.locator('[data-action="open-edit-item"]').getAttribute("data-stock-key");
-      const sourceMinimum=sourceRow.locator('input[data-field="item"][data-key="minimum"]');
-      assert(await sourceMinimum.getAttribute("data-cloud-item-id"),"overview minimum is missing the rendered PostgreSQL item id");
-      assert(await sourceMinimum.getAttribute("data-cloud-location-id"),"overview minimum is missing the rendered PostgreSQL location id");
+      const stockKey=await sourceRow.getAttribute("data-stock-key");
+      assert(stockKey,"multi-location overview product row is missing stock key");
+
+      await sourceRow.locator('[data-action="open-inventory-detail"]').first().click();
+      const sourceSheet=page.locator(".inventory-detail-sheet");
+      await sourceSheet.waitFor({state:"visible"});
+      const sourceMinimum=sourceSheet.locator('input[data-field="item"][data-key="minimum"]').first();
+      await sourceMinimum.waitFor({state:"visible"});
+      const zone=await sourceMinimum.getAttribute("data-zone");
+      const locationId=await sourceMinimum.getAttribute("data-cloud-location-id");
+      assert(zone,"detail minimum is missing the rendered storage zone");
+      assert(locationId,"detail minimum is missing the rendered PostgreSQL location id");
+      assert(await sourceMinimum.getAttribute("data-cloud-item-id"),"detail minimum is missing the rendered PostgreSQL item id");
       const before=Math.max(0,Number(await sourceMinimum.inputValue())||0);
       const next=before+1;
 
-      await peer.locator(`[data-action="open-edit-item"][data-stock-key="${stockKey}"]`).click();
-      const peerMinimum=peer.locator(`input[name="minimum:${zone}"]`);
+      await peer.locator(`.inventory-product-row[data-stock-key="${stockKey}"] [data-action="open-inventory-detail"]`).first().click();
+      const peerSheet=peer.locator(".inventory-detail-sheet");
+      await peerSheet.waitFor({state:"visible"});
+      const peerMinimum=peerSheet.locator(`input[data-key="minimum"][data-cloud-location-id="${locationId}"]`);
       await peerMinimum.waitFor({state:"visible"});
       await page.waitForTimeout(250);
 
@@ -647,9 +662,8 @@ async function roleDesktop(browser, username, checks) {
         input.value=value;
         input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
       },String(next));
-      const dispatchDiagnostic=await page.evaluate(()=>{
-        const input=document.querySelector('.inventory-table.storage-table .storage-row input[data-field="item"][data-key="minimum"]');
-        const auth=JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null");
+      const dispatchDiagnostic=await page.evaluate((targetLocationId)=>{
+        const input=document.querySelector(`.inventory-detail-sheet input[data-key="minimum"][data-cloud-location-id="${CSS.escape(targetLocationId)}"]`);
         const state=JSON.parse(localStorage.getItem("shitu-kitchen-os-v1")||"null");
         const today=new Date();
         const todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
@@ -657,34 +671,33 @@ async function roleDesktop(browser, username, checks) {
           probe:window.__inventoryChangeProbe,
           disabled:Boolean(input?.disabled),
           dataset:{...(input?.dataset||{})},
-          inventoryEdit:Boolean(auth?.permissions?.inventory?.edit),
           selectedDate:state?.selectedDate||"",
           todayKey,
           cloud:localStorage.getItem("shitu-inventory-cloud-v2"),
         };
-      });
-      assert.equal(dispatchDiagnostic.probe,1,`overview change did not reach app root: ${JSON.stringify(dispatchDiagnostic)}`);
-      assert.equal(dispatchDiagnostic.disabled,true,`overview change handler returned before mutation: ${JSON.stringify(dispatchDiagnostic)}`);
-      assert.equal((await minimumWrite).status(),200,"overview minimum did not persist through the database API");
+      },locationId);
+      assert.equal(dispatchDiagnostic.probe,1,`detail change did not reach app root: ${JSON.stringify(dispatchDiagnostic)}`);
+      assert.equal(dispatchDiagnostic.disabled,true,`detail change handler returned before mutation: ${JSON.stringify(dispatchDiagnostic)}`);
+      assert.equal((await minimumWrite).status(),200,"detail minimum did not persist through the database API");
       await peer.waitForFunction(
-        ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
-        {name:`minimum:${zone}`,value:String(next)},
+        ({locationId,value})=>document.querySelector(`.inventory-detail-sheet input[data-key="minimum"][data-cloud-location-id="${CSS.escape(locationId)}"]`)?.value===value,
+        {locationId,value:String(next)},
         {timeout:10000}
       );
 
-      const restoredMinimum=page.locator(".inventory-table.storage-table .storage-row").first().locator('input[data-field="item"][data-key="minimum"]');
+      const restoredMinimum=page.locator(`.inventory-detail-sheet input[data-key="minimum"][data-cloud-location-id="${locationId}"]`);
       const minimumRestore=page.waitForResponse((response)=>response.url().endsWith("/api/inventory/set-minimum")&&response.request().method()==="POST");
       await restoredMinimum.evaluate((input,value)=>{
         input.value=value;
         input.dispatchEvent(new Event("change",{bubbles:true,composed:true}));
       },String(before));
-      assert.equal((await minimumRestore).status(),200,"overview minimum restore did not persist through the database API");
+      assert.equal((await minimumRestore).status(),200,"detail minimum restore did not persist through the database API");
       await peer.waitForFunction(
-        ({name,value})=>document.querySelector(`input[name="${name}"]`)?.value===value,
-        {name:`minimum:${zone}`,value:String(before)},
+        ({locationId,value})=>document.querySelector(`.inventory-detail-sheet input[data-key="minimum"][data-cloud-location-id="${CSS.escape(locationId)}"]`)?.value===value,
+        {locationId,value:String(before)},
         {timeout:10000}
       );
-      await peer.locator('button[data-action="close-modal"]').first().click();
+      await peer.locator('[data-action="close-inventory-detail"]').last().click();
       await peer.close();
     }
     if(checks.operations === false){
@@ -729,17 +742,17 @@ async function responsiveAdmin(browser, viewport) {
 
     for(const site of ["fuxing","yongji"]){
       await setSite(page,site);
-      const overview=page.locator('[data-action="select-inventory-ops"][data-mode="overview"]');
+      const overview=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="overview"]').first();
       await overview.waitFor({state:"visible"});
       await overview.click();
       await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
       await page.locator('[data-action="shift-date"][data-offset="-1"]').first().click();
       await page.locator(".inventory-history-notice").waitFor({state:"visible"});
       for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
-        const tab=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
+        const tab=page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first();
         await tab.waitFor({state:"visible"});
       }
-      await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').click();
+      await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="in"]').first().click();
       await page.locator('[data-branch-inventory-operations][data-mode="in"]').waitFor({state:"visible"});
       assert.equal(await page.locator(".inventory-history-notice").count(),0,`${site} mobile operation did not switch back to today`);
       await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();

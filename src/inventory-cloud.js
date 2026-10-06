@@ -3,6 +3,7 @@ import {
   vpsAdjustInventory,
   vpsArchiveCatalogItem,
   vpsInventory,
+  vpsInventoryAccess,
   vpsInventoryClientId,
   vpsInventoryHistory,
   vpsInventorySites,
@@ -72,6 +73,8 @@ const cache = {
   itemsByKey: new Map(),
   locationsByCode: new Map(),
 };
+const accessBySite = new Map();
+const catalogMastersBySite = new Map();
 
 function readJson(key, fallback = null) {
   try {
@@ -110,16 +113,28 @@ function session() {
   return readJson(AUTH_KEY, null);
 }
 
-function role() {
-  const s = session();
-  return s?.accountRole || (s?.role === "admin" ? "admin" : s?.role === "central" ? "central" : "employee");
+export function inventoryAccessSnapshot(site = currentSite()) {
+  return accessBySite.get(String(site || "")) || null;
 }
 
-function hasInventoryPermission(action = "view") {
-  const s = session();
-  if (!s) return false;
-  if (s.role === "admin" || s.accountRole === "admin") return true;
-  return Boolean(s.permissions?.inventory?.[action]);
+export function inventoryCatalogMasters(site = currentSite()) {
+  return catalogMastersBySite.get(String(site || "")) || { categories:[],units:[] };
+}
+
+export function canInventoryAction(actionKey, {
+  site = currentSite(),
+  locationId = "",
+  workArea = "",
+} = {}) {
+  const snapshot=inventoryAccessSnapshot(site);
+  if (!snapshot || !actionKey) return false;
+  if (locationId && snapshot.locations?.[String(locationId)]?.actions?.[actionKey]) {
+    return snapshot.locations[String(locationId)].actions[actionKey].allowed === true;
+  }
+  if (workArea && snapshot.workAreas?.[String(workArea)]?.actions?.[actionKey]) {
+    return snapshot.workAreas[String(workArea)].actions[actionKey].allowed === true;
+  }
+  return snapshot.actions?.[actionKey]?.allowed === true;
 }
 
 function todayKey() {
@@ -145,17 +160,22 @@ async function ensureSiteRegistry({ force = false } = {}) {
       siteRegistryLoaded = true;
       siteRegistryUserId = userId;
 
-      const currentSession = session();
-      if (currentSession?.location === "all") {
-        const previousSite = String(localStorage.getItem(ACTIVE_SITE_KEY) || "");
-        const nextSite = isActiveInventorySite(previousSite) ? previousSite : firstInventorySite();
-        if (nextSite) localStorage.setItem(ACTIVE_SITE_KEY, nextSite);
-        else localStorage.removeItem(ACTIVE_SITE_KEY);
-        if (nextSite !== previousSite) {
-          window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
-            detail:{ site:nextSite, previousSite, reason:"site-registry", hydrated:false },
-          }));
-        }
+      // The backend registry is already filtered by inventory.view. The active
+      // site therefore follows the user's database permission scope, including
+      // arbitrary combinations such as A+B/A+C, regardless of session.location.
+      const previousSite = String(localStorage.getItem(ACTIVE_SITE_KEY) || "");
+      const assignedSite = String(session()?.location || "");
+      const nextSite = isActiveInventorySite(previousSite)
+        ? previousSite
+        : isActiveInventorySite(assignedSite)
+          ? assignedSite
+          : firstInventorySite();
+      if (nextSite) localStorage.setItem(ACTIVE_SITE_KEY, nextSite);
+      else localStorage.removeItem(ACTIVE_SITE_KEY);
+      if (nextSite !== previousSite) {
+        window.dispatchEvent(new CustomEvent("shitu:active-site-changed", {
+          detail:{ site:nextSite, previousSite, reason:"site-registry", hydrated:false },
+        }));
       }
       return next;
     })
@@ -188,63 +208,74 @@ export function inventoryCloudState() {
 }
 
 export function canInventoryEdit() {
-  if (!hasInventoryPermission("edit")) return false;
   if (inventoryCloudState() !== "ready") return false;
   if (globalThis.navigator?.onLine === false) return false;
-  const site = currentSite();
-  return !isBranchInventorySite(site) || isCurrentBranchInventoryDate();
+  const site=currentSite();
+  const mutationActions=[
+    "inventory.quantity.adjust_quick","inventory.quantity.set_absolute","inventory.minimum.edit",
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.receive_default.edit","inventory.work_area.edit",
+    "inventory.transfer.internal","inventory.transfer.cross_site","inventory.receive","inventory.pick",
+    "inventory.use","inventory.return","inventory.product.archive"
+  ];
+  const allowed=mutationActions.some((action)=>canInventoryAction(action,{site}));
+  return allowed && (!isBranchInventorySite(site) || isCurrentBranchInventoryDate());
 }
 
 export function canManageCentralCatalog() {
-  const s=session();
-  return canInventoryEdit()
-    && activeInventorySite() === "central"
-    && (role() === "admin" || ["central","all"].includes(s?.location));
+  const site=activeInventorySite();
+  if (inventoryCloudState() !== "ready" || globalThis.navigator?.onLine === false) return false;
+  return [
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.work_area.edit"
+  ].some((action)=>canInventoryAction(action,{site}));
 }
 
 function canManageSiteCatalog(site) {
-  return site === "central" ? canManageCentralCatalog() : canManageBranchCatalog(site);
+  if (inventoryCloudState() !== "ready" || globalThis.navigator?.onLine === false) return false;
+  return [
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.work_area.edit"
+  ].some((action)=>canInventoryAction(action,{site}));
 }
 
 export function canViewBranchCatalogManagement(site = activeInventorySite()) {
-  const s=session();
-  if (!hasInventoryPermission("edit") || !isBranchInventorySite(site)) return false;
-  // The inventory edit checkbox is the source of truth. A branch employee who
-  // is explicitly granted edit access must receive the same operational and
-  // catalogue entry points for their assigned site.
-  return role() === "admin" || s?.location === site || s?.location === "all";
+  if (!isBranchInventorySite(site)) return false;
+  return [
+    "inventory.product.create","inventory.product.identity.edit","inventory.product.unit.edit",
+    "inventory.product.category.edit","inventory.product.location.attach","inventory.product.location.detach",
+    "inventory.product.primary_location.edit","inventory.work_area.edit"
+  ].some((action)=>canInventoryAction(action,{site}));
 }
 
 export function canManageBranchCatalog(site = activeInventorySite()) {
   if (!canViewBranchCatalogManagement(site)) return false;
   if (inventoryCloudState() !== "ready") return false;
   if (globalThis.navigator?.onLine === false) return false;
-  // Catalog/storage management is master data. It must not be locked just because
-  // the operator is viewing a different service date.
   return true;
 }
 
 export function canManageReceiveDefault(site = activeInventorySite()) {
-  const s = session();
-  if (!s || !hasInventoryPermission("edit") || !isKnownInventorySite(site)) return false;
-  return s.location === site || s.location === "all";
+  return canInventoryAction("inventory.receive_default.edit",{site});
 }
 
 export function canDirectInventoryAdjust() {
-  // Explicit module permission is authoritative. Role names must not silently
-  // revoke controls after an administrator grants inventory edit access.
-  return canInventoryEdit();
+  const site=activeInventorySite();
+  return canInventoryAction("inventory.quantity.adjust_quick",{site})
+    || canInventoryAction("inventory.quantity.set_absolute",{site})
+    || canInventoryAction("inventory.minimum.edit",{site});
 }
 
 export function activeInventorySite() {
-  const s = session();
+  const s=session();
   if (!s) return "";
-  if (s.location !== "all") {
-    const assignedSite = String(s.location || "");
-    return !siteRegistryLoaded || isActiveInventorySite(assignedSite) ? assignedSite : "";
-  }
-  const saved = localStorage.getItem(ACTIVE_SITE_KEY) || "";
+  const saved=localStorage.getItem(ACTIVE_SITE_KEY) || "";
   if (isActiveInventorySite(saved)) return saved;
+  const assigned=String(s.location || "");
+  if (isActiveInventorySite(assigned)) return assigned;
   return firstInventorySite();
 }
 
@@ -281,8 +312,7 @@ export async function refreshInventorySiteRegistry({ reason = "refresh", hydrate
 }
 
 export function setActiveInventorySite(site) {
-  const s = session();
-  if (s?.location !== "all" || !isKnownInventorySite(site)) return false;
+  if (!session() || !isKnownInventorySite(site)) return false;
   localStorage.setItem(ACTIVE_SITE_KEY, site);
   window.dispatchEvent(new CustomEvent("shitu:active-site-changed", { detail:{ site } }));
   // Legacy low-level setter: preserve the historical immediate-notify contract
@@ -293,8 +323,7 @@ export function setActiveInventorySite(site) {
 }
 
 export async function switchActiveInventorySite(site) {
-  const s = session();
-  if (s?.location !== "all") return false;
+  if (!session()) return false;
 
   const targetSite = String(site || "");
   if (!targetSite) return false;
@@ -317,7 +346,7 @@ export async function switchActiveInventorySite(site) {
   }));
 
   try {
-    if (!(await verifyMigration()) || !hasInventoryPermission("view")) {
+    if (!(await verifyMigration())) {
       throw new Error("INVENTORY_BACKEND_NOT_READY");
     }
     if (!isKnownInventorySite(targetSite)) throw new Error("INVALID_SITE");
@@ -501,8 +530,11 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
         zh: entry.label || stockKey,
         vi: entry.labelVi || entry.label || stockKey,
         unit: entry.unit || "個",
+        unit_code: entry.unitCode || entry.unit || "個",
+        category_code: entry.categoryCode || "",
         work_area: entry.workArea || "",
         storage_only: Boolean(entry.storageOnly),
+        primary_location_code:"",
         locations: [],
       });
     }
@@ -511,31 +543,26 @@ function buildBranchCatalog(site = currentSite(), { zeroQuantities = false } = {
     item.vi = entry.labelVi || item.vi;
     item.catalog_key = entry.catalogKey || item.catalog_key || catalogKey(item.zh);
     item.unit = entry.unit || item.unit;
+    item.unit_code = entry.unitCode || item.unit_code || item.unit;
+    item.category_code = entry.categoryCode || item.category_code || "";
     item.work_area = entry.workArea || item.work_area;
     item.storage_only = Boolean(entry.storageOnly);
     const code = branchLocationCode(site, entry.zone);
     if (code) {
       item.locations.push({
         code,
+        is_primary:Boolean(entry.isPrimary),
+        display_order:Number(entry.displayOrder || 0),
         quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
         minimum: Math.max(0, Number(entry.minimum) || 0),
       });
+      if (entry.isPrimary) item.primary_location_code=code;
     }
   }
 
-  for (const entry of work) {
-    const stockKey = entry.stockKey || String(entry.id || "").replace(/^work-/, "");
-    const item = grouped.get(stockKey);
-    if (!item) continue;
-    const area = entry.workArea || item.work_area || "";
-    const code = branchWorkLocationCode(site, area);
-    if (!code) continue;
-    item.locations.push({
-      code,
-      quantity: zeroQuantities ? 0 : Math.max(0, Number(entry.quantity) || 0),
-      minimum: Math.max(0, Number(entry.minimum) || 0),
-    });
-  }
+  // Work Location is derived server-side from work_area. It is not a storage
+  // association and must never be sent as an explicit catalog location.
+  void work;
 
   return [...grouped.values()];
 }
@@ -637,13 +664,19 @@ export async function refreshInventoryCloudState() {
 }
 
 async function fetchSite(site, { force = false, registryReady = false } = {}) {
-  if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
+  if (!(await verifyMigration()) || !site) return [];
 
   if (!registryReady) await ensureSiteRegistry({ force });
-  const [result, master] = await Promise.all([
+  const [result, master, access] = await Promise.all([
     vpsInventory(site, { force }),
     vpsMasterData(site, { force }),
+    vpsInventoryAccess(site),
   ]);
+  accessBySite.set(site,access || { site,actions:{},locations:{},workAreas:{} });
+  catalogMastersBySite.set(site,{
+    categories:Array.isArray(result?.categories) ? result.categories : [],
+    units:Array.isArray(result?.units) ? result.units : [],
+  });
   syncUiMasterData(site, master || {});
 
   const masterLocationByCode = new Map((master?.locations || []).map((location) => [location.code, location]));
@@ -724,7 +757,7 @@ export async function getSiteInventoryRows(site = currentSite()) {
 }
 
 export async function getSiteLocations(site = currentSite(), kind = "storage") {
-  if (!(await verifyMigration()) || !hasInventoryPermission("view") || !site) return [];
+  if (!(await verifyMigration()) || !site) return [];
   await ensureSiteRegistry();
   const master = await vpsMasterData(site);
   syncUiMasterData(site, master || {});
@@ -809,11 +842,18 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
+        unitCode:row.item.unit_code || row.item.unit || "",
+        categoryCode:row.item.category_code || "",
         workArea:row.item.work_area||"",
         storageOnly:Boolean(row.item.storage_only),
         zone,
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
+        minimumEnabled:row.minimum_enabled === true,
+        warningEnabled:row.warning_enabled === true,
+        warningQuantity:row.warning_quantity == null ? null : Number(row.warning_quantity),
+        isPrimary:row.is_primary === true,
+        displayOrder:Number(row.display_order || 0),
         cloudItemId:row.item.id,
         cloudLocationId:row.location.id,
       });
@@ -827,9 +867,16 @@ function applyBranch(rows, site) {
         catalogKey:row.item.catalog_key || "",
         receiveZone,
         unit:row.item.unit,
+        unitCode:row.item.unit_code || row.item.unit || "",
+        categoryCode:row.item.category_code || "",
         workArea:area||row.item.work_area||"",
         quantity:Number(row.quantity)||0,
         minimum:Number(row.minimum_quantity)||0,
+        minimumEnabled:row.minimum_enabled === true,
+        warningEnabled:row.warning_enabled === true,
+        warningQuantity:row.warning_quantity == null ? null : Number(row.warning_quantity),
+        isPrimary:false,
+        displayOrder:Number(row.display_order || 0),
         cloudItemId:row.item.id,
         cloudLocationId:row.location.id,
       });
@@ -854,7 +901,7 @@ function applyBranch(rows, site) {
 const reconciledInventorySnapshots = new Map();
 
 async function runInventorySync(site, { reloadBranch = false, force = false } = {}) {
-  if (!site || !(await verifyMigration()) || !hasInventoryPermission("view")) return false;
+  if (!site || !(await verifyMigration())) return false;
   await ensureSiteRegistry();
   if (!isKnownInventorySite(site)) return false;
   if (isBranchInventorySite(site) && !isCurrentBranchInventoryDate()) {
@@ -917,11 +964,13 @@ export async function cloudAdjustQuantity({
   sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canInventoryEdit()) return { ok: false, fallback: false, error: new Error("INVENTORY_EDIT_NOT_ALLOWED") };
   const resolved = itemId && locationId
     ? { item:{ id:itemId }, location:{ id:locationId, site } }
     : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryAction("inventory.quantity.adjust_quick",{
+    site:resolved.location.site,locationId:resolved.location.id,
+  })) return { ok:false,fallback:false,error:new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   const value = Math.max(0, Number(amount) || 0);
   if (!value) return { ok: false, fallback: false };
   let data;
@@ -954,11 +1003,13 @@ export async function cloudSetQuantity({
 }) {
   void allowInventoryEditor;
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("DIRECT_ADJUST_NOT_ALLOWED") };
   const resolved = itemId && locationId
     ? { item:{ id:itemId }, location:{ id:locationId, site } }
     : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryAction("inventory.quantity.set_absolute",{
+    site:resolved.location.site,locationId:resolved.location.id,
+  })) return { ok:false,fallback:false,error:new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   try {
     await vpsSetQuantity({
       itemId: resolved.item.id,
@@ -984,11 +1035,14 @@ export async function cloudSetMinimum({
   sync = true,
 }) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (!canDirectInventoryAdjust()) return { ok: false, fallback: false, error: new Error("MINIMUM_EDIT_NOT_ALLOWED") };
   const resolved = itemId && locationId
     ? { item:{ id:itemId }, location:{ id:locationId, site } }
     : await resolveIds(itemKey, locationCode);
   if (!resolved.item || !resolved.location) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
+  if (!canInventoryAction("inventory.minimum.edit",{
+    site:resolved.location.site,locationId:resolved.location.id,
+    workArea:String(resolved.location.metadata?.work_area || ""),
+  })) return { ok:false,fallback:false,error:new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   try {
     await vpsSetMinimum({
       itemId: resolved.item.id,
@@ -1158,17 +1212,23 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
   const item = draft ? {
     key:branchItemKey(site,stockKey), catalog_key:draft.catalogKey,
     zh:draft.label, vi:draft.labelVi, unit:draft.unit,
+    unit_code:draft.unitCode || draft.unit,
+    category_code:draft.categoryCode || "",
     work_area:draft.workArea, storage_only:Boolean(draft.storageOnly),
-    locations:[
-      ...draft.locations.map((location) => ({ code:branchLocationCode(site,location.zone) })),
-      ...(branchWorkLocationCode(site,draft.workArea)
-        ? [{ code:branchWorkLocationCode(site,draft.workArea) }] : []),
-    ],
+    primary_location_code:branchLocationCode(site,draft.primaryZone || ""),
+    locations:draft.locations.map((location,index) => ({
+      code:branchLocationCode(site,location.zone),
+      is_primary:location.zone === draft.primaryZone,
+      display_order:Number(location.displayOrder ?? index),
+      ...(location.quantityEditable === true ? { quantity:Number(location.quantity || 0) } : {}),
+      ...(location.minimumEditable === true ? { minimum:Number(location.minimum || 0) } : {}),
+    })),
+    ...(draft.workMinimumEditable === true ? { work_minimum:Number(draft.workMinimum || 0) } : {}),
   } : buildBranchCatalog(site).find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
   try {
-    await vpsSyncCatalog(item);
+    await vpsSyncCatalog(item,{applyStockFields:Boolean(draft)});
     if (sync) await syncInventoryNow(site, { reloadBranch: false });
     return { ok: true };
   } catch (error) {
@@ -1196,7 +1256,7 @@ export async function cloudSyncCentralCatalogItem(itemKey, items = readJson(CENT
 
 export async function cloudArchiveCentralItem(itemKey) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
+  if (!canInventoryAction("inventory.product.archive",{site:"central"})) return { ok: false, fallback: false, error: new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   if (!String(itemKey || "").startsWith("central:")) return { ok: false, fallback: false, error: new Error("INVALID_ITEM_KEY") };
   try {
     const data = await vpsArchiveCatalogItem(itemKey);
@@ -1210,7 +1270,7 @@ export async function cloudArchiveCentralItem(itemKey) {
 
 export async function cloudArchiveBranchItem(stockKey, site = currentSite()) {
   if (!(await verifyMigration())) return { ok: false, fallback: false, error: new Error("INVENTORY_BACKEND_NOT_READY") };
-  if (role() !== "admin") return { ok: false, fallback: false, error: new Error("ADMIN_REQUIRED") };
+  if (!canInventoryAction("inventory.product.archive",{site})) return { ok: false, fallback: false, error: new Error("INVENTORY_ACTION_NOT_ALLOWED") };
   if (!isBranchInventorySite(site)) return { ok:false, fallback:false, error:new Error("INVALID_SITE") };
 
   const itemKey = branchItemKey(site,stockKey);
@@ -1245,7 +1305,8 @@ export function centralItemKey(id) {
 }
 
 export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
-  if (!(await verifyMigration()) || role() !== "admin") return [];
+  if (!(await verifyMigration())
+      || !canInventoryAction("inventory.history.full",{site})) return [];
 
   try {
     const [historyResult, rows] = await Promise.all([
