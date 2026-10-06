@@ -120,6 +120,13 @@ Object.defineProperty(globalThis,"fetch",{
     if(method!=="GET") throw new Error(`Unexpected mutation: ${method} ${url}`);
     if(url==="/api/inventory/schema-version") return new Response(JSON.stringify({version:12}),{status:200,headers:{"content-type":"application/json"}});
     if(url==="/api/inventory/sites") return new Response(JSON.stringify({sites}),{status:200,headers:{"content-type":"application/json"}});
+    const accessMatch=url.match(/^\/api\/inventory\/access\?site=(fuxing|yongji)$/);
+    if(accessMatch) return new Response(JSON.stringify({
+      site:accessMatch[1],
+      actions:{ "inventory.view":{allowed:true,reason:"TEST_ALLOW",source:"fixture"} },
+      locations:{},
+      workAreas:{},
+    }),{status:200,headers:{"content-type":"application/json"}});
     const masterMatch=url.match(/^\/api\/master-data\/(fuxing|yongji)$/);
     if(masterMatch) return new Response(JSON.stringify(master(masterMatch[1])),{status:200,headers:{"content-type":"application/json"}});
     if(url==="/api/inventory/yongji"){
