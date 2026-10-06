@@ -2380,6 +2380,9 @@ window.addEventListener("shitu:inventory-sites-changed", () => {
   if (inventoryRouteNeedsLiveRender() || route() === "settings") renderWhenAuthorized();
 });
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
+  // Invalidate derived Inventory tasks for every route so a later navigation
+  // never reuses stale replenishment decisions. Rendering is isolated below.
+  taskDerivationCache.clear();
   const activeRoute=route();
   if (!inventoryRouteNeedsLiveRender(activeRoute)) {
     // Inventory realtime is independent from Workforce/Attendance/SOP forms.
@@ -2390,7 +2393,6 @@ window.addEventListener("shitu:inventory-cloud-updated", (event) => {
   if (activeRoute === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
   const site = activeInventorySite();
   if (event.detail?.site && event.detail.site !== site) return;
-  taskDerivationCache.clear();
   if (activeRoute === "inventory" && view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
   renderWhenAuthorized();
 });
