@@ -340,10 +340,10 @@ export function vpsShipInventory(body) {
   return vpsInventoryMutation("/api/inventory/ship", body);
 }
 
-export async function vpsSyncCatalog(item) {
+export async function vpsSyncCatalog(item, { applyStockFields = false } = {}) {
   const result = await apiRequest("/api/inventory/catalog/sync", {
     method: "POST",
-    body: { item },
+    body: { item, applyStockFields:Boolean(applyStockFields) },
   });
   invalidateVpsInventoryCache("");
   invalidateVpsReceiveDefaultsCache();
