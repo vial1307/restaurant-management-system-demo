@@ -1,10 +1,18 @@
-## ACTIVE — PR #213 high-fidelity Inventory/Super Admin visual parity, 2026-10-06
+## STABLE — PR #213 high-fidelity Inventory/Super Admin visual parity, 2026-10-06
 
-- `ACTIVE_PR: #213`.
-- Runtime scope: presentation CSS + static visual regression guards only.
-- Functional authority remains unchanged: PostgreSQL/VPS, existing Inventory renderer/transactions, and granular permission APIs.
-- Candidate branch: `style/visual-parity-inventory-superadmin-20261006`.
-- Await exact-head regression/full-device evidence before merge/deploy.
+- `ACTIVE_PR: none`.
+- Production release: `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f`; schema `032`.
+- Exact tested PR head: `525c2d42cb1d95917dc107d7b9b8b283bea73131`.
+- Exact-head PR gates PASS: Master Data/Admin #528, Super Admin Browser #455, Workforce Diagnostic #603, Deploy/full-device #1263.
+- Earlier candidate `e2261e648314b80da5879ced9741dd1baf6d858f` correctly failed Deploy #1260 because the final desktop product grid overrode the <=1100px tablet card grid and caused 308px horizontal overflow at 844x390; fixed before merge and guarded by regression.
+- Merged as `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f`.
+- Main Deploy #1264 PASS; backup `/opt/kitchen-os/backups/kitchen_os_20261006T133704Z.dump`.
+- Production health: app/database/edge healthy, release `e71376e`, schema `032`, `DATA_INTEGRITY_OK`, `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #574 PASS on attempt 2 after an attempt-1 transient SSH connection closure.
+- Workforce Staff #815 PASS, Attendance #789 PASS, Schedule Backfill #799 PASS, Schedule Parity #588 PASS on attempt 2 after a transient SSH setup closure.
+- Delivered change is visual-only: high-fidelity light Inventory + Super Admin typography, text hierarchy, cards, borders/shadows, emerald accent, spacing/radii and responsive detail/card surfaces.
+- PostgreSQL/VPS authority, quantities, minimums, transactions, API/RBAC, site-scope and renderer semantics are unchanged.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 # Kitchen OS Engineering Status
 

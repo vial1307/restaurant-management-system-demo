@@ -2299,3 +2299,16 @@ The separate read-cutover candidate:
 - Root cause: the final visual-parity desktop `grid-template-columns` declaration loaded after the pre-existing <=1100px card media rule and therefore overrode the tablet card grid.
 - Fix: restated the responsive product-row/card structure inside a final <=1100px media block and added a static regression guard for the tablet grid.
 - No data/API/schema/RBAC/transaction change.
+
+
+### PR #213 production closure
+
+- Final tested PR head: `525c2d42cb1d95917dc107d7b9b8b283bea73131`.
+- Exact-head gates: Master Data/Admin #528 PASS; Super Admin Browser #455 PASS; Workforce Diagnostic #603 PASS; Deploy/full-device #1263 PASS.
+- PR #213 merged as `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f`.
+- Main Deploy #1264 PASS with exact target verification, frontend release stamp `e71376e`, pre-deploy backup `/opt/kitchen-os/backups/kitchen_os_20261006T133704Z.dump`, API health PASS, schema `032`, `DATA_INTEGRITY_OK`, and Web/API/Super Admin edge healthy.
+- Production UI smoke: `PRODUCTION_UI_SMOKE_OK https://82.47.180.185.nip.io/#inventory`.
+- Inventory Site Production Audit #574 PASS on attempt 2; attempt 1 was a transient SSH connection closure, not an Inventory invariant failure.
+- Workforce Staff #815, Attendance #789, Schedule Backfill #799 PASS. Schedule Parity #588 PASS on attempt 2 after transient SSH setup failure.
+- `ACTIVE_PR: none`; production runtime authority remains release `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f` / schema `032`.
+- No JavaScript business logic, PostgreSQL schema/data, inventory quantity/minimum/transaction semantics, RBAC, or site-scope behavior changed.
