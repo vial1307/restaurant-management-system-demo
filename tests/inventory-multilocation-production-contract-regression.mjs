@@ -120,4 +120,9 @@ assert.match(maestroStyles,/--inv-surface:#ffffff/);
 assert.match(maestroStyles,/--inv-accent:#147a59/);
 assert.match(maestroStyles,/\.inventory-product-table\{[\s\S]*?background:#fff/);
 assert.match(maestroStyles,/\.inventory-detail-sheet\{[\s\S]*?background:#fff/);
+assert.match(
+  maestroStyles,
+  /Visual parity responsive correction[\s\S]*?@media\(max-width:1100px\)[\s\S]*?\.inventory-product-table \.inventory-product-row\{[\s\S]*?grid-template-columns:minmax\(0,1fr\) auto/,
+  "tablet card structure after visual parity must override the desktop product grid"
+);
 console.log("INVENTORY_MULTILOCATION_PRODUCTION_CONTRACT_OK");
