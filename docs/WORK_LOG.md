@@ -1,5 +1,16 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #212 Approved Super Admin + Inventory UI
+
+- Started from production baseline `2dd48d7` / schema `032` after PR #211 Deploy #1250 and Inventory Audit #560 passed.
+- Created fresh branch `style/super-admin-inventory-approved-ui-20261006` and PR #212.
+- Super Admin UI: restyled the existing PostgreSQL-backed Inventory permission editor into the approved account target / arbitrary multi-site scope / action-matrix hierarchy; selected-site states, risk/action rows, advanced overrides and sticky save controls remain bound to the current save model.
+- Inventory UI: added a final Maestro presentation layer for the existing product-centric multi-location renderer, including dark product rows/cards, Primary/Work/storage chips, state-specific Near/Low/Empty surfaces, capability-driven three-dot menu, and dark detail drawer.
+- Tablet <=1100px uses product cards instead of the legacy wide row grid; Mobile detail remains full-screen with safe-area handling.
+- No renderer rewrite, schema migration, stock mutation, API change, permission semantic change or business-data hard-code.
+- Added static regression locks for the approved Super Admin permission layout and Inventory multi-location presentation.
+- NEXT: run exact-head PR gates/full-device browser tests; merge only green exact head; deploy and run production Inventory audit.
+
 ## 2026-10-06 — PR #211 Inventory low-stock notification center
 
 - Started after Inventory phase 2 production closure on verified release `09fbda4` / schema `032`.
@@ -15,7 +26,8 @@
 - Added responsive Desktop/Mobile styling.
 - Extended Inventory production contract and browser regression to certify alert tabs/filters and mobile fit.
 - No schema/data mutation in PR #211; schema 032 already contains the required warning/minimum fields.
-- NEXT: exact-head CI and production certification; Procurement DB migration remains next after closure.
+- Closure: merged as `2dd48d7828ea542e976170103c1132aea1f73d55`; Deploy #1250 PASS; Inventory Site Production Audit #560 PASS.
+- Procurement DB migration remains deferred while the approved UI workstream is completed in PR #212.
 
 
 ## 2026-10-06 — Inventory phase 2 production closure: PR #207 + PR #208
