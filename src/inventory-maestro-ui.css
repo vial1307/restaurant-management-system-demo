@@ -3125,3 +3125,48 @@
     color:#58655f;
   }
 }
+
+
+/* Visual parity responsive correction — keep the approved tablet card structure
+ * after the final desktop visual overrides above. Presentation only.
+ */
+@media(max-width:1100px){
+  .inventory-product-table .inventory-product-head{display:none}
+  .inventory-product-table .inventory-product-row{
+    min-width:0;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto auto;
+    gap:9px 12px;
+    min-height:0;
+  }
+  .inventory-product-table .inventory-product-identity{
+    grid-column:1;
+    grid-row:1;
+  }
+  .inventory-product-table .inventory-product-status{
+    grid-column:2;
+    grid-row:1;
+    align-self:start;
+    justify-content:flex-end;
+  }
+  .inventory-product-table .inventory-product-unit{display:none}
+  .inventory-product-table .inventory-product-total{
+    grid-column:1;
+    grid-row:2;
+    padding-left:19px;
+  }
+  .inventory-product-table .inventory-location-chips{
+    grid-column:1 / -1;
+    grid-row:3;
+    overflow-x:auto;
+    overscroll-behavior-inline:contain;
+    padding-bottom:2px;
+    scrollbar-width:none;
+  }
+  .inventory-product-table .inventory-location-chips::-webkit-scrollbar{display:none}
+  .inventory-product-table .inventory-location-chip,
+  .inventory-product-table .inventory-location-more{
+    flex:0 0 126px;
+    min-height:64px;
+  }
+}
