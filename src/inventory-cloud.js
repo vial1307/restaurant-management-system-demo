@@ -1228,7 +1228,7 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
   try {
-    await vpsSyncCatalog(item);
+    await vpsSyncCatalog(item,{applyStockFields:Boolean(draft)});
     if (sync) await syncInventoryNow(site, { reloadBranch: false });
     return { ok: true };
   } catch (error) {
