@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #212 production closure
+
+- Exact tested PR head: `d382084046b9451b31bef3b931e01d98d3e5727a`.
+- PR gates PASS: Master Data/Admin #520, Super Admin Browser #448, Workforce Diagnostic #596, Deploy/full-device #1255.
+- Merged as `b3a56ee83a0d5f00a9543f668cd95789eaa65ded`.
+- Main Deploy Kitchen OS #1256 PASS.
+- Backup: `/opt/kitchen-os/backups/kitchen_os_20261006T123406Z.dump`.
+- Production: app/database/edge healthy, release `b3a56ee`, schema `032`, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #566 PASS.
+- Workforce Staff #807, Attendance #781, Schedule Backfill #791 and Schedule Parity #580 PASS.
+- Approved Super Admin permission UI and Inventory multi-location UI are now production-verified.
+- No Inventory quantity/schema/API/permission-semantic mutation was introduced.
+- Closure sets `ACTIVE_PR: none`.
+
 ## 2026-10-06 — PR #212 Approved Super Admin + Inventory UI
 
 - Started from production baseline `2dd48d7` / schema `032` after PR #211 Deploy #1250 and Inventory Audit #560 passed.

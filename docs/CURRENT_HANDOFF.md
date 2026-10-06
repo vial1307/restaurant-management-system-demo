@@ -1,30 +1,40 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #212
+ACTIVE_PR: none
 
-## ACTIVE — PR #212 Approved Super Admin + Inventory UI implementation, 2026-10-06
+## DONE — PR #212 Approved Super Admin + Inventory UI, 2026-10-06
 
-Production baseline:
-- verified release `2dd48d7828ea542e976170103c1132aea1f73d55`;
+Verified production:
+- release `b3a56ee83a0d5f00a9543f668cd95789eaa65ded`;
 - schema `032`;
-- Deploy Kitchen OS #1250 PASS;
-- Inventory Site Production Audit #560 PASS.
+- PR tested head `d382084046b9451b31bef3b931e01d98d3e5727a`;
+- PR gates: Master Data/Admin #520 PASS, Super Admin Browser #448 PASS, Workforce Diagnostic #596 PASS, Deploy/full-device #1255 PASS;
+- merged as `b3a56ee83a0d5f00a9543f668cd95789eaa65ded`;
+- main Deploy Kitchen OS #1256 PASS;
+- pre-deploy backup: `/opt/kitchen-os/backups/kitchen_os_20261006T123406Z.dump`;
+- production health: app/database/edge healthy, release `b3a56ee`, schema `032`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke PASS;
+- Inventory Site Production Audit #566 PASS;
+- Workforce Staff #807, Attendance #781, Schedule Backfill #791 and Schedule Parity #580 PASS.
 
-PR #212 scope:
-- apply the approved Super Admin Inventory permission visual system to the real `.admindev.html` control plane;
-- arrange the existing DB-backed permission editor as account target -> site scope -> action matrix, with clear selected-site states and responsive save controls;
-- apply the approved dark product-centric multi-location visual system to the real Inventory/Warehouse route;
-- preserve the existing production semantics: one product row/card, Primary -> Work -> Other, 3+ locations => first 2 chips + `Xem thêm / 查看更多`, permission-driven quick edit/actions, mobile full-screen detail;
-- no schema migration, inventory quantity rewrite, API mutation, role/permission semantic change or business-data hard-code;
-- runtime visual changes are limited to existing authority stylesheets plus regression-contract updates.
+Delivered:
+- real Super Admin Inventory permission editor now follows the approved account -> site scope -> action matrix hierarchy;
+- arbitrary multi-site selection remains PostgreSQL-backed; no AB/AC/BC combinations are hard-coded;
+- real Inventory/Warehouse route now follows the approved dark product-centric multi-location visual system;
+- existing runtime semantics remain unchanged: one product row/card, Primary -> Work -> Other, 3+ locations => first 2 chips + `Xem thêm / 查看更多`, capability-driven quick edit/actions, mobile full-screen detail;
+- no schema migration, stock rewrite, API mutation or permission semantic change was introduced by PR #212.
 
-Required before merge:
-1. exact-head PR #212 required checks green;
-2. full-device browser coverage for Super Admin + Inventory;
-3. merge only the tested exact head;
-4. deploy exact merge SHA;
-5. verify release/schema 032 + `DATA_INTEGRITY_OK` + production UI smoke;
-6. Inventory Site Production Audit after deploy.
+Current authority:
+- `ACTIVE_PR: none`;
+- production release is `b3a56ee83a0d5f00a9543f668cd95789eaa65ded`;
+- schema remains `032`;
+- VPS API + PostgreSQL remain authoritative.
+
+Next independent workstreams:
+- migrate remaining mutable Procurement master/scheduling data out of source code into PostgreSQL;
+- Handoff polling/force-refresh;
+- VPS disk cleanup.
 
 ## DONE — PR #211 Inventory low-stock notification center, 2026-10-06
 

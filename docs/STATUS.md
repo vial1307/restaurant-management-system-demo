@@ -1,15 +1,18 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #212 Approved Super Admin + Inventory UI, 2026-10-06
+## STABLE — PR #212 production-verified, 2026-10-06
 
-- `ACTIVE_PR: #212`.
-- Verified production baseline: `2dd48d7828ea542e976170103c1132aea1f73d55` / schema `032`; Deploy #1250 and Inventory Audit #560 PASS.
-- Super Admin: apply the approved Inventory permission control-plane styling to the real PostgreSQL-backed account/site/action/location editor.
-- Inventory: apply the approved dark product-centric multi-location styling to the real Warehouse route and detail sheet.
-- No schema, stock quantity, API, transaction or permission-semantics changes.
-- Existing contract remains: Primary -> Work -> Other; 3+ locations => first 2 chips + `Xem thêm`; mobile detail full-screen; quick edits/actions remain capability-driven.
-- Regression guards added for both approved visual layers.
-- NEXT: exact-head PR gates -> merge tested head -> production deploy/smoke -> Inventory Audit.
+- `ACTIVE_PR: none`.
+- Production release: `b3a56ee83a0d5f00a9543f668cd95789eaa65ded`; schema `032`.
+- PR #212 tested head `d382084046b9451b31bef3b931e01d98d3e5727a`: Master/Admin #520, Super Admin Browser #448, Workforce Diagnostic #596 and full-device Deploy #1255 PASS.
+- Merged as `b3a56ee83a0d5f00a9543f668cd95789eaa65ded`.
+- Main Deploy #1256 PASS; backup `/opt/kitchen-os/backups/kitchen_os_20261006T123406Z.dump`.
+- Production health/release check PASS, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #566 PASS.
+- Workforce Staff #807, Attendance #781, Schedule Backfill #791 and Schedule Parity #580 PASS.
+- Super Admin permission UI and Inventory multi-location UI now match the approved design while retaining PostgreSQL/VPS authority and existing business semantics.
+- No schema, quantity, transaction, API or permission-semantics change in PR #212.
+- NEXT: Procurement mutable-master-data DB migration remains the next runtime technical-debt workstream; Handoff polling/force-refresh and VPS disk cleanup remain separate.
 
 ## DONE — PR #211 Inventory low-stock notification center, 2026-10-06
 
