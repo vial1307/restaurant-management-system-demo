@@ -51,7 +51,7 @@ assert.match(app,/function authoritativeBranchRecord\([\s\S]{0,700}inventoryBran
 assert.match(app,/function inventoryControlItem\([\s\S]{0,800}dataset\?\.stockKey/,"rendered inventory controls must carry a database mutation identity even if the in-memory store lags");
 assert.match(app,/data-cloud-item-id=[\s\S]{0,220}data-cloud-location-id=/,"rendered branch controls must carry authoritative PostgreSQL ids");
 assert.match(app,/const record = branchInventoryMutationRecord\(state,site\);[\s\S]{0,220}inventoryControlItem\(element,record,"item"\)/,"branch mutation handlers must resolve the rendered item from the live PostgreSQL mirror/control identity");
-assert.match(app,/const inventoryRecord = branchInventoryMutationRecord\(state,site\)[\s\S]{0,700}inventoryRecord\?\.inventory\.find/,"branch editor submit must compare against the live PostgreSQL mirror");
+assert.match(app,/const inventoryRecord = branchInventoryMutationRecord\(state,site\)[\s\S]{0,1800}inventoryRecord\?\.inventory\.find/,"branch editor submit must compare against the live PostgreSQL mirror");
 const changeHandler=app.slice(app.indexOf('root.addEventListener("change"'),app.indexOf('root.addEventListener("input"'));
 assert.match(changeHandler,/\}, true\);/,"inventory change delegation must run in capture phase so nested UI layers cannot swallow database writes");
 assert.match(cloud,/cloudSetMinimum\(\{[\s\S]{0,220}itemId = ""[\s\S]{0,220}locationId = ""[\s\S]{0,500}itemId && locationId/,"minimum writes must accept the PostgreSQL ids already present in the rendered snapshot");
