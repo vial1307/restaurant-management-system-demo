@@ -1220,7 +1220,10 @@ export async function cloudSyncBranchCatalogItem(stockKey, site = currentSite(),
       code:branchLocationCode(site,location.zone),
       is_primary:location.zone === draft.primaryZone,
       display_order:Number(location.displayOrder ?? index),
+      ...(location.quantityEditable === true ? { quantity:Number(location.quantity || 0) } : {}),
+      ...(location.minimumEditable === true ? { minimum:Number(location.minimum || 0) } : {}),
     })),
+    ...(draft.workMinimumEditable === true ? { work_minimum:Number(draft.workMinimum || 0) } : {}),
   } : buildBranchCatalog(site).find((entry) => entry.key === branchItemKey(site,stockKey));
   if (!item) return { ok: false, fallback: false, error: new Error("CATALOG_ITEM_NOT_FOUND") };
 
