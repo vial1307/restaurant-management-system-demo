@@ -1,6 +1,6 @@
 ## ACTIVE — Inventory search repair + UX polish, 2026-10-07
 
-- `ACTIVE_PR: pending` on `fix/inventory-search-ux-20261007`.
+- `ACTIVE_PR: #214` on `fix/inventory-search-ux-20261007`.
 - Scope: Inventory search behavior + presentation + regression only.
 - Root cause identified: display rules could visually override rows marked with the HTML `hidden` state.
 - Candidate adds an explicit search-hidden presentation contract, result count, clear control and stronger browser regression.
