@@ -836,7 +836,7 @@ export async function registerInventoryExtraRoutes(app) {
             throw Object.assign(new Error("WORK_LOCATION_NOT_FOUND"), { statusCode:409 });
           }
           await attachLocation(workLocation.rows[0].id,{kind:"work"});
-          if (Object.prototype.hasOwnProperty.call(item,"work_minimum")) {
+          if (request.body?.applyStockFields === true && Object.prototype.hasOwnProperty.call(item,"work_minimum")) {
             await applyCatalogStockFields(
               workLocation.rows[0].id,
               { minimum:item.work_minimum },
@@ -902,7 +902,9 @@ export async function registerInventoryExtraRoutes(app) {
             isPrimary:row.code===primaryCode,
             displayOrder:Number(locationDraft.display_order ?? row.index),
           });
-          await applyCatalogStockFields(row.id,locationDraft);
+          if (request.body?.applyStockFields === true) {
+            await applyCatalogStockFields(row.id,locationDraft);
+          }
         }
 
         if (explicitLocations.length && !request.body?.appendLocations) {
