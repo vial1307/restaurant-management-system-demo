@@ -1,5 +1,25 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #207 Inventory multi-location UI phase 2
+
+- Continued from the approved Inventory mockup/spec after PR #205 production closure.
+- Existing branch `feat/inventory-multilocation-ui-20261006` was audited before opening PR #207; it was already ahead of main with the phase-2 implementation, so work continued from that branch rather than recreating or overwriting it.
+- One product now renders as one row/card.
+- Location priority is Primary -> Work -> Other.
+- Latest user-approved display rule is **3+ configured locations => first 2 chips + Xem thêm / 查看更多**.
+- Mobile location/product detail is a full-screen sheet.
+- Mobile quick editing supports minus / direct number / plus only when the effective per-location permission allows it.
+- Three-dot advanced actions are capability-driven.
+- Frontend now caches the backend Inventory access snapshot per site, including per-location and per-Work-Area effective decisions.
+- Site registry is permission-filtered from PostgreSQL; frontend no longer requires role/location assumptions to decide visible Inventory sites.
+- Add/Edit Product integrates Category, Unit, Primary Location and Receive Default.
+- Unit editors may type a new unit; catalog sync persists it in PostgreSQL.
+- Read model now carries `unit_code`, `category_code`, minimum/warning metadata and item-location primary/display metadata.
+- Receive Default remains separate from Primary and Work Location.
+- PR #207 opened for exact-head regression certification.
+- VPS disk optimization and Handoff polling remain deferred.
+
+
 ## 2026-10-06 — PR #205 production closure
 
 - Exact tested head `df2abcab9680170a46622d44ff68e654f96d5619` passed Deploy #1191, DB Schema #333, Master/Admin #467, Super Admin Browser #389, API Load #680, Workforce Schedule Relational #318, Workforce Relational #306 and Workforce Diagnostic #544.
