@@ -15,13 +15,13 @@ const spec=source("docs/SYSTEM_SPECIFICATION.md");
 
 assert.match(
   cloud,
-  /export function canDirectInventoryAdjust\(\) \{[\s\S]{0,260}return canInventoryEdit\(\);/,
-  "direct quantity/minimum authority must follow explicit inventory edit permission"
+  /export function canDirectInventoryAdjust\(\) \{[\s\S]{0,420}inventory\.quantity\.adjust_quick[\s\S]{0,220}inventory\.quantity\.set_absolute[\s\S]{0,220}inventory\.minimum\.edit/,
+  "direct quantity/minimum authority must follow granular Inventory database actions"
 );
 assert.doesNotMatch(
   cloud,
-  /canDirectInventoryAdjust[\s\S]{0,350}\["manager","supervisor"\]/,
-  "legacy role-name stocktake gate must not override inventory.edit"
+  /canDirectInventoryAdjust[\s\S]{0,500}\["manager","supervisor"\]|hasInventoryPermission\(["']edit["']\)/,
+  "legacy role/module edit gates must not override granular Inventory actions"
 );
 
 for(const [route,actionKey] of [
