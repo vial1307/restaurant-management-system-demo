@@ -778,7 +778,9 @@ async function responsiveAdmin(browser, viewport) {
     }
 
     await setSite(page,"central");
-    for(const mode of ["overview","alerts","in","pick","transfer","ship","manage","history"]){
+    // Central Kitchen keeps its existing dedicated operation navigation in this
+    // branch; PR #211 adds the low-stock center to branch Inventory only.
+    for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
       const tab=page.locator(`[data-central-mode="${mode}"]`);
       await tab.waitFor({state:"visible"});
     }
