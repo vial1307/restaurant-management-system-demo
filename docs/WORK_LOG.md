@@ -2279,3 +2279,14 @@ The separate read-cutover candidate:
 - Added a browser assertion for Desktop widths >900px.
 - In branch inventory, a pick card with `.pick-followup` and a transfer card with `.op-transfer-balance` must span the full `.inventory-ops-list` width and must not horizontally overflow.
 - This test is non-runtime and prevents future responsive CSS regressions in these two operation modes.
+
+## 2026-10-06 — High-fidelity Inventory + Super Admin visual parity
+
+- User reported the approved SVG lock files looked materially different from the richer visual mockups previously shown: typography, text hierarchy, color, spacing and overall dashboard finish.
+- Started PR #213 from current main `399ac5e1aef19f5d27979b97b264ede0b4863052`.
+- Added final CSS-only visual layers to `src/admin-panel.css` and `src/inventory-maestro-ui.css`.
+- Super Admin: Inter/Noto Sans TC, neutral/slate text hierarchy, refined sidebar/topbar/cards, emerald controls and a higher-fidelity permission console.
+- Inventory: replaced the dark spec-like presentation with the approved light dashboard language for page shell, operation cards, product rows/location chips and detail drawer.
+- Added static guards to ensure the visual-parity layer remains present while existing runtime contracts remain untouched.
+- No JS/API/schema/quantity/minimum/transaction/RBAC/site-scope mutation.
+- Next: exact-head PR CI/full-device browser validation, then merge/deploy/audit only if green.
