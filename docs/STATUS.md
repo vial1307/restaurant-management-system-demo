@@ -1,3 +1,11 @@
+## ACTIVE — PR #213 high-fidelity Inventory/Super Admin visual parity, 2026-10-06
+
+- `ACTIVE_PR: #213`.
+- Runtime scope: presentation CSS + static visual regression guards only.
+- Functional authority remains unchanged: PostgreSQL/VPS, existing Inventory renderer/transactions, and granular permission APIs.
+- Candidate branch: `style/visual-parity-inventory-superadmin-20261006`.
+- Await exact-head regression/full-device evidence before merge/deploy.
+
 # Kitchen OS Engineering Status
 
 ## STABLE — PR #212 production-verified, 2026-10-06

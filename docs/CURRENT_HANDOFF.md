@@ -1,3 +1,12 @@
+## ACTIVE — PR #213 visual parity polish, 2026-10-06
+
+- `ACTIVE_PR: #213` — `style/visual-parity-inventory-superadmin-20261006`.
+- Goal: restore the high-fidelity visual language previously approved for Inventory and Super Admin; the earlier SVG lock files remain structural/behavioral references, not pixel-perfect visual authority.
+- Inventory + Super Admin are CSS-only in this PR: Inter/Noto Sans TC typography, neutral ink/slate hierarchy, white surfaces, softer borders/shadows, emerald accent, refined spacing/radii.
+- Do NOT rewrite renderer/API/PostgreSQL/RBAC/site-scope/transaction logic for this workstream.
+- Regression guards were extended to require the new visual-parity layers while preserving the existing multi-location and granular-permission contracts.
+- Merge only after exact-head CI/browser/full-device gates pass; then verify exact merge SHA in production and run Inventory Site Production Audit.
+
 # Kitchen OS — Current Development Handoff
 
 ACTIVE_PR: none

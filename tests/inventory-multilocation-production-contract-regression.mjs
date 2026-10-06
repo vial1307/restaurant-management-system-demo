@@ -115,4 +115,14 @@ assert.match(maestroStyles,/@media\(max-width:1100px\)[\s\S]*?\.inventory-produc
 assert.match(maestroStyles,/@media\(max-width:680px\)[\s\S]*?\.inventory-detail-sheet\{[\s\S]*?height:100dvh/);
 assert.doesNotMatch(maestroStyles,/\.inventory-location-chip(?:\.|,|\{)[^\{]*\{[^}]*display\s*:\s*none/,"approved location chips must remain visible");
 
+assert.match(maestroStyles,/High-fidelity light Inventory presentation/);
+assert.match(maestroStyles,/--inv-surface:#ffffff/);
+assert.match(maestroStyles,/--inv-accent:#147a59/);
+assert.match(maestroStyles,/\.inventory-product-table\{[\s\S]*?background:#fff/);
+assert.match(maestroStyles,/\.inventory-detail-sheet\{[\s\S]*?background:#fff/);
+assert.match(
+  maestroStyles,
+  /Visual parity responsive correction[\s\S]*?@media\(max-width:1100px\)[\s\S]*?\.inventory-product-table \.inventory-product-row\{[\s\S]*?grid-template-columns:minmax\(0,1fr\) auto/,
+  "tablet card structure after visual parity must override the desktop product grid"
+);
 console.log("INVENTORY_MULTILOCATION_PRODUCTION_CONTRACT_OK");
