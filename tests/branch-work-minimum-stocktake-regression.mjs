@@ -7,18 +7,18 @@ const source = fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8");
 
 assert.match(
   source,
-  /const stocktakeEditable = canDirectInventoryAdjust\(\);/,
-  "Branch product editor must derive stocktake authority from canDirectInventoryAdjust()"
+  /name="workMinimum"[\s\S]{0,260}working\?\.cloudLocationId && canInventoryAction\("inventory\.minimum\.edit",\{site,locationId:working\.cloudLocationId,workArea:selectedWorkArea\}\)/,
+  "Branch work minimum must derive authority from the concrete Work Location database action"
 );
 assert.match(
   source,
-  /name="workMinimum" value="\$\{working\?\.minimum \?\? \(stocktakeEditable \? 1 : 0\)\}" \$\{stocktakeEditable \? "" : 'readonly aria-readonly="true"'\}/,
-  "Branch work minimum must be read-only without stocktake authority"
+  /name="workMinimum" value="\$\{working\?\.minimum \?\? 0\}"[\s\S]{0,220}readonly aria-readonly="true"/,
+  "Branch work minimum must remain read-only when the granular minimum action is denied"
 );
 assert.doesNotMatch(
   source,
-  /name="workMinimum" value="\$\{working\?\.minimum \?\? 1\}" \/>/,
-  "Legacy always-editable work minimum field must not return"
+  /const stocktakeEditable = canDirectInventoryAdjust\(\)/,
+  "Branch product editor must not fall back to the legacy site-wide stocktake guard"
 );
 
-console.log("branch work minimum stocktake boundary regression passed");
+console.log("branch work minimum granular permission boundary regression passed");
