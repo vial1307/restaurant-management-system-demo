@@ -1,6 +1,6 @@
 ## ACTIVE — Inventory search repair + UX polish, 2026-10-07
 
-- `ACTIVE_PR: pending` — branch `fix/inventory-search-ux-20261007`.
+- `ACTIVE_PR: #214` — branch `fix/inventory-search-ux-20261007`.
 - User-reported defect: Inventory search input accepts text but rows may remain visible.
 - Root cause: search logic sets `hidden`, while Inventory row presentation explicitly sets `display:grid`; the visual display rule can override the HTML hidden state. The previous browser assertion also allowed `filtered === before`, so a no-op search could pass CI.
 - Fix: filtered rows/groups now carry `data-search-hidden` and CSS enforces `display:none!important`; search remains local over the currently rendered PostgreSQL-backed inventory view and does not mutate data.
