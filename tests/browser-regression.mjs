@@ -297,10 +297,15 @@ async function adminDesktop(browser) {
   await inventorySearchRoundTrip(page);
   await assertInventorySurfaceFits(page,"fuxing desktop overview");
 
-  for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
-    const button=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
+  for(const mode of ["overview","alerts","in","pick","transfer","ship","manage","history"]){
+    const button=page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first();
     await button.waitFor({state:"visible"});
     await button.click();
+    if(mode==="alerts"){
+      await page.locator(".inventory-alert-center").waitFor({state:"visible"});
+      assert.equal(await page.locator('[data-action="select-inventory-alert-filter"]').count(),4,"Inventory alert severity filters missing");
+      await assertInventorySurfaceFits(page,"fuxing desktop alerts");
+    }
     if(["in","pick","transfer","ship"].includes(mode)){
       await page.locator("[data-op-search]").waitFor({state:"visible"});
       await page.locator("[data-op-search]").fill("niu rou");
@@ -748,10 +753,16 @@ async function responsiveAdmin(browser, viewport) {
       await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
       await page.locator('[data-action="shift-date"][data-offset="-1"]').first().click();
       await page.locator(".inventory-history-notice").waitFor({state:"visible"});
-      for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
+      for(const mode of ["overview","alerts","in","pick","transfer","ship","manage","history"]){
         const tab=page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first();
         await tab.waitFor({state:"visible"});
       }
+      await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="alerts"]').first().click();
+      await page.locator(".inventory-alert-center").waitFor({state:"visible"});
+      assert.equal(await page.locator('[data-action="select-inventory-alert-filter"]').count(),4,`${site} mobile Inventory alert filters missing`);
+      await assertInventorySurfaceFits(page,`${site} mobile alerts ${viewport.width}x${viewport.height}`);
+      await page.locator('.inventory-alert-heading [data-action="select-inventory-ops"][data-mode="overview"]').click();
+      await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
       await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="in"]').first().click();
       await page.locator('[data-branch-inventory-operations][data-mode="in"]').waitFor({state:"visible"});
       assert.equal(await page.locator(".inventory-history-notice").count(),0,`${site} mobile operation did not switch back to today`);
@@ -767,6 +778,8 @@ async function responsiveAdmin(browser, viewport) {
     }
 
     await setSite(page,"central");
+    // Central Kitchen keeps its existing dedicated operation navigation in this
+    // branch; PR #211 adds the low-stock center to branch Inventory only.
     for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
       const tab=page.locator(`[data-central-mode="${mode}"]`);
       await tab.waitFor({state:"visible"});

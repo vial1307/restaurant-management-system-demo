@@ -1,5 +1,17 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #211 Inventory low-stock notification center, 2026-10-06
+
+- `ACTIVE_PR: #211`.
+- Baseline production remains `09fbda4291f3f02d895ae84f2779df77bcaccf76` / schema `032`.
+- Adds a dedicated notification center for Out-of-stock / Low / Near-low inventory states.
+- Alert severity is calculated from the same database-backed per-location minimum/warning metadata already used by Inventory rows.
+- Desktop/Mobile alert filters and responsive cards are implemented.
+- Clicking an alert opens the existing product detail surface; quick quantity editing remains permission-controlled.
+- No new schema is required.
+- Procurement source-coded product/supplier schedule data is confirmed as remaining technical debt and is intentionally moved to the next independent runtime PR.
+- NEXT: exact-head gates -> merge tested head -> production deploy/smoke/audit -> close #211 -> start Procurement DB migration.
+
 ## STABLE — Inventory phase 2 production-verified, 2026-10-06
 
 - `ACTIVE_PR: none`.

@@ -73,6 +73,7 @@ const root = document.querySelector("#app");
 const view = {
   inventoryView: "storage",
   inventoryOpsMode: "overview",
+  inventoryAlertFilter: "all",
   workArea: "all",
   zone: "all",
   search: "",
@@ -1045,6 +1046,101 @@ function inventoryProductRow(product, context) {
   </article>`;
 }
 
+function inventoryAlertRows(products) {
+  const rows=[];
+  for(const product of products || []){
+    for(const location of product.locations || []){
+      const state=inventoryLocationState(location);
+      if(state==="ok") continue;
+      const threshold=state==="near"
+        ? (location.warningQuantity == null ? 0 : Number(location.warningQuantity))
+        : Number(location.minimum || 0);
+      rows.push({
+        product,
+        location,
+        state,
+        threshold:Math.max(0,Number(threshold)||0),
+      });
+    }
+  }
+  const priority={empty:0,low:1,near:2};
+  return rows.sort((a,b)=>
+    (priority[a.state]??9)-(priority[b.state]??9)
+    || Number(a.location.quantity||0)-Number(b.location.quantity||0)
+    || String(a.product.label||"").localeCompare(String(b.product.label||""),"zh-Hant")
+  );
+}
+
+function inventoryLowStockAlertCenter(products, context) {
+  const { language }=context;
+  const all=inventoryAlertRows(products);
+  const filter=["all","empty","low","near"].includes(view.inventoryAlertFilter)
+    ? view.inventoryAlertFilter
+    : "all";
+  const shown=filter==="all" ? all : all.filter((row)=>row.state===filter);
+  const counts={
+    empty:all.filter((row)=>row.state==="empty").length,
+    low:all.filter((row)=>row.state==="low").length,
+    near:all.filter((row)=>row.state==="near").length,
+  };
+  const statusLabel=(state)=>state==="empty"
+    ? (language==="zh"?"缺貨":"Hết hàng")
+    : state==="low"
+      ? (language==="zh"?"低庫存":"Sắp hết")
+      : (language==="zh"?"接近不足":"Gần hết");
+  const thresholdLabel=(row)=>{
+    if(row.state==="empty") return language==="zh"?"目前數量為 0":"Số lượng hiện tại bằng 0";
+    if(row.state==="low") return `${language==="zh"?"安全量":"Minimum"}: ${row.threshold} ${row.product.unit}`;
+    return `${language==="zh"?"提醒量":"Mức cảnh báo"}: ${row.threshold} ${row.product.unit}`;
+  };
+  const filterButton=(key,label,count)=>`<button type="button" class="${filter===key?"active":""}" data-action="select-inventory-alert-filter" data-filter="${key}"><span>${escapeHtml(label)}</span><strong>${count}</strong></button>`;
+  return `<section class="inventory-alert-center">
+    <div class="inventory-alert-heading">
+      <div>
+        <small>${language==="zh"?"庫存提醒":"Thông báo tồn kho"}</small>
+        <h2>${language==="zh"?"接近不足 / 低庫存":"Gần hết / Sắp hết"}</h2>
+        <p>${language==="zh"
+          ?"提醒資料直接依 PostgreSQL 的安全量與提醒量計算；點選品項可開啟各儲位詳細。"
+          :"Cảnh báo được tính trực tiếp từ minimum/mức cảnh báo trong PostgreSQL; mở chi tiết để xử lý từng vị trí."}</p>
+      </div>
+      <button class="secondary-button" type="button" data-action="select-inventory-ops" data-mode="overview">${icon("close")}${language==="zh"?"返回庫存":"Về kho"}</button>
+    </div>
+    <div class="inventory-alert-stats">
+      <article class="critical"><small>${language==="zh"?"缺貨":"Hết hàng"}</small><strong>${counts.empty}</strong></article>
+      <article class="low"><small>${language==="zh"?"低庫存":"Sắp hết"}</small><strong>${counts.low}</strong></article>
+      <article class="near"><small>${language==="zh"?"接近不足":"Gần hết"}</small><strong>${counts.near}</strong></article>
+    </div>
+    <div class="inventory-alert-filters">
+      ${filterButton("all",language==="zh"?"全部":"Tất cả",all.length)}
+      ${filterButton("empty",language==="zh"?"缺貨":"Hết hàng",counts.empty)}
+      ${filterButton("low",language==="zh"?"低庫存":"Sắp hết",counts.low)}
+      ${filterButton("near",language==="zh"?"接近不足":"Gần hết",counts.near)}
+    </div>
+    <div class="inventory-alert-list">
+      ${shown.length ? shown.map((row)=>{
+        const product=row.product;
+        const location=row.location;
+        const locationLabel=language==="zh" ? location.labelZh : location.labelVi;
+        const locationKind=location.isPrimary
+          ? (language==="zh"?"主要儲位":"Vị trí chính")
+          : location.kind==="work"
+            ? "Work"
+            : (language==="zh"?"儲位":"Vị trí");
+        return `<article class="inventory-alert-row state-${row.state}">
+          <div class="inventory-alert-product">
+            <span class="inventory-status-dot ${row.state==="near"?"low":row.state}"></span>
+            <div><strong>${escapeHtml(language==="zh"?product.label:product.labelVi)}</strong><small>${escapeHtml(language==="zh"?product.labelVi:product.label)}</small></div>
+          </div>
+          <div class="inventory-alert-location"><span>${escapeHtml(locationKind)}</span><strong>${escapeHtml(locationLabel)}</strong></div>
+          <div class="inventory-alert-quantity"><span>${language==="zh"?"目前":"Hiện có"}</span><strong>${escapeHtml(location.quantity)} <small>${escapeHtml(product.unit)}</small></strong></div>
+          <div class="inventory-alert-threshold"><span class="tag tag-${row.state==="near"?"low":row.state}">${escapeHtml(statusLabel(row.state))}</span><small>${escapeHtml(thresholdLabel(row))}</small></div>
+          <button class="secondary-button" type="button" data-action="open-inventory-detail" data-stock-key="${escapeHtml(product.stockKey)}" data-location-id="${escapeHtml(location.cloudLocationId)}">${language==="zh"?"查看 / 處理":"Xem / xử lý"}</button>
+        </article>`;
+      }).join("") : `<div class="inventory-alert-empty">${icon("check")}<strong>${language==="zh"?"目前沒有此類庫存提醒":"Hiện không có cảnh báo loại này"}</strong><small>${language==="zh"?"安全量與提醒量皆由資料庫設定。":"Minimum và mức cảnh báo đều lấy từ Database."}</small></div>`}
+    </div>
+  </section>`;
+}
+
 function inventoryDetailQuantityControl(location, product) {
   const site=activeInventorySite();
   const workArea=location.kind==="work" ? location.workArea : "";
@@ -1148,13 +1244,16 @@ function inventory(context) {
   if (view.inventoryOpsMode === "out") view.inventoryOpsMode = "pick";
   if (view.inventoryOpsMode === "history" && !canViewHistory) view.inventoryOpsMode = "overview";
   if (view.inventoryOpsMode === "manage" && !catalogManageVisible) view.inventoryOpsMode = "overview";
-  const opsMode = view.inventoryOpsMode === "history" && canViewHistory
-    ? "history"
-    : view.inventoryOpsMode === "manage" && catalogManageVisible
-      ? "manage"
-      : opsEnabled ? view.inventoryOpsMode : "overview";
+  const opsMode = view.inventoryOpsMode === "alerts"
+    ? "alerts"
+    : view.inventoryOpsMode === "history" && canViewHistory
+      ? "history"
+      : view.inventoryOpsMode === "manage" && catalogManageVisible
+        ? "manage"
+        : opsEnabled ? view.inventoryOpsMode : "overview";
   const opLabel = {
     overview: language === "zh" ? "庫存總覽" : "Tổng quan · 庫存總覽",
+    alerts: language === "zh" ? "庫存提醒" : "Cảnh báo · 庫存提醒",
     in: language === "zh" ? "進貨入庫" : "Nhập kho · 進貨入庫",
     pick: language === "zh" ? "領貨" : "Lấy hàng · 領貨",
     transfer: language === "zh" ? "庫存轉撥" : "Điều chuyển · 庫存轉撥",
@@ -1166,6 +1265,9 @@ function inventory(context) {
     overview: language === "zh"
       ? "查看各儲位的實際庫存、標準量與工作區數量；此頁主要用於確認庫存狀態。"
       : "Xem tồn thực tế theo từng vị trí, định mức và số lượng ở khu sử dụng; mục này chủ yếu để kiểm tra tình trạng kho.",
+    alerts: language === "zh"
+      ? "依各儲位在 Database 設定的安全量與提醒量顯示缺貨、低庫存及接近不足。"
+      : "Hiển thị Hết hàng, Sắp hết và Gần hết theo minimum/mức cảnh báo được cấu hình trong Database cho từng vị trí.",
     in: language === "zh"
       ? "新到貨時使用：選擇要入庫的儲位、輸入數量後按「進貨入庫」，數量只會增加到所選儲位。"
       : "Dùng khi có hàng mới: chọn đúng vị trí nhập, nhập số lượng rồi bấm 進貨入庫; hàng chỉ được cộng vào vị trí đã chọn.",
@@ -1185,7 +1287,7 @@ function inventory(context) {
       ? "查看此據點的庫存操作人員、時間、數量與前後變化；資料與雲端庫存紀錄連動。"
       : "Xem người thao tác, thời gian, số lượng và thay đổi tồn tại cơ sở này; dữ liệu liên kết trực tiếp với lịch sử trên database.",
   };
-  const opsTabs = tabsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button>${opsAvailable ? `<button data-action="select-inventory-ops" data-mode="in" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>` : ""}${catalogManageVisible ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}${canViewHistory ? `<button data-action="select-inventory-ops" data-mode="history" class="${opsMode==="history"?"active":""}">${escapeHtml(opLabel.history)}</button>` : ""}</div>` : "";
+  const opsTabs = tabsEnabled ? `<div class="central-tabs branch-ops-tabs"><button data-action="select-inventory-ops" data-mode="overview" class="${opsMode==="overview"?"active":""}">${escapeHtml(opLabel.overview)}</button><button data-action="select-inventory-ops" data-mode="alerts" class="${opsMode==="alerts"?"active":""}">${escapeHtml(opLabel.alerts)}</button>${opsAvailable ? `<button data-action="select-inventory-ops" data-mode="in" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="in"?"active":""}">${escapeHtml(opLabel.in)}</button><button data-action="select-inventory-ops" data-mode="pick" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="pick"?"active":""}">${escapeHtml(opLabel.pick)}</button><button data-action="select-inventory-ops" data-mode="transfer" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="transfer"?"active":""}">${escapeHtml(opLabel.transfer)}</button><button data-action="select-inventory-ops" data-mode="ship" ${historical ? 'data-switch-to-today="true"' : ""} class="${opsMode==="ship"?"active":""}">${escapeHtml(opLabel.ship)}</button>` : ""}${catalogManageVisible ? `<button data-action="select-inventory-ops" data-mode="manage" class="${opsMode==="manage"?"active":""}">${escapeHtml(opLabel.manage)}</button>` : ""}${canViewHistory ? `<button data-action="select-inventory-ops" data-mode="history" class="${opsMode==="history"?"active":""}">${escapeHtml(opLabel.history)}</button>` : ""}</div>` : "";
   const opsGuide = tabsEnabled ? `<div class="inventory-op-guide"><strong>${language === "zh" ? "使用說明" : "Hướng dẫn · 使用說明"}</strong><span>${escapeHtml(opGuide[opsMode] || "")}</span></div>` : "";
   if (opsMode === "manage") {
     const manageEntries = effectiveRecord.inventory;
@@ -1220,6 +1322,9 @@ function inventory(context) {
         <label class="search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(text.search)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label></div>
       <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
   }
+  if (opsMode === "alerts") {
+    return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}${inventoryLowStockAlertCenter(products,rowContext)}`;
+  }
   if (opsMode === "history") {
     return `${heading(text.inventory, text.inventorySubtitle)}${cloudNotice}${opsTabs}${opsGuide}<section data-branch-inventory-history data-site="${escapeHtml(site)}">${branchInventoryHistoryView([],language,false)}</section>`;
   }
@@ -1238,7 +1343,7 @@ function inventory(context) {
     ? ["品項","單位","總量","位置分配","狀態 / 操作"]
     : ["Sản phẩm","Đơn vị","Tổng","Phân bổ vị trí","Trạng thái / thao tác"];
   return `${heading(text.inventory, text.inventorySubtitle, canCreate ? `<button class="primary-button" data-action="open-add-item">${icon("plus")}${escapeHtml(text.addItem)}</button>` : "")}${cloudNotice}${historical ? `<div class="inventory-readonly-notice inventory-history-notice"><span>Ảnh chụp tồn kho theo ngày · 歷史庫存快照：僅供查看。Các thao tác nhập/lấy/chuyển/xuất sẽ tự mở ngày hôm nay. · 庫存操作會自動切回今天。</span><button class="secondary-button" data-action="inventory-go-today">Về hôm nay · 回到今天</button></div>` : ""}${opsTabs}${opsGuide}
-    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${products.length} ${escapeHtml(text.items)}</span><span class="summary-pill"><span class="summary-dot amber"></span>${nearLowCount} ${language==="zh"?"接近不足 / 低庫存":"gần hết / sắp hết"}</span></div>
+    <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${products.length} ${escapeHtml(text.items)}</span><button type="button" class="summary-pill inventory-alert-shortcut" data-action="select-inventory-ops" data-mode="alerts"><span class="summary-dot amber"></span>${nearLowCount} ${language==="zh"?"庫存提醒":"cảnh báo tồn kho"}</button></div>
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
     <div class="filters-row"><p class="inventory-view-description">${language==="zh"?"每個品項只顯示一列；位置依主要儲位 → Work → 其他儲位排序。":"Mỗi sản phẩm chỉ hiện một dòng; vị trí sắp xếp Chính → Work → vị trí khác."}</p>
@@ -1700,6 +1805,11 @@ root.addEventListener("click", (event) => {
   if (action === "inventory-go-today") {
     view.inventoryOpsMode = "overview";
     selectServiceDate(formatDateKey());
+    return;
+  }
+  if (action === "select-inventory-alert-filter") {
+    view.inventoryAlertFilter = ["all","empty","low","near"].includes(target.dataset.filter) ? target.dataset.filter : "all";
+    render();
     return;
   }
   if (action === "select-inventory-ops") {

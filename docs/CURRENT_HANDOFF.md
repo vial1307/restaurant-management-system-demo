@@ -1,6 +1,36 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: none
+ACTIVE_PR: #211
+
+## ACTIVE — PR #211 Inventory low-stock notification center, 2026-10-06
+
+Production baseline:
+- verified release `09fbda4291f3f02d895ae84f2779df77bcaccf76`;
+- schema `032`;
+- Inventory Audit #554 PASS.
+
+PR #211 scope:
+- dedicated Inventory low-stock notification center;
+- severity states are per-location `empty / low / near`;
+- status uses the existing schema-032 PostgreSQL fields `minimum_enabled`, `minimum_quantity`, `warning_enabled`, `warning_quantity`;
+- no duplicate frontend threshold authority is introduced;
+- Desktop/Mobile filters: all / out-of-stock / low / near-low;
+- each alert links to the existing product detail surface, where quantity actions remain controlled by granular Inventory permissions;
+- responsive alert cards and browser regression coverage;
+- no schema migration is required.
+
+Explicitly deferred to the next separate runtime PR:
+- remove remaining Procurement source-code authority (`PROCUREMENT_PRODUCTS`, supplier/category scheduling defaults) by moving mutable Procurement master data to PostgreSQL;
+- GitHub/Handoff polling/force-refresh;
+- VPS disk cleanup.
+
+Required:
+1. exact-head PR #211 Deploy/full-device + Master/Admin + Super Admin Browser + API Load;
+2. merge only the tested exact head;
+3. deploy exact merge SHA;
+4. verify release/schema 032 + `DATA_INTEGRITY_OK` + production UI smoke;
+5. Inventory Site Production Audit;
+6. close handoff and start Procurement DB migration only after production verification.
 
 ## CURRENT VERIFIED PRODUCTION — Inventory multi-location phase 2 + certification repair, 2026-10-06
 
