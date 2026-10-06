@@ -1543,7 +1543,7 @@ async function persistCatalogStocktakeFields({ site, stockKey, locations, workAr
     const locationId=master?.locationId || "";
     if (!locationCode) return { ok:false, fallback:false, error:new Error("INVALID_LOCATION") };
 
-    if (canInventoryAction("inventory.quantity.set_absolute",{site,locationId})) {
+    if (location.quantityEditable === true) {
       const quantityResult=await cloudSetQuantity({
         itemKey,
         locationCode,
@@ -1555,7 +1555,7 @@ async function persistCatalogStocktakeFields({ site, stockKey, locations, workAr
       wrote=true;
     }
 
-    if (canInventoryAction("inventory.minimum.edit",{site,locationId})) {
+    if (location.minimumEditable === true) {
       const minimumResult=await cloudSetMinimum({
         itemKey,
         locationCode,
@@ -1570,9 +1570,8 @@ async function persistCatalogStocktakeFields({ site, stockKey, locations, workAr
   const workMaster=inventoryWorkLocation(site,workArea);
   const workLocationCode=workMaster?.code || branchWorkLocationCode(site,workArea);
   const workLocationId=String(workMaster?.id || "");
-  if (workLocationCode && canInventoryAction("inventory.minimum.edit",{
-    site,locationId:workLocationId,workArea
-  })) {
+  const workMinimumInput=root.querySelector('#ingredient-product-form input[name="workMinimum"]');
+  if (workLocationCode && workMinimumInput && !workMinimumInput.readOnly && !workMinimumInput.disabled) {
     const workMinimumResult=await cloudSetMinimum({
       itemKey,
       locationCode:workLocationCode,
@@ -2138,12 +2137,19 @@ root.addEventListener("submit", async (event) => {
     if (!canInventoryAction(requiredCatalogAction,{site})
         && !canManageBranchCatalog(site)) { view.modal = null; render(); return; }
     const inventoryRecord = branchInventoryMutationRecord(state,site);
-    const locations = data.getAll("zones").map((zone,index) => ({
-      zone: String(zone),
-      quantity: Number(data.get(`quantity:${zone}`)),
-      minimum: Number(data.get(`minimum:${zone}`)),
-      displayOrder:Number(data.get(`displayOrder:${zone}`) ?? index),
-    }));
+    const locations = data.getAll("zones").map((zone,index) => {
+      const zoneKey=String(zone);
+      const quantityInput=form.elements.namedItem(`quantity:${zoneKey}`);
+      const minimumInput=form.elements.namedItem(`minimum:${zoneKey}`);
+      return {
+        zone:zoneKey,
+        quantity:Number(data.get(`quantity:${zoneKey}`)),
+        minimum:Number(data.get(`minimum:${zoneKey}`)),
+        displayOrder:Number(data.get(`displayOrder:${zoneKey}`) ?? index),
+        quantityEditable:Boolean(quantityInput && !quantityInput.readOnly && !quantityInput.disabled),
+        minimumEditable:Boolean(minimumInput && !minimumInput.readOnly && !minimumInput.disabled),
+      };
+    });
     if (!locations.length) {
       window.alert("Hãy chọn ít nhất một vị trí lưu. · 請至少選擇一個存放位置。");
       return;
