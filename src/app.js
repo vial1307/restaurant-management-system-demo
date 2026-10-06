@@ -23,6 +23,7 @@ import { createStore } from "./store.js";
 import {
   inventorySite,
   inventoryUiGroups,
+  inventoryWorkLocation,
   isBranchInventorySite,
 } from "./inventory-master-data.js";
 import { assessShiftCapacity, currentStaff, roleLabel } from "./operations.js";
@@ -1531,34 +1532,47 @@ function syncReceiveZoneOptions(form) {
 }
 
 async function persistCatalogStocktakeFields({ site, stockKey, locations, workArea, workMinimum }) {
-  if (!canDirectInventoryAdjust()) return { ok:true, skipped:true };
   const itemKey=branchItemKey(site,stockKey);
   if (!itemKey) return { ok:false, fallback:false, error:new Error("CATALOG_ITEM_NOT_FOUND") };
 
+  const storageByZone=new Map(inventoryUiGroups(site).storage.map((row)=>[row.id,row]));
+  let wrote=false;
   for (const location of locations) {
-    const locationCode=branchLocationCode(site,location.zone);
+    const master=storageByZone.get(location.zone);
+    const locationCode=master?.code || branchLocationCode(site,location.zone);
+    const locationId=master?.locationId || "";
     if (!locationCode) return { ok:false, fallback:false, error:new Error("INVALID_LOCATION") };
 
-    const quantityResult=await cloudSetQuantity({
-      itemKey,
-      locationCode,
-      quantity:location.quantity,
-      note:"品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
-      sync:false,
-    });
-    if (!quantityResult.ok) return quantityResult;
+    if (canInventoryAction("inventory.quantity.set_absolute",{site,locationId})) {
+      const quantityResult=await cloudSetQuantity({
+        itemKey,
+        locationCode,
+        quantity:location.quantity,
+        note:"品項表單盤點調整 / Điều chỉnh kiểm kê từ biểu mẫu sản phẩm",
+        sync:false,
+      });
+      if (!quantityResult.ok) return quantityResult;
+      wrote=true;
+    }
 
-    const minimumResult=await cloudSetMinimum({
-      itemKey,
-      locationCode,
-      minimum:location.minimum,
-      sync:false,
-    });
-    if (!minimumResult.ok) return minimumResult;
+    if (canInventoryAction("inventory.minimum.edit",{site,locationId})) {
+      const minimumResult=await cloudSetMinimum({
+        itemKey,
+        locationCode,
+        minimum:location.minimum,
+        sync:false,
+      });
+      if (!minimumResult.ok) return minimumResult;
+      wrote=true;
+    }
   }
 
-  const workLocationCode=branchWorkLocationCode(site,workArea);
-  if (workLocationCode) {
+  const workMaster=inventoryWorkLocation(site,workArea);
+  const workLocationCode=workMaster?.code || branchWorkLocationCode(site,workArea);
+  const workLocationId=String(workMaster?.id || "");
+  if (workLocationCode && canInventoryAction("inventory.minimum.edit",{
+    site,locationId:workLocationId,workArea
+  })) {
     const workMinimumResult=await cloudSetMinimum({
       itemKey,
       locationCode:workLocationCode,
@@ -1566,9 +1580,10 @@ async function persistCatalogStocktakeFields({ site, stockKey, locations, workAr
       sync:false,
     });
     if (!workMinimumResult.ok) return workMinimumResult;
+    wrote=true;
   }
 
-  return { ok:true };
+  return { ok:true,skipped:!wrote };
 }
 
 function render() {
