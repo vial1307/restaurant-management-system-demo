@@ -9,6 +9,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const index = read("index.html");
 const vpsEntry = read("vps-entry.html");
 const ui = read("src/workforce-requests.js");
+const app = read("src/app.js");
 const css = read("src/workforce-requests.css");
 const reconciliation = read("src/workforce-reconciliation.js");
 const policy = read("vps/backend/src/workforce-policy.mjs");
@@ -70,6 +71,11 @@ assert.match(ui, /payrollBoundary/, "UI must disclose payroll boundary");
 assert.match(ui, /Yêu cầu lịch làm/, "Vietnamese request UI copy missing");
 assert.match(ui, /排班申請/, "Traditional Chinese request UI copy missing");
 assert.doesNotMatch(ui, /activeStaffId/, "request authorization must not trust device-local activeStaffId");
+
+assert.match(app,/INVENTORY_REACTIVE_ROUTES = new Set\(\["dashboard","inventory","procurement","preparation"\]\)/,
+  "Inventory background hydration must be isolated from Schedule/Workforce interactive forms");
+assert.match(app,/if \(!inventoryRouteNeedsLiveRender\(activeRoute\)\)[\s\S]{0,320}?return;/,
+  "Inventory cloud updates must not replace unrelated interactive workspaces");
 
 assert.match(css, /\.workforce-request-workspace/, "request workspace styling missing");
 assert.match(css, /@media \(max-width:/, "request workspace must include mobile responsive rules");
