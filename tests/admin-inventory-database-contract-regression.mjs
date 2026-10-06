@@ -52,7 +52,11 @@ assert.match(routes,/expectedQuantity/);assert.match(routes,/expectedMinimum/);a
 assert.match(routes,/explicitLocations.length && !request.body\?\.appendLocations/,
   "catalog sync may prune locations only when the caller explicitly supplies a location list");
 assert.match(routes,/guardWorkArea/);
-assert.match(routes,/siteMode === "branch"[\s\S]{0,900}metadata->>'work_area'=\$2[\s\S]{0,700}attachLocation\(workLocation\.rows\[0\]\.id\)/,
+assert.match(routes,/siteMode === "branch"/,
+  "branch catalog sync must branch on database inventory_mode");
+assert.match(routes,/metadata->>'work_area'=\$2/,
+  "branch catalog sync must resolve the site-scoped Work Location from database metadata");
+assert.match(routes,/attachLocation\(workLocation\.rows\[0\]\.id,\{kind:"work"\}\)/,
   "branch catalog sync must always attach the database work-area row, including storage_only products");
 // Execute the real SSE hook: successful master writes invalidate, reads/failures do not.
 const events=[],hooks={},clients=[];
