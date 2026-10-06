@@ -1,6 +1,32 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #207
+ACTIVE_PR: #208
+
+## ACTIVE — PR #208 phase-2 production certification repair, 2026-10-06
+
+PR #207 is merged and its runtime code is already deployed as release `5a7a37d9269aff13e45ff544d134c86bc8934475` / schema `032`.
+
+Observed post-merge certification state:
+- exact PR #207 head `034144568ddc71a252c439cb65cfb922cb25c2af` passed Deploy #1234, Master/Admin #510, Super Admin Browser #431, API Load #723 and Workforce Diagnostic #586;
+- PR #207 merged as `5a7a37d9269aff13e45ff544d134c86bc8934475`;
+- main Deploy #1235 attempt 1 failed only in the cross-surface browser certification because a branch editor rerender detached the close button while Playwright was clicking it;
+- unchanged merge SHA attempt 2 passed the full regression and deployed successfully;
+- deployment evidence: backup `/opt/kitchen-os/backups/kitchen_os_20261006T075152Z.dump`, schema `032`, `DATA_INTEGRITY_OK`, app/database/edge healthy, release `5a7a37d`, AgentMemory seed/recall PASS;
+- production UI smoke then failed because the smoke fixture did not mock the new `/api/inventory/access` granular permission snapshot, so the permission-driven branch operation tabs were intentionally absent in the test fixture;
+- this is a certification-fixture issue, not a database/runtime rollback. The deployed release remains `5a7a37d`.
+
+PR #208 scope:
+- update production UI smoke to mock granular Inventory access actions;
+- make cross-surface test close the currently rendered branch editor atomically after remote rerenders;
+- guard both behaviors in static regression;
+- no runtime Inventory business logic, database schema/data, permission model or application UI behavior changes.
+
+Required:
+1. exact-head PR #208 Deploy/full-device + Master/Admin + Super Admin Browser + API Load;
+2. merge only tested head;
+3. main deploy/smoke must pass on exact merge SHA;
+4. Inventory Site Production Audit and applicable workforce production checks must complete;
+5. close PR #207/#208 handoff as verified production.
 
 ## ACTIVE — PR #207 Inventory multi-location Desktop/Mobile UI, 2026-10-06
 
