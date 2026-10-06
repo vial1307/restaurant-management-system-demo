@@ -1,8 +1,32 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #211
+ACTIVE_PR: #212
 
-## ACTIVE — PR #211 Inventory low-stock notification center, 2026-10-06
+## ACTIVE — PR #212 Approved Super Admin + Inventory UI implementation, 2026-10-06
+
+Production baseline:
+- verified release `2dd48d7828ea542e976170103c1132aea1f73d55`;
+- schema `032`;
+- Deploy Kitchen OS #1250 PASS;
+- Inventory Site Production Audit #560 PASS.
+
+PR #212 scope:
+- apply the approved Super Admin Inventory permission visual system to the real `.admindev.html` control plane;
+- arrange the existing DB-backed permission editor as account target -> site scope -> action matrix, with clear selected-site states and responsive save controls;
+- apply the approved dark product-centric multi-location visual system to the real Inventory/Warehouse route;
+- preserve the existing production semantics: one product row/card, Primary -> Work -> Other, 3+ locations => first 2 chips + `Xem thêm / 查看更多`, permission-driven quick edit/actions, mobile full-screen detail;
+- no schema migration, inventory quantity rewrite, API mutation, role/permission semantic change or business-data hard-code;
+- runtime visual changes are limited to existing authority stylesheets plus regression-contract updates.
+
+Required before merge:
+1. exact-head PR #212 required checks green;
+2. full-device browser coverage for Super Admin + Inventory;
+3. merge only the tested exact head;
+4. deploy exact merge SHA;
+5. verify release/schema 032 + `DATA_INTEGRITY_OK` + production UI smoke;
+6. Inventory Site Production Audit after deploy.
+
+## DONE — PR #211 Inventory low-stock notification center, 2026-10-06
 
 Production baseline:
 - verified release `09fbda4291f3f02d895ae84f2779df77bcaccf76`;
@@ -24,7 +48,12 @@ Explicitly deferred to the next separate runtime PR:
 - GitHub/Handoff polling/force-refresh;
 - VPS disk cleanup.
 
-Required:
+Closure sequence (completed):
+- merged as `2dd48d7828ea542e976170103c1132aea1f73d55`;
+- Deploy Kitchen OS #1250 PASS;
+- Inventory Site Production Audit #560 PASS;
+
+Historical gate sequence:
 1. exact-head PR #211 Deploy/full-device + Master/Admin + Super Admin Browser + API Load;
 2. merge only the tested exact head;
 3. deploy exact merge SHA;

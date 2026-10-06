@@ -4,6 +4,7 @@ import fs from "node:fs";
 const app=fs.readFileSync("src/app.js","utf8");
 const cloud=fs.readFileSync("src/inventory-cloud.js","utf8");
 const styles=fs.readFileSync("src/styles.css","utf8");
+const maestroStyles=fs.readFileSync("src/inventory-maestro-ui.css","utf8");
 const readModel=fs.readFileSync("vps/backend/src/inventory-read-model.mjs","utf8");
 
 assert.match(
@@ -104,5 +105,14 @@ assert.match(
   /Nếu chỉ có 1 vị trí hệ thống tự chọn/,
   "Receive Default UX explanation must stay explicit"
 );
+
+assert.match(maestroStyles,/Approved UI lock — 2026-10-06: Inventory product-centric multi-location view/);
+assert.match(maestroStyles,/\.inventory-product-table \.inventory-product-row\{[\s\S]*?grid-template-columns:minmax\(180px,1.2fr\)/);
+assert.match(maestroStyles,/\.inventory-product-table \.inventory-location-chip\.primary\{/);
+assert.match(maestroStyles,/\.inventory-product-table \.inventory-location-chip\.work\{/);
+assert.match(maestroStyles,/\.inventory-detail-sheet\{[\s\S]*?background:#0f152a/);
+assert.match(maestroStyles,/@media\(max-width:1100px\)[\s\S]*?\.inventory-product-table \.inventory-product-head\{display:none\}/);
+assert.match(maestroStyles,/@media\(max-width:680px\)[\s\S]*?\.inventory-detail-sheet\{[\s\S]*?height:100dvh/);
+assert.doesNotMatch(maestroStyles,/\.inventory-location-chip(?:\.|,|\{)[^\{]*\{[^}]*display\s*:\s*none/,"approved location chips must remain visible");
 
 console.log("INVENTORY_MULTILOCATION_PRODUCTION_CONTRACT_OK");

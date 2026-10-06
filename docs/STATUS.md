@@ -1,8 +1,19 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #211 Inventory low-stock notification center, 2026-10-06
+## ACTIVE — PR #212 Approved Super Admin + Inventory UI, 2026-10-06
 
-- `ACTIVE_PR: #211`.
+- `ACTIVE_PR: #212`.
+- Verified production baseline: `2dd48d7828ea542e976170103c1132aea1f73d55` / schema `032`; Deploy #1250 and Inventory Audit #560 PASS.
+- Super Admin: apply the approved Inventory permission control-plane styling to the real PostgreSQL-backed account/site/action/location editor.
+- Inventory: apply the approved dark product-centric multi-location styling to the real Warehouse route and detail sheet.
+- No schema, stock quantity, API, transaction or permission-semantics changes.
+- Existing contract remains: Primary -> Work -> Other; 3+ locations => first 2 chips + `Xem thêm`; mobile detail full-screen; quick edits/actions remain capability-driven.
+- Regression guards added for both approved visual layers.
+- NEXT: exact-head PR gates -> merge tested head -> production deploy/smoke -> Inventory Audit.
+
+## DONE — PR #211 Inventory low-stock notification center, 2026-10-06
+
+- Merged as `2dd48d7828ea542e976170103c1132aea1f73d55`; Deploy #1250 and Inventory Audit #560 PASS.
 - Baseline production remains `09fbda4291f3f02d895ae84f2779df77bcaccf76` / schema `032`.
 - Adds a dedicated notification center for Out-of-stock / Low / Near-low inventory states.
 - Alert severity is calculated from the same database-backed per-location minimum/warning metadata already used by Inventory rows.
@@ -10,7 +21,7 @@
 - Clicking an alert opens the existing product detail surface; quick quantity editing remains permission-controlled.
 - No new schema is required.
 - Procurement source-coded product/supplier schedule data is confirmed as remaining technical debt and is intentionally moved to the next independent runtime PR.
-- NEXT: exact-head gates -> merge tested head -> production deploy/smoke/audit -> close #211 -> start Procurement DB migration.
+- Production closure complete; Procurement DB migration remains deferred while PR #212 implements the already-approved UI.
 
 ## STABLE — Inventory phase 2 production-verified, 2026-10-06
 

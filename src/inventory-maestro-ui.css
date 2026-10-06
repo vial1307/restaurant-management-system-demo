@@ -2299,3 +2299,384 @@
   .inventory-alert-threshold{grid-column:1;grid-row:3;padding-left:18px}
   .inventory-alert-row>.secondary-button{grid-column:2;grid-row:3;align-self:end;min-width:92px}
 }
+
+/* Approved UI lock — 2026-10-06: Inventory product-centric multi-location view.
+ * Presentation only. Product/location order, PostgreSQL quantities, permissions,
+ * transactions and alert semantics remain owned by the existing renderer/API.
+ */
+.inventory-product-table{
+  overflow:visible;
+  border:1px solid #252e4b;
+  border-radius:15px;
+  background:#0f1428;
+  box-shadow:0 16px 42px rgb(2 6 23 / 20%);
+}
+.inventory-product-table .inventory-product-head{
+  display:grid;
+  grid-template-columns:minmax(180px,1.2fr) 72px 82px minmax(360px,2.25fr) minmax(130px,.85fr);
+  gap:12px;
+  min-height:42px;
+  align-items:center;
+  padding:0 14px;
+  border-bottom:1px solid #252e4b;
+  background:#11172d;
+  color:#8692af;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.inventory-product-table .inventory-product-row{
+  display:grid;
+  grid-template-columns:minmax(180px,1.2fr) 72px 82px minmax(360px,2.25fr) minmax(130px,.85fr);
+  gap:12px;
+  min-width:0;
+  min-height:94px;
+  align-items:center;
+  padding:12px 14px;
+  border:0;
+  border-bottom:1px solid #202844;
+  border-radius:0;
+  background:#10162b;
+  box-shadow:none;
+}
+.inventory-product-table .inventory-product-row:last-of-type{border-bottom:0}
+.inventory-product-table .inventory-product-row:hover{background:#121a32}
+.inventory-product-table .inventory-product-identity{min-width:0}
+.inventory-product-table .inventory-product-identity strong{
+  color:#f8faff;
+  font-size:13px;
+  line-height:1.35;
+}
+.inventory-product-table .inventory-product-identity small{
+  color:#7e89a7;
+  font-size:9px;
+  line-height:1.35;
+}
+.inventory-product-table .inventory-product-unit,
+.inventory-product-table .inventory-product-total{min-width:0}
+.inventory-product-table .inventory-product-unit strong{color:#cbd3e8}
+.inventory-product-table .inventory-product-total strong{
+  color:#f8faff;
+  font-size:16px;
+  font-variant-numeric:tabular-nums;
+}
+.inventory-product-table .inventory-product-total small{color:#7783a0}
+.inventory-product-table .inventory-location-chips{
+  display:flex;
+  min-width:0;
+  align-items:stretch;
+  gap:8px;
+  overflow:hidden;
+}
+.inventory-product-table .inventory-location-chip,
+.inventory-product-table .inventory-location-more{
+  min-width:112px;
+  max-width:150px;
+  min-height:62px;
+  padding:8px 10px;
+  border:1px solid #303958;
+  border-radius:11px;
+  background:#161c34;
+  color:#edf2ff;
+  box-shadow:inset 0 1px 0 rgb(255 255 255 / 2%);
+}
+.inventory-product-table .inventory-location-chip:hover,
+.inventory-product-table .inventory-location-more:hover{
+  border-color:#4b587e;
+  background:#1b2340;
+}
+.inventory-product-table .inventory-location-chip.primary{
+  border-color:#406b9d;
+  background:linear-gradient(180deg,#182c49,#14243d);
+}
+.inventory-product-table .inventory-location-chip.work{
+  border-color:#347060;
+  background:linear-gradient(180deg,#173b35,#142e2d);
+}
+.inventory-product-table .inventory-location-chip.state-near{
+  border-color:#735f2e;
+  background:linear-gradient(180deg,#352e1c,#29251b);
+}
+.inventory-product-table .inventory-location-chip.state-low{
+  border-color:#815435;
+  background:linear-gradient(180deg,#39271e,#2d211c);
+}
+.inventory-product-table .inventory-location-chip.state-empty{
+  border-color:#7b3f4b;
+  background:linear-gradient(180deg,#361f28,#2a1b24);
+}
+.inventory-product-table .inventory-location-chip span{
+  color:#aeb8d0;
+  font-size:8px;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.inventory-product-table .inventory-location-chip span b{
+  padding:2px 5px;
+  border-radius:999px;
+  background:rgb(255 255 255 / 8%);
+  color:#9debd4;
+}
+.inventory-product-table .inventory-location-chip.primary span b{color:#a8cdf7}
+.inventory-product-table .inventory-location-chip strong{
+  color:#f7f9ff;
+  font-size:14px;
+  font-variant-numeric:tabular-nums;
+}
+.inventory-product-table .inventory-location-chip strong small{color:#8995b2}
+.inventory-product-table .inventory-location-more{
+  display:grid;
+  place-items:center;
+  align-content:center;
+  border-style:dashed;
+  color:#9fe7d2;
+  text-align:center;
+}
+.inventory-product-table .inventory-location-more span{color:#71809f}
+.inventory-product-table .inventory-product-status{min-width:0;flex-wrap:wrap}
+.inventory-product-table .inventory-more-menu>summary{
+  border-color:#343d5d;
+  background:#171e37;
+  color:#aeb8d0;
+}
+.inventory-product-table .inventory-more-menu>summary:hover{
+  border-color:#566486;
+  background:#202947;
+  color:#fff;
+}
+.inventory-product-table .inventory-more-menu-popover,
+.inventory-detail-sheet .inventory-more-menu-popover{
+  border-color:#303a59;
+  background:#11172d;
+  box-shadow:0 18px 48px rgb(0 0 0 / 34%);
+}
+.inventory-product-table .inventory-more-menu-popover button,
+.inventory-detail-sheet .inventory-more-menu-popover button{
+  color:#dce3f5;
+}
+.inventory-product-table .inventory-more-menu-popover button:hover,
+.inventory-detail-sheet .inventory-more-menu-popover button:hover{
+  background:#1b2541;
+  color:#8cebd1;
+}
+.inventory-product-table .inventory-more-menu-popover button.danger,
+.inventory-detail-sheet .inventory-more-menu-popover button.danger{color:#ff9ca5}
+
+/* Approved detail drawer: same permission-controlled controls, visual layer only. */
+.inventory-detail-backdrop{
+  background:rgb(3 8 22 / 68%);
+  backdrop-filter:blur(5px);
+}
+.inventory-detail-sheet{
+  border-left:1px solid #293350;
+  background:#0f152a;
+  color:#f3f6ff;
+  box-shadow:-24px 0 70px rgb(0 0 0 / 38%);
+}
+.inventory-detail-sheet>header{
+  padding:20px 20px 16px;
+  border-bottom-color:#28314d;
+  background:#11182f;
+}
+.inventory-detail-sheet>header small{color:#7f8caa}
+.inventory-detail-sheet>header h2{color:#fbfcff}
+.inventory-detail-sheet>header p{color:#8e9ab7}
+.inventory-detail-sheet>header .icon-button{
+  border-color:#343d5d;
+  background:#171e37;
+  color:#c8d0e4;
+}
+.inventory-detail-locations{
+  gap:11px;
+  padding:15px;
+  background:
+    radial-gradient(circle at 100% 0,rgb(38 83 108 / 12%),transparent 24rem),
+    #0c1122;
+}
+.inventory-detail-location{
+  padding:14px;
+  border-color:#2d3654;
+  background:#141a31;
+  box-shadow:0 8px 20px rgb(2 6 23 / 10%);
+}
+.inventory-detail-location.state-near{
+  border-color:#6e5b2f;
+  background:#272319;
+}
+.inventory-detail-location.state-low{
+  border-color:#7a5138;
+  background:#2b211c;
+}
+.inventory-detail-location.state-empty{
+  border-color:#733f4a;
+  background:#2b1d24;
+}
+.inventory-detail-location-head strong{
+  color:#f4f7ff;
+  font-size:13px;
+  line-height:1.4;
+  flex-wrap:wrap;
+}
+.inventory-detail-location-head strong>span{
+  background:#183d35;
+  color:#8ce8ce;
+}
+.inventory-detail-location-head small{color:#8f9bb6}
+.inventory-detail-control{min-width:0;flex-wrap:wrap}
+.inventory-detail-control .quantity-control{min-width:0;flex-wrap:wrap}
+.inventory-detail-control .quantity-button{
+  border-color:#3a4467;
+  background:#19213c;
+  color:#c5cee4;
+}
+.inventory-detail-control .quantity-button:hover{
+  border-color:#60709a;
+  background:#232d50;
+  color:#fff;
+}
+.inventory-detail-control .quantity-button.plus{color:#80e8cb}
+.inventory-detail-control .quantity-input,
+.inventory-detail-control .minimum-input{
+  border-color:#394361;
+  background:#0d1327;
+  color:#f8faff;
+}
+.inventory-detail-control .quantity-input:focus,
+.inventory-detail-control .minimum-input:focus{
+  border-color:#5e70a1;
+  outline:none;
+  box-shadow:0 0 0 3px rgb(94 112 161 / 16%);
+}
+.inventory-detail-control .quantity-readonly,
+.inventory-detail-control>label strong{color:#f4f7ff}
+.inventory-detail-control>label{color:#8d99b6}
+.inventory-detail-sheet>footer{
+  border-top-color:#28314d;
+  background:#11182f;
+}
+.inventory-detail-sheet>footer>.primary-button{
+  background:#15835f;
+  border-color:#15835f;
+}
+.inventory-detail-sheet>footer>.primary-button:hover{
+  background:#117151;
+  border-color:#117151;
+}
+
+/* Tablet: product cards instead of forcing the legacy wide table grid. */
+@media(max-width:1100px){
+  .inventory-product-table{
+    overflow:visible;
+    border:0;
+    background:transparent;
+    box-shadow:none;
+  }
+  .inventory-product-table .inventory-product-head{display:none}
+  .inventory-product-table .inventory-product-row{
+    min-width:0;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-rows:auto auto auto;
+    gap:9px 12px;
+    min-height:0;
+    margin-bottom:10px;
+    padding:13px;
+    border:1px solid #293351;
+    border-radius:13px;
+    background:#11172d;
+    box-shadow:0 10px 24px rgb(2 6 23 / 12%);
+  }
+  .inventory-product-table .inventory-product-row:last-of-type{border-bottom:1px solid #293351}
+  .inventory-product-table .inventory-product-identity{
+    grid-column:1;
+    grid-row:1;
+  }
+  .inventory-product-table .inventory-product-status{
+    grid-column:2;
+    grid-row:1;
+    align-self:start;
+    justify-content:flex-end;
+  }
+  .inventory-product-table .inventory-product-unit{display:none}
+  .inventory-product-table .inventory-product-total{
+    grid-column:1;
+    grid-row:2;
+    padding-left:19px;
+  }
+  .inventory-product-table .inventory-product-total>.mobile-field-label{
+    display:inline;
+    color:#8290ae;
+  }
+  .inventory-product-table .inventory-location-chips{
+    grid-column:1 / -1;
+    grid-row:3;
+    overflow-x:auto;
+    overscroll-behavior-inline:contain;
+    padding-bottom:2px;
+    scrollbar-width:none;
+  }
+  .inventory-product-table .inventory-location-chips::-webkit-scrollbar{display:none}
+  .inventory-product-table .inventory-location-chip,
+  .inventory-product-table .inventory-location-more{
+    flex:0 0 126px;
+    min-height:64px;
+  }
+}
+@media(max-width:680px){
+  .inventory-product-table .inventory-product-row{
+    padding:12px;
+    border-color:#28314e;
+    background:#10162b;
+  }
+  .inventory-product-table .inventory-product-identity strong{font-size:12px}
+  .inventory-product-table .inventory-location-chip,
+  .inventory-product-table .inventory-location-more{flex-basis:122px}
+  .inventory-detail-backdrop{
+    display:block;
+    background:#0f152a;
+  }
+  .inventory-detail-sheet{
+    position:fixed;
+    inset:0;
+    width:100%;
+    max-width:none;
+    height:100dvh;
+    border-left:0;
+    box-shadow:none;
+    padding-top:env(safe-area-inset-top);
+  }
+  .inventory-detail-sheet>header{padding:14px 15px 12px}
+  .inventory-detail-locations{padding:12px}
+  .inventory-detail-location{padding:13px}
+  .inventory-detail-control{align-items:flex-end}
+  .inventory-detail-control .quantity-button{width:38px;height:38px}
+  .inventory-detail-control .quantity-input{width:62px;min-height:38px}
+  .inventory-detail-control .minimum-input{width:62px;min-height:36px}
+  .inventory-detail-sheet>footer{
+    position:sticky;
+    bottom:0;
+    padding-bottom:calc(12px + env(safe-area-inset-bottom));
+  }
+  .inventory-detail-sheet .inventory-more-menu>summary{
+    width:42px;
+    height:42px;
+    border-color:#343d5d;
+    background:#171e37;
+    color:#d3daeb;
+  }
+}
+@media(max-width:390px){
+  .inventory-product-table .inventory-product-row{gap:8px}
+  .inventory-product-table .inventory-product-status{gap:5px}
+  .inventory-product-table .inventory-location-chip,
+  .inventory-product-table .inventory-location-more{
+    flex-basis:116px;
+    min-width:116px;
+  }
+  .inventory-detail-control{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .inventory-detail-control>label{justify-content:space-between}
+}
+
