@@ -1184,15 +1184,16 @@ function inventoryProductDetailOverlay(context, record) {
   </section></div>`;
 }
 
-function inventorySearchControl(language, text) {
+function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
     ? "搜尋品項、拼音、注音或儲位…"
     : "Tìm sản phẩm, pinyin, chú âm hoặc vị trí…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
+  const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
   return `<div class="inventory-search-control" data-inventory-search-control>
     <label class="search-box inventory-search-box">${icon("search")}<input type="search" value="${escapeHtml(view.search)}" placeholder="${escapeHtml(placeholder)}" aria-label="${escapeHtml(label)}" data-field="inventorySearch" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" /></label>
-    <div class="inventory-search-status"><span data-inventory-search-meta aria-live="polite"></span><button type="button" class="inventory-search-clear" data-action="clear-inventory-search" aria-label="${escapeHtml(clearLabel)}" hidden>${icon("close")}<span>${escapeHtml(clearLabel)}</span></button></div>
+    <div class="inventory-search-status"><span data-inventory-search-meta aria-live="polite">${escapeHtml(initialMeta)}</span><button type="button" class="inventory-search-clear" data-action="clear-inventory-search" aria-label="${escapeHtml(clearLabel)}" hidden>${icon("close")}<span>${escapeHtml(clearLabel)}</span></button></div>
   </div>`;
 }
 
@@ -1331,7 +1332,7 @@ function inventory(context) {
       <div class="inventory-summary"><span class="summary-pill"><span class="summary-dot green"></span>${new Set(manageEntries.map((item) => item.stockKey)).size} ${escapeHtml(text.items)}</span></div>
       ${inventoryTabs(manageEntries, uiGroups.storage, "zone", view.zone, "select-zone", text.allStorageLocations, rowContext)}
       <div class="filters-row"><p class="inventory-view-description">${escapeHtml(editHint)}</p>
-        ${inventorySearchControl(language, text)}</div>
+        ${inventorySearchControl(language, text, manageFiltered.length)}</div>
       <section class="inventory-table storage-table"><div class="inventory-table-head">${manageColumns.map((column) => `<span>${escapeHtml(column)}</span>`).join("")}</div>${manageFiltered.length ? manageRows : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
   }
   if (opsMode === "alerts") {
@@ -1359,7 +1360,7 @@ function inventory(context) {
     <div class="inventory-view-switch"><button class="inventory-view-button ${storageView ? "selected" : ""}" data-action="select-inventory-view" data-view="storage">${icon("inventory")}${escapeHtml(text.storageInventory)}</button><button class="inventory-view-button ${storageView ? "" : "selected"}" data-action="select-inventory-view" data-view="work">${icon("preparation")}${escapeHtml(text.workInventory)}</button></div>
     ${inventoryTabs(entries, groups, groupKey, activeGroup, selectAction, allLabel, context)}
     <div class="filters-row"><p class="inventory-view-description">${language==="zh"?"每個品項只顯示一列；位置依主要儲位 → Work → 其他儲位排序。":"Mỗi sản phẩm chỉ hiện một dòng; vị trí sắp xếp Chính → Work → vị trí khác."}</p>
-      ${inventorySearchControl(language, text)}</div>
+      ${inventorySearchControl(language, text, productFiltered.length)}</div>
     <section class="inventory-table inventory-product-table"><div class="inventory-table-head inventory-product-head">${productColumns.map((column)=>`<span>${escapeHtml(column)}</span>`).join("")}</div>${productFiltered.length ? productFiltered.map((product)=>inventoryProductRow(product,rowContext)).join("") : `<p class="empty-state">${escapeHtml(text.noItems)}</p>`}<p class="empty-state" data-inventory-search-empty hidden>${escapeHtml(text.noItems)}</p></section>`;
 }
 
@@ -1726,7 +1727,8 @@ function render() {
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
   watchInventoryEditor(root.querySelector('#ingredient-product-form'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
-  if (inventorySearchInput) applyInventorySearchDom(inventorySearchInput);
+  const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");
+  if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);
   const opsHost=root.querySelector("[data-branch-inventory-operations]");
   const historyHost=root.querySelector("[data-branch-inventory-history]");
   if (historyHost && inventoryCloudState()==="ready") {
@@ -2194,8 +2196,8 @@ function applyInventorySearchDom(input) {
   const page = input.closest(".page-content") || root;
   const table = page.querySelector(".inventory-table");
   if (!table) return;
-  const context = currentContext();
-  const itemsLabel = context.text.items;
+  const itemsLabel = currentContext().text.items;
+  const language = document.documentElement.lang.startsWith("zh") ? "zh" : "vi";
   const totalRows = table.querySelectorAll(".inventory-row").length;
 
   let visibleTotal = 0;
@@ -2231,7 +2233,7 @@ function applyInventorySearchDom(input) {
   if (clear) clear.hidden = !query;
   const meta = control?.querySelector("[data-inventory-search-meta]");
   if (meta) {
-    meta.textContent = context.language === "zh"
+    meta.textContent = language === "zh"
       ? (needle ? `${visibleTotal} / ${totalRows} 筆` : `${totalRows} 筆`)
       : (needle ? `${visibleTotal} / ${totalRows} kết quả` : `${totalRows} sản phẩm`);
   }
