@@ -109,6 +109,18 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
         await menu.locator("summary").click();
         await menu.locator('[data-action="open-edit-item"]').click();
       };
+      const closeBranchEditor=async()=>{
+        const modal=main.locator(".ingredient-modal");
+        if(!(await modal.count())) return;
+        // The Inventory editor may re-render after a remote PostgreSQL update.
+        // A normal Playwright click can then chase a detached close button for
+        // 30s even though the replacement modal is healthy. Trigger the current
+        // DOM button atomically, then certify the modal actually closes.
+        await main.evaluate(()=>{
+          document.querySelector('.ingredient-modal .icon-button[data-action="close-modal"]')?.click();
+        });
+        await modal.waitFor({state:"detached",timeout:10000});
+      };
       const openBranchDetail=async()=>{
         await row.locator('[data-action="open-inventory-detail"]').first().click();
         await main.locator(".inventory-detail-sheet").waitFor({state:"visible",timeout:10000});
@@ -225,7 +237,8 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       assert.equal(await draftInput.inputValue(),`Unsaved ${key}`,`${site}: stale editor must stay open for review`);
       const latest=await api(`/api/inventory/${site}`);
       assert.equal(latest.items.find(i=>i.id===item.id).name_vi,`Remote ${key}`,`${site}: stale editor overwrote peer metadata`);
-      await main.locator(site==="central"?'button[data-central-editor-close]':'.ingredient-modal .icon-button[data-action="close-modal"]').click();
+      if(site==="central") await main.locator('button[data-central-editor-close]').click();
+      else await closeBranchEditor();
       if(site==="fuxing") {
         await main.locator('[data-action="open-add-item"]').first().click();
         const addedName=`Added ${key}`;
