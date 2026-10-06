@@ -279,11 +279,11 @@ async function selectBranch(page, site="fuxing") {
 async function assertInventoryParity(page, label) {
   await selectBranch(page, "fuxing");
   for (const mode of ["overview","in","pick","transfer","ship","manage","history"]) {
-    await page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`).waitFor({ state:"visible", timeout:10000 });
+    await page.locator(`.branch-ops-tabs [data-action="select-inventory-ops"][data-mode="${mode}"]`).waitFor({ state:"visible", timeout:10000 });
   }
   await assertGeometry(page, `${label} inventory overview`);
 
-  await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
+  await page.locator('.branch-ops-tabs [data-action="select-inventory-ops"][data-mode="manage"]').click();
   const add = page.locator('[data-action="open-add-item"]').first();
   await add.waitFor({ state:"visible", timeout:10000 });
   await add.click();
