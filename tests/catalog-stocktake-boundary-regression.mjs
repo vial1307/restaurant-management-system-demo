@@ -40,12 +40,12 @@ assert.match(
 );
 assert.match(
   app,
-  /name="quantity:\$\{zone\.id\}"[\s\S]{0,260}canQuantity \? "" : 'readonly aria-readonly="true"'/,
+  /name="quantity:\$\{escapeHtml\(zone\.id\)\}"[\s\S]{0,260}canQuantity \? "" : 'readonly aria-readonly="true"'/,
   "product modal must render quantity read-only when the location action is denied"
 );
 assert.match(
   app,
-  /name="minimum:\$\{zone\.id\}"[\s\S]{0,260}canMinimum \? "" : 'readonly aria-readonly="true"'/,
+  /name="minimum:\$\{escapeHtml\(zone\.id\)\}"[\s\S]{0,260}canMinimum \? "" : 'readonly aria-readonly="true"'/,
   "product modal must render minimum read-only when the location action is denied"
 );
 
