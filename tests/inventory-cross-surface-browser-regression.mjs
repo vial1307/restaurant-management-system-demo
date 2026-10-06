@@ -37,7 +37,7 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       assert(workLocation,`${site}: Work Area did not create its synchronized Work Location`);
       assert.equal(workLocation.metadata?.ui_key,area,`${site}: Work Location ui_key must match Work Area`);
       const {location}=await api('/api/master-data/locations',{action:"save",site,code,kind:"storage",name_vi:key,name_zh_tw:key,active:true,metadata:{ui_key:key,storage_group:"primary"}});
-      const locations=[{code},{code:workLocation.code}];
+      const locations=[{code}];
       await api('/api/inventory/catalog/sync',{expectedRevision:"0",item:{key:`${site}:${key}`,catalog_key:key,vi:key,zh:key,unit:"包",work_area:area,locations}});
       const snapshot=await api(`/api/inventory/${site}`), item=snapshot.items.find(i=>i.item_key===`${site}:${key}`);
       assert(item,`${site}: fixture missing`);
@@ -80,8 +80,26 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       // Certification is based on observable authoritative state rather than a
       // one-shot hydration event: the newly created PostgreSQL item must be
       // rendered on the selected site before the test proceeds.
-      const row=main.locator('.storage-row').filter({has:main.locator(`[data-cloud-item-id="${item.id}"], [data-central-item-key="${item.item_key}"]`)}).first();
+      const row=site==="central"
+        ? main.locator('.storage-row').filter({has:main.locator(`[data-central-item-key="${item.item_key}"]`)}).first()
+        : main.locator(`.inventory-product-row[data-stock-key="${key}"]`).first();
       await row.waitFor({state:"visible",timeout:20000});
+      const openBranchEditor=async()=>{
+        const menu=row.locator(".inventory-more-menu").first();
+        await menu.locator("summary").click();
+        await menu.locator('[data-action="open-edit-item"]').click();
+      };
+      const openBranchDetail=async()=>{
+        await row.locator('[data-action="open-inventory-detail"]').first().click();
+        await main.locator(".inventory-detail-sheet").waitFor({state:"visible",timeout:10000});
+      };
+      const closeBranchDetail=async()=>{
+        const sheet=main.locator(".inventory-detail-sheet");
+        if(await sheet.count()) {
+          await sheet.locator('[data-action="close-inventory-detail"]').last().click();
+          await sheet.waitFor({state:"detached",timeout:10000});
+        }
+      };
       await workspace.locator('[name="site"]').selectOption(site);
       await workspace.locator('[data-idb-action="tab-locations"]').click();
       await workspace.locator('[data-idb-action="kind-areas"]').click();
@@ -91,15 +109,23 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       await workspace.locator('[name="name_vi"]').fill(areaName);
       await workspace.locator('[name="name_zh_tw"]').fill(areaName);
       await save();
-      const areaSelector=site==="central"?'select[data-central-inline-work-area]':'select[data-key="workArea"]';
-      await main.waitForFunction(({selector,value,text})=>[...document.querySelectorAll(`${selector} option`)].some(o=>o.value===value&&o.textContent.includes(text)),{selector:areaSelector,value:area,text:areaName},{timeout:12000});
+      if(site==="central") {
+        const areaSelector='select[data-central-inline-work-area]';
+        await main.waitForFunction(({selector,value,text})=>[...document.querySelectorAll(`${selector} option`)].some(o=>o.value===value&&o.textContent.includes(text)),{selector:areaSelector,value:area,text:areaName},{timeout:12000});
+      } else {
+        await main.waitForFunction(({stockKey,text})=>document.querySelector(`.inventory-product-row[data-stock-key="${CSS.escape(stockKey)}"]`)?.textContent.includes(text),{stockKey:key,text:areaName},{timeout:12000});
+      }
       await workspace.locator('[data-idb-action="kind-storage"]').click();await search(code);
       await workspace.locator(`[data-idb-action="master"][data-id="${location.id}"]`).click();
       const locationName=`Tủ mới 新儲位 ${site} ${stamp}`;
       await workspace.locator('[name="name_vi"]').fill(locationName);
       await workspace.locator('[name="name_zh_tw"]').fill(locationName);await save();
-      const zoneSelector=site==="central"?'select[data-central-inline-zone]':'select[data-key="zone"]';
-      await main.waitForFunction(({selector,value,text})=>[...document.querySelectorAll(`${selector} option`)].some(o=>o.value===value&&o.textContent.includes(text)),{selector:zoneSelector,value:key,text:locationName},{timeout:12000});
+      if(site==="central") {
+        const zoneSelector='select[data-central-inline-zone]';
+        await main.waitForFunction(({selector,value,text})=>[...document.querySelectorAll(`${selector} option`)].some(o=>o.value===value&&o.textContent.includes(text)),{selector:zoneSelector,value:key,text:locationName},{timeout:12000});
+      } else {
+        await main.waitForFunction(({stockKey,text})=>document.querySelector(`.inventory-product-row[data-stock-key="${CSS.escape(stockKey)}"]`)?.textContent.includes(text),{stockKey:key,text:locationName},{timeout:12000});
+      }
       await workspace.locator('[data-idb-action="tab-items"]').click();await search(key);
       await workspace.locator(`[data-idb-action="item"][data-id="${item.id}"]`).click();
       const adminName=`Admin ${key}`;
@@ -110,11 +136,19 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       await more.locator('[data-idb-action="item-stock"]').click();
       await workspace.locator(`[data-idb-action="minimum"][data-id="${item.id}"][data-location="${location.id}"]`).click();
       await workspace.locator('[name="value"]').fill('7');await workspace.locator('[name="note"]').fill('cross-surface CI');await save();
-      const minSelector=site==="central"?`input[data-central-minimum][data-central-item-key="${item.item_key}"]`:`input[data-key="minimum"][data-cloud-item-id="${item.id}"]`;
+      const minSelector=site==="central"
+        ? `input[data-central-minimum][data-central-item-key="${item.item_key}"]`
+        : `input[data-key="minimum"][data-cloud-item-id="${item.id}"][data-cloud-location-id="${location.id}"]`;
+      if(site!=="central") await openBranchDetail();
       await main.waitForFunction(selector=>document.querySelector(selector)?.value==='7',minSelector,{timeout:12000});
       // The main ingredient editor uses those same names/options and writes
       // back into the existing row viewed by Super Admin.
-      await row.locator(site==="central"?'[data-central-editor-open]':'[data-action="open-edit-item"]').click();
+      if(site!=="central") {
+        await closeBranchDetail();
+        await openBranchEditor();
+      } else {
+        await row.locator('[data-central-editor-open]').click();
+      }
       const form=main.locator(site==="central"?'[data-central-editor-form]':'#ingredient-product-form');
       assert((await form.textContent()).includes(locationName),`${site}: editor storage label stale`);
       assert((await form.textContent()).includes(areaName),`${site}: editor area label stale`);
@@ -123,6 +157,7 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       await form.locator('button[type="submit"]').click();
       await form.waitFor({state:"detached",timeout:12000});
       await waitText(adminPage,'[data-inventory-database] tbody',mainName);
+      if(site!=="central") await openBranchDetail();
       const change=main.waitForResponse(r=>r.url().endsWith('/api/inventory/set-minimum')&&r.request().method()==="POST");
       await main.locator(minSelector).fill('9');await main.locator(minSelector).dispatchEvent('change');
       assert.equal((await change).status(),200,`${site}: main minimum save failed`);
@@ -130,6 +165,7 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const persisted=await api(`/api/inventory/${site}`);
       assert.equal(persisted.items.find(i=>i.id===item.id).name_vi,mainName);
       assert.equal(Number(persisted.stock.find(s=>s.item_id===item.id&&s.location_id===location.id).minimum_quantity),9);
+      if(site!=="central") await closeBranchDetail();
       const reloadInventory = main.waitForResponse((response) => {
         try {
           const url = new URL(response.url());
@@ -144,8 +180,10 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
         && localStorage.getItem("shitu-inventory-cloud-v2") === "ready"
       ), site, {timeout:20000});
       await reloadInventory;
+      if(site!=="central") await openBranchDetail();
       await main.locator(minSelector).waitFor({state:"attached",timeout:20000});
       await main.waitForFunction(selector=>document.querySelector(selector)?.value==='9',minSelector,{timeout:30000});
+      if(site!=="central") await closeBranchDetail();
       assert((await row.textContent()).includes(mainName),`${site}: reload reverted metadata`);
       assert((await row.textContent()).includes(areaName),`${site}: reload reverted area name`);
       assert((await row.textContent()).includes(locationName),`${site}: reload reverted location name`);
@@ -155,7 +193,8 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
       const adminRow=workspace.locator(`[data-idb-item="${item.id}"]`);
       assert.equal(await adminRow.locator('details[open]').count(),0);
       assert.equal(await adminRow.locator('[data-idb-action="archive-item"]').count(),1);
-      await row.locator(site==="central"?'[data-central-editor-open]':'[data-action="open-edit-item"]').click();
+      if(site==="central") await row.locator('[data-central-editor-open]').click();
+      else await openBranchEditor();
       const draftInput=form.locator(site==="central"?'[name="central-label-vi"]':'[name="labelVi"]');
       await draftInput.fill(`Unsaved ${key}`);
       await adminRow.locator('[data-idb-action="item"]').click();
