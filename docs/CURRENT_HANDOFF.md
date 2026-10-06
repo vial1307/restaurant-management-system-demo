@@ -1,11 +1,19 @@
-## ACTIVE — PR #213 visual parity polish, 2026-10-06
+## STABLE — PR #213 high-fidelity Inventory + Super Admin visual parity, 2026-10-06
 
-- `ACTIVE_PR: #213` — `style/visual-parity-inventory-superadmin-20261006`.
-- Goal: restore the high-fidelity visual language previously approved for Inventory and Super Admin; the earlier SVG lock files remain structural/behavioral references, not pixel-perfect visual authority.
-- Inventory + Super Admin are CSS-only in this PR: Inter/Noto Sans TC typography, neutral ink/slate hierarchy, white surfaces, softer borders/shadows, emerald accent, refined spacing/radii.
-- Do NOT rewrite renderer/API/PostgreSQL/RBAC/site-scope/transaction logic for this workstream.
-- Regression guards were extended to require the new visual-parity layers while preserving the existing multi-location and granular-permission contracts.
-- Merge only after exact-head CI/browser/full-device gates pass; then verify exact merge SHA in production and run Inventory Site Production Audit.
+- `ACTIVE_PR: none`.
+- Production release: `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f`; schema `032`.
+- Exact tested PR head: `525c2d42cb1d95917dc107d7b9b8b283bea73131`.
+- Exact-head PR gates PASS: Master Data/Admin #528, Super Admin Browser #455, Workforce Diagnostic #603, Deploy/full-device #1263.
+- Earlier candidate `e2261e648314b80da5879ced9741dd1baf6d858f` correctly failed Deploy #1260 because the final desktop product grid overrode the <=1100px tablet card grid, causing 308px horizontal overflow at 844x390. The responsive structure was repaired and guarded before merge.
+- Merged as `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f`.
+- Main Deploy Kitchen OS #1264 PASS; pre-deploy backup: `/opt/kitchen-os/backups/kitchen_os_20261006T133704Z.dump`.
+- Production health: app/database/edge healthy, release `e71376e`, schema `032`, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #574: attempt 1 hit concurrent SSH connection closure (exit 255); sequential attempt 2 PASS.
+- Workforce Staff #815 PASS, Attendance #789 PASS, Schedule Backfill #799 PASS; Schedule Parity #588 attempt 1 hit concurrent `ssh-keyscan` connection closure and attempt 2 PASS.
+- Delivered visual-only parity: Inter/Noto Sans TC typography, neutral ink/slate text hierarchy, light white surfaces, subtle borders/shadows, emerald accent, refined spacing/radii, light product/location cards and light Inventory detail drawer.
+- Existing PostgreSQL/VPS authority, Inventory quantities/minimums/transactions, renderer semantics, arbitrary site scopes and granular permission behavior are unchanged.
+- The earlier SVG mockups remain structural/behavioral references; the production visual layer is the higher-fidelity presentation authority.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 # Kitchen OS — Current Development Handoff
 
