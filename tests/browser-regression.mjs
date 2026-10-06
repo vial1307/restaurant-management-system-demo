@@ -247,18 +247,38 @@ async function assertRoutePermissions(page, username) {
 async function inventorySearchRoundTrip(page) {
   const input = page.locator('[data-field="inventorySearch"]');
   await input.waitFor({state:"visible"});
-  const before = await page.locator(".inventory-row:visible").count();
-  assert(before > 0,"inventory should have visible rows");
+  const rows = page.locator(".inventory-row");
+  const visibleRows = page.locator(".inventory-row:visible");
+  const before = await visibleRows.count();
+  assert(before > 1,"inventory search fixture needs multiple visible rows");
+
   await input.fill("niu rou");
   assert.equal(await input.inputValue(),"niu rou");
-  await page.waitForTimeout(50);
-  const filtered = await page.locator(".inventory-row:visible").count();
-  assert(filtered > 0 && filtered <= before,"inventory search did not filter");
-  await input.fill("");
-  await page.waitForTimeout(50);
+  await page.waitForFunction(
+    (beforeCount)=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length < beforeCount,
+    before
+  );
+  const filtered = await visibleRows.count();
+  assert(filtered > 0 && filtered < before,"inventory search must hide non-matching rows");
+  assert((await page.locator(".inventory-row[data-search-hidden]").count()) > 0,"inventory search did not mark hidden rows");
+
+  const meta = page.locator("[data-inventory-search-meta]");
+  await meta.waitFor({state:"visible"});
+  assert.match(await meta.innerText(),new RegExp(`^${filtered} / ${before} `),"inventory search result counter is stale");
+
+  await input.fill("__inventory_no_match__");
+  await page.waitForFunction(()=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length===0);
+  assert.equal(await visibleRows.count(),0,"no-result inventory search must hide every row");
+  assert.equal(await page.locator("[data-inventory-search-empty]:visible").count(),1,"no-result state must be visible");
+
+  const clear = page.locator('[data-action="clear-inventory-search"]');
+  await clear.waitFor({state:"visible"});
+  await clear.click();
+  await page.waitForFunction((beforeCount)=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length===beforeCount,before);
   assert.equal(await input.inputValue(),"");
-  const restored = await page.locator(".inventory-row:visible").count();
-  assert.equal(restored,before,"clearing inventory search did not restore all rows");
+  assert.equal(await visibleRows.count(),before,"clearing inventory search did not restore all rows");
+  assert.equal(await page.locator("[data-inventory-search-empty]:visible").count(),0,"empty state must clear after search reset");
+  assert.equal(await rows.count(),before,"search must not remove inventory rows from the DOM");
 }
 
 async function adminDesktop(browser) {
