@@ -89,6 +89,24 @@ const accountAdminSource = read("src/account-admin.js");
 const operationsSource = read("src/operations.js");
 const storeCoreSource = read("src/store-core.js");
 const managementSource = read("src/management.js");
+const productionUiSmokeSource = read("tests/production-ui-smoke.mjs");
+const inventoryCrossSurfaceSource = read("tests/inventory-cross-surface-browser-regression.mjs");
+
+assert.match(
+  productionUiSmokeSource,
+  /url\.pathname === "\/api\/inventory\/access"[\s\S]{0,700}inventoryAccess\(/,
+  "production UI smoke must mock the database-driven Inventory access snapshot"
+);
+assert.match(
+  productionUiSmokeSource,
+  /inventory\.product\.create[\s\S]{0,500}inventory\.history\.full/,
+  "production UI smoke must grant the granular Inventory actions needed to certify the branch operation tabs"
+);
+assert.match(
+  inventoryCrossSurfaceSource,
+  /const closeBranchEditor=async\(\)=>[\s\S]{0,700}querySelector\('\.ingredient-modal \.icon-button\[data-action="close-modal"\]'\)\?\.click\(\)/,
+  "cross-surface regression must close the current rerendered Inventory editor atomically"
+);
 
 assert.doesNotMatch(accountPermissionsSource, /ACCOUNT_ROLE_DEFAULTS/,
   "frontend permissions must not contain source-coded role grants");
