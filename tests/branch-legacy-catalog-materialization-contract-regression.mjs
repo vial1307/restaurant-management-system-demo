@@ -71,7 +71,20 @@ assert.match(admin,/await request\(path,\{method:"POST",body\}\)[\s\S]{0,220}inv
 assert.doesNotMatch(admin,/DEFAULT_ITEMS|LARGE_FREEZER_SHEET_ITEMS|localStorage/,
   "Super Admin database must never use browser legacy inventory as authority");
 
-assert.match(routes,/siteMode === "branch"[\s\S]{0,900}metadata->>'work_area'=\$2[\s\S]{0,700}attachLocation\(workLocation\.rows\[0\]\.id\)/,
+const branchWorkProjectionSection=section(
+  routes,
+  'const siteMode = (await client.query(',
+  'const requestedPrimaryCode=String('
+);
+assert.match(branchWorkProjectionSection,/siteMode === "branch"/,
+  "catalog sync must keep the database-driven branch Work Area projection");
+assert.match(branchWorkProjectionSection,/kind=\'work\'/,
+  "branch Work Area projection must resolve a work-kind location");
+assert.match(branchWorkProjectionSection,/metadata->>\'work_area\'=\$2/,
+  "branch Work Area projection must resolve the site-scoped Work Area code from PostgreSQL");
+assert.match(branchWorkProjectionSection,/\[site,target\.work_area\]/,
+  "branch Work Area projection must be scoped to the current site and requested Work Area");
+assert.match(branchWorkProjectionSection,/attachLocation\(workLocation\.rows\[0\]\.id,\{kind:"work"\}\)/,
   "API must repair/create branch work-area associations on every catalog sync");
 assert.match(cloud,/\.\.\.\(branchWorkLocationCode\(site,draft\.workArea\)[\s\S]{0,180}\[\{ code:branchWorkLocationCode\(site,draft\.workArea\) \}\]/,
   "branch editor must include work location regardless of legacy storageOnly flag");
