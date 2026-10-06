@@ -113,20 +113,6 @@ function session() {
   return readJson(AUTH_KEY, null);
 }
 
-function role() {
-  const s = session();
-  return s?.accountRole || (s?.role === "admin" ? "admin" : s?.role === "central" ? "central" : "employee");
-}
-
-function hasInventoryPermission(action = "view") {
-  // Legacy module permission remains available only for non-Inventory callers
-  // during migration. Inventory UI/runtime authority comes from accessBySite.
-  const s = session();
-  if (!s) return false;
-  if (s.role === "admin" || s.accountRole === "admin") return true;
-  return Boolean(s.permissions?.inventory?.[action]);
-}
-
 export function inventoryAccessSnapshot(site = currentSite()) {
   return accessBySite.get(String(site || "")) || null;
 }
@@ -1316,7 +1302,8 @@ export function centralItemKey(id) {
 }
 
 export async function getCloudInventoryHistory(site = currentSite(), limit = 200) {
-  if (!(await verifyMigration()) || role() !== "admin") return [];
+  if (!(await verifyMigration())
+      || !canInventoryAction("inventory.history.full",{site})) return [];
 
   try {
     const [historyResult, rows] = await Promise.all([
