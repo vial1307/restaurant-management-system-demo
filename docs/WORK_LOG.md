@@ -1,5 +1,23 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — Inventory phase 2 production closure: PR #207 + PR #208
+
+- PR #207 exact head `034144568ddc71a252c439cb65cfb922cb25c2af` passed Deploy #1234, Master/Admin #510, Super Admin Browser #431, API Load #723 and Workforce Diagnostic #586.
+- PR #207 merged as `5a7a37d9269aff13e45ff544d134c86bc8934475`.
+- Main Deploy #1235 attempt 1 hit only a detached-close-button browser certification race after remote rerender; unchanged merge SHA rerun passed regression and deployed.
+- Production UI smoke then revealed a stale test fixture that did not provide granular `/api/inventory/access` actions; runtime intentionally failed closed and hid operation tabs.
+- PR #208 changed certification only, not runtime business behavior. Exact head `5f0506f7b4a2911ae0e91fc318caf5a8ebb8ffd7` passed Deploy #1243, Master/Admin #514, Super Admin Browser #438 and API Load #725.
+- PR #208 merged as `09fbda4291f3f02d895ae84f2779df77bcaccf76`.
+- Main Deploy #1244 / `37439101732`: PASS.
+- Backup: `/opt/kitchen-os/backups/kitchen_os_20261006T090006Z.dump`.
+- Health: app/database OK, schema `032`, release `09fbda4`; `DATA_INTEGRITY_OK`; production UI smoke PASS.
+- AgentMemory seed/recall PASS.
+- Post-deploy: Inventory Audit #554, Workforce Staff #795, Attendance #769, Schedule Backfill #779 and Schedule Parity #568 all PASS.
+- Inventory multi-location UI, Mobile Full Screen Detail, permission-controlled quick quantity editing, DB Category/Unit/Primary/Receive Default integration and arbitrary site combinations are now production-verified.
+- Closure sets `ACTIVE_PR: none`.
+- Next Inventory runtime work should focus on low-stock notification UX and remaining mutable business-data hard-code audit. Handoff auto-polling/force-refresh and VPS disk cleanup remain separate.
+
+
 ## 2026-10-06 — PR #208 phase-2 production certification repair
 
 - PR #207 exact head `034144568ddc71a252c439cb65cfb922cb25c2af` passed its PR gates and merged as `5a7a37d9269aff13e45ff544d134c86bc8934475`.

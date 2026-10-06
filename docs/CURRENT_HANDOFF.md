@@ -1,73 +1,72 @@
 # Kitchen OS — Current Development Handoff
 
-ACTIVE_PR: #208
+ACTIVE_PR: none
 
-## ACTIVE — PR #208 phase-2 production certification repair, 2026-10-06
+## CURRENT VERIFIED PRODUCTION — Inventory multi-location phase 2 + certification repair, 2026-10-06
 
-PR #207 is merged and its runtime code is already deployed as release `5a7a37d9269aff13e45ff544d134c86bc8934475` / schema `032`.
+PR #207 and PR #208 are merged, deployed and production-verified. There is currently **no active engineering PR**.
 
-Observed post-merge certification state:
-- exact PR #207 head `034144568ddc71a252c439cb65cfb922cb25c2af` passed Deploy #1234, Master/Admin #510, Super Admin Browser #431, API Load #723 and Workforce Diagnostic #586;
-- PR #207 merged as `5a7a37d9269aff13e45ff544d134c86bc8934475`;
-- main Deploy #1235 attempt 1 failed only in the cross-surface browser certification because a branch editor rerender detached the close button while Playwright was clicking it;
-- unchanged merge SHA attempt 2 passed the full regression and deployed successfully;
-- deployment evidence: backup `/opt/kitchen-os/backups/kitchen_os_20261006T075152Z.dump`, schema `032`, `DATA_INTEGRITY_OK`, app/database/edge healthy, release `5a7a37d`, AgentMemory seed/recall PASS;
-- production UI smoke then failed because the smoke fixture did not mock the new `/api/inventory/access` granular permission snapshot, so the permission-driven branch operation tabs were intentionally absent in the test fixture;
-- this is a certification-fixture issue, not a database/runtime rollback. The deployed release remains `5a7a37d`.
+Delivered by PR #207:
+- one Inventory product = one Desktop row / one Mobile card;
+- location ordering is database-driven: Primary Location -> Work Location -> other configured locations;
+- current UX rule: when an item has 3 or more configured locations, show the first 2 chips plus `Xem thêm / 查看更多`;
+- product/location detail opens as a full-screen detail surface on Mobile;
+- permitted users can quick-edit per-location quantity with minus / direct number / plus;
+- quick-edit and three-dot actions use granular Inventory permission snapshots from PostgreSQL, not role names;
+- Inventory site switching follows the database-visible site list and therefore supports arbitrary site combinations granted from Super Admin;
+- Add/Edit Product integrates database Category, Unit, Primary Location and Receive Default;
+- permitted Unit editors may create a new Unit and persist it into PostgreSQL;
+- read model hydrates category/unit metadata, primary/display order, minimum/warning state and item-location presentation metadata;
+- catalog sync persists item-location metadata and validates granular attach/detach/primary/category/unit/Work Area permissions.
 
-PR #208 scope:
-- update production UI smoke to mock granular Inventory access actions;
-- make cross-surface test close the currently rendered branch editor atomically after remote rerenders;
-- guard both behaviors in static regression;
-- no runtime Inventory business logic, database schema/data, permission model or application UI behavior changes.
+PR #207 exact-head evidence:
+- tested head: `034144568ddc71a252c439cb65cfb922cb25c2af`;
+- Deploy Kitchen OS #1234: PASS;
+- Master Data/Admin Panel #510: PASS;
+- Super Admin Browser #431: PASS;
+- API Load #723: PASS;
+- Workforce Approval Diagnostic #586: PASS;
+- merge commit: `5a7a37d9269aff13e45ff544d134c86bc8934475`.
 
-Required:
-1. exact-head PR #208 Deploy/full-device + Master/Admin + Super Admin Browser + API Load;
-2. merge only tested head;
-3. main deploy/smoke must pass on exact merge SHA;
-4. Inventory Site Production Audit and applicable workforce production checks must complete;
-5. close PR #207/#208 handoff as verified production.
+Post-merge certification issue and PR #208:
+- the first main Deploy #1235 attempt failed only because a remote Inventory editor rerender detached a close button during Playwright interaction;
+- unchanged merge SHA rerun passed full regression and deployed successfully;
+- the deployed runtime itself was healthy on schema `032`, but production UI smoke used a pre-granular test fixture that returned no `/api/inventory/access` actions, so the permission-driven operation tabs were correctly hidden;
+- PR #208 repaired only certification fixtures: granular access mocking + atomic close of the currently rendered editor + static guards;
+- no Inventory business logic, permission model, schema/data or production UI behavior was changed by PR #208.
 
-## ACTIVE — PR #207 Inventory multi-location Desktop/Mobile UI, 2026-10-06
+PR #208 exact-head evidence:
+- tested head: `5f0506f7b4a2911ae0e91fc318caf5a8ebb8ffd7`;
+- Deploy Kitchen OS #1243: PASS;
+- Master Data/Admin Panel #514: PASS;
+- Super Admin Browser #438: PASS;
+- API Load #725: PASS;
+- merge commit: `09fbda4291f3f02d895ae84f2779df77bcaccf76`.
 
-Runtime phase 2 of the approved Inventory redesign.
+Final production verification on exact merge SHA `09fbda4291f3f02d895ae84f2779df77bcaccf76`:
+- Deploy Kitchen OS #1244 / run `37439101732`: PASS;
+- backup: `/opt/kitchen-os/backups/kitchen_os_20261006T090006Z.dump`;
+- production health: app/database healthy, schema `032`, release `09fbda4`;
+- `DATA_INTEGRITY_OK`;
+- production UI smoke: `PRODUCTION_UI_SMOKE_OK`;
+- AgentMemory seed/recall: PASS;
+- Inventory Site Production Audit #554 / run `37440144236`: PASS;
+- Workforce Staff Production Backfill #795: PASS;
+- Workforce Attendance Production Backfill #769: PASS;
+- Workforce Schedule Production Backfill #779: PASS;
+- Workforce Schedule Production Parity #568: PASS.
 
-Production baseline:
-- release `36e0fbc0703262cc2b61f0cd7dba2fe44abc3358`;
-- schema `032`;
-- PR #205 granular Inventory permissions are already production authority.
+Current authority:
+- `ACTIVE_PR: none`;
+- verified production release is `09fbda4291f3f02d895ae84f2779df77bcaccf76`;
+- schema remains `032`;
+- PostgreSQL/VPS + CURRENT_HANDOFF remain authoritative.
 
-Current PR #207 implementation:
-- one inventory product is rendered as one Desktop row / one Mobile card instead of one row per storage location;
-- location order is database-driven: Primary Location -> Work Location -> other configured storage locations;
-- latest approved UX rule: when a product has **3 or more locations**, show the first **2** location chips plus `Xem thêm / 查看更多`;
-- a location chip opens product detail; on Mobile the detail is full-screen;
-- per-location quick edit uses minus / direct number / plus only when the effective granular permission allows it;
-- three-dot action menu is generated from the effective Inventory permission snapshot instead of Role names;
-- Inventory site switcher follows the database-visible site list, supporting arbitrary site combinations from Super Admin;
-- Add/Edit Product integrates Category, Unit, Primary Location and Receive Default from PostgreSQL;
-- permitted unit editors may type a new unit and the backend persists it to `inventory_units`;
-- Inventory read model hydrates category/unit, primary/display metadata and low-stock fields;
-- catalog sync persists item-location presentation metadata and validates granular attach/detach/primary/category/unit/Work Area permissions.
-
-Important terminology:
-- Primary Location = first/primary storage location for presentation/operations;
-- Work Location = site-scoped Work Area stock location;
-- Receive Default = inbound/cross-site routing destination when a product has multiple valid storage locations;
-- these three concepts remain separate.
-
-Not in PR #207:
-- VPS disk cleanup;
-- GitHub/Handoff auto-polling/force-refresh.
-
-Required exact-head gates before merge:
-1. Database Schema Regression;
-2. Master Data and Admin Panel Regression;
-3. Super Admin Browser Regression;
-4. Isolated CI API Load Smoke;
-5. Deploy Kitchen OS to VPS regression/full-device;
-6. merge only the tested exact head;
-7. deploy exact merge SHA and verify release/schema 032, `DATA_INTEGRITY_OK`, production UI smoke and Inventory Site Production Audit.
+Next approved Inventory work:
+- dedicated low-stock / near-low notification UX using database warning/minimum metadata;
+- audit remaining mutable Inventory/Procurement business lists and remove any remaining source-code authority;
+- Handoff auto-polling/force-refresh remains a separate control-plane improvement;
+- VPS disk cleanup remains deferred.
 
 ## CURRENT VERIFIED PRODUCTION — PR #205 granular Inventory access + Super Admin control, 2026-10-06
 
