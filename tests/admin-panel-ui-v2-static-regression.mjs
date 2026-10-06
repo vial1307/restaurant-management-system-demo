@@ -5,6 +5,7 @@ const html = fs.readFileSync(".admindev.html", "utf8");
 const shellJs = fs.readFileSync("src/admin-panel-ui-v2.js", "utf8");
 const sectionsJs = fs.readFileSync("src/admin-panel-sections-v2.js", "utf8");
 const shellCss = fs.readFileSync("src/admin-panel-v2.css", "utf8");
+const baseAdminCss = fs.readFileSync("src/admin-panel.css", "utf8");
 const sectionsCss = fs.readFileSync("src/admin-panel-sections-v2.css", "utf8");
 
 for (const asset of [
@@ -22,6 +23,14 @@ assert.match(shellJs, /Kitchen OS Control Center/);
 assert.match(shellJs, /data-ui-section/);
 assert.match(shellCss, /\.sa-dashboard-hero/);
 assert.match(shellCss, /@media\(max-width:640px\)/);
+
+assert.match(baseAdminCss, /Approved UI lock — 2026-10-06: Super Admin inventory permission console/);
+assert.match(baseAdminCss, /\.iap-shell\{[\s\S]*?grid-template-columns:minmax\(270px,.72fr\) minmax\(0,1.68fr\)/);
+assert.match(baseAdminCss, /\.iap-toolbar::before\{[\s\S]*?Đối tượng áp dụng/);
+assert.match(baseAdminCss, /\.iap-scope-head>div:first-child>strong::before\{[\s\S]*?2\. /);
+assert.match(baseAdminCss, /\.iap-site-chip:has\(input:checked\)/);
+assert.match(baseAdminCss, /@media\(max-width:1050px\)[\s\S]*?\.iap-shell\{grid-template-columns:1fr\}/);
+assert.match(baseAdminCss, /@media\(max-width:390px\)[\s\S]*?\.iap-site-grid\{grid-template-columns:1fr\}/);
 
 for (const section of ["development", "users", "content", "data", "stores", "settings", "logs"]) {
   assert.match(sectionsJs, new RegExp(`${section}:\\s*\\{`), `${section} must have v2 section metadata`);
