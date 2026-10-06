@@ -140,6 +140,7 @@ jobs:
           node tests/admin-panel-static-regression.mjs
           node tests/admin-panel-ui-v2-static-regression.mjs
           node tests/inventory-access-control-contract-regression.mjs
+          node tests/inventory-multilocation-production-contract-regression.mjs
 
       - name: Prepare isolated regression database
         run: node vps/backend/scripts/regression-setup.mjs
