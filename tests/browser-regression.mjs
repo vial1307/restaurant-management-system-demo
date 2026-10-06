@@ -615,6 +615,11 @@ async function roleDesktop(browser, username, checks) {
       await page.locator(".modal-backdrop").waitFor({state:"detached"});
     }
     if(username === "employeefx" && checks.stocktake === true){
+      const overview=page.locator('[data-action="select-inventory-ops"][data-mode="overview"]').first();
+      if(await overview.count()) {
+        await overview.click();
+        await page.locator(".inventory-product-table").waitFor({state:"visible",timeout:12000});
+      }
       const peer=await context.newPage();
       attachRuntimeDiagnostics(peer,errors,"peer: ");
       await peer.goto(BASE + "/#inventory",{waitUntil:"domcontentloaded"});
