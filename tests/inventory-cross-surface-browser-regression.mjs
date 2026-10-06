@@ -78,12 +78,32 @@ export async function verifyInventoryCrossSurface({browser, adminPage, adminCont
         }
       }
       // Certification is based on observable authoritative state rather than a
-      // one-shot hydration event: the newly created PostgreSQL item must be
-      // rendered on the selected site before the test proceeds.
+      // one-shot hydration event. Branch UI may retain a user's previous
+      // location filter, so normalize it to the product overview before
+      // asserting that the newly-created PostgreSQL item is rendered.
+      if(site!=="central") {
+        const overview=main.locator('[data-action="select-inventory-ops"][data-mode="overview"]').first();
+        if(await overview.count()) await overview.click();
+        const storage=main.locator('[data-action="select-inventory-view"][data-view="storage"]').first();
+        if(await storage.count()) await storage.click();
+        const allLocations=main.locator('[data-action="select-zone"][data-zone="all"]').first();
+        if(await allLocations.count()) await allLocations.click();
+        await main.locator(".inventory-product-table").waitFor({state:"visible",timeout:12000});
+      }
       const row=site==="central"
         ? main.locator('.storage-row').filter({has:main.locator(`[data-central-item-key="${item.item_key}"]`)}).first()
         : main.locator(`.inventory-product-row[data-stock-key="${key}"]`).first();
-      await row.waitFor({state:"visible",timeout:20000});
+      try {
+        await row.waitFor({state:"visible",timeout:20000});
+      } catch(error) {
+        const diagnostic=await main.evaluate((targetSite)=>({
+          active:localStorage.getItem("shitu-admin-active-site-v1")||"",
+          cloud:localStorage.getItem("shitu-inventory-cloud-v2")||"",
+          branchSnapshot:localStorage.getItem(`shitu-inventory-branch-snapshot-v1:${targetSite}`)||"",
+          pageText:document.querySelector(".page-content")?.textContent?.slice(0,3000)||"",
+        }),site);
+        throw new Error(`${profile.name} ${site}: authoritative item was not rendered after site hydration; diagnostic=${JSON.stringify(diagnostic)}; original=${error?.message||error}`);
+      }
       const openBranchEditor=async()=>{
         const menu=row.locator(".inventory-more-menu").first();
         await menu.locator("summary").click();
