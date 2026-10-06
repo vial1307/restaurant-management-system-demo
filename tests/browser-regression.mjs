@@ -298,7 +298,7 @@ async function adminDesktop(browser) {
   await assertInventorySurfaceFits(page,"fuxing desktop overview");
 
   for(const mode of ["overview","alerts","in","pick","transfer","ship","manage","history"]){
-    const button=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
+    const button=page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first();
     await button.waitFor({state:"visible"});
     await button.click();
     if(mode==="alerts"){
