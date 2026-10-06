@@ -1,5 +1,23 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #211 Inventory low-stock notification center
+
+- Started after Inventory phase 2 production closure on verified release `09fbda4` / schema `032`.
+- Confirmed remaining hard-code audit finding: `src/rules-core.js` still owns `PROCUREMENT_PRODUCTS` and `src/store-core.js` still owns mutable Procurement category/schedule defaults. These will be migrated in a separate PR after #211.
+- Added a dedicated Inventory notification center driven by current PostgreSQL stock metadata:
+  - Out of stock: quantity <= 0;
+  - Low: minimum enabled / minimum > 0 and quantity <= minimum;
+  - Near-low: warning enabled and quantity <= warning threshold after Low is excluded.
+- Added all / empty / low / near filters.
+- Added a prominent Inventory alert shortcut with current alert count.
+- Alert rows show product, exact storage/Work location, current quantity, threshold and severity.
+- Alert rows open the existing multi-location product detail so allowed users can resolve quantity using the same granular permission model.
+- Added responsive Desktop/Mobile styling.
+- Extended Inventory production contract and browser regression to certify alert tabs/filters and mobile fit.
+- No schema/data mutation in PR #211; schema 032 already contains the required warning/minimum fields.
+- NEXT: exact-head CI and production certification; Procurement DB migration remains next after closure.
+
+
 ## 2026-10-06 — Inventory phase 2 production closure: PR #207 + PR #208
 
 - PR #207 exact head `034144568ddc71a252c439cb65cfb922cb25c2af` passed Deploy #1234, Master/Admin #510, Super Admin Browser #431, API Load #723 and Workforce Diagnostic #586.
