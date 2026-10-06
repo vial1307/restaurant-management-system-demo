@@ -350,7 +350,7 @@ async function adminDesktop(browser) {
     }
   }
 
-  await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
+  await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="manage"]').first().click();
   assert((await page.locator('[data-manage-adjust="true"]').count()) > 0,"branch management quantity controls missing");
   const add=page.locator('[data-action="open-add-item"]').first();
   await add.waitFor({state:"visible"});
@@ -742,17 +742,17 @@ async function responsiveAdmin(browser, viewport) {
 
     for(const site of ["fuxing","yongji"]){
       await setSite(page,site);
-      const overview=page.locator('[data-action="select-inventory-ops"][data-mode="overview"]');
+      const overview=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="overview"]').first();
       await overview.waitFor({state:"visible"});
       await overview.click();
       await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
       await page.locator('[data-action="shift-date"][data-offset="-1"]').first().click();
       await page.locator(".inventory-history-notice").waitFor({state:"visible"});
       for(const mode of ["overview","in","pick","transfer","ship","manage","history"]){
-        const tab=page.locator(`[data-action="select-inventory-ops"][data-mode="${mode}"]`);
+        const tab=page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first();
         await tab.waitFor({state:"visible"});
       }
-      await page.locator('[data-action="select-inventory-ops"][data-mode="in"]').click();
+      await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="in"]').first().click();
       await page.locator('[data-branch-inventory-operations][data-mode="in"]').waitFor({state:"visible"});
       assert.equal(await page.locator(".inventory-history-notice").count(),0,`${site} mobile operation did not switch back to today`);
       await page.locator('[data-action="select-inventory-ops"][data-mode="manage"]').click();
