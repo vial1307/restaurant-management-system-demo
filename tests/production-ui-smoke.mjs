@@ -21,6 +21,39 @@ const sites = [
   { code:"fuxing", name_vi:"Fuxing", name_zh_tw:"復興店", sort_order:20, metadata:{ inventory_mode:"branch" } },
   { code:"yongji", name_vi:"Yongji", name_zh_tw:"永吉店", sort_order:30, metadata:{ inventory_mode:"branch" } },
 ];
+const inventorySmokeActions = [
+  "inventory.view",
+  "inventory.quantity.adjust_quick",
+  "inventory.quantity.set_absolute",
+  "inventory.minimum.edit",
+  "inventory.product.create",
+  "inventory.product.identity.edit",
+  "inventory.product.unit.edit",
+  "inventory.product.category.edit",
+  "inventory.product.location.attach",
+  "inventory.product.location.detach",
+  "inventory.product.primary_location.edit",
+  "inventory.receive_default.edit",
+  "inventory.work_area.edit",
+  "inventory.transfer.internal",
+  "inventory.transfer.cross_site",
+  "inventory.receive",
+  "inventory.pick",
+  "inventory.use",
+  "inventory.return",
+  "inventory.history.view",
+  "inventory.history.full",
+  "inventory.product.archive",
+];
+
+function inventoryAccess(siteCode) {
+  const actions=Object.fromEntries(inventorySmokeActions.map((actionKey)=>[
+    actionKey,
+    { allowed:true,reason:"PRODUCTION_SMOKE",source:"fixture",ruleId:"production-ui-smoke" },
+  ]));
+  return { site:siteCode,actions,locations:{},workAreas:{} };
+}
+
 function masterData(siteCode) {
   const site = sites.find((entry) => entry.code === siteCode);
   const branch = site?.metadata?.inventory_mode === "branch";
@@ -82,6 +115,14 @@ try {
     }
     if (url.pathname === "/api/inventory/receive-defaults") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ defaults: [] }) });
+      return;
+    }
+    if (url.pathname === "/api/inventory/access") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(inventoryAccess(url.searchParams.get("site") || "fuxing")),
+      });
       return;
     }
     if (/^\/api\/inventory\/(central|fuxing|yongji)$/.test(url.pathname)) {

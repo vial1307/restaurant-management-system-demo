@@ -1,5 +1,15 @@
 # Kitchen OS Engineering Status
 
+## ACTIVE — PR #208 phase-2 production certification repair, 2026-10-06
+
+- `ACTIVE_PR: #208`.
+- PR #207 merged as `5a7a37d9269aff13e45ff544d134c86bc8934475` and that exact release is already live on schema `032`.
+- Deployment itself passed: backup created, API/database healthy, `DATA_INTEGRITY_OK`, release stamp `5a7a37d`, AgentMemory seed/recall PASS.
+- Main Deploy #1235 attempt 1 hit a transient rerendered-modal click failure; attempt 2 full regression passed and deployed.
+- Production UI smoke then exposed a stale certification fixture: it returned `{}` for the new granular `/api/inventory/access` endpoint, so permission-driven Inventory operation tabs could not render.
+- PR #208 updates only certification tests; no runtime business behavior/schema/data changes.
+- NEXT: exact-head #208 gates -> merge tested head -> main deploy/smoke -> post-deploy Inventory audit -> closure.
+
 ## ACTIVE — PR #207 Inventory multi-location UI, 2026-10-06
 
 - `ACTIVE_PR: #207`.

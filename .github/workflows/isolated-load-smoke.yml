@@ -77,6 +77,9 @@ jobs:
           cat /tmp/kitchen-load-api.log
           exit 1
 
+      - name: Inventory phase-2 production contract
+        run: node tests/inventory-multilocation-production-contract-regression.mjs
+
       - name: Run 10/25/50-client isolated load smoke
         run: node vps/backend/scripts/isolated-load-smoke.mjs
 

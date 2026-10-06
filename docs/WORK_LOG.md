@@ -1,5 +1,19 @@
 # Kitchen OS Work Log
 
+## 2026-10-06 — PR #208 phase-2 production certification repair
+
+- PR #207 exact head `034144568ddc71a252c439cb65cfb922cb25c2af` passed its PR gates and merged as `5a7a37d9269aff13e45ff544d134c86bc8934475`.
+- Main Deploy #1235 attempt 1 failed in full-device certification only because a remote Inventory editor rerender detached the close button while Playwright was waiting for it to stabilize.
+- Reran the unchanged merge SHA. Attempt 2 full regression PASS and deployment PASS.
+- Production deploy evidence: backup `/opt/kitchen-os/backups/kitchen_os_20261006T075152Z.dump`; schema `032`; `DATA_INTEGRITY_OK`; app/database/edge healthy; release `5a7a37d`; AgentMemory sync/recall PASS.
+- Production UI smoke then failed at the first branch operation tab because its API interceptor still returned `{}` for the phase-2 `/api/inventory/access?site=...` endpoint. This made the UI correctly fail closed and hide permission-driven controls.
+- Opened PR #208 from current main to repair certification only.
+- Added a granular Inventory access fixture to `tests/production-ui-smoke.mjs`.
+- Stabilized cross-surface editor close by clicking the current DOM close control atomically after rerenders and still requiring modal detach.
+- Added static guards so neither production certification fixture can silently regress.
+- No runtime Inventory logic, database schema/data, permissions or UI behavior changed.
+
+
 ## 2026-10-06 — PR #207 Inventory multi-location UI phase 2
 
 - Continued from the approved Inventory mockup/spec after PR #205 production closure.
