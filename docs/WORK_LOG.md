@@ -2312,3 +2312,14 @@ The separate read-cutover candidate:
 - Workforce Staff #815, Attendance #789, Schedule Backfill #799 PASS. Schedule Parity #588 PASS on attempt 2 after transient SSH setup failure.
 - `ACTIVE_PR: none`; production runtime authority remains release `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f` / schema `032`.
 - No JavaScript business logic, PostgreSQL schema/data, inventory quantity/minimum/transaction semantics, RBAC, or site-scope behavior changed.
+
+## 2026-10-07 — Inventory search defect + search-bar UX
+
+- User reported Inventory search could not actually filter results and requested search-bar optimization.
+- Diagnosis: `applyInventorySearchDom()` correctly evaluated normalized text/pinyin/zhuyin and set `row.hidden`, but Inventory row CSS defines explicit grid display. That presentation path can cause rows to remain visible despite the hidden state.
+- Existing browser test was insufficient because it asserted `filtered <= before`, allowing an unchanged result set to pass.
+- Branch: `fix/inventory-search-ux-20261007`.
+- Runtime fix: add `data-search-hidden` to non-matching rows/groups and enforce `display:none!important` for the search visibility contract.
+- Search UX: bilingual product/pinyin/zhuyin/location placeholder, live result count, clear action, refined light search field and mobile layout.
+- Browser regression now requires a real reduction for `niu rou`, validates a zero-match query, validates the empty state, validates clear/reset, and confirms search never removes rows from the DOM.
+- No database, API, RBAC, quantity, minimum or transaction mutation.
