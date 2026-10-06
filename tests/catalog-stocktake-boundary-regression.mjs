@@ -20,23 +20,33 @@ assert.match(
 );
 assert.match(
   app,
-  /element\.dataset\.manageAdjust === "true" && canManageBranchCatalog\((?:activeInventorySite\(\)|site)\) && canDirectInventoryAdjust\(\)/,
-  "quantity change handler must retain the stocktake role guard"
+  /key === "quantity"[\s\S]{0,220}canInventoryAction\("inventory\.quantity\.set_absolute",\{[\s\S]{0,120}locationId:item\.cloudLocationId/,
+  "quantity change handler must enforce the location-scoped database action"
 );
 assert.match(
   app,
-  /const stocktakeEditable = canDirectInventoryAdjust\(\);/,
-  "product modal must derive stock fields from the stocktake guard"
+  /key === "minimum"[\s\S]{0,220}canInventoryAction\("inventory\.minimum\.edit",\{[\s\S]{0,120}locationId:item\.cloudLocationId/,
+  "minimum change handler must enforce the location-scoped database action"
 );
 assert.match(
   app,
-  /name="quantity:\$\{zone\.id\}"[^>]+readonly aria-readonly=/,
-  "non-stocktake catalog editors must see quantity as read-only in the product modal"
+  /const canQuantity=canInventoryAction\("inventory\.quantity\.set_absolute",\{site,locationId\}\)/,
+  "product modal must derive quantity editing from the location-scoped database action"
 );
 assert.match(
   app,
-  /name="minimum:\$\{zone\.id\}"[^>]+readonly aria-readonly=/,
-  "non-stocktake catalog editors must see minimum as read-only in the product modal"
+  /const canMinimum=canInventoryAction\("inventory\.minimum\.edit",\{site,locationId\}\)/,
+  "product modal must derive minimum editing from the location-scoped database action"
+);
+assert.match(
+  app,
+  /name="quantity:\$\{zone\.id\}"[\s\S]{0,260}canQuantity \? "" : 'readonly aria-readonly="true"'/,
+  "product modal must render quantity read-only when the location action is denied"
+);
+assert.match(
+  app,
+  /name="minimum:\$\{zone\.id\}"[\s\S]{0,260}canMinimum \? "" : 'readonly aria-readonly="true"'/,
+  "product modal must render minimum read-only when the location action is denied"
 );
 
 assert.match(
