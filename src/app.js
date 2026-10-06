@@ -2367,16 +2367,31 @@ window.addEventListener("shitu:active-site-changed", () => {
   taskDerivationCache.clear();
   renderWhenAuthorized();
 });
+const INVENTORY_REACTIVE_ROUTES = new Set(["dashboard","inventory","procurement","preparation"]);
+function inventoryRouteNeedsLiveRender(activeRoute = route()) {
+  return INVENTORY_REACTIVE_ROUTES.has(String(activeRoute || ""));
+}
+
 window.addEventListener("shitu:inventory-sites-changed", () => {
   taskDerivationCache.clear();
-  renderWhenAuthorized();
+  // Site-registry changes affect Inventory-derived operational pages and the
+  // branch label in Settings. Do not replace unrelated interactive workspaces
+  // such as Schedule/Workforce while a background Inventory hydration finishes.
+  if (inventoryRouteNeedsLiveRender() || route() === "settings") renderWhenAuthorized();
 });
 window.addEventListener("shitu:inventory-cloud-updated", (event) => {
-  if (route() === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
+  const activeRoute=route();
+  if (!inventoryRouteNeedsLiveRender(activeRoute)) {
+    // Inventory realtime is independent from Workforce/Attendance/SOP forms.
+    // Re-rendering those pages here can discard an in-progress form between
+    // pointer down and submit when Inventory access/master-data hydration returns.
+    return;
+  }
+  if (activeRoute === "inventory" && document.querySelector("[data-central-kitchen-shell]")) return;
   const site = activeInventorySite();
   if (event.detail?.site && event.detail.site !== site) return;
   taskDerivationCache.clear();
-  if (route() === "inventory" && view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
+  if (activeRoute === "inventory" && view.modal === "add-item" && preserveInventoryEditor(root.querySelector('#ingredient-product-form'))) return;
   renderWhenAuthorized();
 });
 window.addEventListener("shitu:inventory-cloud-status", (event) => {
