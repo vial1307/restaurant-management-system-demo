@@ -68,7 +68,11 @@ assert.equal(supervisorWorkMinimum.response.status, 200);
 
 const seeded = await request("/api/inventory/fuxing", { cookie: admin });
 const locations = seeded.data.stock
-  .filter((row) => row.item_id === beef.id)
+  .filter((row) => {
+    if (row.item_id !== beef.id) return false;
+    const location = seeded.data.locations.find((candidate) => candidate.id === row.location_id);
+    return location?.kind === "storage";
+  })
   .map((row) => {
     const location = seeded.data.locations.find((candidate) => candidate.id === row.location_id);
     return {
