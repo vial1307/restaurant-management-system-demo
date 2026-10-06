@@ -55,4 +55,9 @@ for (const presentationJs of [shellJs, sectionsJs]) {
   assert.doesNotMatch(presentationJs, /localStorage|sessionStorage/, "v2 presentation layer must not become a data authority");
 }
 
+assert.match(baseAdminCss, /Visual parity polish — 2026-10-06/);
+assert.match(baseAdminCss, /--sa-canvas:#f6f7f9/);
+assert.match(baseAdminCss, /--sa-accent:#147a59/);
+assert.match(baseAdminCss, /\.iap-shell\{[\s\S]*?background:#f8faf9/);
+assert.match(baseAdminCss, /\.sa-btn\.primary\{[\s\S]*?background:var\(--sa-accent\)/);
 console.log("SUPER_ADMIN_UI_V2_STATIC_REGRESSION_OK");
