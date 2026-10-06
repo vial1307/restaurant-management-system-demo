@@ -1427,6 +1427,11 @@ function addItemModal(context) {
   const canCategory=canInventoryAction("inventory.product.category.edit",{site});
   const canWorkArea=canInventoryAction("inventory.work_area.edit",{site,workArea:selectedWorkArea});
   const canPrimary=canInventoryAction("inventory.product.primary_location.edit",{site});
+  const selectedWorkLocation=inventoryWorkLocation(site,selectedWorkArea);
+  const workMinimumLocationId=String(working?.cloudLocationId || selectedWorkLocation?.id || "");
+  const canWorkMinimum=workMinimumLocationId
+    ? canInventoryAction("inventory.minimum.edit",{site,locationId:workMinimumLocationId,workArea:selectedWorkArea})
+    : canInventoryAction("inventory.minimum.edit",{site,workArea:selectedWorkArea});
   const receiveDefaultEditable = canManageReceiveDefault(site);
 
   const unitRows=(masters.units||[]);
@@ -1498,7 +1503,7 @@ function addItemModal(context) {
         ${locations}
       </fieldset>
       <div class="modal-grid modal-meta-grid">
-        <label>${escapeHtml(text.workInventory)} · Minimum<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 0}" ${working?.cloudLocationId && canInventoryAction("inventory.minimum.edit",{site,locationId:working.cloudLocationId,workArea:selectedWorkArea}) ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "可留 0；設定後用於工作區低庫存提醒。" : "Có thể để 0; nếu đặt sẽ dùng cho cảnh báo thiếu tại Work Area."}</small></label>
+        <label>${escapeHtml(text.workInventory)} · Minimum<input type="number" min="0" name="workMinimum" value="${working?.minimum ?? 0}" ${canWorkMinimum ? "" : 'readonly aria-readonly="true"'} /><small class="ingredient-form-guide">${language === "zh" ? "可留 0；設定後用於工作區低庫存提醒。" : "Có thể để 0; nếu đặt sẽ dùng cho cảnh báo thiếu tại Work Area."}</small></label>
         <label>${language==="zh"?"預設收貨儲位":"Vị trí nhận hàng mặc định · 預設收貨儲位"}<select name="receiveZone" ${receiveDefaultEditable ? "" : 'disabled aria-disabled="true"'}>${receiveOptions}</select>${receiveDefaultEditable ? "" : `<input type="hidden" name="receiveZone" value="${escapeHtml(receiveZone)}" />`}<small class="ingredient-form-guide">${language==="zh"?"只有一個儲位時可自動；多個儲位若有預設就自動入該位置，若沒有則收貨／跨店調撥時必須選擇目的儲位。":"Nếu chỉ có 1 vị trí hệ thống tự chọn; nếu có nhiều vị trí và đặt mặc định thì hàng đến sẽ vào đó, còn chưa đặt thì khi nhận/chuyển liên chi nhánh phải chọn vị trí đích."}</small></label>
       </div>
       <div class="modal-submit-bar"><button class="primary-button modal-submit" type="submit" data-save-item>${icon("check")}${escapeHtml(saveLabel)}</button></div>
