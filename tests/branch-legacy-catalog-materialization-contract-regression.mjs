@@ -86,12 +86,21 @@ assert.match(branchWorkProjectionSection,/\[site,target\.work_area\]/,
   "branch Work Area projection must be scoped to the current site and requested Work Area");
 assert.match(branchWorkProjectionSection,/attachLocation\(workLocation\.rows\[0\]\.id,\{kind:"work"\}\)/,
   "API must repair/create branch work-area associations on every catalog sync");
-assert.match(cloud,/\.\.\.\(branchWorkLocationCode\(site,draft\.workArea\)[\s\S]{0,180}\[\{ code:branchWorkLocationCode\(site,draft\.workArea\) \}\]/,
-  "branch editor must include work location regardless of legacy storageOnly flag");
+const branchDraftSection=section(cloud,"const item = draft ? {","} : buildBranchCatalog");
+assert.match(
+  branchDraftSection,
+  /work_area:draft\.workArea, storage_only:Boolean\(draft\.storageOnly\)/,
+  "branch editor must always send the database-owned Work Area identity independently of legacy storageOnly"
+);
 assert.doesNotMatch(
-  section(cloud,"const item = draft ? {","} : buildBranchCatalog"),
-  /!draft\.storageOnly\s*&&\s*branchWorkLocationCode/,
-  "legacy storageOnly must not suppress the work-area association"
+  branchDraftSection,
+  /!draft\.storageOnly[\s\S]{0,160}workArea|storageOnly\s*\?[\s\S]{0,160}work_area/,
+  "legacy storageOnly must not suppress the Work Area identity"
+);
+assert.match(
+  branchWorkProjectionSection,
+  /attachLocation\(workLocation\.rows\[0\]\.id,\{kind:"work"\}\)/,
+  "backend catalog lifecycle remains authoritative for materializing the Work Location stock projection"
 );
 
 assert.match(realtime,/route\.startsWith\("\/api\/inventory\/"\)/,
