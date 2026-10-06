@@ -15,8 +15,8 @@ const catalogSync = backend.slice(
 
 assert.match(
   app,
-  /manageQuantityEdit:canDirectInventoryAdjust\(\)/,
-  "Manage tab must not grant direct quantity editing from catalog permission alone"
+  /function quantityControl[\s\S]{0,500}inventory\.quantity\.adjust_quick[\s\S]{0,220}inventory\.quantity\.set_absolute/,
+  "all quantity controls must derive +/- and direct-number editing from granular database actions"
 );
 assert.match(
   app,
@@ -51,8 +51,13 @@ assert.match(
 
 assert.match(
   cloud,
-  /if \(!canDirectInventoryAdjust\(\)\) return \{ ok: false, fallback: false, error: new Error\("DIRECT_ADJUST_NOT_ALLOWED"\) \};/,
-  "frontend VPS set-quantity wrapper must not honor an inventory-editor bypass"
+  /cloudSetQuantity[\s\S]{0,1500}canInventoryAction\("inventory\.quantity\.set_absolute",[\s\S]{0,180}locationId:resolved\.location\.id/,
+  "frontend VPS set-quantity wrapper must enforce the concrete location database action"
+);
+assert.match(
+  cloud,
+  /cloudSetMinimum[\s\S]{0,1500}canInventoryAction\("inventory\.minimum\.edit",[\s\S]{0,200}locationId:resolved\.location\.id/,
+  "frontend VPS set-minimum wrapper must enforce the concrete location database action"
 );
 assert.doesNotMatch(
   cloud,
