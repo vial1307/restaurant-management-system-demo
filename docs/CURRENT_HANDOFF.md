@@ -1,3 +1,14 @@
+## ACTIVE — Inventory search repair + UX polish, 2026-10-07
+
+- `ACTIVE_PR: pending` — branch `fix/inventory-search-ux-20261007`.
+- User-reported defect: Inventory search input accepts text but rows may remain visible.
+- Root cause: search logic sets `hidden`, while Inventory row presentation explicitly sets `display:grid`; the visual display rule can override the HTML hidden state. The previous browser assertion also allowed `filtered === before`, so a no-op search could pass CI.
+- Fix: filtered rows/groups now carry `data-search-hidden` and CSS enforces `display:none!important`; search remains local over the currently rendered PostgreSQL-backed inventory view and does not mutate data.
+- UX: clearer bilingual search placeholder, result counter, explicit clear button, light visual styling aligned with PR #213, responsive mobile layout.
+- Regression now requires result count to decrease for a matching query, validates zero-result state, clear/reset behavior, and DOM row preservation.
+- No API/PostgreSQL/schema/RBAC/quantity/transaction changes.
+- Merge/deploy only after exact-head browser/full-device gates pass.
+
 ## STABLE — PR #213 high-fidelity Inventory + Super Admin visual parity, 2026-10-06
 
 - `ACTIVE_PR: none`.
