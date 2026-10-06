@@ -125,7 +125,7 @@ assert.match(
   /Visual parity responsive correction[\s\S]*?@media\(max-width:1100px\)[\s\S]*?\.inventory-product-table \.inventory-product-row\{[\s\S]*?grid-template-columns:minmax\(0,1fr\) auto/,
   "tablet card structure after visual parity must override the desktop product grid"
 );
-assert.match(app,/function inventorySearchControl\(language, text\)/,"Inventory search control must remain explicit and reusable");
+assert.match(app,/function inventorySearchControl\(language, text, totalCount\)/,"Inventory search control must remain explicit, reusable and receive the current rendered count");
 assert.match(app,/data-action="clear-inventory-search"/,"Inventory search must expose a clear action");
 assert.match(app,/row\.toggleAttribute\("data-search-hidden", !visible\)/,"Inventory search must mark filtered rows explicitly");
 assert.match(maestroStyles,/\.inventory-table \.inventory-row\[hidden\][\s\S]*?display:none!important/,"filtered Inventory rows must stay hidden despite display grid rules");
