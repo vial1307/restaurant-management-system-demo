@@ -2178,6 +2178,11 @@ root.addEventListener("submit", async (event) => {
       unitCode:String(data.get("unit") || "").trim(),
       primaryZone,
       workMinimum: Number(data.get("workMinimum")),
+      workMinimumEditable:Boolean(
+        form.elements.namedItem("workMinimum")
+        && !form.elements.namedItem("workMinimum").readOnly
+        && !form.elements.namedItem("workMinimum").disabled
+      ),
       storageOnly: Boolean(existingItem?.storageOnly),
       locations,
     };
