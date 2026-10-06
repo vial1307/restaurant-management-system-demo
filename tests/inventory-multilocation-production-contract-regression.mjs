@@ -52,6 +52,31 @@ assert.match(
   "minimum editing must use granular DB permission"
 );
 
+assert.match(
+  app,
+  /function inventoryLowStockAlertCenter\(products, context\)/,
+  "Inventory must expose a dedicated low-stock notification center"
+);
+assert.match(
+  app,
+  /function inventoryAlertRows\(products\)[\s\S]*?inventoryLocationState\(location\)/,
+  "low-stock notifications must derive from the same per-location database-backed thresholds as Inventory status"
+);
+assert.match(
+  app,
+  /data-action="select-inventory-alert-filter"/,
+  "low-stock center must expose severity filters"
+);
+assert.match(
+  app,
+  /data-mode="alerts"/,
+  "Inventory overview must expose the notification center"
+);
+for(const field of ["minimumEnabled","warningEnabled","warningQuantity"]){
+  assert(app.includes(field), `${field} must remain part of low-stock rendering`);
+}
+
+
 const actionBlock=app.slice(
   app.indexOf("function inventoryProductActions"),
   app.indexOf("function inventoryProductRow")
