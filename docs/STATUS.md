@@ -1,28 +1,21 @@
 # Kitchen OS Engineering Status
 
-## ACTIVE — PR #208 phase-2 production certification repair, 2026-10-06
+## STABLE — Inventory phase 2 production-verified, 2026-10-06
 
-- `ACTIVE_PR: #208`.
-- PR #207 merged as `5a7a37d9269aff13e45ff544d134c86bc8934475` and that exact release is already live on schema `032`.
-- Deployment itself passed: backup created, API/database healthy, `DATA_INTEGRITY_OK`, release stamp `5a7a37d`, AgentMemory seed/recall PASS.
-- Main Deploy #1235 attempt 1 hit a transient rerendered-modal click failure; attempt 2 full regression passed and deployed.
-- Production UI smoke then exposed a stale certification fixture: it returned `{}` for the new granular `/api/inventory/access` endpoint, so permission-driven Inventory operation tabs could not render.
-- PR #208 updates only certification tests; no runtime business behavior/schema/data changes.
-- NEXT: exact-head #208 gates -> merge tested head -> main deploy/smoke -> post-deploy Inventory audit -> closure.
-
-## ACTIVE — PR #207 Inventory multi-location UI, 2026-10-06
-
-- `ACTIVE_PR: #207`.
-- Production baseline remains release `36e0fbc...` / schema `032`.
-- Desktop: one product = one row.
-- Mobile: one product = one card; chip opens Full Screen Detail.
-- Location order: Primary -> Work -> Other.
-- Latest approved rule: 3+ locations => first 2 chips + `Xem thêm`.
-- Quick - / number / + controls are filtered by per-location effective database permission.
-- Three-dot actions use granular Inventory permission snapshots, not role names.
-- Add/Edit Product now uses database Category/Unit/Primary/Receive Default metadata.
-- Site switching follows database-visible Inventory sites and arbitrary Super Admin site combinations.
-- NEXT: exact-head CI → fix regression → merge tested head → production deploy/audit.
+- `ACTIVE_PR: none`.
+- PR #207 delivered the Inventory multi-location Desktop/Mobile UI and Add/Edit Product master-data integration.
+- PR #207 exact head `034144568ddc71a252c439cb65cfb922cb25c2af`: Deploy #1234, Master/Admin #510, Super Admin Browser #431, API Load #723 and Workforce Diagnostic #586 PASS.
+- PR #207 merged as `5a7a37d9269aff13e45ff544d134c86bc8934475`.
+- PR #208 repaired certification fixtures only; exact head `5f0506f7b4a2911ae0e91fc318caf5a8ebb8ffd7`: Deploy #1243, Master/Admin #514, Super Admin Browser #438 and API Load #725 PASS.
+- PR #208 merged as `09fbda4291f3f02d895ae84f2779df77bcaccf76`.
+- Final main Deploy #1244 PASS; backup `/opt/kitchen-os/backups/kitchen_os_20261006T090006Z.dump`.
+- Production: release `09fbda4`, schema `032`, app/database/edge healthy, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #554 PASS.
+- Workforce Staff #795, Attendance #769, Schedule Backfill #779 and Schedule Parity #568 PASS.
+- Multi-location UI uses Primary -> Work -> Other and 3+ locations => first 2 chips + `Xem thêm`.
+- Mobile Full Screen Detail and permission-controlled minus/direct-number/plus are live.
+- Category/Unit/Primary/Receive Default integration is live and PostgreSQL-backed.
+- NEXT: low-stock notification UX + remaining mutable-business-data hard-code audit; Handoff auto-polling and VPS disk cleanup remain separate deferred workstreams.
 
 ## STABLE — PR #205 production-verified, 2026-10-06
 
