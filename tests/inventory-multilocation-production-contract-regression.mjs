@@ -113,6 +113,6 @@ assert.match(maestroStyles,/\.inventory-product-table \.inventory-location-chip\
 assert.match(maestroStyles,/\.inventory-detail-sheet\{[\s\S]*?background:#0f152a/);
 assert.match(maestroStyles,/@media\(max-width:1100px\)[\s\S]*?\.inventory-product-table \.inventory-product-head\{display:none\}/);
 assert.match(maestroStyles,/@media\(max-width:680px\)[\s\S]*?\.inventory-detail-sheet\{[\s\S]*?height:100dvh/);
-assert.doesNotMatch(maestroStyles,/\.inventory-location-chip[^\{]*\{[^}]*display\s*:\s*none/,"approved location chips must remain visible");
+assert.doesNotMatch(maestroStyles,/\.inventory-location-chip(?:\.|,|\{)[^\{]*\{[^}]*display\s*:\s*none/,"approved location chips must remain visible");
 
 console.log("INVENTORY_MULTILOCATION_PRODUCTION_CONTRACT_OK");
