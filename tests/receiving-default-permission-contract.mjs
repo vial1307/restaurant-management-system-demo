@@ -10,10 +10,10 @@ const backend = read("vps/backend/src/inventory-extra-routes.mjs");
 const spec = read("docs/SYSTEM_SPECIFICATION.md");
 
 assert(cloud.includes("export function canManageReceiveDefault(site = activeInventorySite())"), "frontend receiving-default permission boundary missing");
-assert.match(cloud,/canManageReceiveDefault[\s\S]{0,400}hasInventoryPermission\("edit"\)[\s\S]{0,250}s\.location === site \|\| s\.location === "all"/, "frontend receiving-default boundary must follow explicit edit permission and site scope");
-assert.doesNotMatch(cloud,/canManageReceiveDefault[\s\S]{0,400}currentRole === "manager"/, "frontend receiving-default writes must not be re-denied by role name");
+assert.match(cloud,/canManageReceiveDefault[\s\S]{0,180}canInventoryAction\("inventory\.receive_default\.edit",\{site\}\)/, "frontend receiving-default boundary must use granular database action and active site");
+assert.doesNotMatch(cloud,/canManageReceiveDefault[\s\S]{0,400}currentRole|hasInventoryPermission\("edit"\)|s\.location === site/, "frontend receiving-default writes must not derive authority from role/module/session-location");
 assert(!cloud.includes('["fuxing","yongji"].includes(site)'), "frontend receiving-default permission must not hard-code branch site names");
-assert(cloud.includes('if(!canManageReceiveDefault(site)) return {ok:false,fallback:false,error:new Error("RECEIVE_DEFAULT_MANAGER_REQUIRED")}'), "cloud receive-default write is not guarded by explicit inventory edit authority");
+assert.match(cloud,/cloudSetReceiveDefault[\s\S]{0,1200}canManageReceiveDefault\(site\)[\s\S]{0,260}INVENTORY_ACTION_NOT_ALLOWED|cloudSetReceiveDefault[\s\S]{0,1200}canManageReceiveDefault\(site\)/, "cloud receive-default write must remain guarded by the granular permission boundary");
 
 assert(app.includes("canManageReceiveDefault,"), "branch editor does not import receiving-default permission boundary");
 assert.match(app,/const site = activeInventorySite\(\);[\s\S]{0,700}const receiveDefaultEditable = canManageReceiveDefault\(site\);/, "branch editor must derive receiving-default editability from the active database-scoped site");
