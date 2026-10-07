@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
 
-assert.match(app, /import\s*\{[^}]*prepareSearchCorpus[^}]*prepareSearchNeedle[^}]*preparedSearchMatches[^}]*\}\s*from\s*["']\.\/search-utils\.js["']|import\s*\{[^}]*preparedSearchMatches[^}]*prepareSearchCorpus[^}]*prepareSearchNeedle[^}]*\}\s*from\s*["']\.\/search-utils\.js["']|import\s*\{[^}]*prepareSearchNeedle[^}]*prepareSearchCorpus[^}]*preparedSearchMatches[^}]*\}\s*from\s*["']\.\/search-utils\.js["']/, "app must import prepared search primitives");
+assert.match(app, /importassert.match(app, /row\.dataset\.inventorySearchCorpus\s*\|\|\s*prepareSearchCorpus\s*\(\s*row\.textContent\s*\|\|\s*["']["']\s*\)/, "row corpus must prefer curated Inventory data and only fall back to rendered text");s*\{[^}]*prepareSearchCorpus[^}]*prepareSearchNeedle[^}]*preparedSearchMatches[^}]*\}\s*from\s*["']\.\/search-utils\.js["']|import\s*\{[^}]*preparedSearchMatches[^}]*prepareSearchCorpus[^}]*prepareSearchNeedle[^}]*\}\s*from\s*["']\.\/search-utils\.js["']|import\s*\{[^}]*prepareSearchNeedle[^}]*prepareSearchCorpus[^}]*preparedSearchMatches[^}]*\}\s*from\s*["']\.\/search-utils\.js["']/, "app must import prepared search primitives");
 assert.match(app, /const\s+inventorySearchCorpusCache\s*=\s*new\s+WeakMap\s*\(\s*\)/, "inventory search corpus cache must be a WeakMap");
 assert.match(app, /function\s+inventoryRowSearchCorpus\s*\(\s*row\s*\)/, "inventory row corpus helper must exist");
 assert.match(app, /inventorySearchCorpusCache\.has\(row\)/, "row corpus helper must check the WeakMap before computing");
@@ -21,5 +21,10 @@ assert.match(source.slice(0, firstRowLoop), /const\s+needle\s*=\s*prepareSearchN
 const preparedMatchPattern = /const\s+visible\s*=\s*!needle\s*\|\|\s*preparedSearchMatches\s*\(\s*inventoryRowSearchCorpus\(row\)\s*,\s*needle\s*\)/g;
 assert.equal([...source.matchAll(preparedMatchPattern)].length, 2, "grouped and loose rows must short-circuit empty queries before preparing row corpus");
 assert.doesNotMatch(source, /searchMatches\s*\(\s*row\.textContent/, "inventory row loops must not rebuild search corpus through searchMatches");
+
+
+assert.match(app,/data-inventory-search-corpus/,"Inventory rows must carry curated search corpus metadata");
+assert.match(app,/function\s+inventoryItemSearchText\s*\(/,"Inventory row search data helper must exist");
+assert.match(app,/function\s+inventoryProductSearchText\s*\(/,"product search must include full product/location data");
 
 console.log("INVENTORY_SEARCH_PREPARED_CORPUS_CONTRACT_OK");
