@@ -327,37 +327,67 @@ async function adminDesktop(browser) {
       await assertInventorySurfaceFits(page,"fuxing desktop alerts");
     }
     if(["in","pick","transfer","ship"].includes(mode)){
-      await page.locator("[data-op-search]").waitFor({state:"visible"});
-      await page.locator("[data-op-search]").fill("niu rou");
-      assert.equal(await page.locator("[data-op-search]").inputValue(),"niu rou");
-      await page.locator("[data-op-search]").fill("");
+      const search=page.locator("[data-op-search]");
+      const cards=page.locator("[data-op-item]");
+      const visibleCards=page.locator("[data-op-item]:visible");
+      await search.waitFor({state:"visible"});
+      const beforeSearch=await visibleCards.count();
+      assert(beforeSearch>1,`${mode} operation search fixture needs multiple cards`);
+
+      await search.fill("niu rou");
+      assert.equal(await search.inputValue(),"niu rou");
+      await page.waitForFunction(
+        (before)=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length<before,
+        beforeSearch
+      );
+      const filteredCards=await visibleCards.count();
+      assert(filteredCards>0&&filteredCards<beforeSearch,`${mode} search must hide non-matching operation cards`);
+      assert((await page.locator("[data-op-item][data-op-search-hidden]").count())>0,`${mode} search missing explicit hidden-card state`);
+      const expectedCount=`${filteredCards} / ${beforeSearch}`;
+      await page.waitForFunction(
+        (expected)=>[...document.querySelectorAll(".inventory-operations-host .op-count")]
+          .some((node)=>node.getClientRects().length>0&&node.textContent?.trim()===expected),
+        expectedCount
+      );
+      const visibleCount=page.locator(".inventory-operations-host .op-count:visible").last();
+      assert.equal(await visibleCount.innerText(),expectedCount,`${mode} search counter is stale`);
+
+      await search.fill("__inventory_operation_no_match__");
+      await page.waitForFunction(()=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length===0);
+      assert.equal(await visibleCards.count(),0,`${mode} no-result search must hide every operation card`);
+      assert.equal(await page.locator("[data-op-search-empty]:visible").count(),1,`${mode} no-result state missing`);
+
+      const clearSearch=page.locator("[data-op-search-clear]");
+      await clearSearch.waitFor({state:"visible"});
+      await clearSearch.click();
+      await page.waitForFunction(
+        (before)=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length===before,
+        beforeSearch
+      );
+      assert.equal(await search.inputValue(),"",`${mode} clear-search did not reset input`);
+      assert.equal(await visibleCards.count(),beforeSearch,`${mode} clear-search did not restore all cards`);
+      assert.equal(await cards.count(),beforeSearch,`${mode} search must not remove cards from DOM`);
 
       const desktopViewport=page.viewportSize();
-      if(desktopViewport?.width>900 && ["pick","transfer"].includes(mode)){
+      if(desktopViewport?.width>900){
         const listBox=await page.locator(".inventory-ops-list").boundingBox();
-        const denseCard=mode==="pick"
-          ? page.locator(".inventory-op-card:has(.pick-followup):visible").first()
-          : page.locator(".inventory-op-card:has(.op-transfer-balance):visible").first();
-        if(await denseCard.count()){
-          await page.waitForFunction(({mode})=>{
-            const list=document.querySelector(".inventory-ops-list");
-            const card=document.querySelector(mode==="pick"
-              ? ".inventory-op-card:has(.pick-followup)"
-              : ".inventory-op-card:has(.op-transfer-balance)");
-            if(!list||!card)return false;
-            const listBox=list.getBoundingClientRect();
-            const cardBox=card.getBoundingClientRect();
-            return listBox.width>0&&cardBox.width>0&&Math.abs(cardBox.width-listBox.width)<=2;
-          },{mode},{timeout:5000});
-          const settledListBox=await page.locator(".inventory-ops-list").boundingBox();
-          const cardBox=await denseCard.boundingBox();
-          assert(
-            settledListBox&&cardBox&&Math.abs(cardBox.width-settledListBox.width)<=2,
-            `${mode} desktop operation card must span the full operation grid (card=${cardBox?.width ?? "missing"}, list=${settledListBox?.width ?? "missing"})`
-          );
-          assert.equal(await denseCard.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,`${mode} desktop operation card has horizontal overflow`);
+        const firstCard=page.locator(".inventory-op-card:visible").first();
+        const firstCardBox=await firstCard.boundingBox();
+        assert(
+          listBox&&firstCardBox&&Math.abs(firstCardBox.width-listBox.width)<=2,
+          `${mode} desktop operation card must span the full operation grid (card=${firstCardBox?.width ?? "missing"}, list=${listBox?.width ?? "missing"})`
+        );
+        assert.equal(await firstCard.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,`${mode} desktop operation card has horizontal overflow`);
 
-          if(mode==="pick"&&desktopViewport.width>=1200){
+        const controls=firstCard.locator(".op-select-grid");
+        const action=firstCard.locator(".op-action-row");
+        const [controlsBox,actionBox]=await Promise.all([controls.boundingBox(),action.boundingBox()]);
+        assert(controlsBox&&actionBox,`${mode} desktop control/action geometry missing`);
+        assert(controlsBox.x+controlsBox.width<=actionBox.x+2,`${mode} controls and action column overlap`);
+
+        if(mode==="pick"&&desktopViewport.width>=1200){
+          const denseCard=page.locator(".inventory-op-card:has(.pick-followup):visible").first();
+          if(await denseCard.count()){
             const followup=denseCard.locator(".pick-followup");
             const [statusBox,useBox,returnBox]=await Promise.all([
               followup.locator(".pick-status").boundingBox(),
@@ -372,6 +402,19 @@ async function adminDesktop(browser) {
         }
       }
       await assertInventorySurfaceFits(page,`fuxing desktop ${mode}`);
+    }
+    if(mode==="overview"){
+      await page.locator(".inventory-product-table").waitFor({state:"visible"});
+      await assertInventorySurfaceFits(page,"fuxing desktop overview revisit");
+    }
+    if(mode==="manage"){
+      await page.locator(".storage-table").waitFor({state:"visible"});
+      await inventorySearchRoundTrip(page);
+      await assertInventorySurfaceFits(page,"fuxing desktop manage");
+    }
+    if(mode==="history"){
+      await page.locator(".branch-history-card").waitFor({state:"visible"});
+      await assertInventorySurfaceFits(page,"fuxing desktop history");
     }
   }
 

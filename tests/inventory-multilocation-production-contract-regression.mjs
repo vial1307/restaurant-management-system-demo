@@ -130,4 +130,8 @@ assert.match(app,/data-action="clear-inventory-search"/,"Inventory search must e
 assert.match(app,/row\.toggleAttribute\("data-search-hidden", !visible\)/,"Inventory search must mark filtered rows explicitly");
 assert.match(maestroStyles,/\.inventory-table \.inventory-row\[hidden\][\s\S]*?display:none!important/,"filtered Inventory rows must stay hidden despite display grid rules");
 assert.match(maestroStyles,/Inventory search repair \+ UX polish — 2026-10-07/,"Inventory search visual layer must remain present");
+assert.match(maestroStyles,/Inventory operations search \+ alignment contract — 2026-10-07/,"Inventory operation alignment layer must remain present");
+assert.match(maestroStyles,/\[data-op-search-hidden\][\s\S]*?display:none!important/,"filtered Inventory operation cards must remain hidden");
+assert.match(maestroStyles,/\.inventory-operations-host \.inventory-ops-list\{[\s\S]*?grid-template-columns:minmax\(0,1fr\)!important/,"Inventory operations must share a full-width card rail");
+assert.match(maestroStyles,/\.inventory-op-card\[data-op-mode="ship"\]>\.op-select-grid\{[\s\S]*?repeat\(3,minmax\(150px,1fr\)\)/,"Desktop shipping controls must use aligned three-column destinations");
 console.log("INVENTORY_MULTILOCATION_PRODUCTION_CONTRACT_OK");

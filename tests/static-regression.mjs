@@ -183,6 +183,18 @@ assert.equal(searchMatches("牛肉", "ㄋㄧㄡㄖㄡ"), true);
 assert.equal(searchMatches("Thịt bò", "thit bo"), true);
 assert.equal(searchMatches("永吉店", "yongji"), true);
 assert.equal(searchMatches("麻辣湯", "malatang"), true);
+assert.equal(searchMatches("高麗菜", "gao li cai"), true, "current catalog pinyin must cover 高麗菜");
+assert.equal(searchMatches("炸魷魚", "zha you yu"), true, "current catalog pinyin must cover 炸魷魚");
+assert.equal(searchMatches("梅花豬", "mei hua zhu"), true, "current catalog pinyin must cover 梅花豬");
+assert.equal(searchMatches("龍蝦", "long xia"), true, "current catalog pinyin must cover 龍蝦");
+
+const inventoryOperationsSource = read("src/inventory-operations.js");
+assert.match(inventoryOperationsSource,/data-op-search-corpus/,"operation cards must carry a prepared search corpus");
+assert.match(inventoryOperationsSource,/data-op-search-hidden/,"operation search must expose an explicit hidden-card state");
+assert.match(inventoryOperationsSource,/data-op-search-clear/,"operation search must expose a clear control");
+assert.match(inventoryOperationsSource,/prepareSearchNeedle\(query\)/,"operation search must normalize the query once");
+assert.match(inventoryOperationsSource,/preparedSearchMatches\(corpus,needle\)/,"operation search must use prepared corpus matching");
+assert.doesNotMatch(inventoryOperationsSource,/searchMatches\(card\.textContent/,"operation search must not rebuild raw DOM corpus on every card");
 
 for (const [file, marker] of [
   ["src/app.js", 'data-field="inventorySearch"'],

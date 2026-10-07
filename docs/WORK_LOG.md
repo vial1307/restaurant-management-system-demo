@@ -2339,3 +2339,16 @@ The separate read-cutover candidate:
 - Search UI now includes bilingual product/pinyin/zhuyin/location guidance, live result count and explicit clear control on Desktop/Mobile.
 - `ACTIVE_PR: none`; production authority is release `d1afe98a99f471028476126feb4b2ae5c84be977` / schema `032`.
 - No database/schema/RBAC/quantity/minimum/transaction behavior changed.
+
+## 2026-10-07 — Inventory full search audit + operation layout normalization
+
+- Follow-up after PR #214: user still found Inventory items that could not be searched and reported uneven UI in 領貨 / 出貨 / other operation modes.
+- Audited shared Inventory search plus the separate `inventory-operations.js` search used by 進貨 / 領貨 / 轉撥 / 出貨.
+- Found the operation search still set only `card.hidden` while operation-card CSS explicitly uses grid display, reproducing the same class of visibility bug fixed earlier in the overview.
+- Replaced operation DOM-text matching with a prepared corpus built from DB-backed item names, item/catalog key, unit, Work Area and storage/work-location labels/codes.
+- Added explicit `data-op-search-hidden`, zero-result handling, clear-search control and visible/total counter.
+- Audited the current branch catalog against `search-utils.js`; added missing phonetic character coverage for current names such as 高麗菜, 炸魷魚, 梅花豬 and 龍蝦.
+- Normalized Receive/Pick/Transfer/Ship presentation onto one full-width Desktop card rail with aligned identity / selectors / quantity-action zones; tablet and mobile use dedicated stacked contracts.
+- Strengthened browser regression for all four operation modes: real result reduction, zero-result state, clear/reset restoration, DOM preservation, full-width cards, non-overlapping controls/actions and Pick follow-up geometry.
+- Added static guards for catalog phonetics, operation prepared corpus and final layout/search-hidden CSS.
+- No PostgreSQL migration, quantity rewrite, permission change or transaction semantic change.

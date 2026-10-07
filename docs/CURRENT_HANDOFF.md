@@ -1,3 +1,23 @@
+## ACTIVE — Inventory full search audit + operation layout normalization, 2026-10-07
+
+- `ACTIVE_PR: #215` — branch `fix/inventory-operations-search-layout-20261007`.
+- User reported that some Inventory items still could not be found and that 領貨 / 出貨 / related operation layouts were visually uneven.
+- Search audit scope: shared Inventory overview/manage search, Central search, and the separate 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 operation search.
+- Root causes found:
+  1. operation search still relied on HTML `hidden` while operation cards are explicitly displayed as grid, allowing presentation rules to revive filtered cards;
+  2. operation search rebuilt matching from card DOM text instead of a stable prepared item corpus;
+  3. the current catalog contains Chinese characters not covered by the Pinyin/注音 map, so some valid Pinyin queries could not match;
+  4. accumulated responsive patches gave Pick/Transfer different geometry from Receive/Ship.
+- Candidate fix:
+  - operation cards carry a prepared search corpus derived from DB-backed item identity, unit, Work Area and location metadata;
+  - operation query is normalized once and non-matches receive `data-op-search-hidden` with a hard presentation hide contract;
+  - current catalog phonetic coverage extended for missing characters including 高麗菜 / 炸魷魚 / 梅花豬 / 龍蝦 paths;
+  - operation search has explicit clear control and live visible/total count;
+  - Receive/Pick/Transfer/Ship now share one full-width Desktop card rail and one responsive alignment contract.
+- Regression strengthens every operation mode: search must actually reduce cards, zero-result state must work, clear must restore all cards, cards must stay in DOM, and Desktop control/action columns must not overlap.
+- No PostgreSQL/schema/RBAC/quantity/minimum/transaction behavior changes.
+- Production authority remains release `d1afe98a99f471028476126feb4b2ae5c84be977` / schema `032` until exact-head gates pass and the tested merge SHA is deployed.
+
 ## STABLE — PR #214 Inventory search repair + UX polish, 2026-10-07
 
 - `ACTIVE_PR: none`.
