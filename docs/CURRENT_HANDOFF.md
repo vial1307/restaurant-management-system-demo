@@ -1,13 +1,15 @@
-## ACTIVE — PR #218 operation search parity, 2026-10-07
+## STABLE — PR #218 operation search parity, 2026-10-07
 
-- `ACTIVE_PR: #218` — branch `fix/inventory-operation-search-parity-20261007`.
-- User confirmed Inventory Overview search is correct, while other Inventory operation tabs still miss products/metadata.
-- Scope is limited to 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 search parity; Overview remains unchanged.
-- Operation items now retain DB-backed unit/category masters, receive-default metadata, location ui_key/work_area/storage_group metadata, and existing product/location identities.
-- Search state is now shared between Overview and operation tabs: switching modes keeps the same query, and clearing it in an operation tab clears the shared Inventory query.
-- Browser certification now checks every rendered operation card indexes its Chinese/Vietnamese identity, plus real UI lookup for representative cards in every operation mode.
-- No PostgreSQL schema/data, RBAC, stock quantity/minimum or transaction behavior changes.
-- Production remains `79f1491f112c830c80da3494cb2aaf1af5ef27ba` / schema `032` until exact-head gates pass and the merge SHA is deployed.
+- `ACTIVE_PR: none`.
+- User-reported gap closed: Inventory Overview search was already correct, while 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 used a narrower operation-item corpus.
+- Operation search now reuses the PostgreSQL-backed Inventory snapshot and indexes product identity, item/catalog keys, bilingual category/unit masters, Work Area labels, receive-default metadata, and real storage/work location metadata.
+- Search state is shared across Inventory Overview and operation tabs; switching modes preserves the query and clearing it in an operation tab clears the shared Inventory query.
+- Exact tested PR head: `3c94789abbc094d3deb3fab9b8df404a965c987d`; PR gates PASS: Super Admin Browser #480, Deploy/full-device #1297, Workforce Diagnostic #628.
+- PR #218 merged as `0ba58f0fe649fb81e3c023d11d7a3ccef4630ec5`.
+- Main Deploy #1298 attempt 1 was correctly blocked by a transient Workforce request browser login timeout after Inventory Chromium/search regression had already passed; unchanged merge SHA attempt 2 PASS.
+- Final main Deploy #1298 PASS: exact target `0ba58f0fe649fb81e3c023d11d7a3ccef4630ec5`, frontend stamp `0ba58f0`, backup `/opt/kitchen-os/backups/kitchen_os_20261007T125037Z.dump`, schema `032`, `DATA_INTEGRITY_OK`, healthy Web/API/Super Admin edge and production UI smoke PASS.
+- No PostgreSQL schema/data, RBAC, stock quantity/minimum, transaction semantics or unrelated Inventory behavior changed.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 ## STABLE — PR #217 Inventory search v2, 2026-10-07
 
