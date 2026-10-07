@@ -246,6 +246,13 @@ assert.match(authLayerSwitching, /document\.addEventListener\("click", activateW
 assert.match(authLayerSwitching, /warehousePointerActivation[\s\S]{0,700}Date\.now\(\) - warehousePointerActivation\.at < 1200/, "warehouse switching must deduplicate pointerdown followed by click");
 assert.doesNotMatch(authLayerSwitching, /content\.querySelectorAll\("\[data-warehouse\]"\)\.forEach\(b => b\.onclick/, "central warehouse buttons must not rely on transient per-node onclick bindings");
 assert.doesNotMatch(authLayerSwitching, /heading\.querySelectorAll\("\[data-warehouse\]"\)\.forEach[\s\S]{0,180}addEventListener\("click"/, "branch warehouse buttons must not rely on post-render per-node click bindings");
+assert.doesNotMatch(authLayerSwitching, /window\.alert\("Không thể tải dữ liệu cơ sở mới từ PostgreSQL/, "warehouse switch failures must not use blocking alert dialogs");
+assert.match(authLayerSwitching, /shitu:notify[\s\S]{0,900}PostgreSQL chưa xác nhận dữ liệu cơ sở mới/, "warehouse switch failure must use non-blocking feedback while preserving the current site");
+const vpsApiSource = read("src/vps-api.js");
+assert.match(vpsApiSource, /SAFE_READ_RETRY_DELAYS_MS/, "VPS reads must define bounded transient retry delays");
+assert.match(vpsApiSource, /normalizedMethod === "GET" && retrySafeRead !== false/, "automatic retries must be limited to safe GET reads");
+assert.match(vpsApiSource, /SAFE_READ_RETRY_STATUS\.has\(response\.status\)/, "safe GET retries must cover transient upstream HTTP failures");
+
 
 const accountAdmin = read("src/account-admin.js");
 const authBridge = read("src/vps-auth-bridge.js");

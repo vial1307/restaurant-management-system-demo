@@ -8,6 +8,8 @@ const MASTER_DATA_CACHE_MS = 5000;
 const RECEIVE_DEFAULTS_CACHE_MS = 5000;
 const API_TIMEOUT_MS = 12000;
 const AUTH_LOGIN_GRACE_MS = 5000;
+const SAFE_READ_RETRY_DELAYS_MS = [250, 700, 1500];
+const SAFE_READ_RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 let lastSuccessfulLoginAt = 0;
 let authMeInFlight = null;
 let adminUsersInFlight = null;
@@ -69,76 +71,115 @@ export async function apiRequest(path, {
   headers = {},
   allow404 = false,
   timeoutMs = API_TIMEOUT_MS,
+  retrySafeRead = true,
 } = {}) {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || API_TIMEOUT_MS));
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  const safeRead = normalizedMethod === "GET" && retrySafeRead !== false;
+  const maxAttempts = 1 + (safeRead ? SAFE_READ_RETRY_DELAYS_MS.length : 0);
   let sessionAtStart = null;
   try {
     sessionAtStart = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null");
   } catch {}
 
-  let response;
-  try {
-    const mutationPath = String(path);
-    const publishesInventoryRealtime = method !== "GET" && (
-      mutationPath.startsWith("/api/inventory/")
-      || mutationPath.startsWith("/api/master-data/")
-      || mutationPath === "/api/admin/super/inventory-catalog-identity"
-      || mutationPath.startsWith("/api/admin/super/data/inventory-products")
-    );
-    const inventoryMutationHeaders = publishesInventoryRealtime
-      ? { "X-Kitchen-Client-Id": vpsInventoryClientId() }
-      : {};
-    response = await fetch(path, {
-      method,
-      credentials: "same-origin",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...inventoryMutationHeaders,
-        ...headers,
+  const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+  const retryDelay = (attempt) => SAFE_READ_RETRY_DELAYS_MS[Math.min(attempt, SAFE_READ_RETRY_DELAYS_MS.length - 1)] || 0;
+  const announceRetry = (attempt, error) => {
+    window.dispatchEvent(new CustomEvent("shitu:api-read-retry", {
+      detail:{
+        path:String(path),
+        attempt:attempt + 1,
+        maxAttempts,
+        error:error?.code || error?.message || String(error || ""),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch (cause) {
-    const code = controller.signal.aborted ? "REQUEST_TIMEOUT" : "API_UNREACHABLE";
-    const error = new Error(code);
-    error.code = code;
-    error.cause = cause;
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
+    }));
+  };
 
-  let data = null;
-  const type = response.headers.get("content-type") || "";
-  if (type.includes("application/json")) {
-    try { data = await response.json(); } catch {}
-  } else {
-    try { data = await response.text(); } catch {}
-  }
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || API_TIMEOUT_MS));
+    let response;
 
-  if (!response.ok && !(allow404 && response.status === 404)) {
-    const code = data && typeof data === "object" ? data.error : "";
-    const insideLoginGrace = lastSuccessfulLoginAt > 0 && Date.now() - lastSuccessfulLoginAt < AUTH_LOGIN_GRACE_MS;
-    if (response.status === 401 && code === "AUTH_REQUIRED" && sessionAtStart?.id && !insideLoginGrace) {
-      let currentSession = null;
-      try { currentSession = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
-      if (currentSession?.id === sessionAtStart.id) {
-        try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
-        clearRuntimeCaches();
-        window.dispatchEvent(new CustomEvent("shitu:auth-expired", { detail: { path } }));
+    try {
+      const mutationPath = String(path);
+      const publishesInventoryRealtime = normalizedMethod !== "GET" && (
+        mutationPath.startsWith("/api/inventory/")
+        || mutationPath.startsWith("/api/master-data/")
+        || mutationPath === "/api/admin/super/inventory-catalog-identity"
+        || mutationPath.startsWith("/api/admin/super/data/inventory-products")
+      );
+      const inventoryMutationHeaders = publishesInventoryRealtime
+        ? { "X-Kitchen-Client-Id": vpsInventoryClientId() }
+        : {};
+      response = await fetch(path, {
+        method:normalizedMethod,
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...inventoryMutationHeaders,
+          ...headers,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (cause) {
+      clearTimeout(timer);
+      const code = controller.signal.aborted ? "REQUEST_TIMEOUT" : "API_UNREACHABLE";
+      const error = new Error(code);
+      error.code = code;
+      error.cause = cause;
+      if (safeRead && attempt < maxAttempts - 1) {
+        announceRetry(attempt, error);
+        await sleep(retryDelay(attempt));
+        continue;
       }
+      throw error;
     }
-    const error = new Error(code || `HTTP_${response.status}`);
-    error.status = response.status;
-    error.code = code || "";
-    error.payload = data;
-    throw error;
+
+    clearTimeout(timer);
+
+    let data = null;
+    const type = response.headers.get("content-type") || "";
+    if (type.includes("application/json")) {
+      try { data = await response.json(); } catch {}
+    } else {
+      try { data = await response.text(); } catch {}
+    }
+
+    if (!response.ok && !(allow404 && response.status === 404)) {
+      const code = data && typeof data === "object" ? data.error : "";
+      const error = new Error(code || `HTTP_${response.status}`);
+      error.status = response.status;
+      error.code = code || "";
+      error.payload = data;
+
+      // Automatic replay is intentionally limited to idempotent reads.
+      // Inventory/account mutations must never be duplicated by transport retry.
+      if (safeRead && SAFE_READ_RETRY_STATUS.has(response.status) && attempt < maxAttempts - 1) {
+        announceRetry(attempt, error);
+        await sleep(retryDelay(attempt));
+        continue;
+      }
+
+      const insideLoginGrace = lastSuccessfulLoginAt > 0 && Date.now() - lastSuccessfulLoginAt < AUTH_LOGIN_GRACE_MS;
+      if (response.status === 401 && code === "AUTH_REQUIRED" && sessionAtStart?.id && !insideLoginGrace) {
+        let currentSession = null;
+        try { currentSession = JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1") || "null"); } catch {}
+        if (currentSession?.id === sessionAtStart.id) {
+          try { localStorage.removeItem("shitu-kitchen-auth-v1"); } catch {}
+          clearRuntimeCaches();
+          window.dispatchEvent(new CustomEvent("shitu:auth-expired", { detail: { path } }));
+        }
+      }
+      throw error;
+    }
+
+    return data;
   }
 
-  return data;
+  const error = new Error("API_READ_RETRY_EXHAUSTED");
+  error.code = "API_READ_RETRY_EXHAUSTED";
+  throw error;
 }
 
 function normalizedModuleRevisions(input) {

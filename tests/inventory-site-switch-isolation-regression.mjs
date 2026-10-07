@@ -53,7 +53,7 @@ Object.defineProperty(globalThis,"window",{
     location:{hostname:"82.47.180.185",protocol:"http:"},
     addEventListener(){},
     dispatchEvent(event){ events.push({type:event.type,detail:event.detail}); return true; },
-    setTimeout:globalThis.setTimeout,
+    setTimeout:(fn,ms)=>globalThis.setTimeout(fn,Math.min(Number(ms)||0,5)),
     clearTimeout:globalThis.clearTimeout,
     setInterval(){ return 0; },
   },
@@ -112,6 +112,7 @@ function inventoryPayload(site, quantity){
 let releaseYongji;
 let yongjiStarted=false;
 let failYongji=false;
+let yongjiAttempts=0;
 Object.defineProperty(globalThis,"fetch",{
   configurable:true,
   value:async(path,options={})=>{
@@ -131,8 +132,9 @@ Object.defineProperty(globalThis,"fetch",{
     if(masterMatch) return new Response(JSON.stringify(master(masterMatch[1])),{status:200,headers:{"content-type":"application/json"}});
     if(url==="/api/inventory/yongji"){
       yongjiStarted=true;
-      await new Promise((resolve)=>{ releaseYongji=resolve; });
+      yongjiAttempts+=1;
       if(failYongji) return new Response(JSON.stringify({error:"TEST_YONGJI_FAILURE"}),{status:500,headers:{"content-type":"application/json"}});
+      await new Promise((resolve)=>{ releaseYongji=resolve; });
       return new Response(JSON.stringify(inventoryPayload("yongji",22)),{status:200,headers:{"content-type":"application/json"}});
     }
     if(url==="/api/inventory/fuxing") return new Response(JSON.stringify(inventoryPayload("fuxing",11)),{status:200,headers:{"content-type":"application/json"}});
@@ -182,11 +184,12 @@ try{
   // A failed target hydrate must leave the current site and its mirror untouched.
   failYongji=true;
   yongjiStarted=false;
+  yongjiAttempts=0;
   releaseYongji=undefined;
   const failed=cloud.switchActiveInventorySite("yongji");
-  for(let i=0;i<50&&!yongjiStarted;i+=1) await delay(1);
-  releaseYongji();
   assert.equal(await failed,false);
+  assert.equal(yongjiStarted,true,"failed Yongji switch never attempted the authoritative read");
+  assert.equal(yongjiAttempts,4,"transient Yongji 500 must exhaust the bounded safe-read retry policy");
   assert.equal(storage.get(ACTIVE_SITE_KEY),"fuxing","failed Yongji switch replaced the active Fuxing site");
   assert.equal(cloud.inventoryBranchSnapshot("fuxing").inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,11);
   assert.equal(cloud.inventoryBranchSnapshot("yongji").inventory.find((row)=>row.stockKey==="beef"&&row.zone==="large-freezer")?.quantity,22);
