@@ -8,7 +8,7 @@ import {
   inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { searchMatches } from "./search-utils.js";
+import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches } from "./search-utils.js";
 import {
   INVENTORY_SITES,
   directBranchTransfer,
@@ -80,6 +80,17 @@ function langText(language){ return TEXT[language==="zh"?"zh":"vi"]; }
 function itemLabel(item,language){
   return language==="zh" ? item.zh : `${item.vi || item.zh} · ${item.zh}`;
 }
+function operationSearchText(item){
+  const locationText=[...(item.locations||[]),...(item.workLocations||[])]
+    .flatMap((loc)=>[loc.zh,loc.vi,loc.name_zh_tw,loc.name_vi,loc.code])
+    .filter(Boolean);
+  return [item.zh,item.vi,item.itemKey,item.catalogKey,item.unit,item.workArea,...locationText]
+    .filter(Boolean)
+    .join(" ");
+}
+function operationSearchCorpus(item){
+  return prepareSearchCorpus(operationSearchText(item));
+}
 function locationLabel(location,language){
   return language==="zh" ? location.name_zh_tw || location.zh : `${location.name_vi || location.vi || location.name_zh_tw} · ${location.name_zh_tw || location.zh}`;
 }
@@ -136,7 +147,7 @@ function overviewCard(item,language,t){
     .map((loc)=>`<span class="op-location-pill op-location-pill-use"><small>${esc(language==="zh"?loc.zh:`${loc.vi||loc.zh} · ${loc.zh}`)}</small><strong>${Number(loc.quantity||0)} ${esc(item.unit)}</strong></span>`)
     .join("");
   const physicalTotal=Number(item.total||0)+Number(item.workTotal||0);
-  return `<article class="inventory-op-card inventory-overview-card" data-op-item="${esc(item.id)}" data-op-item-key="${esc(item.itemKey||"")}">
+  return `<article class="inventory-op-card inventory-overview-card" data-op-item="${esc(item.id)}" data-op-item-key="${esc(item.itemKey||"")}" data-op-search-corpus="${esc(operationSearchCorpus(item))}">
     <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi||"")}</small></div><span><small>${esc(t.current)}</small><strong>${physicalTotal} ${esc(item.unit)}</strong></span></div>
     <div class="op-location-list">${storageLocations+activeLocations||'<span class="op-location-pill"><small>—</small><strong>0</strong></span>'}</div>
   </article>`;
@@ -194,7 +205,7 @@ function itemCard(item,mode,locations,site,language,t,allLocations=locations,wor
   const transferBalance = mode==="transfer" && firstSource && firstDestination
     ? `<div class="op-transfer-balance" data-op-transfer-balance="${esc(item.id)}"><span>${esc(locationLabel({name_zh_tw:firstSource.zh,name_vi:firstSource.vi},language))} <strong>${Number(firstSource.quantity)||0}</strong></span><b>→</b><span>${esc(locationLabel(firstDestination,language))} <strong>${Number(stockAt(item,firstDestination.id))||0}</strong></span></div>`
     : "";
-  return `<article class="inventory-op-card" data-op-item="${esc(item.id)}" data-op-item-key="${esc(item.itemKey||"")}">
+  return `<article class="inventory-op-card" data-op-mode="${esc(mode)}" data-op-item="${esc(item.id)}" data-op-item-key="${esc(item.itemKey||"")}" data-op-search-corpus="${esc(operationSearchCorpus(item))}">
     <div class="op-item-head"><div><strong>${esc(item.zh)}</strong><small>${esc(item.vi || "")}</small></div><span><small>${esc(t.current)}</small><strong data-op-current="${esc(item.id)}">${currentQuantity} ${esc(item.unit)}</strong></span></div>
     <div class="op-select-grid">${controls}</div>
     ${transferBalance}
@@ -207,22 +218,29 @@ function applyOperationSearch(host,state) {
   if (!input) return;
 
   const query = input.value || "";
+  const needle = prepareSearchNeedle(query);
   state.search = query;
   const exactFocus = Boolean(state.focusItemKey && query === state.focusSearch);
+  const cards = [...host.querySelectorAll("[data-op-item]")];
   let visible = 0;
-  host.querySelectorAll("[data-op-item]").forEach((card) => {
+  cards.forEach((card) => {
+    const corpus = card.dataset.opSearchCorpus || prepareSearchCorpus(card.textContent || "");
     const show = exactFocus
       ? card.dataset.opItemKey === state.focusItemKey
-      : searchMatches(card.textContent || "", query);
+      : !needle || preparedSearchMatches(corpus,needle);
     card.hidden = !show;
+    card.toggleAttribute("data-op-search-hidden",!show);
     if (show) visible += 1;
   });
 
   const count = host.querySelector(".op-count");
-  if (count) count.textContent = String(visible);
+  if (count) count.textContent = needle ? `${visible} / ${cards.length}` : String(cards.length);
+
+  const clear = host.querySelector("[data-op-search-clear]");
+  if (clear) clear.hidden = !query;
 
   const empty = host.querySelector("[data-op-search-empty]");
-  if (empty) empty.hidden = !query || visible > 0;
+  if (empty) empty.hidden = !needle || visible > 0;
 }
 
 function applyInitialOperationFocus(host,state){
@@ -264,22 +282,32 @@ function applyInitialOperationFocus(host,state){
 function bindOperationSearch(host,state) {
   const input = host.querySelector("[data-op-search]");
   if (!input) return;
+  const clear = host.querySelector("[data-op-search-clear]");
 
+  const resetFocus = () => {
+    state.focusItemKey="";
+    state.focusSearch="";
+    state.initialItemKey="";
+    state.initialLocationCode="";
+    state.initialSourceLocationCode="";
+  };
   const apply = (event) => {
     if (event?.isComposing) return;
-    if(state.focusItemKey && input.value !== state.focusSearch){
-      state.focusItemKey="";
-      state.focusSearch="";
-      state.initialItemKey="";
-      state.initialLocationCode="";
-      state.initialSourceLocationCode="";
-    }
+    if(state.focusItemKey && input.value !== state.focusSearch) resetFocus();
     applyOperationSearch(host,state);
   };
 
   input.oninput = apply;
   input.onsearch = apply;
   input.oncompositionend = apply;
+  if(clear){
+    clear.onclick = () => {
+      resetFocus();
+      input.value="";
+      applyOperationSearch(host,state);
+      input.focus({preventScroll:true});
+    };
+  }
   applyOperationSearch(host,state);
 }
 
@@ -294,7 +322,7 @@ async function doRender(host,state){
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
       : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[]));
-    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><span class="op-count">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
+    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><div class="op-search-wrap"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><button type="button" class="op-search-clear" data-op-search-clear aria-label="${esc(language==="zh"?"清除搜尋":"Xóa tìm kiếm")}" hidden>×</button></div><span class="op-count" aria-live="polite">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
     restoreOperationSelections(host,state);
     bind(host,state);
     applyInitialOperationFocus(host,state);
