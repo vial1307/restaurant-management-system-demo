@@ -3639,3 +3639,43 @@
     width:100%;
   }
 }
+
+
+/* Inventory search v2 — authoritative filtered visibility for Central surfaces.
+ * Central rows also use explicit grid presentation, so search state must win.
+ */
+.central-row[data-central-search-hidden],
+.central-manage-row[data-central-search-hidden],
+.inventory-group[data-central-search-hidden]{
+  display:none!important;
+}
+
+.inventory-operations-host .op-search-wrap::before{
+  content:"";
+  position:absolute;
+  left:13px;
+  top:50%;
+  width:14px;
+  height:14px;
+  transform:translateY(-50%);
+  border:1.7px solid #82908a;
+  border-radius:50%;
+  pointer-events:none;
+  box-sizing:border-box;
+}
+.inventory-operations-host .op-search-wrap::after{
+  content:"";
+  position:absolute;
+  left:25px;
+  top:27px;
+  width:6px;
+  height:1.7px;
+  background:#82908a;
+  transform:rotate(45deg);
+  transform-origin:left center;
+  border-radius:999px;
+  pointer-events:none;
+}
+.inventory-operations-host .op-search input{
+  padding-left:38px;
+}
