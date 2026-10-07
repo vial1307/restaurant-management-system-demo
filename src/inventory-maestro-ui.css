@@ -3329,3 +3329,313 @@
     padding:3px 6px;
   }
 }
+
+
+/* Inventory operations search + alignment contract — 2026-10-07.
+ * One layout contract now owns Receive / Pick / Transfer / Ship presentation.
+ * Search-hidden state is explicit so card display rules cannot revive filtered rows.
+ */
+.inventory-operations-host [data-op-item][hidden],
+.inventory-operations-host [data-op-search-hidden],
+.inventory-operations-host [data-op-search-empty][hidden],
+.inventory-operations-host [data-op-search-clear][hidden]{
+  display:none!important;
+}
+
+.inventory-operations-host .inventory-ops-toolbar{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+}
+.inventory-operations-host .op-search-wrap{
+  position:relative;
+  min-width:0;
+}
+.inventory-operations-host .op-search{
+  display:block;
+  width:100%;
+  min-width:0;
+}
+.inventory-operations-host .op-search input{
+  width:100%;
+  min-width:0;
+  min-height:44px;
+  padding:0 42px 0 13px;
+  font-size:12px;
+  font-weight:620;
+}
+.inventory-operations-host .op-search-clear{
+  position:absolute;
+  top:50%;
+  right:8px;
+  width:28px;
+  height:28px;
+  transform:translateY(-50%);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  border:0;
+  border-radius:8px;
+  background:#eef4f1;
+  color:#607069;
+  font:inherit;
+  font-size:18px;
+  line-height:1;
+  cursor:pointer;
+}
+.inventory-operations-host .op-search-clear:hover{
+  background:#e2f0e9;
+  color:#126044;
+}
+.inventory-operations-host .op-count{
+  min-width:64px;
+  justify-content:center;
+  white-space:nowrap;
+}
+
+/* Use a single full-width card rail for every inventory operation.
+ * Internal columns, not card width, carry the information density.
+ */
+.inventory-operations-host .inventory-ops-list{
+  display:grid;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:12px;
+}
+.inventory-operations-host .inventory-op-card{
+  width:100%;
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(190px,.8fr) minmax(360px,1.7fr) minmax(220px,auto)!important;
+  grid-template-rows:auto auto;
+  align-items:end!important;
+  gap:12px 16px;
+  padding:14px 16px;
+}
+.inventory-operations-host .inventory-op-card>.op-item-head{
+  grid-column:1!important;
+  grid-row:1!important;
+  min-width:0;
+  align-self:stretch;
+  align-items:center;
+  padding:0 14px 0 0;
+  border-bottom:0;
+  border-right:1px solid var(--inv-line,#e3e9e6);
+}
+.inventory-operations-host .inventory-op-card>.op-select-grid{
+  grid-column:2!important;
+  grid-row:1!important;
+  display:grid;
+  min-width:0;
+  align-items:end;
+  gap:10px;
+}
+.inventory-operations-host .inventory-op-card[data-op-mode="in"]>.op-select-grid{
+  grid-template-columns:minmax(220px,1fr)!important;
+}
+.inventory-operations-host .inventory-op-card[data-op-mode="pick"]>.op-select-grid,
+.inventory-operations-host .inventory-op-card[data-op-mode="transfer"]>.op-select-grid{
+  grid-template-columns:repeat(2,minmax(170px,1fr))!important;
+}
+.inventory-operations-host .inventory-op-card[data-op-mode="ship"]>.op-select-grid{
+  grid-template-columns:repeat(3,minmax(150px,1fr))!important;
+}
+.inventory-operations-host .op-select-grid>label{
+  display:grid;
+  min-width:0;
+  gap:5px;
+  align-content:end;
+}
+.inventory-operations-host .op-select-grid>label>span:first-child,
+.inventory-operations-host .pick-return-row label>span:first-child{
+  min-height:16px;
+  display:flex;
+  align-items:flex-end;
+  font-size:10px;
+  line-height:1.25;
+}
+.inventory-operations-host .op-select-grid select,
+.inventory-operations-host .inventory-readonly-field{
+  width:100%;
+  min-width:0;
+  min-height:42px;
+}
+.inventory-operations-host .ship-fixed-hint{
+  grid-column:1 / -1!important;
+  min-width:0;
+  margin:0;
+}
+.inventory-operations-host .inventory-op-card>.op-action-row{
+  grid-column:3!important;
+  grid-row:1!important;
+  display:grid;
+  grid-template-columns:auto minmax(102px,auto);
+  min-width:0;
+  align-items:end;
+  justify-content:end;
+  gap:8px;
+  flex-wrap:nowrap;
+}
+.inventory-operations-host .op-action-row .op-quantity{
+  display:grid;
+  grid-template-columns:38px 64px 38px;
+  width:140px;
+  min-width:140px;
+  max-width:140px;
+}
+.inventory-operations-host .op-action-row .op-quantity :is(button,input){
+  height:42px;
+  min-height:42px;
+}
+.inventory-operations-host .op-action-row :is(.op-primary,.op-secondary){
+  min-width:102px;
+  min-height:42px;
+  align-self:end;
+  white-space:nowrap;
+}
+.inventory-operations-host .inventory-op-card>.op-transfer-balance,
+.inventory-operations-host .inventory-op-card>.pick-followup{
+  grid-column:1 / -1!important;
+  grid-row:2!important;
+  width:100%;
+  min-width:0;
+  margin:0;
+}
+.inventory-operations-host .op-transfer-balance{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;
+  align-items:center;
+  gap:10px;
+}
+.inventory-operations-host .op-transfer-balance span:last-child{
+  text-align:right;
+}
+
+/* Pick follow-up follows the same three-zone rhythm as the main card row. */
+@media(min-width:1200px){
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-followup{
+    display:grid!important;
+    grid-template-columns:minmax(190px,.8fr) auto minmax(380px,1.7fr)!important;
+    align-items:end;
+    gap:10px 14px;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-status{
+    grid-column:1;
+    min-width:0;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-use-row{
+    grid-column:2;
+    min-width:0;
+  }
+  .inventory-operations-host .inventory-op-card:has(.pick-followup) .pick-return-row{
+    grid-column:3;
+    min-width:0;
+    display:grid!important;
+    grid-template-columns:minmax(210px,1fr) auto auto!important;
+    align-items:end;
+    gap:8px;
+  }
+}
+
+/* Mid-size desktop/tablet: product identity gets its own row and controls stay aligned. */
+@media(min-width:761px) and (max-width:1199px){
+  .inventory-operations-host .inventory-op-card{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    grid-template-rows:auto auto auto;
+    gap:10px 12px;
+  }
+  .inventory-operations-host .inventory-op-card>.op-item-head{
+    grid-column:1 / -1!important;
+    grid-row:1!important;
+    padding:0 0 10px;
+    border-right:0;
+    border-bottom:1px solid var(--inv-line,#e3e9e6);
+  }
+  .inventory-operations-host .inventory-op-card>.op-select-grid{
+    grid-column:1!important;
+    grid-row:2!important;
+  }
+  .inventory-operations-host .inventory-op-card>.op-action-row{
+    grid-column:2!important;
+    grid-row:2!important;
+  }
+  .inventory-operations-host .inventory-op-card>.op-transfer-balance,
+  .inventory-operations-host .inventory-op-card>.pick-followup{
+    grid-column:1 / -1!important;
+    grid-row:3!important;
+  }
+  .inventory-operations-host .inventory-op-card[data-op-mode="ship"]>.op-select-grid{
+    grid-template-columns:repeat(2,minmax(170px,1fr))!important;
+  }
+  .inventory-operations-host .inventory-op-card[data-op-mode="ship"] .op-target-location{
+    grid-column:1 / -1;
+  }
+}
+
+/* Mobile: one vertical flow, equal full-width controls, no horizontal drift. */
+@media(max-width:760px){
+  .inventory-operations-host .inventory-ops-toolbar{
+    grid-template-columns:minmax(0,1fr) auto;
+    padding:9px;
+  }
+  .inventory-operations-host .op-search input{
+    min-height:46px;
+    font-size:13px;
+  }
+  .inventory-operations-host .inventory-op-card{
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:auto!important;
+    gap:10px;
+    padding:12px;
+  }
+  .inventory-operations-host .inventory-op-card>.op-item-head,
+  .inventory-operations-host .inventory-op-card>.op-select-grid,
+  .inventory-operations-host .inventory-op-card>.op-action-row,
+  .inventory-operations-host .inventory-op-card>.op-transfer-balance,
+  .inventory-operations-host .inventory-op-card>.pick-followup{
+    grid-column:1!important;
+    grid-row:auto!important;
+  }
+  .inventory-operations-host .inventory-op-card>.op-item-head{
+    padding:0 0 10px;
+    border-right:0;
+    border-bottom:1px solid var(--inv-line,#e3e9e6);
+  }
+  .inventory-operations-host .inventory-op-card[data-op-mode]>.op-select-grid{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  .inventory-operations-host .inventory-op-card>.op-action-row{
+    width:100%;
+    grid-template-columns:minmax(0,1fr) minmax(108px,.8fr);
+    justify-content:stretch;
+  }
+  .inventory-operations-host .op-action-row .op-quantity{
+    width:100%;
+    min-width:0;
+    max-width:none;
+    grid-template-columns:42px minmax(54px,1fr) 42px;
+  }
+  .inventory-operations-host .op-action-row :is(.op-primary,.op-secondary){
+    width:100%;
+  }
+  .inventory-operations-host .op-transfer-balance{
+    grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)!important;
+  }
+  .inventory-operations-host .pick-followup,
+  .inventory-operations-host .pick-use-row,
+  .inventory-operations-host .pick-return-row{
+    width:100%;
+  }
+  .inventory-operations-host .pick-use-row,
+  .inventory-operations-host .pick-return-row{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:8px;
+    align-items:end;
+  }
+  .inventory-operations-host .pick-return-row label{
+    grid-column:1 / -1;
+    width:100%;
+  }
+}
