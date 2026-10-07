@@ -41,7 +41,9 @@ assert.doesNotMatch(deploy,/kitchen-os-db\s+psql[^\n]*\b(update|insert|delete|al
 assert.match(productionDeploy,/kitchen-os-staging-deploy/);
 assert.match(productionDeploy,/kitchen_staging_edge/);
 assert.match(workflow,/workflow_dispatch:/);
-assert.doesNotMatch(workflow,/pull_request:/);
+assert.match(workflow,/pull_request:/,"staging must run for pull-request candidates");
+assert.match(workflow,/push:[\s\S]*branches:[\s\S]*- main/,"staging must run for main candidates");
+assert.match(workflow,/github\.event\.pull_request\.head\.sha/,"PR staging must pin the exact head SHA");
 assert.match(workflow,/\.kitchen-os-staging-bundle\.tgz/);
 assert.match(workflow,/staging\.82\.47\.180\.185\.nip\.io\/api\/health/);
 
