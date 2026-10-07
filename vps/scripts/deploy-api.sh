@@ -68,6 +68,17 @@ echo "[2/12] Updating compose definition..."
 cp "${REPO_DIR}/vps/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 chown deploy:deploy "${APP_DIR}/docker-compose.yml"
 docker network inspect marketing_edge >/dev/null 2>&1 || docker network create marketing_edge >/dev/null
+docker network inspect kitchen_staging_edge >/dev/null 2>&1 || docker network create kitchen_staging_edge >/dev/null
+
+# Bootstrap the isolated staging deployer from trusted main. Candidate bundles
+# are later deployed through this fixed root-owned entry point and never reset
+# the production repository or target the production DB for migrations.
+install -o root -g root -m 0755 "${REPO_DIR}/vps/scripts/deploy-staging.sh" /usr/local/sbin/kitchen-os-staging-deploy
+cat > /etc/sudoers.d/kitchen-os-staging-deploy <<'EOF'
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/kitchen-os-staging-deploy
+EOF
+chmod 0440 /etc/sudoers.d/kitchen-os-staging-deploy
+visudo -cf /etc/sudoers.d/kitchen-os-staging-deploy >/dev/null
 
 echo "[2b/12] Installing private AgentMemory runtime..."
 bash "${REPO_DIR}/vps/scripts/install-agentmemory.sh"
