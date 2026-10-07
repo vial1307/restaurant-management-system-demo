@@ -1,6 +1,7 @@
 import { vpsDirectTransfer, vpsInventoryDestinations } from "./vps-api.js";
 import {
   getSiteInventoryRows,
+  inventoryCatalogMasters,
   syncInventoryNow,
 } from "./inventory-cloud.js";
 import { inventoryLocations, inventorySites } from "./inventory-master-data.js";
@@ -36,6 +37,13 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
   const destinationMetadata = includeDestinations
     ? await vpsInventoryDestinations(site, destinationSites)
     : null;
+  const catalogMasters = inventoryCatalogMasters(site);
+  const categoryByCode = new Map(
+    (catalogMasters.categories || []).map((entry) => [String(entry.code || ""), entry])
+  );
+  const unitByCode = new Map(
+    (catalogMasters.units || []).map((entry) => [String(entry.code || ""), entry])
+  );
 
   const byItem = new Map();
   for (const row of rows) {
@@ -48,7 +56,12 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
       zh: item.name_zh_tw,
       vi: item.name_vi,
       unit: item.unit,
+      unitCode: item.unit_code || item.unit || "",
+      categoryCode: item.category_code || "",
+      category: categoryByCode.get(String(item.category_code || "")) || null,
+      unitMaster: unitByCode.get(String(item.unit_code || item.unit || "")) || null,
       workArea: item.work_area || "",
+      receiveLocationCode: item.receive_default_location_code || "",
       locations: [],
       workLocations: [],
       total: 0,
@@ -62,6 +75,7 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
       vi: row.location.name_vi,
       workArea: String(row.location.metadata?.work_area || "").trim(),
       storageGroup: String(row.location.metadata?.storage_group || "").trim(),
+      metadata: row.location.metadata || {},
       quantity,
       minimum: Number(row.minimum_quantity) || 0,
     };
