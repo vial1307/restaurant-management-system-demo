@@ -8,7 +8,7 @@ import {
   inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { prepareIngredientNameSearchCorpus, prepareSearchNeedle, preparedSearchMatches } from "./search-utils.js";
+import { ingredientNameSearchMatches, prepareIngredientNameSearchCorpus, prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import {
   INVENTORY_SITES,
   directBranchTransfer,
@@ -23,7 +23,7 @@ const TEXT = {
     pick:"Lấy hàng · 領貨",
     transfer:"Điều chuyển · 庫存轉撥",
     ship:"Xuất hàng · 出貨",
-    search:"Tìm nguyên liệu: tên, Pinyin/注音 hoặc viết tắt…",
+    search:"Tìm nguyên liệu theo tên…",
     from:"Từ kho · 來源儲位",
     to:"Đến · 目的地",
     destination:"Kho nhận · 目的儲位",
@@ -61,7 +61,7 @@ const TEXT = {
   },
   zh: {
     in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
-    search:"搜尋原料名稱、Pinyin/注音或縮寫…",from:"來源儲位",to:"目的地",destination:"目的儲位",
+    search:"搜尋原料名稱…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
     workDestination:"工作區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
     fixedDestination:"分店已有此品項，收貨儲位依分店設定自動帶入。",singleDestination:"分店此品項只有一個存放儲位，系統已自動選擇。",flexibleDestination:"分店尚無此品項，本次請選擇實際存放位置。",needsManagerDestination:"分店已有此品項但有多個儲位，尚未設定固定收貨儲位；請分店主管先完成設定。",fixedBadge:"依分店設定",singleBadge:"自動帶入",flexibleBadge:"分店未建品項",needsManagerBadge:"需主管設定",shipFixed:"已出貨並更新至正確收貨儲位。",
@@ -215,7 +215,7 @@ function applyOperationSearch(host,state) {
   if (!input) return;
 
   const query = input.value || "";
-  const needle = prepareSearchNeedle(query);
+  const needle = prepareIngredientNameSearchNeedle(query);
   state.search = query;
   if (typeof state.onSearchChange === "function") state.onSearchChange(query);
   const exactFocus = Boolean(state.focusItemKey && query === state.focusSearch);
@@ -225,7 +225,7 @@ function applyOperationSearch(host,state) {
     const corpus = card.dataset.opSearchCorpus || prepareSearchCorpus(card.textContent || "");
     const show = exactFocus
       ? card.dataset.opItemKey === state.focusItemKey
-      : !needle || preparedSearchMatches(corpus,needle);
+      : !needle || ingredientNameSearchMatches(corpus,needle);
     card.hidden = !show;
     card.toggleAttribute("data-op-search-hidden",!show);
     if (show) visible += 1;
