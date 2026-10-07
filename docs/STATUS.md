@@ -1,3 +1,11 @@
+## ACTIVE — Operation search parity, 2026-10-07
+
+- `ACTIVE_PR: #218`.
+- Fixing search parity only for Receive / Pick / Transfer / Ship; Overview remains on the stable Search v2 implementation.
+- Operation search corpus is being expanded with authoritative category, unit, receive-default and location metadata from the Inventory snapshot.
+- Regression now verifies every rendered operation card's bilingual product identity is indexed.
+- Production authority remains `79f1491f112c830c80da3494cb2aaf1af5ef27ba`, schema `032`.
+
 ## STABLE — Inventory search v2, 2026-10-07
 
 - `ACTIVE_PR: none`.

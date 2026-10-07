@@ -2409,3 +2409,12 @@ The separate read-cutover candidate:
 - Inventory search now uses curated DB-backed corpus, searches hidden 3rd+ product locations, excludes unselected select options, supports multi-token AND matching and initials, and applies the same contract to Central Inventory.
 - `ACTIVE_PR: none`; production authority is `79f1491f112c830c80da3494cb2aaf1af5ef27ba` / schema `032`.
 - No PostgreSQL schema/data, RBAC, quantity, minimum or transaction behavior changed.
+
+
+## 2026-10-07 — PR #218 operation search parity
+
+- Follow-up report: Overview search is correct, but other Inventory operation tabs still fail to find some entries.
+- Audited `loadSiteOperationData()` versus Overview product search metadata.
+- Found the operation search corpus was narrower than Overview: it omitted category master labels, unit master labels, receive-default metadata and some DB-backed location metadata.
+- Enriched operation items from the same PostgreSQL Inventory snapshot and expanded the operation corpus without changing stock behavior.
+- Added browser regression that validates every operation card indexes its rendered Chinese/Vietnamese identity and exercises actual search on representative cards across Receive/Pick/Transfer/Ship.
