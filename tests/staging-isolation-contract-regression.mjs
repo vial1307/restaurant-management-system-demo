@@ -51,6 +51,7 @@ assert.match(workflow,/cancel-in-progress:\s*false/,"single staging stack must s
 assert.match(productionWorkflow,/workflow_run:[\s\S]*Deploy Kitchen OS Staging/,"production must be triggered by the staging workflow");
 assert.doesNotMatch(productionWorkflow,/\n  push:\n/,"production must not deploy directly from a main push");
 assert.match(productionWorkflow,/KITCHEN_TARGET_SHA:[^\n]*workflow_run[^\n]*head_sha/,"promotion SHA must come from the successful staging run");
+assert.match(productionWorkflow,/KITCHEN_TARGET_SHA:[^\n]*pull_request[^\n]*head\.sha/,"PR validation must use the exact PR head SHA");
 assert.match(productionWorkflow,/github\.event\.workflow_run\.conclusion == 'success'/,"failed staging must never reach production");
 assert.match(productionWorkflow,/github\.event\.workflow_run\.head_branch == 'main'/,"only staged main commits may be promoted");
 assert.match(productionWorkflow,/printf '%s\\n' "\$KITCHEN_TARGET_SHA" > \/tmp\/kitchen-os-deploy-target/,"production deploy target must be the staged SHA");
