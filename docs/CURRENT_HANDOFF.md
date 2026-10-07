@@ -1,6 +1,6 @@
 ## ACTIVE — PR #215 merge certification repair, 2026-10-07
 
-- `ACTIVE_PR: pending` — branch `test/inventory-operation-geometry-atomic-20261007`.
+- `ACTIVE_PR: #216` — branch `test/inventory-operation-geometry-atomic-20261007`.
 - Runtime feature PR #215 merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a` but has NOT been deployed.
 - Main Deploy #1276 was correctly blocked in regression before VPS deploy.
 - Failure was test-only: `browser-regression.mjs` measured `.inventory-ops-list` and the visible operation card with separate locator/boundingBox calls; Inventory realtime rerender could detach the list between measurements, producing `list=missing` while the newly rendered card remained visible.
