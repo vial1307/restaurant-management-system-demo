@@ -79,14 +79,38 @@ echo "[staging 3/10] Preparing isolated staging PostgreSQL..."
 cd "${STAGE_DIR}"
 APP_RELEASE="${TARGET:0:7}-staging" docker compose --env-file .env stop app web >/dev/null 2>&1 || true
 APP_RELEASE="${TARGET:0:7}-staging" docker compose --env-file .env up -d db
-for attempt in $(seq 1 30); do
-  if docker exec kitchen-os-staging-db pg_isready -U "${STAGE_USER}" -d "${STAGE_DB}" >/dev/null 2>&1; then break; fi
-  [[ "${attempt}" == "30" ]] && fail "STAGING_DB_NOT_READY" 76
+
+# postgres:alpine starts a temporary server during first-time initialization,
+# creates the configured database, stops that temporary server, then starts the
+# real long-lived server. A single pg_isready can therefore produce a false
+# positive in the middle of that hand-off. Require two healthy SQL probes
+# separated by a stability window before destructive restore preparation.
+stable_probes=0
+for attempt in $(seq 1 45); do
+  health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' kitchen-os-staging-db 2>/dev/null || true)"
+  if [[ "${health}" == "healthy" ]] \
+    && docker exec kitchen-os-staging-db psql -Atq -U "${STAGE_USER}" -d "${STAGE_DB}" -c "select 1" 2>/dev/null | grep -qx "1"; then
+    stable_probes=$((stable_probes+1))
+    if [[ "${stable_probes}" -ge 2 ]]; then
+      break
+    fi
+    sleep 3
+    continue
+  fi
+  stable_probes=0
+  if [[ "${attempt}" == "45" ]]; then
+    docker logs --tail=120 kitchen-os-staging-db >&2 || true
+    fail "STAGING_DB_NOT_STABLE" 76
+  fi
   sleep 1
 done
 
-docker exec kitchen-os-staging-db dropdb --if-exists --force -U "${STAGE_USER}" "${STAGE_DB}" >/dev/null 2>&1 || true
-docker exec kitchen-os-staging-db createdb -U "${STAGE_USER}" "${STAGE_DB}"
+# Reset the isolated clone target through the maintenance database after the
+# long-lived server is stable. Nothing here addresses kitchen-os-db.
+docker exec kitchen-os-staging-db psql -v ON_ERROR_STOP=1 -U "${STAGE_USER}" -d postgres \
+  -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='${STAGE_DB}' and pid<>pg_backend_pid();" >/dev/null
+docker exec kitchen-os-staging-db dropdb --if-exists -U "${STAGE_USER}" --maintenance-db=postgres "${STAGE_DB}"
+docker exec kitchen-os-staging-db createdb -U "${STAGE_USER}" --maintenance-db=postgres "${STAGE_DB}"
 docker exec -i kitchen-os-staging-db pg_restore -U "${STAGE_USER}" -d "${STAGE_DB}" --no-owner --no-acl < "${DUMP_FILE}"
 
 echo "[staging 4/10] Verifying clone parity before candidate migrations..."

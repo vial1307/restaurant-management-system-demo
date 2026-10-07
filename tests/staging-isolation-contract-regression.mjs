@@ -32,13 +32,18 @@ assert.match(deploy,/kitchen-os-staging-db pg_restore/);
 assert.match(deploy,/STAGING_CLONE_DRIFT/);
 assert.match(deploy,/PRODUCTION_SCHEMA_CHANGED_DURING_STAGING/);
 assert.match(deploy,/STAGING_DATA_INTEGRITY_FAILED/);
+assert.match(deploy,/STAGING_DB_NOT_STABLE/);
+assert.match(deploy,/stable_probes/);
+assert.match(deploy,/--maintenance-db=postgres/);
 assert.match(deploy,/truncate table public\.sessions/);
 assert.doesNotMatch(deploy,/kitchen-os-db\s+psql[^\n]*\b(update|insert|delete|alter|drop|create)\b/i);
 
 assert.match(productionDeploy,/kitchen-os-staging-deploy/);
 assert.match(productionDeploy,/kitchen_staging_edge/);
 assert.match(workflow,/workflow_dispatch:/);
-assert.doesNotMatch(workflow,/pull_request:/);
+assert.match(workflow,/pull_request:/,"staging must run for pull-request candidates");
+assert.match(workflow,/push:[\s\S]*branches:[\s\S]*- main/,"staging must run for main candidates");
+assert.match(workflow,/github\.event\.pull_request\.head\.sha/,"PR staging must pin the exact head SHA");
 assert.match(workflow,/\.kitchen-os-staging-bundle\.tgz/);
 assert.match(workflow,/staging\.82\.47\.180\.185\.nip\.io\/api\/health/);
 
