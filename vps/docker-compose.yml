@@ -36,6 +36,7 @@ services:
       SESSION_DAYS: 14
       COOKIE_SECURE: "false"
       APP_RELEASE: ${APP_RELEASE:-vps-dev}
+      APP_ENV: production
       WORKFORCE_SCHEDULE_RELATIONAL_READ: ${WORKFORCE_SCHEDULE_RELATIONAL_READ:-true}
       HOST_METRICS_PATH: /run/kitchen-host-metrics/host-metrics.env
       HOST_ACTION_DIR: /run/kitchen-admin-actions
@@ -105,6 +106,7 @@ services:
     networks:
       - kitchen_internal
       - marketing_edge
+      - kitchen_staging_edge
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -123,3 +125,6 @@ networks:
   marketing_edge:
     external: true
     name: marketing_edge
+  kitchen_staging_edge:
+    external: true
+    name: kitchen_staging_edge

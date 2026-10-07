@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kitchen-os-staging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+    networks:
+      - staging_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ./repo/vps/backend
+    container_name: kitchen-os-staging-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DB_HOST: db
+      DB_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_POOL_MAX: 6
+      SESSION_DAYS: 1
+      COOKIE_SECURE: "true"
+      APP_RELEASE: ${APP_RELEASE:-staging-dev}
+      APP_ENV: staging
+      WORKFORCE_SCHEDULE_RELATIONAL_READ: ${WORKFORCE_SCHEDULE_RELATIONAL_READ:-true}
+      HOST_METRICS_PATH: /run/kitchen-host-metrics/host-metrics.env
+      HOST_ACTION_DIR: /run/kitchen-admin-actions
+    volumes:
+      - ./runtime:/run/kitchen-host-metrics:ro
+      - ./admin-actions:/run/kitchen-admin-actions
+    networks:
+      - staging_internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  web:
+    image: caddy:2.10-alpine
+    container_name: kitchen-os-staging-web
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - ./www:/srv:ro
+      - ./repo/vps/Caddyfile.staging:/etc/caddy/Caddyfile:ro
+    networks:
+      - staging_internal
+      - kitchen_staging_edge
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  staging_postgres_data:
+    name: kitchen_os_staging_postgres_data
+
+networks:
+  staging_internal:
+    name: kitchen_os_staging_internal
+  kitchen_staging_edge:
+    external: true
+    name: kitchen_staging_edge
