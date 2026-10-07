@@ -1,3 +1,11 @@
+## ACTIVE — Inventory operation merge certification repair, 2026-10-07
+
+- `ACTIVE_PR: #216` on `test/inventory-operation-geometry-atomic-20261007`.
+- PR #215 runtime merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a`, but Deploy #1276 stopped before deployment because of a browser-test DOM detach race while measuring operation geometry.
+- Repair is test-only: measure list/card/control/action and Pick follow-up geometry atomically in one DOM frame.
+- Production still runs `d1afe98a99f471028476126feb4b2ae5c84be977`, schema `032`.
+- No runtime/database/API/RBAC/stock behavior changes.
+
 ## ACTIVE — Inventory search completeness + operation UI alignment, 2026-10-07
 
 - `ACTIVE_PR: #215` on `fix/inventory-operations-search-layout-20261007`.

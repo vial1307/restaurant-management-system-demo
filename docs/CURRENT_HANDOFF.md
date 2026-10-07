@@ -1,3 +1,14 @@
+## ACTIVE — PR #215 merge certification repair, 2026-10-07
+
+- `ACTIVE_PR: #216` — branch `test/inventory-operation-geometry-atomic-20261007`.
+- Runtime feature PR #215 merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a` but has NOT been deployed.
+- Main Deploy #1276 was correctly blocked in regression before VPS deploy.
+- Failure was test-only: `browser-regression.mjs` measured `.inventory-ops-list` and the visible operation card with separate locator/boundingBox calls; Inventory realtime rerender could detach the list between measurements, producing `list=missing` while the newly rendered card remained visible.
+- Exact PR #215 head had already passed browser/full-device gates; no runtime search/layout assertion failed.
+- Repair uses an atomic same-frame DOM geometry snapshot for operation list/card/control/action and Pick follow-up geometry. Genuine width/overflow/overlap failures remain asserted; only the detach race is removed.
+- Production authority remains release `d1afe98a99f471028476126feb4b2ae5c84be977`, schema `032`, until a repaired merge commit passes full regression and is actually deployed.
+- No runtime/API/PostgreSQL/schema/RBAC/Inventory mutation change in this repair.
+
 ## ACTIVE — Inventory full search audit + operation layout normalization, 2026-10-07
 
 - `ACTIVE_PR: #215` — branch `fix/inventory-operations-search-layout-20261007`.
