@@ -10,6 +10,7 @@ const stagingCaddy = read("vps/Caddyfile.staging");
 const deploy = read("vps/scripts/deploy-staging.sh");
 const productionDeploy = read("vps/scripts/deploy-api.sh");
 const workflow = read(".github/workflows/deploy-staging.yml");
+const productionWorkflow = read(".github/workflows/deploy-vps.yml");
 const server = read("vps/backend/src/server.mjs");
 const db = read("vps/backend/src/db.mjs");
 
@@ -46,6 +47,14 @@ assert.match(workflow,/push:[\s\S]*branches:[\s\S]*- main/,"staging must run for
 assert.match(workflow,/github\.event\.pull_request\.head\.sha/,"PR staging must pin the exact head SHA");
 assert.match(workflow,/\.kitchen-os-staging-bundle\.tgz/);
 assert.match(workflow,/staging\.82\.47\.180\.185\.nip\.io\/api\/health/);
+assert.match(workflow,/cancel-in-progress:\s*false/,"single staging stack must serialize candidates without cancelling main");
+assert.match(productionWorkflow,/workflow_run:[\s\S]*Deploy Kitchen OS Staging/,"production must be triggered by the staging workflow");
+assert.doesNotMatch(productionWorkflow,/\n  push:\n/,"production must not deploy directly from a main push");
+assert.match(productionWorkflow,/KITCHEN_TARGET_SHA:[^\n]*workflow_run[^\n]*head_sha/,"promotion SHA must come from the successful staging run");
+assert.match(productionWorkflow,/github\.event\.workflow_run\.conclusion == 'success'/,"failed staging must never reach production");
+assert.match(productionWorkflow,/github\.event\.workflow_run\.head_branch == 'main'/,"only staged main commits may be promoted");
+assert.match(productionWorkflow,/printf '%s\\n' "\$KITCHEN_TARGET_SHA" > \/tmp\/kitchen-os-deploy-target/,"production deploy target must be the staged SHA");
+assert.doesNotMatch(productionWorkflow,/printf '%s\\n' "\$GITHUB_SHA" > \/tmp\/kitchen-os-deploy-target/,"workflow metadata SHA must not replace staged candidate SHA");
 
 assert.match(server,/schemaFingerprint/);
 assert.match(server,/environment: process\.env\.APP_ENV \|\| "production"/);
