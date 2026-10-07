@@ -198,7 +198,26 @@ assert.match(inventoryOperationsSource,/data-op-search-hidden/,"operation search
 assert.match(inventoryOperationsSource,/data-op-search-clear/,"operation search must expose a clear control");
 assert.match(inventoryOperationsSource,/prepareSearchNeedle\(query\)/,"operation search must normalize the query once");
 assert.match(inventoryOperationsSource,/preparedSearchMatches\(corpus,needle\)/,"operation search must use prepared corpus matching");
+assert.match(inventoryOperationsSource,/item\.category\?\.name_zh_tw/,"operation search must index category labels");
+assert.match(inventoryOperationsSource,/item\.category\?\.name_vi/,"operation search must index bilingual category labels");
+assert.match(inventoryOperationsSource,/item\.unitMaster\?\.name_zh_tw/,"operation search must index unit master labels");
+assert.match(inventoryOperationsSource,/item\.receiveLocationCode/,"operation search must index receive-default location metadata");
+assert.match(inventoryOperationsSource,/loc\.metadata\?\.ui_key/,"operation search must index DB-backed location ui keys");
+assert.match(inventoryOperationsSource,/item\.workAreaMaster\?\.name_zh_tw/,"operation search must index Work Area Chinese labels");
+assert.match(inventoryOperationsSource,/item\.workAreaMaster\?\.name_vi/,"operation search must index Work Area Vietnamese labels");
+assert.match(inventoryOperationsSource,/initialSearch=""/,"operation mount must accept shared Inventory search state");
+assert.match(inventoryOperationsSource,/onSearchChange\(query\)/,"operation search must report query changes to the parent Inventory view");
+assert.match(read("src/app.js"),/initialSearch:view\.search/,"Inventory must pass Overview search state into operation tabs");
+assert.match(read("src/app.js"),/onSearchChange:\(query\)=>\{\s*view\.search=query;\s*\}/,"operation search changes must update shared Inventory search state");
 assert.doesNotMatch(inventoryOperationsSource,/searchMatches\(card\.textContent/,"operation search must not rebuild raw DOM corpus on every card");
+
+const inventoryTransferSource = read("src/inventory-transfer-service.js");
+assert.match(inventoryTransferSource,/inventoryCatalogMasters/,"operation data must reuse Inventory catalog masters from the authoritative snapshot");
+assert.match(inventoryTransferSource,/categoryCode:\s*item\.category_code/,"operation items must retain category code");
+assert.match(inventoryTransferSource,/unitCode:\s*item\.unit_code/,"operation items must retain unit code");
+assert.match(inventoryTransferSource,/receiveLocationCode:\s*item\.receive_default_location_code/,"operation items must retain receive-default metadata");
+assert.match(inventoryTransferSource,/inventoryUiGroups/,"operation items must reuse DB-backed Work Area UI groups");
+assert.match(inventoryTransferSource,/workAreaMaster:\s*workAreaByCode\.get/,"operation items must retain bilingual Work Area master metadata");
 
 for (const [file, marker] of [
   ["src/app.js", 'data-field="inventorySearch"'],

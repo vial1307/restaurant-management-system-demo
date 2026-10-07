@@ -1,3 +1,14 @@
+## ACTIVE — PR #218 operation search parity, 2026-10-07
+
+- `ACTIVE_PR: #218` — branch `fix/inventory-operation-search-parity-20261007`.
+- User confirmed Inventory Overview search is correct, while other Inventory operation tabs still miss products/metadata.
+- Scope is limited to 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 search parity; Overview remains unchanged.
+- Operation items now retain DB-backed unit/category masters, receive-default metadata, location ui_key/work_area/storage_group metadata, and existing product/location identities.
+- Search state is now shared between Overview and operation tabs: switching modes keeps the same query, and clearing it in an operation tab clears the shared Inventory query.
+- Browser certification now checks every rendered operation card indexes its Chinese/Vietnamese identity, plus real UI lookup for representative cards in every operation mode.
+- No PostgreSQL schema/data, RBAC, stock quantity/minimum or transaction behavior changes.
+- Production remains `79f1491f112c830c80da3494cb2aaf1af5ef27ba` / schema `032` until exact-head gates pass and the merge SHA is deployed.
+
 ## STABLE — PR #217 Inventory search v2, 2026-10-07
 
 - `ACTIVE_PR: none`.

@@ -82,9 +82,44 @@ function itemLabel(item,language){
 }
 function operationSearchText(item){
   const locationText=[...(item.locations||[]),...(item.workLocations||[])]
-    .flatMap((loc)=>[loc.zh,loc.vi,loc.name_zh_tw,loc.name_vi,loc.code])
+    .flatMap((loc)=>[
+      loc.zh,
+      loc.vi,
+      loc.name_zh_tw,
+      loc.name_vi,
+      loc.code,
+      loc.workArea,
+      loc.storageGroup,
+      loc.metadata?.ui_key,
+      loc.metadata?.work_area,
+      loc.metadata?.storage_group,
+    ])
     .filter(Boolean);
-  return [item.zh,item.vi,item.itemKey,item.catalogKey,item.unit,item.workArea,...locationText]
+  const receiveLocation=[...(item.locations||[]),...(item.workLocations||[])]
+    .find((loc)=>String(loc.code||"")===String(item.receiveLocationCode||""));
+  return [
+    item.zh,
+    item.vi,
+    item.itemKey,
+    item.catalogKey,
+    item.unit,
+    item.unitCode,
+    item.categoryCode,
+    item.category?.name_zh_tw,
+    item.category?.name_vi,
+    item.unitMaster?.symbol,
+    item.unitMaster?.name_zh_tw,
+    item.unitMaster?.name_vi,
+    item.workArea,
+    item.workAreaMaster?.zh,
+    item.workAreaMaster?.vi,
+    item.workAreaMaster?.name_zh_tw,
+    item.workAreaMaster?.name_vi,
+    item.receiveLocationCode,
+    receiveLocation?.zh,
+    receiveLocation?.vi,
+    ...locationText,
+  ]
     .filter(Boolean)
     .join(" ");
 }
@@ -220,6 +255,7 @@ function applyOperationSearch(host,state) {
   const query = input.value || "";
   const needle = prepareSearchNeedle(query);
   state.search = query;
+  if (typeof state.onSearchChange === "function") state.onSearchChange(query);
   const exactFocus = Boolean(state.focusItemKey && query === state.focusSearch);
   const cards = [...host.querySelectorAll("[data-op-item]")];
   let visible = 0;
@@ -634,6 +670,8 @@ export async function mountInventoryOperations(host,{
   mode="in",
   language="vi",
   onUpdated,
+  initialSearch="",
+  onSearchChange,
   initialItemKey="",
   initialLocationCode="",
   initialSourceLocationCode="",
@@ -642,7 +680,7 @@ export async function mountInventoryOperations(host,{
   if(activeMount?.stopWatch){
     try{await activeMount.stopWatch();}catch{}
   }
-  const state={host,site,mode,language,onUpdated,stopWatch:null,search:"",initialItemKey,initialLocationCode,initialSourceLocationCode,focusItemKey:"",focusSearch:""};
+  const state={host,site,mode,language,onUpdated,onSearchChange,stopWatch:null,search:String(initialSearch||""),initialItemKey,initialLocationCode,initialSourceLocationCode,focusItemKey:"",focusSearch:""};
   activeMount=state;
   await doRender(host,state);
   if(activeMount!==state || !host.isConnected) return;

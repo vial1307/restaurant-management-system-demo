@@ -1800,6 +1800,8 @@ function render() {
       site,
       mode:opsHost.dataset.mode,
       language:context.language,
+      initialSearch:view.search,
+      onSearchChange:(query)=>{ view.search=query; },
       onUpdated:()=>{ void syncInventoryNow(site,{reloadBranch:false}); },
     });
   }
