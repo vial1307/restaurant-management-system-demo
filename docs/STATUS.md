@@ -1,3 +1,13 @@
+## ACTIVE — Inventory search completeness + operation UI alignment, 2026-10-07
+
+- `ACTIVE_PR: pending` on `fix/inventory-operations-search-layout-20261007`.
+- Scope: Inventory search correctness/coverage and UI alignment for 進貨 / 領貨 / 轉撥 / 出貨.
+- Operation search now uses prepared DB-backed item/location corpus plus explicit search-hidden state instead of relying only on `hidden` + card text.
+- Pinyin/注音 coverage is extended for current catalog characters that were previously missing.
+- All four operation modes use one full-width responsive card alignment contract.
+- No database/schema/RBAC/stock mutation.
+- Production remains `d1afe98a99f471028476126feb4b2ae5c84be977`, schema `032` until tested merge/deploy.
+
 ## STABLE — PR #214 Inventory search repair + UX polish, 2026-10-07
 
 - `ACTIVE_PR: none`.
