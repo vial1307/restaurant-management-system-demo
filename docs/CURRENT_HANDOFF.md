@@ -1,13 +1,20 @@
-## ACTIVE — Inventory search repair + UX polish, 2026-10-07
+## STABLE — PR #214 Inventory search repair + UX polish, 2026-10-07
 
-- `ACTIVE_PR: #214` — branch `fix/inventory-search-ux-20261007`.
-- User-reported defect: Inventory search input accepts text but rows may remain visible.
-- Root cause: search logic sets `hidden`, while Inventory row presentation explicitly sets `display:grid`; the visual display rule can override the HTML hidden state. The previous browser assertion also allowed `filtered === before`, so a no-op search could pass CI.
-- Fix: filtered rows/groups now carry `data-search-hidden` and CSS enforces `display:none!important`; search remains local over the currently rendered PostgreSQL-backed inventory view and does not mutate data.
-- UX: clearer bilingual search placeholder, result counter, explicit clear button, light visual styling aligned with PR #213, responsive mobile layout.
-- Regression now requires result count to decrease for a matching query, validates zero-result state, clear/reset behavior, and DOM row preservation.
-- No API/PostgreSQL/schema/RBAC/quantity/transaction changes.
-- Merge/deploy only after exact-head browser/full-device gates pass.
+- `ACTIVE_PR: none`.
+- Production release: `d1afe98a99f471028476126feb4b2ae5c84be977`; schema `032`.
+- Exact tested PR head: `6853e70ca3eed2c85058fafee52cd60644654b29`.
+- Exact-head gates PASS: Super Admin Browser #460, Workforce Diagnostic #608, Deploy/full-device #1269.
+- Root cause closed: Inventory search set HTML `hidden`, but explicit row `display:grid` presentation could visually override the hidden state; the old regression also allowed `filtered === before`.
+- Runtime fix: filtered rows/groups use `data-search-hidden` and CSS enforces `display:none!important`; the search remains local to the currently rendered PostgreSQL-backed Inventory view and does not mutate data.
+- UX delivered: clearer bilingual product/pinyin/zhuyin/location placeholder, live result counter, explicit clear control, refined light search field, responsive mobile layout.
+- Regression now requires a matching query to reduce visible rows, verifies a zero-result state, clear/reset behavior and DOM-row preservation.
+- PR #214 merged as `d1afe98a99f471028476126feb4b2ae5c84be977`.
+- Main Deploy #1270 PASS; pre-deploy backup: `/opt/kitchen-os/backups/kitchen_os_20261006T214104Z.dump`.
+- Production health: app/database/edge healthy, release `d1afe98`, schema `032`, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Inventory Site Production Audit #581 PASS.
+- Workforce Staff #822, Attendance #796, Schedule Backfill #806 and Schedule Parity #595 PASS.
+- No PostgreSQL schema/data, Inventory quantities/minimums/transactions, API or RBAC semantics were changed.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 ## STABLE — PR #213 high-fidelity Inventory + Super Admin visual parity, 2026-10-06
 

@@ -2323,3 +2323,19 @@ The separate read-cutover candidate:
 - Search UX: bilingual product/pinyin/zhuyin/location placeholder, live result count, clear action, refined light search field and mobile layout.
 - Browser regression now requires a real reduction for `niu rou`, validates a zero-match query, validates the empty state, validates clear/reset, and confirms search never removes rows from the DOM.
 - No database, API, RBAC, quantity, minimum or transaction mutation.
+
+
+### PR #214 production closure
+
+- Final tested PR head: `6853e70ca3eed2c85058fafee52cd60644654b29`.
+- Exact-head gates: Super Admin Browser #460 PASS; Workforce Diagnostic #608 PASS; Deploy/full-device #1269 PASS.
+- PR #214 merged as `d1afe98a99f471028476126feb4b2ae5c84be977`.
+- Main Deploy #1270 PASS with exact target verification, frontend release stamp `d1afe98`, backup `/opt/kitchen-os/backups/kitchen_os_20261006T214104Z.dump`, schema `032`, `DATA_INTEGRITY_OK`, and healthy Web/API/Super Admin edge.
+- Production UI smoke: `PRODUCTION_UI_SMOKE_OK https://82.47.180.185.nip.io/#inventory`.
+- Inventory Site Production Audit #581 PASS.
+- Workforce Staff #822, Attendance #796, Schedule Backfill #806 and Schedule Parity #595 PASS.
+- Search defect is production-closed: rows that do not match are explicitly marked `data-search-hidden` and forced out of layout, including product rows that otherwise use `display:grid`.
+- Search regression now proves result reduction, no-result behavior, clear/reset restoration and DOM preservation.
+- Search UI now includes bilingual product/pinyin/zhuyin/location guidance, live result count and explicit clear control on Desktop/Mobile.
+- `ACTIVE_PR: none`; production authority is release `d1afe98a99f471028476126feb4b2ae5c84be977` / schema `032`.
+- No database/schema/RBAC/quantity/minimum/transaction behavior changed.

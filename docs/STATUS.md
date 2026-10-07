@@ -1,10 +1,17 @@
-## ACTIVE — Inventory search repair + UX polish, 2026-10-07
+## STABLE — PR #214 Inventory search repair + UX polish, 2026-10-07
 
-- `ACTIVE_PR: #214` on `fix/inventory-search-ux-20261007`.
-- Scope: Inventory search behavior + presentation + regression only.
-- Root cause identified: display rules could visually override rows marked with the HTML `hidden` state.
-- Candidate adds an explicit search-hidden presentation contract, result count, clear control and stronger browser regression.
-- Production authority remains release `e71376e8893626e1c9bcd8c4d23dae8ba5ddf04f` / schema `032` until a tested merge is deployed.
+- `ACTIVE_PR: none`.
+- Production release: `d1afe98a99f471028476126feb4b2ae5c84be977`; schema `032`.
+- Exact tested PR head: `6853e70ca3eed2c85058fafee52cd60644654b29`.
+- Exact-head gates PASS: Super Admin Browser #460, Workforce Diagnostic #608, Deploy/full-device #1269.
+- Search behavior is fixed with an explicit `data-search-hidden` presentation contract; matching queries must now reduce visible rows under browser regression.
+- Search UX includes bilingual product/pinyin/zhuyin/location placeholder, live result count, clear action and responsive light styling.
+- Main Deploy #1270 PASS; backup `/opt/kitchen-os/backups/kitchen_os_20261006T214104Z.dump`.
+- Production health: app/database/edge healthy, release `d1afe98`, schema `032`, `DATA_INTEGRITY_OK`, `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #581 PASS.
+- Workforce Staff #822, Attendance #796, Schedule Backfill #806 and Schedule Parity #595 PASS.
+- PostgreSQL/VPS authority and all Inventory business mutation semantics remain unchanged.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 ## STABLE — PR #213 high-fidelity Inventory/Super Admin visual parity, 2026-10-06
 
