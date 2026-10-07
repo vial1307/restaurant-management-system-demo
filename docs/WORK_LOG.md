@@ -2352,3 +2352,13 @@ The separate read-cutover candidate:
 - Strengthened browser regression for all four operation modes: real result reduction, zero-result state, clear/reset restoration, DOM preservation, full-width cards, non-overlapping controls/actions and Pick follow-up geometry.
 - Added static guards for catalog phonetics, operation prepared corpus and final layout/search-hidden CSS.
 - No PostgreSQL migration, quantity rewrite, permission change or transaction semantic change.
+
+### PR #215 merge deploy gate failure and certification repair
+
+- PR #215 exact head `abfc1b7c512f5b24cf04e187f2f754b6e6aaf6d6` passed Super Admin Browser #465, Workforce Diagnostic #613 and Deploy/full-device #1275.
+- PR #215 merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a`.
+- Main Deploy #1276 stopped before deploy because browser regression reported: `in desktop operation card must span the full operation grid (card=1128, list=missing)`.
+- Diagnosis: the test took list and card bounding boxes through separate Playwright locator calls while Inventory realtime refresh could replace the operation DOM between calls. This is a certification race, not evidence of a runtime geometry defect.
+- Started `test/inventory-operation-geometry-atomic-20261007` from the merged main.
+- Replaced split geometry reads with same-frame atomic DOM snapshots for list/card/control/action geometry and Pick follow-up geometry. Width, overflow and overlap invariants are still asserted.
+- Production was not modified because #1276 failed before deploy; verified production remains `d1afe98a99f471028476126feb4b2ae5c84be977` / schema `032`.
