@@ -251,6 +251,7 @@ function applyOperationSearch(host,state) {
   const query = input.value || "";
   const needle = prepareSearchNeedle(query);
   state.search = query;
+  if (typeof state.onSearchChange === "function") state.onSearchChange(query);
   const exactFocus = Boolean(state.focusItemKey && query === state.focusSearch);
   const cards = [...host.querySelectorAll("[data-op-item]")];
   let visible = 0;
@@ -665,6 +666,8 @@ export async function mountInventoryOperations(host,{
   mode="in",
   language="vi",
   onUpdated,
+  initialSearch="",
+  onSearchChange,
   initialItemKey="",
   initialLocationCode="",
   initialSourceLocationCode="",
@@ -673,7 +676,7 @@ export async function mountInventoryOperations(host,{
   if(activeMount?.stopWatch){
     try{await activeMount.stopWatch();}catch{}
   }
-  const state={host,site,mode,language,onUpdated,stopWatch:null,search:"",initialItemKey,initialLocationCode,initialSourceLocationCode,focusItemKey:"",focusSearch:""};
+  const state={host,site,mode,language,onUpdated,onSearchChange,stopWatch:null,search:String(initialSearch||""),initialItemKey,initialLocationCode,initialSourceLocationCode,focusItemKey:"",focusSearch:""};
   activeMount=state;
   await doRender(host,state);
   if(activeMount!==state || !host.isConnected) return;
