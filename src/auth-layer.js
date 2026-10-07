@@ -233,7 +233,16 @@ async function switchWarehouse(button, { centralContent = null } = {}) {
     const ok = await switchActiveInventorySite(site);
     if (token !== warehouseSwitchToken) return false;
     if (!ok) {
-      window.alert("Không thể tải dữ liệu cơ sở mới từ PostgreSQL. Hệ thống đã giữ lại cơ sở hiện tại. · 無法從 PostgreSQL 載入新據點資料，系統已保留原據點。");
+      window.dispatchEvent(new CustomEvent("shitu:notify", {
+        detail:{
+          type:"error",
+          title:document.documentElement.lang === "zh-Hant" ? "切換據點失敗" : "Chưa thể chuyển cơ sở",
+          body:document.documentElement.lang === "zh-Hant"
+            ? "PostgreSQL 未確認新據點資料，已保留目前據點；請稍後再試。"
+            : "PostgreSQL chưa xác nhận dữ liệu cơ sở mới; hệ thống giữ nguyên cơ sở hiện tại. Hãy thử lại sau.",
+          duration:5200,
+        },
+      }));
       return false;
     }
     if (centralContent) centralContent.dataset.centralView = "off";
