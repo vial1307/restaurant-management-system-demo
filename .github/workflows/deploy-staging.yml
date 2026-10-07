@@ -1,0 +1,93 @@
+name: Deploy Kitchen OS Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref/SHA to stage"
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kitchen-os-staging
+  cancel-in-progress: true
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Resolve exact candidate SHA
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${SHA}" > .staging-source-sha
+
+      - name: Fast candidate preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in src/*.js tests/*.mjs; do node --check "$file"; done
+          bash -n vps/scripts/deploy-staging.sh
+          bash -n vps/scripts/schema-fingerprint.sh
+          test -f vps/docker-compose.staging.yml
+          test -f vps/Caddyfile.staging
+
+      - name: Package candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf /tmp/kitchen-os-staging-bundle.tgz .
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_SSH_KEY"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Upload exact candidate bundle
+        env:
+          TARGET_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$TARGET_SHA" > /tmp/kitchen-os-staging-target
+          scp -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15             /tmp/kitchen-os-staging-target deploy@82.47.180.185:/home/deploy/.kitchen-os-staging-target
+          scp -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15             /tmp/kitchen-os-staging-bundle.tgz deploy@82.47.180.185:/home/deploy/.kitchen-os-staging-bundle.tgz
+
+      - name: Deploy isolated staging clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15             deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-os-staging-deploy'
+
+      - name: Verify staging edge
+        env:
+          TARGET_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2             https://staging.82.47.180.185.nip.io/api/health
+          echo
+          curl --fail --silent --show-error --retry 5 --retry-delay 2             https://staging.82.47.180.185.nip.io/STAGING_RELEASE.json > /tmp/staging-release.json
+          grep -q "$TARGET_SHA" /tmp/staging-release.json
+          cat /tmp/staging-release.json
