@@ -50,9 +50,8 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
   );
 
   const byItem = new Map();
-  for (const row of rows) {
-    const item = row.item;
-    if (!item || !row.location) continue;
+  const ensureItem=(item)=>{
+    if (!item) return null;
     const current = byItem.get(item.id) || {
       id: item.id,
       itemKey: item.item_key,
@@ -72,6 +71,19 @@ export async function loadSiteOperationData(site, { includeDestinations = false 
       total: 0,
       workTotal: 0,
     };
+    byItem.set(item.id,current);
+    return current;
+  };
+
+  // Overview is catalog/product authoritative, including valid products that
+  // currently have no materialized inventory row. Operation search must expose
+  // the same product set instead of silently dropping those products.
+  for (const item of catalogMasters.items || []) ensureItem(item);
+
+  for (const row of rows) {
+    const item = row.item;
+    if (!item || !row.location) continue;
+    const current = ensureItem(item);
     const quantity = Number(row.quantity) || 0;
     const mapped = {
       id: row.location.id,

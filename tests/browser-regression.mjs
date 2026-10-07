@@ -292,6 +292,57 @@ async function inventorySearchRoundTrip(page) {
   assert.equal(await rows.count(),before,"search must not remove inventory rows from the DOM");
 }
 
+async function assertInventorySearchParityAcrossSurfaces(page) {
+  const overview=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="overview"]').first();
+  await overview.click();
+  const overviewSearch=page.locator('[data-field="inventorySearch"]');
+  await overviewSearch.waitFor({state:"visible"});
+  await overviewSearch.fill("");
+
+  const samples=await page.locator(".inventory-product-row").evaluateAll((rows)=>rows
+    .map((row)=>({
+      stockKey:row.dataset.stockKey||"",
+      zh:row.querySelector(".inventory-product-name strong")?.textContent?.trim()
+        || row.querySelector("strong")?.textContent?.trim()
+        || "",
+      vi:row.querySelector(".inventory-product-name small")?.textContent?.trim()
+        || row.querySelector("small")?.textContent?.trim()
+        || "",
+    }))
+    .filter((row)=>row.stockKey&&row.zh)
+    .slice(0,6));
+  assert(samples.length>=2,"search parity needs overview product samples");
+
+  for(const sample of samples){
+    for(const query of [sample.zh,sample.vi].filter(Boolean)){
+      await overview.click();
+      await page.locator('[data-field="inventorySearch"]').fill(query);
+      const overviewMatch=page.locator(`.inventory-product-row[data-stock-key="${sample.stockKey}"]:visible`);
+      await overviewMatch.waitFor({state:"visible"});
+      for(const mode of ["in","pick","transfer","ship"]){
+        await page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first().click();
+        await page.locator("[data-op-search]").waitFor({state:"visible"});
+        assert.equal(await page.locator("[data-op-search]").inputValue(),query,`${mode} did not preserve parity query for ${sample.stockKey}`);
+        const cards=page.locator("[data-op-item]");
+        assert((await cards.count())>0,`${mode} rendered no searchable products`);
+        const identityMatch=cards.filter({hasText:sample.zh}).first();
+        await identityMatch.waitFor({state:"visible"});
+        assert.equal(await identityMatch.getAttribute("data-op-search-hidden"),null,`${mode} cannot find overview product ${sample.stockKey} with "${query}"`);
+      }
+      await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="manage"]').first().click();
+      const manageSearch=page.locator('[data-field="inventorySearch"]');
+      await manageSearch.waitFor({state:"visible"});
+      assert.equal(await manageSearch.inputValue(),query,`manage did not preserve parity query for ${sample.stockKey}`);
+      const manageRows=page.locator(".inventory-row:visible");
+      assert((await manageRows.filter({hasText:sample.zh}).count())>0,
+        `manage cannot find overview product ${sample.stockKey} with "${query}"`);
+    }
+  }
+
+  await overview.click();
+  await page.locator('[data-field="inventorySearch"]').fill("");
+}
+
 async function adminDesktop(browser) {
   const context = await browser.newContext({ viewport:{width:1440,height:900} });
   const page = await context.newPage();
@@ -327,6 +378,7 @@ async function adminDesktop(browser) {
   await setSite(page,"fuxing");
   await inventorySearchRoundTrip(page);
   await assertInventorySurfaceFits(page,"fuxing desktop overview");
+  await assertInventorySearchParityAcrossSurfaces(page);
 
   const overviewSearch=page.locator('[data-field="inventorySearch"]');
   await overviewSearch.fill("niu rou");

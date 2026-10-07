@@ -81,13 +81,17 @@ function itemLabel(item,language){
   return language==="zh" ? item.zh : `${item.vi || item.zh} · ${item.zh}`;
 }
 function operationSearchText(item){
-  const locationText=[...(item.locations||[]),...(item.workLocations||[])]
+  const allLocations=[...(item.locations||[]),...(item.workLocations||[])];
+  const locationText=allLocations
     .flatMap((loc)=>[
       loc.zh,
       loc.vi,
+      loc.labelZh,
+      loc.labelVi,
       loc.name_zh_tw,
       loc.name_vi,
       loc.code,
+      loc.zone,
       loc.workArea,
       loc.storageGroup,
       loc.metadata?.ui_key,
@@ -95,29 +99,39 @@ function operationSearchText(item){
       loc.metadata?.storage_group,
     ])
     .filter(Boolean);
-  const receiveLocation=[...(item.locations||[]),...(item.workLocations||[])]
+  const receiveLocation=allLocations
     .find((loc)=>String(loc.code||"")===String(item.receiveLocationCode||""));
   return [
     item.zh,
     item.vi,
+    item.label,
+    item.labelVi,
+    item.stockKey,
     item.itemKey,
     item.catalogKey,
     item.unit,
     item.unitCode,
     item.categoryCode,
+    item.category?.code,
     item.category?.name_zh_tw,
     item.category?.name_vi,
+    item.unitMaster?.code,
     item.unitMaster?.symbol,
     item.unitMaster?.name_zh_tw,
     item.unitMaster?.name_vi,
     item.workArea,
+    item.workAreaMaster?.id,
+    item.workAreaMaster?.code,
     item.workAreaMaster?.zh,
     item.workAreaMaster?.vi,
     item.workAreaMaster?.name_zh_tw,
     item.workAreaMaster?.name_vi,
+    item.receiveZone,
     item.receiveLocationCode,
     receiveLocation?.zh,
     receiveLocation?.vi,
+    receiveLocation?.name_zh_tw,
+    receiveLocation?.name_vi,
     ...locationText,
   ]
     .filter(Boolean)
