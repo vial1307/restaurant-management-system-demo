@@ -1246,8 +1246,8 @@ function inventoryProductDetailOverlay(context, record) {
 
 function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
-    ? "搜尋品項、拼音、注音或儲位…"
-    : "Tìm sản phẩm, pinyin, chú âm hoặc vị trí…";
+    ? "搜尋品項、拼音/注音、縮寫或儲位…"
+    : "Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
   const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
