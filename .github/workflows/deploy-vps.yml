@@ -98,6 +98,7 @@ jobs:
           node tests/device-sync-auth-transition-regression.mjs
           node tests/device-sync-user-scope-regression.mjs
           node tests/vps-auth-stale-response-regression.mjs
+          node tests/vps-safe-read-retry-regression.mjs
           node tests/vps-business-state-contract-regression.mjs
           node tests/vps-business-module-revision-runtime-regression.mjs
           node tests/inventory-site-switch-isolation-regression.mjs
