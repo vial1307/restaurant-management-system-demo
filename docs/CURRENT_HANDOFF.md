@@ -1,6 +1,6 @@
 ## ACTIVE — Inventory full search audit + operation layout normalization, 2026-10-07
 
-- `ACTIVE_PR: pending` — branch `fix/inventory-operations-search-layout-20261007`.
+- `ACTIVE_PR: #215` — branch `fix/inventory-operations-search-layout-20261007`.
 - User reported that some Inventory items still could not be found and that 領貨 / 出貨 / related operation layouts were visually uneven.
 - Search audit scope: shared Inventory overview/manage search, Central search, and the separate 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 operation search.
 - Root causes found:
