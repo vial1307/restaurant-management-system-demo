@@ -266,6 +266,16 @@ async function inventorySearchRoundTrip(page) {
   await meta.waitFor({state:"visible"});
   assert.match(await meta.innerText(),new RegExp(`^${filtered} / ${before} `),"inventory search result counter is stale");
 
+  await input.fill("n r");
+  await page.waitForFunction(
+    (beforeCount)=>{
+      const visible=document.querySelectorAll(".inventory-row:not([data-search-hidden])").length;
+      return visible>0 && visible<beforeCount;
+    },
+    before
+  );
+  assert((await visibleRows.count()) > 0,"Inventory spaced-initial search must return matching rows");
+
   await input.fill("__inventory_no_match__");
   await page.waitForFunction(()=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length===0);
   assert.equal(await visibleRows.count(),0,"no-result inventory search must hide every row");

@@ -1,3 +1,13 @@
+## ACTIVE — Inventory search v2, 2026-10-07
+
+- `ACTIVE_PR: #217` on `fix/inventory-search-v2-20261007`.
+- Search corpus is being moved from rendered DOM text to curated DB-backed item/product/location data.
+- This removes false positives from unselected select options and makes hidden 3rd+ product locations searchable.
+- Query semantics now support order-independent multi-token AND matching plus Pinyin initials/spaced initials and Vietnamese word initials.
+- Central Inventory receives the same prepared-corpus + explicit hidden-state contract.
+- No database/schema/RBAC/stock mutation.
+- Production remains `9ea27adb9630bd571b5cdafcc770cdc167245c7f`, schema `032` until tested merge/deploy.
+
 ## STABLE — Inventory search completeness + operation UI alignment, 2026-10-07
 
 - `ACTIVE_PR: none`.

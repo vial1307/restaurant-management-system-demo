@@ -462,6 +462,52 @@ function itemSecondary(item, language) {
   return language === "zh" ? item.labelVi || "" : item.label;
 }
 
+function inventoryItemSearchText(item, { site=activeInventorySite(), extra=[] } = {}) {
+  const zone = String(item?.zone || "");
+  const workArea = String(item?.workArea || "");
+  return [
+    item?.label,
+    item?.labelVi,
+    item?.stockKey,
+    item?.catalogKey,
+    item?.unit,
+    item?.unitCode,
+    item?.categoryCode,
+    zone,
+    zone ? zoneLabel(zone,"zh",site) : "",
+    zone ? zoneLabel(zone,"vi",site) : "",
+    workArea,
+    workArea ? workAreaLabel(workArea,"zh",site) : "",
+    workArea ? workAreaLabel(workArea,"vi",site) : "",
+    ...extra,
+  ].filter(Boolean).join(" ");
+}
+
+function inventoryProductSearchText(product, site=activeInventorySite()) {
+  const locationTerms=(product?.locations || []).flatMap((location)=>[
+    location.zone,
+    location.workArea,
+    location.labelZh,
+    location.labelVi,
+    location.zone ? zoneLabel(location.zone,"zh",site) : "",
+    location.zone ? zoneLabel(location.zone,"vi",site) : "",
+    location.workArea ? workAreaLabel(location.workArea,"zh",site) : "",
+    location.workArea ? workAreaLabel(location.workArea,"vi",site) : "",
+  ]);
+  return [
+    product?.label,
+    product?.labelVi,
+    product?.stockKey,
+    product?.catalogKey,
+    product?.unit,
+    product?.unitCode,
+    product?.categoryCode,
+    product?.workArea,
+    product?.receiveZone,
+    ...locationTerms,
+  ].filter(Boolean).join(" ");
+}
+
 function heading(title, subtitle, action = "") {
   return `<div class="page-heading"><div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(subtitle)}</p></div>${action}</div>`;
 }
@@ -781,7 +827,8 @@ function storageInventoryRow(item, context) {
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
   const source = storageSources(item, record, item.zone)[0];
   const canRestock = inventoryRestock(item) > 0 && source;
-  return `<article class="inventory-row storage-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
+  const searchCorpus=prepareSearchCorpus(inventoryItemSearchText(item,{site}));
+  return `<article class="inventory-row storage-row" data-inventory-search-corpus="${escapeHtml(searchCorpus)}"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${canRelocate ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${storageGroups.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
     <div class="inventory-storage">${quantityControl(item, "item", Boolean(context.manageQuantityEdit))}<label class="storage-threshold"><span>${escapeHtml(text.reserveMinimum)}</span>${canMinimum ? numberInput(item.minimum, `data-field="item" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-zone="${escapeHtml(item.zone)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}" aria-label="${escapeHtml(text.reserveMinimum)}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}</label></div><div class="inventory-working"><span class="mobile-field-label">${escapeHtml(text.workingQuantity)}</span><strong>${working?.quantity ?? 0}</strong><small>${escapeHtml(item.unit)}</small></div><div class="inventory-actions">${inventoryStatusBadge(item, text)}<div class="inventory-item-tools">${canInternalTransfer && canRestock ? `<button class="inventory-action-button restock-location" data-action="restock-storage-item" data-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(text.transfer)}">${icon("plus")}</button>` : ""}${catalogManageVisible ? `<button class="inventory-action-button ${catalogManage ? "" : "sql-pending-action"}" data-action="${catalogManage ? "open-edit-item" : "inventory-edit-sql-pending"}" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.editItem)}">${icon("edit")}</button>${canArchive ? `<button class="inventory-action-button delete-action" data-action="delete-item" data-stock-key="${escapeHtml(item.stockKey)}" aria-label="${escapeHtml(text.deleteItem)}">${icon("trash")}</button>` : ""}` : ""}</div></div></article>`;
@@ -807,7 +854,15 @@ function workInventoryRow(item, context) {
       .filter((entry) => entry.stockKey === item.stockKey && entry.zone === zone)
       .reduce((total, entry) => total + entry.quantity, 0),
   }));
-  return `<article class="inventory-row work-row"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
+  const searchCorpus=prepareSearchCorpus(inventoryItemSearchText(item,{
+    site,
+    extra:sources.flatMap((entry)=>[
+      entry.zone,
+      zoneLabel(entry.zone,"zh",site),
+      zoneLabel(entry.zone,"vi",site),
+    ]),
+  }));
+  return `<article class="inventory-row work-row" data-inventory-search-corpus="${escapeHtml(searchCorpus)}"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canMinimum ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-work-area="${escapeHtml(item.workArea)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
     <div class="inventory-source"><div class="source-quantities">${mainSources.map((entry) => `<span class="source-quantity ${entry.quantity === 0 ? "source-empty" : ""}" data-source-zone="${entry.zone}">${escapeHtml(zoneLabel(entry.zone, language))} <strong>${entry.quantity}</strong></span>`).join("")}</div><small>${escapeHtml(source ? `${text.takeFrom} ${zoneLabel(source.zone, language)}` : text.noSource)}</small></div>
@@ -1037,7 +1092,8 @@ function inventoryProductRow(product, context) {
     : product.status==="low" ? text.lowStock
     : product.status==="near" ? (language==="zh"?"接近不足":"Gần hết")
     : text.ready;
-  return `<article class="inventory-row inventory-product-row" data-stock-key="${escapeHtml(product.stockKey)}">
+  const searchCorpus=prepareSearchCorpus(inventoryProductSearchText(product,activeInventorySite()));
+  return `<article class="inventory-row inventory-product-row" data-stock-key="${escapeHtml(product.stockKey)}" data-inventory-search-corpus="${escapeHtml(searchCorpus)}">
     <div class="inventory-product-identity"><span class="inventory-status-dot ${product.status==="near"?"low":product.status}"></span><div><strong>${escapeHtml(language==="zh"?product.label:product.labelVi)}</strong><small>${escapeHtml(language==="zh"?product.labelVi:product.label)}${product.categoryCode?` · ${escapeHtml(product.categoryCode)}`:""}</small></div></div>
     <div class="inventory-product-unit"><span class="mobile-field-label">${language==="zh"?"單位":"Đơn vị"}</span><strong>${escapeHtml(product.unit)}</strong></div>
     <div class="inventory-product-total"><span class="mobile-field-label">${language==="zh"?"總量":"Tổng"}</span><strong>${escapeHtml(product.total)}</strong><small>${escapeHtml(product.unit)}</small></div>
@@ -1186,8 +1242,8 @@ function inventoryProductDetailOverlay(context, record) {
 
 function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
-    ? "搜尋品項、拼音、注音或儲位…"
-    : "Tìm sản phẩm, pinyin, chú âm hoặc vị trí…";
+    ? "搜尋品項、拼音/注音、縮寫或儲位…"
+    : "Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
   const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
@@ -2182,7 +2238,7 @@ const inventorySearchCorpusCache = new WeakMap();
 
 function inventoryRowSearchCorpus(row) {
   if (inventorySearchCorpusCache.has(row)) return inventorySearchCorpusCache.get(row);
-  const corpus = prepareSearchCorpus(row.textContent || "");
+  const corpus = row.dataset.inventorySearchCorpus || prepareSearchCorpus(row.textContent || "");
   inventorySearchCorpusCache.set(row, corpus);
   return corpus;
 }

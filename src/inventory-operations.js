@@ -23,7 +23,7 @@ const TEXT = {
     pick:"Lấy hàng · 領貨",
     transfer:"Điều chuyển · 庫存轉撥",
     ship:"Xuất hàng · 出貨",
-    search:"Tìm / 中文 / Tiếng Việt / Pinyin / 注音…",
+    search:"Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…",
     from:"Từ kho · 來源儲位",
     to:"Đến · 目的地",
     destination:"Kho nhận · 目的儲位",
@@ -61,7 +61,7 @@ const TEXT = {
   },
   zh: {
     in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
-    search:"搜尋品項 / Pinyin / 注音…",from:"來源儲位",to:"目的地",destination:"目的儲位",
+    search:"搜尋品項、Pinyin/注音、縮寫或儲位…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
     workDestination:"工作區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
     fixedDestination:"分店已有此品項，收貨儲位依分店設定自動帶入。",singleDestination:"分店此品項只有一個存放儲位，系統已自動選擇。",flexibleDestination:"分店尚無此品項，本次請選擇實際存放位置。",needsManagerDestination:"分店已有此品項但有多個儲位，尚未設定固定收貨儲位；請分店主管先完成設定。",fixedBadge:"依分店設定",singleBadge:"自動帶入",flexibleBadge:"分店未建品項",needsManagerBadge:"需主管設定",shipFixed:"已出貨並更新至正確收貨儲位。",
@@ -322,7 +322,7 @@ async function doRender(host,state){
     const cards = mode==="overview"
       ? data.items.map((item)=>overviewCard(item,language,t))
       : data.items.map((item)=>itemCard(item,mode,data.locations,site,language,t,data.allLocations||data.locations,data.workLocations||[]));
-    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><div class="op-search-wrap"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" placeholder="${esc(t.search)}" data-op-search></label><button type="button" class="op-search-clear" data-op-search-clear aria-label="${esc(language==="zh"?"清除搜尋":"Xóa tìm kiếm")}" hidden>×</button></div><span class="op-count" aria-live="polite">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
+    host.innerHTML=`<section class="inventory-ops-shell"><div class="inventory-ops-toolbar"><div class="op-search-wrap"><label class="op-search"><input type="search" value="${esc(state.search || "")}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" inputmode="search" placeholder="${esc(t.search)}" data-op-search></label><button type="button" class="op-search-clear" data-op-search-clear aria-label="${esc(language==="zh"?"清除搜尋":"Xóa tìm kiếm")}" hidden>×</button></div><span class="op-count" aria-live="polite">${data.items.length}</span></div><div class="inventory-ops-list" data-op-list>${data.items.length?cards.join(""):`<p class="inventory-ops-empty">${esc(t.noItems)}</p>`}<p class="inventory-ops-empty" data-op-search-empty hidden>${esc(t.noItems)}</p></div><p class="op-message" data-op-message></p></section>`;
     restoreOperationSelections(host,state);
     bind(host,state);
     applyInitialOperationFocus(host,state);

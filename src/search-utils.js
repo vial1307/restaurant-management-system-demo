@@ -47,9 +47,20 @@ export function normalizeSearch(value) {
     .replace(/[\s._\-\/()（）·]+/g, "");
 }
 
+const SEARCH_TERM_SEPARATOR = "\u001f";
+
+function latinWordInitials(text) {
+  const words = String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .match(/[a-z0-9]+/gi) || [];
+  return words.length > 1 ? words.map((word) => word[0]).join("") : "";
+}
+
 export function phoneticOf(text) {
   let pinyin = "";
   let zhuyin = "";
+  let initials = "";
   const source = String(text || "");
 
   for (const ch of source) {
@@ -57,6 +68,7 @@ export function phoneticOf(text) {
     if (!item) continue;
     pinyin += item[0];
     zhuyin += item[1];
+    initials += item[0]?.[0] || "";
   }
 
   const aliases = [];
@@ -64,16 +76,29 @@ export function phoneticOf(text) {
     if (source.includes(phrase)) aliases.push(...list);
   }
 
-  return `${pinyin} ${zhuyin} ${aliases.join(" ")}`;
+  return `${pinyin} ${initials} ${zhuyin} ${aliases.join(" ")}`;
 }
 
 export function buildSearchText(text) {
   const source = String(text || "");
-  return `${source} ${phoneticOf(source)}`;
+  return `${source} ${phoneticOf(source)} ${latinWordInitials(source)}`;
+}
+
+function searchQueryTokens(query) {
+  const source = String(query || "").trim();
+  if (!source) return [];
+  const tokens = source
+    .split(/[\s._\-\/()（）·,，;；:：]+/u)
+    .map((part) => normalizeSearch(part))
+    .filter(Boolean);
+  if (tokens.length > 1 && tokens.every((token) => /^[a-z0-9]$/i.test(token))) {
+    return [tokens.join("")];
+  }
+  return [...new Set(tokens)];
 }
 
 export function prepareSearchNeedle(query) {
-  return normalizeSearch(query);
+  return searchQueryTokens(query).join(SEARCH_TERM_SEPARATOR);
 }
 
 export function prepareSearchCorpus(text) {
@@ -83,7 +108,9 @@ export function prepareSearchCorpus(text) {
 export function preparedSearchMatches(corpus, needle) {
   if (!needle) return true;
   markSearchEvaluation();
-  return String(corpus || "").includes(needle);
+  const haystack = String(corpus || "");
+  const terms = String(needle).split(SEARCH_TERM_SEPARATOR).filter(Boolean);
+  return terms.every((term) => haystack.includes(term));
 }
 
 export function searchMatches(text, query) {
