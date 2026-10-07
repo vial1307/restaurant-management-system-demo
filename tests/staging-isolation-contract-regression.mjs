@@ -32,6 +32,9 @@ assert.match(deploy,/kitchen-os-staging-db pg_restore/);
 assert.match(deploy,/STAGING_CLONE_DRIFT/);
 assert.match(deploy,/PRODUCTION_SCHEMA_CHANGED_DURING_STAGING/);
 assert.match(deploy,/STAGING_DATA_INTEGRITY_FAILED/);
+assert.match(deploy,/STAGING_DB_NOT_STABLE/);
+assert.match(deploy,/stable_probes/);
+assert.match(deploy,/--maintenance-db=postgres/);
 assert.match(deploy,/truncate table public\.sessions/);
 assert.doesNotMatch(deploy,/kitchen-os-db\s+psql[^\n]*\b(update|insert|delete|alter|drop|create)\b/i);
 
