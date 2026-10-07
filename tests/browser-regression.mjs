@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { ACCOUNT_MODULES } from "../src/account-permissions.js";
+import { normalizeSearch } from "../src/search-utils.js";
 
 const BASE = process.env.TEST_WEB_BASE || "http://127.0.0.1:3000";
 const PASSWORD = "KitchenTest!123";
@@ -341,6 +342,39 @@ async function adminDesktop(browser) {
       await search.waitFor({state:"visible"});
       const beforeSearch=await page.locator("[data-op-item]:visible").count();
       assert(beforeSearch>1,`${mode} operation search fixture needs multiple cards`);
+
+      const indexedCards=await page.locator("[data-op-item]").evaluateAll((cards)=>cards.map((card)=>({
+        key:card.dataset.opItemKey||"",
+        corpus:card.dataset.opSearchCorpus||"",
+        zh:card.querySelector(".op-item-head strong")?.textContent?.trim()||"",
+        vi:card.querySelector(".op-item-head small")?.textContent?.trim()||"",
+      })));
+      assert.equal(indexedCards.length,beforeSearch,`${mode} operation search index must cover every rendered card`);
+      for(const card of indexedCards){
+        assert(card.zh,`${mode} operation card missing Chinese product identity`);
+        assert(
+          normalizeSearch(card.corpus).includes(normalizeSearch(card.zh)),
+          `${mode} search corpus missing Chinese identity for ${card.key||card.zh}`
+        );
+        if(card.vi){
+          assert(
+            normalizeSearch(card.corpus).includes(normalizeSearch(card.vi)),
+            `${mode} search corpus missing Vietnamese identity for ${card.key||card.zh}`
+          );
+        }
+      }
+
+      const identitySamples=[indexedCards[0],indexedCards.at(-1)].filter(Boolean);
+      for(const sample of identitySamples){
+        await search.fill(sample.zh);
+        await page.waitForFunction(({key,query})=>{
+          const host=[...document.querySelectorAll(".inventory-operations-host")]
+            .find((node)=>node.getClientRects().length>0);
+          const input=host?.querySelector("[data-op-search]");
+          const card=host?.querySelector(`[data-op-item-key="${CSS.escape(key)}"]`);
+          return Boolean(host&&input?.value===query&&card&&card.getClientRects().length>0&&!card.hasAttribute("data-op-search-hidden"));
+        },{key:sample.key,query:sample.zh});
+      }
 
       await search.fill("niu rou");
       const filteredHandle=await page.waitForFunction(({before,query})=>{
