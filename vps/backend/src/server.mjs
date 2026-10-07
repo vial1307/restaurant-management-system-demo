@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import crypto from "node:crypto";
-import { pool, withTransaction } from "./db.mjs";
+import { pool, schemaFingerprint, withTransaction } from "./db.mjs";
 import { hashPassword, verifyPassword } from "./password.mjs";
 import { registerAdminRoutes } from "./admin-routes.mjs";
 import { registerInventoryExtraRoutes } from "./inventory-extra-routes.mjs";
@@ -38,15 +38,18 @@ await registerInventoryExtraRoutes(app);
 await registerBusinessStateRoutes(app);
 
 app.get("/api/health", async () => {
-  const db = await pool.query("select now() as now");
-  const migration = await pool.query(
-    "select version from public.schema_migrations order by version desc limit 1"
-  );
+  const [db, migration, fingerprint] = await Promise.all([
+    pool.query("select now() as now"),
+    pool.query("select version from public.schema_migrations order by version desc limit 1"),
+    schemaFingerprint(),
+  ]);
   return {
     app: "ok",
     database: db.rowCount === 1 ? "ok" : "error",
     schema: migration.rows[0]?.version || null,
+    schemaFingerprint:fingerprint,
     release: process.env.APP_RELEASE || "dev",
+    environment: process.env.APP_ENV || "production",
   };
 });
 
