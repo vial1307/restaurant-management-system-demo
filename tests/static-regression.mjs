@@ -203,6 +203,10 @@ assert.match(inventoryOperationsSource,/item\.category\?\.name_vi/,"operation se
 assert.match(inventoryOperationsSource,/item\.unitMaster\?\.name_zh_tw/,"operation search must index unit master labels");
 assert.match(inventoryOperationsSource,/item\.receiveLocationCode/,"operation search must index receive-default location metadata");
 assert.match(inventoryOperationsSource,/loc\.metadata\?\.ui_key/,"operation search must index DB-backed location ui keys");
+assert.match(inventoryOperationsSource,/initialSearch=""/,"operation mount must accept shared Inventory search state");
+assert.match(inventoryOperationsSource,/onSearchChange\(query\)/,"operation search must report query changes to the parent Inventory view");
+assert.match(read("src/app.js"),/initialSearch:view\.search/,"Inventory must pass Overview search state into operation tabs");
+assert.match(read("src/app.js"),/onSearchChange:\(query\)=>\{\s*view\.search=query;\s*\}/,"operation search changes must update shared Inventory search state");
 assert.doesNotMatch(inventoryOperationsSource,/searchMatches\(card\.textContent/,"operation search must not rebuild raw DOM corpus on every card");
 
 const inventoryTransferSource = read("src/inventory-transfer-service.js");
