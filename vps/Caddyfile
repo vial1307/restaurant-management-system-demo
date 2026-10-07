@@ -46,6 +46,20 @@
   import kitchen_site
 }
 
+staging.82.47.180.185.nip.io {
+  encode zstd gzip
+
+  header {
+    X-Robots-Tag "noindex, nofollow, noarchive"
+    X-Kitchen-Environment "staging"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  reverse_proxy kitchen-os-staging-web:80
+}
+
 marketing.82.47.180.185.nip.io {
   encode zstd gzip
 
