@@ -105,6 +105,12 @@ export function prepareSearchCorpus(text) {
   return normalizeSearch(buildSearchText(text));
 }
 
+export function prepareIngredientNameSearchCorpus(...names) {
+  // Search contract for Inventory: index ingredient names only. Pinyin,
+  // Zhuyin, Latin normalization and initials are derived from the names here.
+  return prepareSearchCorpus(names.flat().filter(Boolean).join(" "));
+}
+
 export function preparedSearchMatches(corpus, needle) {
   if (!needle) return true;
   markSearchEvaluation();
