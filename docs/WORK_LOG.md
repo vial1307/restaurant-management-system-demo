@@ -2418,3 +2418,5 @@ The separate read-cutover candidate:
 - Found the operation search corpus was narrower than Overview: it omitted category master labels, unit master labels, receive-default metadata and some DB-backed location metadata.
 - Enriched operation items from the same PostgreSQL Inventory snapshot and expanded the operation corpus without changing stock behavior.
 - Added browser regression that validates every operation card indexes its rendered Chinese/Vietnamese identity and exercises actual search on representative cards across Receive/Pick/Transfer/Ship.
+
+- Shared `view.search` is now passed into operation mounts; operation input changes update the same parent search state, so a query carries across Overview / Receive / Pick / Transfer / Ship and clear/reset is consistent.
