@@ -328,6 +328,19 @@ async function adminDesktop(browser) {
   await inventorySearchRoundTrip(page);
   await assertInventorySurfaceFits(page,"fuxing desktop overview");
 
+  const overviewSearch=page.locator('[data-field="inventorySearch"]');
+  await overviewSearch.fill("niu rou");
+  const receiveTab=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="in"]').first();
+  await receiveTab.click();
+  const carriedSearch=page.locator("[data-op-search]");
+  await carriedSearch.waitFor({state:"visible"});
+  assert.equal(await carriedSearch.inputValue(),"niu rou","Inventory search must carry from Overview into operation tabs");
+  await page.locator("[data-op-search-clear]").click();
+  const overviewTab=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="overview"]').first();
+  await overviewTab.click();
+  await page.locator('[data-field="inventorySearch"]').waitFor({state:"visible"});
+  assert.equal(await page.locator('[data-field="inventorySearch"]').inputValue(),"","clearing operation search must clear shared Inventory search state");
+
   for(const mode of ["overview","alerts","in","pick","transfer","ship","manage","history"]){
     const button=page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first();
     await button.waitFor({state:"visible"});
