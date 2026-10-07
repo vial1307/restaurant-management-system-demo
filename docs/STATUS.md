@@ -1,3 +1,14 @@
+## STABLE — Staging-gated production promotion, 2026-10-08
+
+- `ACTIVE_PR: none`.
+- Production release: `2e2a42d163c741aa122bf4fbac5fe3e449001f12`; schema `032`.
+- Staging is physically isolated on the VPS with its own PostgreSQL volume, API/web containers and hostname `staging.82.47.180.185.nip.io`.
+- Staging clones production by read-only dump, verifies schema fingerprint parity, then applies candidate migrations only to staging and runs integrity/health checks.
+- Production deployment is no longer triggered directly by `push main`; successful main staging completion is the required `workflow_run` gate.
+- Exact SHA contract: PR = `pull_request.head.sha`; production = successful staging `workflow_run.head_sha`.
+- Main verification: Staging #9 PASS → Production #1321 PASS on the same SHA `2e2a42d...`; production UI smoke PASS.
+- Failure in staging blocks promotion without modifying production.
+
 ## ACTIVE — Operation search parity, 2026-10-07
 
 - `ACTIVE_PR: #218`.
