@@ -1,33 +1,22 @@
-## ACTIVE — PR #215 merge certification repair, 2026-10-07
+## STABLE — PR #215 Inventory search completeness + operation UI alignment, certified by PR #216, 2026-10-07
 
-- `ACTIVE_PR: #216` — branch `test/inventory-operation-geometry-atomic-20261007`.
-- Runtime feature PR #215 merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a` but has NOT been deployed.
-- Main Deploy #1276 was correctly blocked in regression before VPS deploy.
-- Failure was test-only: `browser-regression.mjs` measured `.inventory-ops-list` and the visible operation card with separate locator/boundingBox calls; Inventory realtime rerender could detach the list between measurements, producing `list=missing` while the newly rendered card remained visible.
-- Exact PR #215 head had already passed browser/full-device gates; no runtime search/layout assertion failed.
-- Repair uses an atomic same-frame DOM geometry snapshot for operation list/card/control/action and Pick follow-up geometry. Genuine width/overflow/overlap failures remain asserted; only the detach race is removed.
-- Production authority remains release `d1afe98a99f471028476126feb4b2ae5c84be977`, schema `032`, until a repaired merge commit passes full regression and is actually deployed.
-- No runtime/API/PostgreSQL/schema/RBAC/Inventory mutation change in this repair.
-
-## ACTIVE — Inventory full search audit + operation layout normalization, 2026-10-07
-
-- `ACTIVE_PR: #215` — branch `fix/inventory-operations-search-layout-20261007`.
-- User reported that some Inventory items still could not be found and that 領貨 / 出貨 / related operation layouts were visually uneven.
-- Search audit scope: shared Inventory overview/manage search, Central search, and the separate 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 operation search.
-- Root causes found:
-  1. operation search still relied on HTML `hidden` while operation cards are explicitly displayed as grid, allowing presentation rules to revive filtered cards;
-  2. operation search rebuilt matching from card DOM text instead of a stable prepared item corpus;
-  3. the current catalog contains Chinese characters not covered by the Pinyin/注音 map, so some valid Pinyin queries could not match;
-  4. accumulated responsive patches gave Pick/Transfer different geometry from Receive/Ship.
-- Candidate fix:
-  - operation cards carry a prepared search corpus derived from DB-backed item identity, unit, Work Area and location metadata;
-  - operation query is normalized once and non-matches receive `data-op-search-hidden` with a hard presentation hide contract;
-  - current catalog phonetic coverage extended for missing characters including 高麗菜 / 炸魷魚 / 梅花豬 / 龍蝦 paths;
-  - operation search has explicit clear control and live visible/total count;
-  - Receive/Pick/Transfer/Ship now share one full-width Desktop card rail and one responsive alignment contract.
-- Regression strengthens every operation mode: search must actually reduce cards, zero-result state must work, clear must restore all cards, cards must stay in DOM, and Desktop control/action columns must not overlap.
-- No PostgreSQL/schema/RBAC/quantity/minimum/transaction behavior changes.
-- Production authority remains release `d1afe98a99f471028476126feb4b2ae5c84be977` / schema `032` until exact-head gates pass and the tested merge SHA is deployed.
+- `ACTIVE_PR: none`.
+- Production release: `9ea27adb9630bd571b5cdafcc770cdc167245c7f`; schema `032`.
+- Runtime feature PR #215 exact tested head: `abfc1b7c512f5b24cf04e187f2f754b6e6aaf6d6`; merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a`.
+- Certification-repair PR #216 exact tested head: `b4994a4cad42e5c61ef554a4fd8bf54e512086f4`; merged as `9ea27adb9630bd571b5cdafcc770cdc167245c7f`.
+- Search audit covered shared Inventory overview/manage/Central search plus the separate 進貨入庫 / 領貨 / 庫存轉撥 / 出貨 operation search.
+- Operation search now uses a prepared corpus from DB-backed item identity, unit, Work Area and location metadata; non-matches receive `data-op-search-hidden`, preventing explicit grid display rules from reviving filtered cards.
+- Current catalog Pinyin/注音 coverage was extended for missing characters, including 高麗菜 / 炸魷魚 / 梅花豬 / 龍蝦 paths.
+- 進貨 / 領貨 / 轉撥 / 出貨 now share one full-width Desktop card rail with aligned product → selector(s) → quantity/action columns and dedicated tablet/mobile stacking.
+- Search regression verifies real result reduction, zero-result state, explicit hidden state, clear/reset restoration and DOM preservation in every operation mode.
+- Geometry regression verifies full-width cards, no horizontal overflow, no selector/action overlap and Pick follow-up ordering using same-frame atomic snapshots resilient to realtime rerender.
+- Main Deploy #1276 was correctly blocked before deploy by a test-only DOM-detach race; production remained on the previous release until the certification repair passed.
+- Final main Deploy #1281 PASS with exact target `9ea27adb9630bd571b5cdafcc770cdc167245c7f`, frontend stamp `9ea27ad`, backup `/opt/kitchen-os/backups/kitchen_os_20261007T072844Z.dump`, schema `032`, `DATA_INTEGRITY_OK` and healthy Web/API/Super Admin edge.
+- Production UI smoke PASS: `PRODUCTION_UI_SMOKE_OK https://82.47.180.185.nip.io/#inventory`.
+- Inventory Site Production Audit #592 PASS.
+- Workforce Staff #833, Attendance #807, Schedule Backfill #817 and Schedule Parity #606 PASS.
+- No PostgreSQL schema/data, Inventory quantity/minimum/transaction semantics, API or RBAC authority changed in this workstream.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 ## STABLE — PR #214 Inventory search repair + UX polish, 2026-10-07
 

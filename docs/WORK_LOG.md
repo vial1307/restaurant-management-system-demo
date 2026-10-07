@@ -2362,3 +2362,21 @@ The separate read-cutover candidate:
 - Started `test/inventory-operation-geometry-atomic-20261007` from the merged main.
 - Replaced split geometry reads with same-frame atomic DOM snapshots for list/card/control/action geometry and Pick follow-up geometry. Width, overflow and overlap invariants are still asserted.
 - Production was not modified because #1276 failed before deploy; verified production remains `d1afe98a99f471028476126feb4b2ae5c84be977` / schema `032`.
+
+
+### PR #215 / #216 production closure
+
+- PR #215 exact tested head `abfc1b7c512f5b24cf04e187f2f754b6e6aaf6d6` passed Super Admin Browser #465, Workforce Diagnostic #613 and Deploy/full-device #1275 before merge.
+- PR #215 merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a`.
+- Main Deploy #1276 was blocked before VPS deployment by a browser-test DOM detach race while operation geometry was read through separate locator calls.
+- PR #216 converted operation geometry and search-state assertions to same-frame atomic DOM snapshots while preserving all real width/overflow/overlap/search invariants.
+- PR #216 exact tested head `b4994a4cad42e5c61ef554a4fd8bf54e512086f4` passed Chromium regression and full-device cross-browser regression; merged as `9ea27adb9630bd571b5cdafcc770cdc167245c7f`.
+- Final main Deploy #1281 PASS. Deploy target verified `9ea27adb9630bd571b5cdafcc770cdc167245c7f`; frontend stamped `9ea27ad`; backup `/opt/kitchen-os/backups/kitchen_os_20261007T072844Z.dump`; schema `032`; `DATA_INTEGRITY_OK`; Web/API/Super Admin edge healthy.
+- Production UI smoke: `PRODUCTION_UI_SMOKE_OK https://82.47.180.185.nip.io/#inventory`.
+- Inventory Site Production Audit #592 PASS.
+- Workforce Staff #833, Attendance #807, Schedule Backfill #817 and Schedule Parity #606 PASS.
+- Production search coverage now includes shared Inventory surfaces and all 進貨 / 領貨 / 轉撥 / 出貨 operation surfaces; operation cards use prepared item/location corpus plus explicit search-hidden state.
+- Pinyin/注音 coverage was extended for current catalog characters such as 高麗菜, 炸魷魚, 梅花豬 and 龍蝦.
+- Operation UI now uses one full-width responsive alignment contract across Receive/Pick/Transfer/Ship.
+- `ACTIVE_PR: none`; production authority is release `9ea27adb9630bd571b5cdafcc770cdc167245c7f` / schema `032`.
+- No PostgreSQL schema/data, RBAC, quantity, minimum or transaction semantics changed.

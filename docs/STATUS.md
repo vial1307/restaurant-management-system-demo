@@ -1,20 +1,18 @@
-## ACTIVE — Inventory operation merge certification repair, 2026-10-07
+## STABLE — Inventory search completeness + operation UI alignment, 2026-10-07
 
-- `ACTIVE_PR: #216` on `test/inventory-operation-geometry-atomic-20261007`.
-- PR #215 runtime merged as `cf8768ca9ae92ef3656af57df8f5574bff94a23a`, but Deploy #1276 stopped before deployment because of a browser-test DOM detach race while measuring operation geometry.
-- Repair is test-only: measure list/card/control/action and Pick follow-up geometry atomically in one DOM frame.
-- Production still runs `d1afe98a99f471028476126feb4b2ae5c84be977`, schema `032`.
-- No runtime/database/API/RBAC/stock behavior changes.
-
-## ACTIVE — Inventory search completeness + operation UI alignment, 2026-10-07
-
-- `ACTIVE_PR: #215` on `fix/inventory-operations-search-layout-20261007`.
-- Scope: Inventory search correctness/coverage and UI alignment for 進貨 / 領貨 / 轉撥 / 出貨.
-- Operation search now uses prepared DB-backed item/location corpus plus explicit search-hidden state instead of relying only on `hidden` + card text.
-- Pinyin/注音 coverage is extended for current catalog characters that were previously missing.
-- All four operation modes use one full-width responsive card alignment contract.
-- No database/schema/RBAC/stock mutation.
-- Production remains `d1afe98a99f471028476126feb4b2ae5c84be977`, schema `032` until tested merge/deploy.
+- `ACTIVE_PR: none`.
+- Production release: `9ea27adb9630bd571b5cdafcc770cdc167245c7f`; schema `032`.
+- PR #215 delivered the runtime search/UI changes; PR #216 stabilized certification against realtime DOM replacement without changing runtime behavior.
+- Inventory search coverage now includes overview/manage/Central plus 進貨 / 領貨 / 轉撥 / 出貨, using prepared DB-backed item/location corpus and explicit hidden-card state.
+- Pinyin/注音 coverage was extended for current catalog names that were previously missing.
+- Receive/Pick/Transfer/Ship share one full-width responsive layout contract with aligned controls on Desktop and stacked controls on Tablet/Mobile.
+- Browser/full-device certification verifies search reduction, zero-result, clear/reset, DOM preservation, full-width cards, no overflow and no control overlap.
+- Main Deploy #1281 PASS; exact release `9ea27adb9630bd571b5cdafcc770cdc167245c7f`; backup `/opt/kitchen-os/backups/kitchen_os_20261007T072844Z.dump`.
+- Production health: app/database/edge healthy, schema `032`, `DATA_INTEGRITY_OK`, `PRODUCTION_UI_SMOKE_OK`.
+- Inventory Site Production Audit #592 PASS.
+- Workforce Staff #833, Attendance #807, Schedule Backfill #817 and Schedule Parity #606 PASS.
+- No database/schema/RBAC/stock-mutation semantics changed.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 ## STABLE — PR #214 Inventory search repair + UX polish, 2026-10-07
 
