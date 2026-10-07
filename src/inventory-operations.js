@@ -8,7 +8,7 @@ import {
   inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches } from "./search-utils.js";
+import { prepareIngredientNameSearchCorpus, prepareSearchNeedle, preparedSearchMatches } from "./search-utils.js";
 import {
   INVENTORY_SITES,
   directBranchTransfer,
@@ -80,20 +80,13 @@ function langText(language){ return TEXT[language==="zh"?"zh":"vi"]; }
 function itemLabel(item,language){
   return language==="zh" ? item.zh : `${item.vi || item.zh} · ${item.zh}`;
 }
-function operationSearchText(item){
-  // Inventory search is a product-name finder. Phonetic variants (Pinyin,
-  // Zhuyin and initials) are derived by prepareSearchCorpus from these names.
-  return [
+function operationSearchCorpus(item){
+  return prepareIngredientNameSearchCorpus(
     item.zh,
     item.vi,
     item.label,
     item.labelVi,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-function operationSearchCorpus(item){
-  return prepareSearchCorpus(operationSearchText(item));
+  );
 }
 function locationLabel(location,language){
   return language==="zh" ? location.name_zh_tw || location.zh : `${location.name_vi || location.vi || location.name_zh_tw} · ${location.name_zh_tw || location.zh}`;
