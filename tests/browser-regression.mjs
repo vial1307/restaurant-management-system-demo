@@ -328,45 +328,66 @@ async function adminDesktop(browser) {
     }
     if(["in","pick","transfer","ship"].includes(mode)){
       const search=page.locator("[data-op-search]");
-      const cards=page.locator("[data-op-item]");
-      const visibleCards=page.locator("[data-op-item]:visible");
       await search.waitFor({state:"visible"});
-      const beforeSearch=await visibleCards.count();
+      const beforeSearch=await page.locator("[data-op-item]:visible").count();
       assert(beforeSearch>1,`${mode} operation search fixture needs multiple cards`);
 
       await search.fill("niu rou");
-      assert.equal(await search.inputValue(),"niu rou");
-      await page.waitForFunction(
-        (before)=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length<before,
-        beforeSearch
-      );
-      const filteredCards=await visibleCards.count();
-      assert(filteredCards>0&&filteredCards<beforeSearch,`${mode} search must hide non-matching operation cards`);
-      assert((await page.locator("[data-op-item][data-op-search-hidden]").count())>0,`${mode} search missing explicit hidden-card state`);
-      const expectedCount=`${filteredCards} / ${beforeSearch}`;
-      await page.waitForFunction(
-        (expected)=>[...document.querySelectorAll(".inventory-operations-host .op-count")]
-          .some((node)=>node.getClientRects().length>0&&node.textContent?.trim()===expected),
-        expectedCount
-      );
-      const visibleCount=page.locator(".inventory-operations-host .op-count:visible").last();
-      assert.equal(await visibleCount.innerText(),expectedCount,`${mode} search counter is stale`);
+      const filteredHandle=await page.waitForFunction(({before,query})=>{
+        const host=[...document.querySelectorAll(".inventory-operations-host")]
+          .find((node)=>node.getClientRects().length>0);
+        const input=host?.querySelector("[data-op-search]");
+        const cards=host ? [...host.querySelectorAll("[data-op-item]")] : [];
+        const hidden=cards.filter((card)=>card.hasAttribute("data-op-search-hidden"));
+        const visible=cards.filter((card)=>card.getClientRects().length>0);
+        const count=host?.querySelector(".op-count");
+        if(!host||input?.value!==query||cards.length!==before)return false;
+        if(!(visible.length>0&&visible.length<before&&hidden.length>0))return false;
+        const expected=`${visible.length} / ${before}`;
+        if(count?.textContent?.trim()!==expected)return false;
+        return {total:cards.length,visible:visible.length,hidden:hidden.length,count:expected};
+      },{before:beforeSearch,query:"niu rou"});
+      const filteredState=await filteredHandle.jsonValue();
+      assert(filteredState,`${mode} search state did not stabilize`);
+      assert(filteredState.visible>0&&filteredState.visible<beforeSearch,`${mode} search must hide non-matching operation cards`);
+      assert(filteredState.hidden>0,`${mode} search missing explicit hidden-card state`);
+      assert.equal(filteredState.count,`${filteredState.visible} / ${beforeSearch}`,`${mode} search counter is stale`);
 
       await search.fill("__inventory_operation_no_match__");
-      await page.waitForFunction(()=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length===0);
-      assert.equal(await visibleCards.count(),0,`${mode} no-result search must hide every operation card`);
-      assert.equal(await page.locator("[data-op-search-empty]:visible").count(),1,`${mode} no-result state missing`);
+      const emptyHandle=await page.waitForFunction(({before,query})=>{
+        const host=[...document.querySelectorAll(".inventory-operations-host")]
+          .find((node)=>node.getClientRects().length>0);
+        const input=host?.querySelector("[data-op-search]");
+        const cards=host ? [...host.querySelectorAll("[data-op-item]")] : [];
+        const hidden=cards.filter((card)=>card.hasAttribute("data-op-search-hidden"));
+        const visible=cards.filter((card)=>card.getClientRects().length>0);
+        const empty=host?.querySelector("[data-op-search-empty]");
+        if(!host||input?.value!==query||cards.length!==before)return false;
+        if(visible.length!==0||hidden.length!==before||!empty?.getClientRects().length)return false;
+        return {total:cards.length,hidden:hidden.length,visible:visible.length};
+      },{before:beforeSearch,query:"__inventory_operation_no_match__"});
+      const emptyState=await emptyHandle.jsonValue();
+      assert.equal(emptyState.visible,0,`${mode} no-result search must hide every operation card`);
+      assert.equal(emptyState.hidden,beforeSearch,`${mode} no-result search must explicitly hide every card`);
 
       const clearSearch=page.locator("[data-op-search-clear]");
       await clearSearch.waitFor({state:"visible"});
       await clearSearch.click();
-      await page.waitForFunction(
-        (before)=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length===before,
-        beforeSearch
-      );
-      assert.equal(await search.inputValue(),"",`${mode} clear-search did not reset input`);
-      assert.equal(await visibleCards.count(),beforeSearch,`${mode} clear-search did not restore all cards`);
-      assert.equal(await cards.count(),beforeSearch,`${mode} search must not remove cards from DOM`);
+      const restoredHandle=await page.waitForFunction((before)=>{
+        const host=[...document.querySelectorAll(".inventory-operations-host")]
+          .find((node)=>node.getClientRects().length>0);
+        const input=host?.querySelector("[data-op-search]");
+        const cards=host ? [...host.querySelectorAll("[data-op-item]")] : [];
+        const hidden=cards.filter((card)=>card.hasAttribute("data-op-search-hidden"));
+        const visible=cards.filter((card)=>card.getClientRects().length>0);
+        const empty=host?.querySelector("[data-op-search-empty]");
+        if(!host||input?.value!==""||cards.length!==before)return false;
+        if(visible.length!==before||hidden.length!==0||empty?.getClientRects().length)return false;
+        return {total:cards.length,visible:visible.length,hidden:hidden.length};
+      },beforeSearch);
+      const restoredState=await restoredHandle.jsonValue();
+      assert.equal(restoredState.visible,beforeSearch,`${mode} clear-search did not restore all cards`);
+      assert.equal(restoredState.total,beforeSearch,`${mode} search must not remove cards from DOM`);
 
       const desktopViewport=page.viewportSize();
       if(desktopViewport?.width>900){
