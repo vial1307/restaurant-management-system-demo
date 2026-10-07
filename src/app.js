@@ -2245,6 +2245,23 @@ function inventoryRowSearchCorpus(row) {
   return corpus;
 }
 
+function inventoryProductIdentitySearchText(record, stockKey, site=activeInventorySite()) {
+  if (!record || !stockKey) return "";
+  const products=inventoryProductModels(record,site);
+  const product=products.find((entry)=>String(entry.stockKey||"")===String(stockKey||""));
+  return product ? inventoryProductSearchText(product,site) : "";
+}
+
+function inventoryRowSearchCorpusWithProduct(row, record, site=activeInventorySite()) {
+  const stockKey=String(row?.dataset?.stockKey || row?.dataset?.inventoryStockKey || "");
+  const productText=inventoryProductIdentitySearchText(record,stockKey,site);
+  if (!productText) return inventoryRowSearchCorpus(row);
+  return prepareSearchCorpus([
+    row.dataset.inventorySearchCorpus || row.textContent || "",
+    productText,
+  ].join(" "));
+}
+
 function applyInventorySearchDom(input) {
   if (!input?.isConnected) return;
   const query = input.value || "";
@@ -2257,12 +2274,14 @@ function applyInventorySearchDom(input) {
   const itemsLabel = currentContext().text.items;
   const language = document.documentElement.lang.startsWith("zh") ? "zh" : "vi";
   const totalRows = table.querySelectorAll(".inventory-row").length;
+  const site=activeInventorySite();
+  const record=authoritativeBranchRecord(store.getState());
 
   let visibleTotal = 0;
   table.querySelectorAll(".inventory-group").forEach((group) => {
     let visibleInGroup = 0;
     group.querySelectorAll(".inventory-row").forEach((row) => {
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpusWithProduct(row,record,site), needle);
       row.hidden = !visible;
       row.toggleAttribute("data-search-hidden", !visible);
       if (visible) visibleInGroup += 1;
@@ -2277,7 +2296,7 @@ function applyInventorySearchDom(input) {
 
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
   looseRows.forEach((row) => {
-    const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+    const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpusWithProduct(row,record,site), needle);
     row.hidden = !visible;
     row.toggleAttribute("data-search-hidden", !visible);
     if (visible) visibleTotal += 1;
