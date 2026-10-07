@@ -1,5 +1,23 @@
 # Kitchen OS Work Log
 
+## 2026-10-08 — Staging isolation + hard production promotion gate
+
+- PR #221 (`a293bbf75036762f71372a7837728645242f6147`) bootstrapped the isolated staging runtime and installed the trusted root-owned staging deploy command on the VPS.
+- Production bootstrap #1313 PASS: release `a293bbf`, schema `032`, `DATA_INTEGRITY_OK`, production UI smoke PASS.
+- Added deterministic PostgreSQL schema fingerprinting to API health and staging verification.
+- Staging clone flow: production read-only dump → isolated staging restore → clone fingerprint equality → clear sessions → candidate migrations only on staging → integrity/health checks.
+- Initial Staging #1 failed only because PostgreSQL first initialization briefly reported ready during temporary-server handoff; production was untouched. Hardened restore readiness with repeated health + SQL probes and maintenance-DB reset.
+- Staging #3/#4 subsequently PASS with production/staging fingerprint `032|0c9e6844e821eb434ad8a211ad7be214`.
+- PR #222 (`113938a534c2ed5964f6afa0c6f0f6ceb59c8fd9`) enabled staging on PR and main changes. Main Staging #5 PASS.
+- PR #223 exact head `6730796981b9158a13afa822908478f7e7fac279`: Staging #8 PASS and Deploy/full regression #1320 PASS.
+- PR #223 merged as `2e2a42d163c741aa122bf4fbac5fe3e449001f12`.
+- Verified new main sequence: no direct production workflow on push; Staging #9 ran first and PASS; only then Production #1321 was triggered by `workflow_run` for the same SHA.
+- Production #1321 PASS end-to-end: preflight, full-device/browser regression, exact-target deployment, release/health verification and production UI smoke.
+- New deployment invariant: production target is `workflow_run.head_sha`; PR CI target is `pull_request.head.sha`; direct `push: main` production deploy is forbidden.
+- Single staging stack uses serialized runs (`cancel-in-progress: false`) so a PR cannot cancel a main candidate awaiting promotion.
+- No production schema migration was introduced by this workstream; schema remains `032`.
+
+
 ## 2026-10-06 — PR #212 production closure
 
 - Exact tested PR head: `d382084046b9451b31bef3b931e01d98d3e5727a`.

@@ -1,3 +1,18 @@
+## STABLE — Staging-gated production promotion, 2026-10-08
+
+- `ACTIVE_PR: none`.
+- Current production release: `2e2a42d163c741aa122bf4fbac5fe3e449001f12`; PostgreSQL schema `032`.
+- PR #221 bootstrapped a physically isolated staging runtime on the VPS: separate web/API containers plus PostgreSQL volume `kitchen_os_staging_postgres_data`; staging is served at `https://staging.82.47.180.185.nip.io`.
+- Every staging deployment takes a read-only `pg_dump` from production, restores it into staging, requires an exact schema fingerprint match before candidate migrations, clears staging sessions, applies migrations only to staging, then runs data-integrity and edge health verification.
+- Drift/failure classifications are explicit: `STAGING_CLONE_DRIFT`, `PRODUCTION_SCHEMA_CHANGED_DURING_STAGING`, `STAGING_DB_NOT_STABLE`, `STAGING_DATA_INTEGRITY_FAILED`.
+- First live staging attempt correctly exposed a PostgreSQL first-start temporary-server race; the deployer was hardened to require two stable SQL/health probes before restore.
+- PR #222 enabled automated staging for PR and main candidates. A single physical staging stack is serialized; candidates are not allowed to cancel the currently running main staging candidate.
+- PR #223 made staging a hard production gate. `Deploy Kitchen OS to VPS` no longer has a direct `push: main` production path; it is triggered by successful `workflow_run` completion of `Deploy Kitchen OS Staging` on main.
+- SHA authority is exact: PR validation uses `github.event.pull_request.head.sha`; production promotion uses `github.event.workflow_run.head_sha`; server-side deploy still verifies the target is an ancestor of `origin/main` and resets to that exact commit.
+- End-to-end proof on main: Staging #9 PASS for `2e2a42d...` → Production #1321 started only afterward with `event=workflow_run` and the same SHA → preflight PASS → full regression PASS → exact-SHA deploy PASS → production UI smoke PASS.
+- Production health after closure: app/database/edge healthy; schema `032`; release `2e2a42d`; existing backup/integrity/rollback safeguards remain active.
+- Invariant for future work: never restore direct production deployment from a main push, never run candidate migrations against the production DB before staging certification, and never replace staged/head SHA authority with a transient PR merge-ref or workflow metadata SHA.
+
 ## STABLE — PR #218 operation search parity, 2026-10-07
 
 - `ACTIVE_PR: none`.
