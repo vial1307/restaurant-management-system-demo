@@ -75,6 +75,7 @@ const cache = {
 };
 const accessBySite = new Map();
 const catalogMastersBySite = new Map();
+const catalogItemsBySite = new Map();
 
 function readJson(key, fallback = null) {
   try {
@@ -118,7 +119,9 @@ export function inventoryAccessSnapshot(site = currentSite()) {
 }
 
 export function inventoryCatalogMasters(site = currentSite()) {
-  return catalogMastersBySite.get(String(site || "")) || { categories:[],units:[],items:[] };
+  const key=String(site || "");
+  const masters=catalogMastersBySite.get(key) || { categories:[],units:[] };
+  return { ...masters, items:catalogItemsBySite.get(key) || [] };
 }
 
 export function canInventoryAction(actionKey, {
@@ -676,8 +679,8 @@ async function fetchSite(site, { force = false, registryReady = false } = {}) {
   catalogMastersBySite.set(site,{
     categories:Array.isArray(result?.categories) ? result.categories : [],
     units:Array.isArray(result?.units) ? result.units : [],
-    items:Array.isArray(result?.items) ? result.items : [],
   });
+  catalogItemsBySite.set(site,Array.isArray(result?.items) ? result.items : []);
   syncUiMasterData(site, master || {});
 
   const masterLocationByCode = new Map((master?.locations || []).map((location) => [location.code, location]));
