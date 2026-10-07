@@ -66,6 +66,7 @@ jobs:
         run: |
           node tests/static-regression.mjs
           node tests/engineering-harness-contract-regression.mjs
+          node tests/staging-isolation-contract-regression.mjs
           node tests/inventory-access-control-contract-regression.mjs
           node tests/inventory-multilocation-production-contract-regression.mjs
 
@@ -151,7 +152,11 @@ jobs:
           test -f src/workforce-approval.js
           test -f src/workforce-schedule-publication.js
           test -f vps/docker-compose.yml
+          test -f vps/docker-compose.staging.yml
           test -f vps/Caddyfile
+          test -f vps/Caddyfile.staging
+          test -f vps/scripts/deploy-staging.sh
+          test -f vps/scripts/schema-fingerprint.sh
           test -f src/vps-auth-bridge.js
           test -f vps/scripts/deploy-api.sh
           test -f vps/scripts/admin-action-runner.sh
