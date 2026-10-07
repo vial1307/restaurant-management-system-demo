@@ -183,6 +183,10 @@ assert.equal(searchMatches("牛肉", "ㄋㄧㄡㄖㄡ"), true);
 assert.equal(searchMatches("Thịt bò", "thit bo"), true);
 assert.equal(searchMatches("永吉店", "yongji"), true);
 assert.equal(searchMatches("麻辣湯", "malatang"), true);
+assert.equal(searchMatches("牛肉 大冷凍", "niu rou leng dong"), true, "Inventory search must match multi-token product + location queries");
+assert.equal(searchMatches("牛肉 大冷凍", "nr"), true, "Inventory search must support Pinyin initials");
+assert.equal(searchMatches("牛肉 大冷凍", "n r"), true, "Inventory search must compact spaced initials");
+assert.equal(searchMatches("Thịt bò kho", "t b"), true, "Inventory search must support Vietnamese word initials");
 assert.equal(searchMatches("高麗菜", "gao li cai"), true, "current catalog pinyin must cover 高麗菜");
 assert.equal(searchMatches("炸魷魚", "zha you yu"), true, "current catalog pinyin must cover 炸魷魚");
 assert.equal(searchMatches("梅花豬", "mei hua zhu"), true, "current catalog pinyin must cover 梅花豬");
@@ -211,6 +215,12 @@ assert.match(app, /function renderWhenAuthorized\(\)/, "application rendering mu
 assert.match(app, /event\.detail\?\.status === "synced"\) return/, "unchanged inventory polls must not rerender the full page");
 assert.match(app, /shitu:inventory-cloud-updated/, "actual inventory changes must still refresh the page");
 assert.doesNotMatch(read("src/auth-layer.js"), /data-warehouse[\s\S]{0,500}location\.reload\(\)/, "switching warehouses must not reload the entire application");
+const authLayerSearchV2 = read("src/auth-layer.js");
+assert.match(authLayerSearchV2,/data-central-search-corpus/,"Central Inventory rows must carry curated search corpus");
+assert.match(authLayerSearchV2,/data-central-search-hidden/,"Central Inventory search must expose explicit hidden state");
+assert.match(authLayerSearchV2,/prepareSearchNeedle\(query\)/,"Central Inventory search must prepare the query once");
+assert.match(read("src/inventory-maestro-ui.css"),/\[data-central-search-hidden\][\s\S]*?display:none!important/,"Central filtered rows must stay hidden despite grid display rules");
+
 const authLayerSwitching = read("src/auth-layer.js");
 assert.match(authLayerSwitching, /document\.addEventListener\("pointerdown", activateWarehouseFromEvent, \{ capture:true \}\)/, "warehouse switching must capture pointer activation before rerender can replace the button");
 assert.match(authLayerSwitching, /document\.addEventListener\("click", activateWarehouseFromEvent, \{ capture:true \}\)/, "warehouse switching must retain capture-phase click activation for keyboard/accessibility");
