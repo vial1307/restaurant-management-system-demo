@@ -2395,3 +2395,17 @@ The separate read-cutover candidate:
 - Updated search placeholders and operation search icon/UX.
 - Added utility/static/browser regression coverage.
 - No PostgreSQL/schema/RBAC/quantity/minimum/transaction behavior change.
+
+
+### PR #217 production closure
+
+- Exact tested PR head: `c3343699c733fc00eac0953d4b747ad2fb12f63e`.
+- Exact-head Deploy/full-device #1285 PASS; Super Admin Browser #469 PASS on attempt 2 using the same SHA after a transient branch hydration race on attempt 1; Workforce Diagnostic #617 PASS.
+- PR #217 merged as `79f1491f112c830c80da3494cb2aaf1af5ef27ba`.
+- Main Deploy #1286 PASS with exact target verification, frontend stamp `79f1491`, backup `/opt/kitchen-os/backups/kitchen_os_20261007T085408Z.dump`, schema `032`, `DATA_INTEGRITY_OK` and healthy Web/API/Super Admin edge.
+- Production UI smoke: `PRODUCTION_UI_SMOKE_OK https://82.47.180.185.nip.io/#inventory`.
+- Inventory Site Production Audit #597 PASS.
+- Workforce Staff #838, Attendance #812, Schedule Backfill #822 and Schedule Parity #611 PASS.
+- Inventory search now uses curated DB-backed corpus, searches hidden 3rd+ product locations, excludes unselected select options, supports multi-token AND matching and initials, and applies the same contract to Central Inventory.
+- `ACTIVE_PR: none`; production authority is `79f1491f112c830c80da3494cb2aaf1af5ef27ba` / schema `032`.
+- No PostgreSQL schema/data, RBAC, quantity, minimum or transaction behavior changed.

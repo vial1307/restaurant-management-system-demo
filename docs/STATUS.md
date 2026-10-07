@@ -1,12 +1,16 @@
-## ACTIVE — Inventory search v2, 2026-10-07
+## STABLE — Inventory search v2, 2026-10-07
 
-- `ACTIVE_PR: #217` on `fix/inventory-search-v2-20261007`.
-- Search corpus is being moved from rendered DOM text to curated DB-backed item/product/location data.
-- This removes false positives from unselected select options and makes hidden 3rd+ product locations searchable.
-- Query semantics now support order-independent multi-token AND matching plus Pinyin initials/spaced initials and Vietnamese word initials.
-- Central Inventory receives the same prepared-corpus + explicit hidden-state contract.
-- No database/schema/RBAC/stock mutation.
-- Production remains `9ea27adb9630bd571b5cdafcc770cdc167245c7f`, schema `032` until tested merge/deploy.
+- `ACTIVE_PR: none`.
+- Production release: `79f1491f112c830c80da3494cb2aaf1af5ef27ba`; schema `032`.
+- Search now uses curated DB-backed product/item/location corpus instead of rendered DOM text.
+- Hidden 3rd+ locations are searchable; unselected select options no longer create false-positive location/Work Area matches.
+- Multi-token AND matching supports product + location terms; Pinyin/注音, Pinyin initials/spaced initials and Vietnamese/Latin initials are supported.
+- Central Inventory uses the same prepared-corpus and explicit hidden-state contract.
+- Deploy #1286 PASS; backup `/opt/kitchen-os/backups/kitchen_os_20261007T085408Z.dump`; `DATA_INTEGRITY_OK`; production UI smoke PASS.
+- Inventory Site Production Audit #597 PASS.
+- Workforce Staff #838, Attendance #812, Schedule Backfill #822 and Schedule Parity #611 PASS.
+- No database/schema/RBAC/stock mutation semantics changed.
+- NEXT independent workstreams: Procurement mutable-master/scheduling DB migration; Handoff polling/force-refresh; VPS disk cleanup.
 
 ## STABLE — Inventory search completeness + operation UI alignment, 2026-10-07
 
