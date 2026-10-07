@@ -462,49 +462,17 @@ function itemSecondary(item, language) {
   return language === "zh" ? item.labelVi || "" : item.label;
 }
 
-function inventoryItemSearchText(item, { site=activeInventorySite(), extra=[] } = {}) {
-  const zone = String(item?.zone || "");
-  const workArea = String(item?.workArea || "");
+function inventoryItemSearchText(item) {
   return [
     item?.label,
     item?.labelVi,
-    item?.stockKey,
-    item?.catalogKey,
-    item?.unit,
-    item?.unitCode,
-    item?.categoryCode,
-    zone,
-    zone ? zoneLabel(zone,"zh",site) : "",
-    zone ? zoneLabel(zone,"vi",site) : "",
-    workArea,
-    workArea ? workAreaLabel(workArea,"zh",site) : "",
-    workArea ? workAreaLabel(workArea,"vi",site) : "",
-    ...extra,
   ].filter(Boolean).join(" ");
 }
 
-function inventoryProductSearchText(product, site=activeInventorySite()) {
-  const locationTerms=(product?.locations || []).flatMap((location)=>[
-    location.zone,
-    location.workArea,
-    location.labelZh,
-    location.labelVi,
-    location.zone ? zoneLabel(location.zone,"zh",site) : "",
-    location.zone ? zoneLabel(location.zone,"vi",site) : "",
-    location.workArea ? workAreaLabel(location.workArea,"zh",site) : "",
-    location.workArea ? workAreaLabel(location.workArea,"vi",site) : "",
-  ]);
+function inventoryProductSearchText(product) {
   return [
     product?.label,
     product?.labelVi,
-    product?.stockKey,
-    product?.catalogKey,
-    product?.unit,
-    product?.unitCode,
-    product?.categoryCode,
-    product?.workArea,
-    product?.receiveZone,
-    ...locationTerms,
   ].filter(Boolean).join(" ");
 }
 
@@ -1242,8 +1210,8 @@ function inventoryProductDetailOverlay(context, record) {
 
 function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
-    ? "搜尋品項、拼音/注音、縮寫或儲位…"
-    : "Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…";
+    ? "搜尋原料名稱、拼音/注音或縮寫…"
+    : "Tìm nguyên liệu: tên, Pinyin/注音 hoặc viết tắt…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
   const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
@@ -2240,7 +2208,10 @@ const inventorySearchCorpusCache = new WeakMap();
 
 function inventoryRowSearchCorpus(row) {
   if (inventorySearchCorpusCache.has(row)) return inventorySearchCorpusCache.get(row);
-  const corpus = row.dataset.inventorySearchCorpus || prepareSearchCorpus(row.textContent || "");
+  const visibleName = [...row.querySelectorAll(".inventory-item-name strong, .inventory-item-name small")]
+    .map((node) => node.textContent || "")
+    .join(" ");
+  const corpus = row.dataset.inventorySearchCorpus || prepareSearchCorpus(visibleName);
   inventorySearchCorpusCache.set(row, corpus);
   return corpus;
 }
@@ -2257,10 +2228,7 @@ function primeInventoryRowSearchCorpus(row, record, site=activeInventorySite()) 
   const stockKey=String(row.dataset.stockKey || row.dataset.inventoryStockKey || "");
   const productText=inventoryProductIdentitySearchText(record,stockKey,site);
   if (!productText) return;
-  inventorySearchCorpusCache.set(row,prepareSearchCorpus([
-    row.dataset.inventorySearchCorpus || row.textContent || "",
-    productText,
-  ].join(" ")));
+  inventorySearchCorpusCache.set(row,prepareSearchCorpus(productText));
 }
 
 function applyInventorySearchDom(input) {
