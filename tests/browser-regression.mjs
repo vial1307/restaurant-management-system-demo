@@ -343,7 +343,14 @@ async function adminDesktop(browser) {
       const filteredCards=await visibleCards.count();
       assert(filteredCards>0&&filteredCards<beforeSearch,`${mode} search must hide non-matching operation cards`);
       assert((await page.locator("[data-op-item][data-op-search-hidden]").count())>0,`${mode} search missing explicit hidden-card state`);
-      assert.equal(await page.locator(".op-count").innerText(),`${filteredCards} / ${beforeSearch}`,`${mode} search counter is stale`);
+      const expectedCount=`${filteredCards} / ${beforeSearch}`;
+      await page.waitForFunction(
+        (expected)=>[...document.querySelectorAll(".inventory-operations-host .op-count")]
+          .some((node)=>node.getClientRects().length>0&&node.textContent?.trim()===expected),
+        expectedCount
+      );
+      const visibleCount=page.locator(".inventory-operations-host .op-count:visible").last();
+      assert.equal(await visibleCount.innerText(),expectedCount,`${mode} search counter is stale`);
 
       await search.fill("__inventory_operation_no_match__");
       await page.waitForFunction(()=>document.querySelectorAll("[data-op-item]:not([data-op-search-hidden])").length===0);
