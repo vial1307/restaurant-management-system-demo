@@ -887,6 +887,45 @@ function applyBranch(rows, site) {
     }
   }
 
+  // Keep the branch product catalog authoritative even when a product has no
+  // stock row yet. Overview, management and operation tabs must all receive the
+  // same product identities; zero-row products get a neutral catalog row that
+  // can be searched/managed without inventing stock.
+  const materialized=new Set([
+    ...inventory.map((entry)=>entry.stockKey),
+    ...workMap.keys(),
+  ]);
+  for (const item of catalogItemsBySite.get(site) || []) {
+    const key=String(item?.item_key || "");
+    if (!key.startsWith(`${site}:`)) continue;
+    const stockKey=key.slice(site.length+1);
+    if (!stockKey || materialized.has(stockKey)) continue;
+    inventory.push({
+      id:`${stockKey}-catalog`,
+      stockKey,
+      label:item.name_zh_tw || stockKey,
+      labelVi:item.name_vi || item.name_zh_tw || stockKey,
+      catalogKey:item.catalog_key || "",
+      receiveZone:"",
+      unit:item.unit || "",
+      unitCode:item.unit_code || item.unit || "",
+      categoryCode:item.category_code || "",
+      workArea:item.work_area || "",
+      storageOnly:Boolean(item.storage_only),
+      zone:"",
+      quantity:0,
+      minimum:0,
+      minimumEnabled:false,
+      warningEnabled:false,
+      warningQuantity:null,
+      isPrimary:false,
+      displayOrder:Number(item.display_order || 0),
+      cloudItemId:item.id || "",
+      cloudLocationId:"",
+      catalogOnly:true,
+    });
+  }
+
   inventory.sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant") || String(a.zone).localeCompare(String(b.zone)));
   const workInventory=[...workMap.values()].sort((a,b)=>String(a.label).localeCompare(String(b.label),"zh-Hant"));
   saveInventoryBranchSnapshot(site, inventory, workInventory);
