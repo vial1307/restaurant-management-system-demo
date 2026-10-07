@@ -203,6 +203,8 @@ assert.match(inventoryOperationsSource,/item\.category\?\.name_vi/,"operation se
 assert.match(inventoryOperationsSource,/item\.unitMaster\?\.name_zh_tw/,"operation search must index unit master labels");
 assert.match(inventoryOperationsSource,/item\.receiveLocationCode/,"operation search must index receive-default location metadata");
 assert.match(inventoryOperationsSource,/loc\.metadata\?\.ui_key/,"operation search must index DB-backed location ui keys");
+assert.match(inventoryOperationsSource,/item\.workAreaMaster\?\.name_zh_tw/,"operation search must index Work Area Chinese labels");
+assert.match(inventoryOperationsSource,/item\.workAreaMaster\?\.name_vi/,"operation search must index Work Area Vietnamese labels");
 assert.match(inventoryOperationsSource,/initialSearch=""/,"operation mount must accept shared Inventory search state");
 assert.match(inventoryOperationsSource,/onSearchChange\(query\)/,"operation search must report query changes to the parent Inventory view");
 assert.match(read("src/app.js"),/initialSearch:view\.search/,"Inventory must pass Overview search state into operation tabs");
@@ -214,6 +216,8 @@ assert.match(inventoryTransferSource,/inventoryCatalogMasters/,"operation data m
 assert.match(inventoryTransferSource,/categoryCode:\s*item\.category_code/,"operation items must retain category code");
 assert.match(inventoryTransferSource,/unitCode:\s*item\.unit_code/,"operation items must retain unit code");
 assert.match(inventoryTransferSource,/receiveLocationCode:\s*item\.receive_default_location_code/,"operation items must retain receive-default metadata");
+assert.match(inventoryTransferSource,/inventoryUiGroups/,"operation items must reuse DB-backed Work Area UI groups");
+assert.match(inventoryTransferSource,/workAreaMaster:\s*workAreaByCode\.get/,"operation items must retain bilingual Work Area master metadata");
 
 for (const [file, marker] of [
   ["src/app.js", 'data-field="inventorySearch"'],
