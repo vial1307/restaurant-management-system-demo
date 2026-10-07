@@ -1,7 +1,7 @@
 import { mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
-import { prepareIngredientNameSearchCorpus, prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
+import { ingredientNameSearchMatches, prepareIngredientNameSearchCorpus, prepareIngredientNameSearchNeedle, prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession } from "./account-permissions.js";
 import {
   buildGeneratedTasks,
@@ -1189,8 +1189,8 @@ function inventoryProductDetailOverlay(context, record) {
 
 function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
-    ? "搜尋原料名稱、拼音/注音或縮寫…"
-    : "Tìm nguyên liệu: tên, Pinyin/注音 hoặc viết tắt…";
+    ? "搜尋原料名稱…"
+    : "Tìm nguyên liệu theo tên…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
   const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
@@ -2212,7 +2212,7 @@ function primeInventoryRowSearchCorpus(row, record, site=activeInventorySite()) 
 function applyInventorySearchDom(input) {
   if (!input?.isConnected) return;
   const query = input.value || "";
-  const needle = prepareSearchNeedle(query);
+  const needle = prepareIngredientNameSearchNeedle(query);
   view.search = query;
 
   const page = input.closest(".page-content") || root;
@@ -2229,7 +2229,7 @@ function applyInventorySearchDom(input) {
     let visibleInGroup = 0;
     group.querySelectorAll(".inventory-row").forEach((row) => {
       primeInventoryRowSearchCorpus(row,record,site);
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || ingredientNameSearchMatches(inventoryRowSearchCorpus(row), needle);
       row.hidden = !visible;
       row.toggleAttribute("data-search-hidden", !visible);
       if (visible) visibleInGroup += 1;
@@ -2245,7 +2245,7 @@ function applyInventorySearchDom(input) {
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
   looseRows.forEach((row) => {
     primeInventoryRowSearchCorpus(row,record,site);
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || ingredientNameSearchMatches(inventoryRowSearchCorpus(row), needle);
     row.hidden = !visible;
     row.toggleAttribute("data-search-hidden", !visible);
     if (visible) visibleTotal += 1;
