@@ -118,7 +118,7 @@ export function inventoryAccessSnapshot(site = currentSite()) {
 }
 
 export function inventoryCatalogMasters(site = currentSite()) {
-  return catalogMastersBySite.get(String(site || "")) || { categories:[],units:[] };
+  return catalogMastersBySite.get(String(site || "")) || { categories:[],units:[],items:[] };
 }
 
 export function canInventoryAction(actionKey, {
@@ -676,6 +676,7 @@ async function fetchSite(site, { force = false, registryReady = false } = {}) {
   catalogMastersBySite.set(site,{
     categories:Array.isArray(result?.categories) ? result.categories : [],
     units:Array.isArray(result?.units) ? result.units : [],
+    items:Array.isArray(result?.items) ? result.items : [],
   });
   syncUiMasterData(site, master || {});
 
