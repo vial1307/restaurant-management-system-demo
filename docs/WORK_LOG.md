@@ -2380,3 +2380,18 @@ The separate read-cutover candidate:
 - Operation UI now uses one full-width responsive alignment contract across Receive/Pick/Transfer/Ship.
 - `ACTIVE_PR: none`; production authority is release `9ea27adb9630bd571b5cdafcc770cdc167245c7f` / schema `032`.
 - No PostgreSQL schema/data, RBAC, quantity, minimum or transaction semantics changed.
+
+
+## 2026-10-07 — Inventory search v2
+
+- User reported the search experience was still not sufficiently optimized after the earlier visibility/search repair.
+- Audited Overview, Manage, Central and 進貨 / 領貨 / 轉撥 / 出貨 search paths.
+- Found rendered-row `textContent` was still a poor search authority: select elements exposed every unselected location/Work Area option, while Product Overview omitted 3rd+ locations hidden behind `Xem thêm`.
+- Added curated search corpus generated from actual DB-backed item/product fields and real location/work-area/source assignments.
+- Storage row search is scoped to its actual placement; Receive Default is not injected into unrelated row-level location search.
+- Product Overview search includes all actual locations, including locations not currently rendered as chips.
+- Search query preparation now preserves multiple terms and uses AND semantics; adds Pinyin initials/spaced initials and Latin/Vietnamese word initials.
+- Central Inventory moved from raw DOM-text matching to prepared curated corpus and explicit `data-central-search-hidden` state.
+- Updated search placeholders and operation search icon/UX.
+- Added utility/static/browser regression coverage.
+- No PostgreSQL/schema/RBAC/quantity/minimum/transaction behavior change.

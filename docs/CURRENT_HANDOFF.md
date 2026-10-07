@@ -1,3 +1,23 @@
+## ACTIVE — PR #217 Inventory search v2, 2026-10-07
+
+- `ACTIVE_PR: #217` — branch `fix/inventory-search-v2-20261007`.
+- Follow-up: user confirmed Inventory search still was not sufficiently optimized after PR #215/#216.
+- Root causes found:
+  1. Overview/Manage row search corpus still fell back to rendered `textContent`; editable selects therefore contributed every unselected option and could create false-positive location/Work Area matches.
+  2. Product Overview intentionally renders only the first two location chips for products with 3+ locations, so locations behind `Xem thêm` were absent from rendered-text search.
+  3. multi-word queries were normalized into one compact phrase, so product + location terms were brittle unless contiguous.
+  4. Central Inventory still used raw row text and only the HTML `hidden` state.
+- Candidate fix:
+  - curated corpus from DB-backed product/item identity, unit/category, actual Work Area and actual location/source metadata;
+  - Product Overview corpus includes all real locations, including hidden 3rd+ locations;
+  - row-level corpus excludes unselected dropdown options and excludes Receive Default from unrelated storage rows;
+  - multi-token AND search; Pinyin/注音 remains supported, with Pinyin initials/spaced initials and Vietnamese word initials;
+  - Central Inventory uses curated prepared corpus plus `data-central-search-hidden` with presentation hard-hide;
+  - clearer search placeholders across Inventory and operation screens.
+- Browser/static regression now covers initial search and new token/initial contracts.
+- No PostgreSQL/schema/RBAC/quantity/minimum/transaction changes.
+- Production authority remains `9ea27adb9630bd571b5cdafcc770cdc167245c7f` / schema `032` until exact-head gates pass and the tested merge SHA is deployed.
+
 ## STABLE — PR #215 Inventory search completeness + operation UI alignment, certified by PR #216, 2026-10-07
 
 - `ACTIVE_PR: none`.
