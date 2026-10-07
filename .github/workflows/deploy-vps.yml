@@ -18,25 +18,21 @@ on:
       - "docs/FEATURE_REGISTRY.md"
       - "docs/VERIFICATION_MATRIX.md"
       - ".github/workflows/deploy-vps.yml"
-  push:
+      - ".github/workflows/deploy-staging.yml"
+  workflow_run:
+    workflows:
+      - "Deploy Kitchen OS Staging"
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - "index.html"
-      - "vps-entry.html"
-      - "manifest.webmanifest"
-      - "sw.js"
-      - "src/**"
-      - "tests/**"
-      - "vps/**"
-      - "docs/ENGINEERING_CONTRACT.md"
-      - "docs/AGENT_START_PROTOCOL.md"
-      - "docs/FEATURE_REGISTRY.md"
-      - "docs/VERIFICATION_MATRIX.md"
-      - ".github/workflows/deploy-vps.yml"
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  KITCHEN_TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 concurrency:
   group: kitchen-os-production
@@ -44,11 +40,14 @@ concurrency:
 
 jobs:
   preflight:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
+      - name: Checkout exact candidate
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.KITCHEN_TARGET_SHA }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -208,6 +207,7 @@ jobs:
           test -f vps/database/migrations/024_inventory_location_archive_integrity.sql
 
   regression:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     container:
@@ -242,8 +242,10 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
       WORKFORCE_SCHEDULE_RELATIONAL_READ: "true"
     steps:
-      - name: Checkout
+      - name: Checkout exact candidate
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.KITCHEN_TARGET_SHA }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -354,7 +356,10 @@ jobs:
           cat /tmp/kitchen-web.log 2>/dev/null || true
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     needs:
       - preflight
       - regression
@@ -381,7 +386,7 @@ jobs:
       - name: Deploy exact tested commit with server-side backup and rollback
         run: |
           set -euo pipefail
-          printf '%s\n' "$GITHUB_SHA" > /tmp/kitchen-os-deploy-target
+          printf '%s\n' "$KITCHEN_TARGET_SHA" > /tmp/kitchen-os-deploy-target
           chmod 600 /tmp/kitchen-os-deploy-target
           scp -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 /tmp/kitchen-os-deploy-target deploy@82.47.180.185:/home/deploy/.kitchen-os-deploy-target
           ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-os-deploy'
@@ -389,7 +394,7 @@ jobs:
       - name: Production health and release check
         run: |
           set -euo pipefail
-          EXPECTED_RELEASE="${GITHUB_SHA:0:7}"
+          EXPECTED_RELEASE="${KITCHEN_TARGET_SHA:0:7}"
           curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
           echo
           ACTUAL_RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
@@ -407,8 +412,10 @@ jobs:
     env:
       PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
     steps:
-      - name: Checkout
+      - name: Checkout exact candidate
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.KITCHEN_TARGET_SHA }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -421,5 +428,5 @@ jobs:
       - name: Verify production permission modal
         env:
           PRODUCTION_BASE: https://82.47.180.185.nip.io
-          EXPECTED_RELEASE: ${{ github.sha }}
+          EXPECTED_RELEASE: ${{ env.KITCHEN_TARGET_SHA }}
         run: node tests/production-ui-smoke.mjs

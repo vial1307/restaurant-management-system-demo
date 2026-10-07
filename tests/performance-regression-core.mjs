@@ -162,7 +162,9 @@ assert.match(deploy, /exec \/usr\/bin\/bash .*deploy-api\.sh/, "deploy self-relo
 assert.match(deploy, /docker run --rm[\s\S]{0,400}node:22-alpine[\s\S]{0,200}stamp-frontend-release\.mjs/, "frontend release stamping must run inside the pinned Node container");
 assert.doesNotMatch(deploy, /^node .*stamp-frontend-release\.mjs/m, "deployment must not require Node.js installed on the VPS host");
 
-assert.match(workflow, /GITHUB_SHA/, "workflow must carry the tested GitHub SHA into deployment");
+assert.match(workflow, /KITCHEN_TARGET_SHA/, "workflow must carry the exact tested or staged SHA into deployment");
+assert.match(workflow, /github\.event\.workflow_run\.head_sha/, "production promotion must derive its target from the successful staging run");
+assert.match(workflow, /github\.event\.pull_request\.head\.sha/, "PR validation must pin the exact PR head rather than GitHub's temporary merge ref");
 assert.match(workflow, /kitchen-os-deploy-target/, "workflow must transfer the tested SHA to the VPS deploy target file");
 assert.match(workflow, /EXPECTED_RELEASE/, "workflow must compare the active VPS release with the tested commit");
 assert.match(workflow, /full-device-regression\.mjs/, "workflow must gate deployment on full-device regression");

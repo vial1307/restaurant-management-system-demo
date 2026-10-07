@@ -42,8 +42,10 @@ permissions:
   contents: read
 
 concurrency:
+  # One physical staging stack exists on this VPS. Serialize every candidate so
+  # a PR can never cancel the main candidate that production is waiting on.
   group: kitchen-os-staging
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   stage:
