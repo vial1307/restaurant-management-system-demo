@@ -370,34 +370,65 @@ async function adminDesktop(browser) {
 
       const desktopViewport=page.viewportSize();
       if(desktopViewport?.width>900){
-        const listBox=await page.locator(".inventory-ops-list").boundingBox();
-        const firstCard=page.locator(".inventory-op-card:visible").first();
-        const firstCardBox=await firstCard.boundingBox();
+        const geometryHandle=await page.waitForFunction(()=>{
+          const list=document.querySelector(".inventory-operations-host .inventory-ops-list");
+          const card=[...document.querySelectorAll(".inventory-operations-host .inventory-op-card")]
+            .find((node)=>node.getClientRects().length>0);
+          if(!list||!card||!list.getClientRects().length||!card.getClientRects().length)return false;
+          const controls=card.querySelector(".op-select-grid");
+          const action=card.querySelector(".op-action-row");
+          if(!controls||!action||!controls.getClientRects().length||!action.getClientRects().length)return false;
+          const listBox=list.getBoundingClientRect();
+          const cardBox=card.getBoundingClientRect();
+          const controlsBox=controls.getBoundingClientRect();
+          const actionBox=action.getBoundingClientRect();
+          return {
+            listWidth:listBox.width,
+            cardWidth:cardBox.width,
+            cardOverflow:card.scrollWidth>card.clientWidth+1,
+            controlsRight:controlsBox.x+controlsBox.width,
+            actionLeft:actionBox.x,
+          };
+        });
+        const geometry=await geometryHandle.jsonValue();
         assert(
-          listBox&&firstCardBox&&Math.abs(firstCardBox.width-listBox.width)<=2,
-          `${mode} desktop operation card must span the full operation grid (card=${firstCardBox?.width ?? "missing"}, list=${listBox?.width ?? "missing"})`
+          geometry&&Math.abs(geometry.cardWidth-geometry.listWidth)<=2,
+          `${mode} desktop operation card must span the full operation grid (card=${geometry?.cardWidth ?? "missing"}, list=${geometry?.listWidth ?? "missing"})`
         );
-        assert.equal(await firstCard.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,`${mode} desktop operation card has horizontal overflow`);
-
-        const controls=firstCard.locator(".op-select-grid");
-        const action=firstCard.locator(".op-action-row");
-        const [controlsBox,actionBox]=await Promise.all([controls.boundingBox(),action.boundingBox()]);
-        assert(controlsBox&&actionBox,`${mode} desktop control/action geometry missing`);
-        assert(controlsBox.x+controlsBox.width<=actionBox.x+2,`${mode} controls and action column overlap`);
+        assert.equal(geometry.cardOverflow,false,`${mode} desktop operation card has horizontal overflow`);
+        assert(
+          geometry.controlsRight<=geometry.actionLeft+2,
+          `${mode} controls and action column overlap (controlsRight=${geometry.controlsRight}, actionLeft=${geometry.actionLeft})`
+        );
 
         if(mode==="pick"&&desktopViewport.width>=1200){
-          const denseCard=page.locator(".inventory-op-card:has(.pick-followup):visible").first();
-          if(await denseCard.count()){
-            const followup=denseCard.locator(".pick-followup");
-            const [statusBox,useBox,returnBox]=await Promise.all([
-              followup.locator(".pick-status").boundingBox(),
-              followup.locator(".pick-use-row").boundingBox(),
-              followup.locator(".pick-return-row").boundingBox(),
-            ]);
-            assert(statusBox && useBox && returnBox,"pick Desktop compact-row geometry missing");
-            assert(statusBox.x+statusBox.width<=useBox.x+1,"pick Desktop status must remain left of Use controls");
-            assert(useBox.x+useBox.width<=returnBox.x+1,"pick Desktop Use controls must remain left of Return controls");
-            assert.equal(await followup.evaluate((node)=>node.scrollWidth<=node.clientWidth+1),true,"pick Desktop compact row has horizontal overflow");
+          const denseCount=await page.locator(".inventory-op-card:has(.pick-followup):visible").count();
+          if(denseCount){
+            const followupHandle=await page.waitForFunction(()=>{
+              const card=[...document.querySelectorAll(".inventory-operations-host .inventory-op-card")]
+                .find((node)=>node.getClientRects().length>0&&node.querySelector(".pick-followup"));
+              const followup=card?.querySelector(".pick-followup");
+              const status=followup?.querySelector(".pick-status");
+              const use=followup?.querySelector(".pick-use-row");
+              const ret=followup?.querySelector(".pick-return-row");
+              if(!followup||!status||!use||!ret)return false;
+              if(!followup.getClientRects().length||!status.getClientRects().length||!use.getClientRects().length||!ret.getClientRects().length)return false;
+              const statusBox=status.getBoundingClientRect();
+              const useBox=use.getBoundingClientRect();
+              const returnBox=ret.getBoundingClientRect();
+              return {
+                statusRight:statusBox.x+statusBox.width,
+                useLeft:useBox.x,
+                useRight:useBox.x+useBox.width,
+                returnLeft:returnBox.x,
+                overflow:followup.scrollWidth>followup.clientWidth+1,
+              };
+            });
+            const followupGeometry=await followupHandle.jsonValue();
+            assert(followupGeometry,"pick Desktop compact-row geometry missing");
+            assert(followupGeometry.statusRight<=followupGeometry.useLeft+1,"pick Desktop status must remain left of Use controls");
+            assert(followupGeometry.useRight<=followupGeometry.returnLeft+1,"pick Desktop Use controls must remain left of Return controls");
+            assert.equal(followupGeometry.overflow,false,"pick Desktop compact row has horizontal overflow");
           }
         }
       }
