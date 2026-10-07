@@ -7,6 +7,36 @@ on:
         description: "Git ref/SHA to stage"
         required: false
         default: "main"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - ".admindev.html"
+      - "admin.html"
+      - "vps-entry.html"
+      - "manifest.webmanifest"
+      - "sw.js"
+      - "src/**"
+      - "vps/**"
+      - "tests/**"
+      - ".github/workflows/deploy-staging.yml"
+      - ".github/workflows/deploy-vps.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - ".admindev.html"
+      - "admin.html"
+      - "vps-entry.html"
+      - "manifest.webmanifest"
+      - "sw.js"
+      - "src/**"
+      - "vps/**"
+      - "tests/**"
+      - ".github/workflows/deploy-staging.yml"
+      - ".github/workflows/deploy-vps.yml"
 
 permissions:
   contents: read
@@ -24,7 +54,7 @@ jobs:
       - name: Checkout candidate
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - name: Use Node.js 22
