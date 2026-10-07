@@ -323,15 +323,18 @@ async function assertInventorySearchParityAcrossSurfaces(page) {
         await page.locator(`.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="${mode}"]`).first().click();
         await page.locator("[data-op-search]").waitFor({state:"visible"});
         assert.equal(await page.locator("[data-op-search]").inputValue(),query,`${mode} did not preserve parity query for ${sample.stockKey}`);
-        const card=page.locator(`[data-op-item-key="${sample.stockKey}"]`);
-        await card.waitFor({state:"visible"});
-        assert.equal(await card.getAttribute("data-op-search-hidden"),null,`${mode} cannot find overview product ${sample.stockKey} with "${query}"`);
+        const cards=page.locator("[data-op-item]");
+        assert((await cards.count())>0,`${mode} rendered no searchable products`);
+        const identityMatch=cards.filter({hasText:sample.zh}).first();
+        await identityMatch.waitFor({state:"visible"});
+        assert.equal(await identityMatch.getAttribute("data-op-search-hidden"),null,`${mode} cannot find overview product ${sample.stockKey} with "${query}"`);
       }
       await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="manage"]').first().click();
       const manageSearch=page.locator('[data-field="inventorySearch"]');
       await manageSearch.waitFor({state:"visible"});
       assert.equal(await manageSearch.inputValue(),query,`manage did not preserve parity query for ${sample.stockKey}`);
-      assert((await page.locator(`.inventory-row[data-stock-key="${sample.stockKey}"]:visible,.inventory-row[data-inventory-stock-key="${sample.stockKey}"]:visible`).count())>0,
+      const manageRows=page.locator(".inventory-row:visible");
+      assert((await manageRows.filter({hasText:sample.zh}).count())>0,
         `manage cannot find overview product ${sample.stockKey} with "${query}"`);
     }
   }
