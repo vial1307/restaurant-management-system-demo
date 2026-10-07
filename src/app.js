@@ -465,7 +465,6 @@ function itemSecondary(item, language) {
 function inventoryItemSearchText(item, { site=activeInventorySite(), extra=[] } = {}) {
   const zone = String(item?.zone || "");
   const workArea = String(item?.workArea || "");
-  const receiveZone = String(item?.receiveZone || "");
   return [
     item?.label,
     item?.labelVi,
@@ -480,9 +479,6 @@ function inventoryItemSearchText(item, { site=activeInventorySite(), extra=[] } 
     workArea,
     workArea ? workAreaLabel(workArea,"zh",site) : "",
     workArea ? workAreaLabel(workArea,"vi",site) : "",
-    receiveZone,
-    receiveZone ? zoneLabel(receiveZone,"zh",site) : "",
-    receiveZone ? zoneLabel(receiveZone,"vi",site) : "",
     ...extra,
   ].filter(Boolean).join(" ");
 }
