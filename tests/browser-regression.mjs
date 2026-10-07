@@ -396,6 +396,19 @@ async function adminDesktop(browser) {
       }
       await assertInventorySurfaceFits(page,`fuxing desktop ${mode}`);
     }
+    if(mode==="overview"){
+      await page.locator(".inventory-product-table").waitFor({state:"visible"});
+      await assertInventorySurfaceFits(page,"fuxing desktop overview revisit");
+    }
+    if(mode==="manage"){
+      await page.locator(".storage-table").waitFor({state:"visible"});
+      await inventorySearchRoundTrip(page);
+      await assertInventorySurfaceFits(page,"fuxing desktop manage");
+    }
+    if(mode==="history"){
+      await page.locator(".branch-history-card").waitFor({state:"visible"});
+      await assertInventorySurfaceFits(page,"fuxing desktop history");
+    }
   }
 
   await page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="manage"]').first().click();
