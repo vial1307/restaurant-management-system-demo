@@ -120,6 +120,57 @@ try {
   assert.equal(centralDenied.response.status, 403);
   assert.equal(centralDenied.data.error, "SITE_NOT_ALLOWED");
 
+  // Regression for multi-site Inventory RBAC: a user's home location may remain
+  // Fuxing while Super Admin grants inventory.view for Central. Inventory site
+  // switching requires Master Data reads to honor that same explicit DB scope.
+  const extraSiteRule = await DB.query(
+    `insert into public.inventory_access_rules(
+       user_id,action_key,effect,applies_all_sites,active,note
+     ) values($1,'inventory.view','allow',false,true,'MASTER_DATA_MULTI_SITE_REGRESSION')
+     returning id`,
+    [manager.user.id]
+  );
+  await DB.query(
+    "insert into public.inventory_access_rule_sites(rule_id,site_code) values($1,'central')",
+    [extraSiteRule.rows[0].id]
+  );
+
+  const centralReadViaInventoryScope = await request("/api/master-data/central", { cookie:manager.cookie });
+  assert.equal(
+    centralReadViaInventoryScope.response.status,
+    200,
+    `explicit Central inventory.view must allow Master Data read: ${JSON.stringify(centralReadViaInventoryScope.data)}`
+  );
+  assert.equal(centralReadViaInventoryScope.data.site.code, "central");
+  assert.equal(
+    centralReadViaInventoryScope.data.permissions.manageLocations,
+    false,
+    "extra-site inventory.view must not grant Central location management"
+  );
+  assert.equal(
+    centralReadViaInventoryScope.data.permissions.manageWorkAreas,
+    false,
+    "extra-site inventory.view must not grant Central Work Area management"
+  );
+
+  const centralWriteStillDenied = await request("/api/master-data/locations", {
+    method:"POST",
+    cookie:manager.cookie,
+    body:{
+      action:"save",
+      site:"central",
+      code:"central-cross-site-write-denied",
+      name_zh_tw:"跨店拒絕",
+      name_vi:"Từ chối ghi chéo chi nhánh",
+      kind:"storage",
+      sort_order:99,
+      active:true,
+      metadata:{ regression:true },
+    },
+  });
+  assert.equal(centralWriteStillDenied.response.status,403);
+  assert.equal(centralWriteStillDenied.data.error,"LOCATION_MANAGE_NOT_ALLOWED");
+
   const createdLocation = await request("/api/master-data/locations", {
     method:"POST",
     cookie:manager.cookie,
