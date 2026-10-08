@@ -1,6 +1,7 @@
 import { pool, withTransaction } from "./db.mjs";
 import { hasCapability, requireUser, siteAllowed } from "./auth.mjs";
 import { activeSite } from "./site-registry.mjs";
+import { inventoryActionAllowed } from "./inventory-access.mjs";
 
 const LOCATION_KINDS = new Set(["storage", "work"]);
 const CODE_RE = /^[a-z][a-z0-9._-]{1,39}$/;
@@ -44,7 +45,19 @@ async function validateSite(site, reply) {
 
 async function requireSiteRead(user, site, reply) {
   if (!(await validateSite(site, reply))) return false;
-  if (siteAllowed(user, site)) return true;
+
+  // Master Data is part of the Inventory read model. Accounts can now receive
+  // explicit multi-site Inventory grants in PostgreSQL even when their legacy
+  // app_users.location remains assigned to one home site. Reads must therefore
+  // follow the same site-scoped inventory.view authority as /api/inventory/:site.
+  //
+  // Keep the legacy location check for non-Inventory master-data consumers and
+  // keep write-manager checks unchanged below; an extra-site inventory.view
+  // grant only exposes read metadata required to render that site's Inventory.
+  if (siteAllowed(user, site) || await inventoryActionAllowed(user,"inventory.view",{site})) {
+    return true;
+  }
+
   reply.code(403).send({ error: "SITE_NOT_ALLOWED" });
   return false;
 }
