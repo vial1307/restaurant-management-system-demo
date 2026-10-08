@@ -1,3 +1,14 @@
+## 2026-10-08 — PR #226 multi-site Inventory Master Data RBAC repair
+
+- Investigated production toast after PR #225: PostgreSQL remained healthy but site hydration still failed after safe-read retries.
+- Found authorization drift: Inventory site list/snapshot used DB-backed `inventory.view`, while Master Data read still used legacy `user.location`.
+- Fixed `GET /api/master-data/:site` read authorization to accept explicit PostgreSQL `inventory.view` site scope.
+- Kept Master Data write/manage checks unchanged; cross-site read permission does not grant location/Work Area editing.
+- Master Data/Admin #532 PASS, Staging #13 PASS, API Load #729 PASS, Workforce #644 PASS, Super Admin #496 PASS, exact-head Deploy regression #1325 PASS.
+- Merged as `a6ec4b569adb90b01620c319e0325c039b8b061c`.
+- Main Staging #14 PASS; Production #1326 PASS including UI smoke.
+- No schema/data quantity mutation.
+
 # Kitchen OS Work Log
 
 ## 2026-10-08 — Staging isolation + hard production promotion gate
