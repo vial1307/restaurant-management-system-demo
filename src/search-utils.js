@@ -105,6 +105,30 @@ export function prepareSearchCorpus(text) {
   return normalizeSearch(buildSearchText(text));
 }
 
+function normalizeLiteralSearch(value) {
+  return String(value || "")
+    .toLocaleLowerCase("vi")
+    .normalize("NFC")
+    .trim()
+    .replace(/\s+/gu, " ");
+}
+
+export function prepareIngredientNameSearchCorpus(...names) {
+  // Inventory search is literal text search over the actual ingredient names.
+  // Do not derive Pinyin, Zhuyin, initials, aliases, locations or metadata.
+  return names.flat().filter(Boolean).map(normalizeLiteralSearch).join("\u001e");
+}
+
+export function prepareIngredientNameSearchNeedle(query) {
+  return normalizeLiteralSearch(query);
+}
+
+export function ingredientNameSearchMatches(corpus, needle) {
+  if (!needle) return true;
+  markSearchEvaluation();
+  return String(corpus || "").split("\u001e").some((name) => name.includes(needle));
+}
+
 export function preparedSearchMatches(corpus, needle) {
   if (!needle) return true;
   markSearchEvaluation();

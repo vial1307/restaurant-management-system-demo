@@ -1,7 +1,7 @@
 import { mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
-import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
+import { ingredientNameSearchMatches, prepareIngredientNameSearchCorpus, prepareIngredientNameSearchNeedle, prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession } from "./account-permissions.js";
 import {
   buildGeneratedTasks,
@@ -462,52 +462,6 @@ function itemSecondary(item, language) {
   return language === "zh" ? item.labelVi || "" : item.label;
 }
 
-function inventoryItemSearchText(item, { site=activeInventorySite(), extra=[] } = {}) {
-  const zone = String(item?.zone || "");
-  const workArea = String(item?.workArea || "");
-  return [
-    item?.label,
-    item?.labelVi,
-    item?.stockKey,
-    item?.catalogKey,
-    item?.unit,
-    item?.unitCode,
-    item?.categoryCode,
-    zone,
-    zone ? zoneLabel(zone,"zh",site) : "",
-    zone ? zoneLabel(zone,"vi",site) : "",
-    workArea,
-    workArea ? workAreaLabel(workArea,"zh",site) : "",
-    workArea ? workAreaLabel(workArea,"vi",site) : "",
-    ...extra,
-  ].filter(Boolean).join(" ");
-}
-
-function inventoryProductSearchText(product, site=activeInventorySite()) {
-  const locationTerms=(product?.locations || []).flatMap((location)=>[
-    location.zone,
-    location.workArea,
-    location.labelZh,
-    location.labelVi,
-    location.zone ? zoneLabel(location.zone,"zh",site) : "",
-    location.zone ? zoneLabel(location.zone,"vi",site) : "",
-    location.workArea ? workAreaLabel(location.workArea,"zh",site) : "",
-    location.workArea ? workAreaLabel(location.workArea,"vi",site) : "",
-  ]);
-  return [
-    product?.label,
-    product?.labelVi,
-    product?.stockKey,
-    product?.catalogKey,
-    product?.unit,
-    product?.unitCode,
-    product?.categoryCode,
-    product?.workArea,
-    product?.receiveZone,
-    ...locationTerms,
-  ].filter(Boolean).join(" ");
-}
-
 function heading(title, subtitle, action = "") {
   return `<div class="page-heading"><div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(subtitle)}</p></div>${action}</div>`;
 }
@@ -827,7 +781,7 @@ function storageInventoryRow(item, context) {
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
   const source = storageSources(item, record, item.zone)[0];
   const canRestock = inventoryRestock(item) > 0 && source;
-  const searchCorpus=prepareSearchCorpus(inventoryItemSearchText(item,{site}));
+  const searchCorpus=prepareIngredientNameSearchCorpus(item.label,item.labelVi);
   return `<article class="inventory-row storage-row" data-inventory-search-corpus="${escapeHtml(searchCorpus)}"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${canRelocate ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${storageGroups.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
@@ -854,14 +808,7 @@ function workInventoryRow(item, context) {
       .filter((entry) => entry.stockKey === item.stockKey && entry.zone === zone)
       .reduce((total, entry) => total + entry.quantity, 0),
   }));
-  const searchCorpus=prepareSearchCorpus(inventoryItemSearchText(item,{
-    site,
-    extra:sources.flatMap((entry)=>[
-      entry.zone,
-      zoneLabel(entry.zone,"zh",site),
-      zoneLabel(entry.zone,"vi",site),
-    ]),
-  }));
+  const searchCorpus=prepareIngredientNameSearchCorpus(item.label,item.labelVi);
   return `<article class="inventory-row work-row" data-inventory-search-corpus="${escapeHtml(searchCorpus)}"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canMinimum ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-work-area="${escapeHtml(item.workArea)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
@@ -1092,7 +1039,7 @@ function inventoryProductRow(product, context) {
     : product.status==="low" ? text.lowStock
     : product.status==="near" ? (language==="zh"?"接近不足":"Gần hết")
     : text.ready;
-  const searchCorpus=prepareSearchCorpus(inventoryProductSearchText(product,activeInventorySite()));
+  const searchCorpus=prepareIngredientNameSearchCorpus(product.label,product.labelVi);
   return `<article class="inventory-row inventory-product-row" data-stock-key="${escapeHtml(product.stockKey)}" data-inventory-search-corpus="${escapeHtml(searchCorpus)}">
     <div class="inventory-product-identity"><span class="inventory-status-dot ${product.status==="near"?"low":product.status}"></span><div><strong>${escapeHtml(language==="zh"?product.label:product.labelVi)}</strong><small>${escapeHtml(language==="zh"?product.labelVi:product.label)}${product.categoryCode?` · ${escapeHtml(product.categoryCode)}`:""}</small></div></div>
     <div class="inventory-product-unit"><span class="mobile-field-label">${language==="zh"?"單位":"Đơn vị"}</span><strong>${escapeHtml(product.unit)}</strong></div>
@@ -1242,8 +1189,8 @@ function inventoryProductDetailOverlay(context, record) {
 
 function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
-    ? "搜尋品項、拼音/注音、縮寫或儲位…"
-    : "Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…";
+    ? "搜尋原料名稱…"
+    : "Tìm nguyên liệu theo tên…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
   const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
@@ -2240,33 +2187,32 @@ const inventorySearchCorpusCache = new WeakMap();
 
 function inventoryRowSearchCorpus(row) {
   if (inventorySearchCorpusCache.has(row)) return inventorySearchCorpusCache.get(row);
-  const corpus = row.dataset.inventorySearchCorpus || prepareSearchCorpus(row.textContent || "");
+  const visibleNames = [...row.querySelectorAll(".inventory-item-name strong, .inventory-item-name small")]
+    .map((node) => node.textContent || "");
+  const corpus = row.dataset.inventorySearchCorpus || prepareIngredientNameSearchCorpus(...visibleNames);
   inventorySearchCorpusCache.set(row, corpus);
   return corpus;
 }
 
-function inventoryProductIdentitySearchText(record, stockKey, site=activeInventorySite()) {
+function inventoryProductIdentitySearchCorpus(record, stockKey, site=activeInventorySite()) {
   if (!record || !stockKey) return "";
   const products=inventoryProductModels(record,site);
   const product=products.find((entry)=>String(entry.stockKey||"")===String(stockKey||""));
-  return product ? inventoryProductSearchText(product,site) : "";
+  return product ? prepareIngredientNameSearchCorpus(product.label,product.labelVi) : "";
 }
 
 function primeInventoryRowSearchCorpus(row, record, site=activeInventorySite()) {
   if (!row || inventorySearchCorpusCache.has(row)) return;
   const stockKey=String(row.dataset.stockKey || row.dataset.inventoryStockKey || "");
-  const productText=inventoryProductIdentitySearchText(record,stockKey,site);
-  if (!productText) return;
-  inventorySearchCorpusCache.set(row,prepareSearchCorpus([
-    row.dataset.inventorySearchCorpus || row.textContent || "",
-    productText,
-  ].join(" ")));
+  const productCorpus=inventoryProductIdentitySearchCorpus(record,stockKey,site);
+  if (!productCorpus) return;
+  inventorySearchCorpusCache.set(row,productCorpus);
 }
 
 function applyInventorySearchDom(input) {
   if (!input?.isConnected) return;
   const query = input.value || "";
-  const needle = prepareSearchNeedle(query);
+  const needle = prepareIngredientNameSearchNeedle(query);
   view.search = query;
 
   const page = input.closest(".page-content") || root;
@@ -2283,7 +2229,7 @@ function applyInventorySearchDom(input) {
     let visibleInGroup = 0;
     group.querySelectorAll(".inventory-row").forEach((row) => {
       primeInventoryRowSearchCorpus(row,record,site);
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || ingredientNameSearchMatches(inventoryRowSearchCorpus(row), needle);
       row.hidden = !visible;
       row.toggleAttribute("data-search-hidden", !visible);
       if (visible) visibleInGroup += 1;
@@ -2299,7 +2245,7 @@ function applyInventorySearchDom(input) {
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
   looseRows.forEach((row) => {
     primeInventoryRowSearchCorpus(row,record,site);
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || ingredientNameSearchMatches(inventoryRowSearchCorpus(row), needle);
     row.hidden = !visible;
     row.toggleAttribute("data-search-hidden", !visible);
     if (visible) visibleTotal += 1;
