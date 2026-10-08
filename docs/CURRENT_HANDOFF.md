@@ -1,3 +1,14 @@
+## STABLE — Multi-site Inventory Master Data RBAC repair, 2026-10-08
+
+- `ACTIVE_PR: none`.
+- Root cause of failed Fuxing/Yongji/Central switching: `/api/inventory/sites` and `/api/inventory/:site` honored PostgreSQL `inventory.view` rules, but `GET /api/master-data/:site` still enforced legacy single-site `user.location`.
+- Result: a user could see a site in the switcher and read its Inventory snapshot, while the companion Master Data request returned `403 SITE_NOT_ALLOWED`, causing the full site hydration to fail.
+- PR #226 aligns Master Data READ authorization with the same explicit `inventory.view` site scope while preserving all existing location/work-area WRITE restrictions.
+- Regression proves: no scope -> 403; explicit cross-site `inventory.view` -> Master Data GET 200; cross-site Master Data write remains 403.
+- PR #226 merged as `a6ec4b569adb90b01620c319e0325c039b8b061c`.
+- Main Staging #14 PASS; Production #1326 PASS: preflight, full regression, exact-SHA deploy and production UI smoke.
+- No schema migration or inventory quantity mutation.
+
 ## STABLE — Staging-gated production promotion, 2026-10-08
 
 - `ACTIVE_PR: none`.
