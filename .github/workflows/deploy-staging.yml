@@ -77,7 +77,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in src/*.js tests/*.mjs; do node --check "$file"; done
+          for file in src/*.js tests/*.mjs vps/backend/src/procurement-routes.mjs; do node --check "$file"; done
+          node tests/procurement-v2-contract-regression.mjs
           bash -n vps/scripts/deploy-staging.sh
           bash -n vps/scripts/schema-fingerprint.sh
           test -f vps/docker-compose.staging.yml
