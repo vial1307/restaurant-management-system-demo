@@ -1,3 +1,24 @@
+## STABLE — PR #228 Inventory Reports + literal product-name search, 2026-10-09
+
+- `ACTIVE_PR: none`.
+- Production application release: `99d2d391fc0123140ee3d221d302ad8dc88df6f2`; PostgreSQL schema remains `032`.
+- PR #228 redesigned **Reports > Inventory report** at `#reports` only. Existing Inventory layout/business logic was not redesigned.
+- Inventory Report is DB-backed: visible sites come from `/api/inventory/sites`, stock/products/categories/units from `/api/inventory/:site`, and Work Area/location master data from `/api/master-data/:site`. Super Admin and Website therefore read the same PostgreSQL authority.
+- Report UI is one responsive Desktop/Mobile component with site / Work Area / category / product filters, selectable products, status summaries, report preview, TXT export, PDF via browser print/PDF, UTF-8 CSV for Excel, and Copy text.
+- Search contract is now **field-aware literal substring by actual product name only** across branch Inventory Overview / Receive / Pick / Transfer / Ship / Manage, Central Inventory, and Inventory Reports:
+  - Vietnamese query searches actual `name_vi`; Chinese query searches actual `name_zh_tw`.
+  - Vietnamese diacritics are preserved: `cá` matches names containing `cá`; `ca` does not infer `cá`; `bò` does not normalize to `bo`.
+  - Chinese literal substring works directly: e.g. `魚` matches Chinese names containing `魚`.
+  - Pinyin, Zhuyin/注音, initials/abbreviations, semantic aliases, location, category, Work Area, unit and internal-key guessing are forbidden for Inventory/Inventory Reports search.
+  - Examples that must return no inferred match: `niu rou`, `nr`, `n r`, `ㄋㄧㄡ`, `kg`, `大冷凍` unless those exact characters are literally part of a product name.
+- Generic phonetic search utilities remain available to unrelated modules; only Inventory-family search paths use the literal ingredient-name helpers.
+- Exact tested PR head: `5d6f9f7a10b39edc3a54114d255fecce546494cc`.
+- PR validation: Staging #21 PASS; Super Admin Browser #503 PASS; Workforce Approval #651 PASS; Schedule #170 PASS; Attendance #62 PASS; Payroll #51 PASS. Deploy/full regression #1333 attempt 1 hit a transient Firefox language-toggle timeout after route geometry passed; unchanged exact head attempt 2 PASS, including preflight and full-device browser regression.
+- PR #228 squash-merged as `99d2d391fc0123140ee3d221d302ad8dc88df6f2`.
+- Main GitHub Pages #1057 PASS; Staging #22 PASS; Production #1334 PASS: preflight, regression, exact-SHA deploy and production UI smoke all succeeded.
+- No schema migration, inventory quantity/minimum rewrite, RBAC semantic change or transaction behavior change.
+- This section **supersedes the older PR #217/#218 Pinyin/注音/metadata Inventory-search behavior** documented below. Do not reintroduce those semantics into Inventory search.
+
 ## STABLE — Multi-site Inventory Master Data RBAC repair, 2026-10-08
 
 - `ACTIVE_PR: none`.
