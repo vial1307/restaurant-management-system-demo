@@ -1,9 +1,10 @@
 import { apiRequest, vpsInventory } from "./vps-api.js";
+import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,procurementSettingsModal,procurementSupplierCard,procurementProductCard } from "./procurement-v2-components.js";
 import { ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { addCalendarDays, planProcurementLine } from "./procurement-planner.js";
 import { procurementAddClosedDates, procurementCalendarMonth, procurementMonthCells, procurementMoveMonth, validProcurementDate } from "./procurement-calendar-picker.js";
 
-const ui={ site:"",data:null,inventory:null,loading:false,error:"",tab:"list",supplier:"all",category:"all",
+const ui={ language:"vi",site:"",data:null,inventory:null,loading:false,error:"",tab:"list",supplier:"all",category:"all",
  search:"",date:"",selected:new Set(),overrides:new Map(),editingSupplier:null,editingItem:null,pending:false,notice:"",
  requestKeys:new Map(),loadVersion:0,lastSyncedAt:0,supplierDraft:null,supplierClosedDates:[],calendarMonth:"",calendarAnchor:null,calendarError:"",rangeStart:"",rangeEnd:"",ruleDraft:null };
 const html=(value)=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -77,12 +78,11 @@ function prepare(site,render,date){
  ui.date=date||new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
  void refresh(site,render);
 }
-function metric(zh,vi,value){return `<div class="pv2-stat"><span>${html(zh)}<small>${html(vi)}</small></span><strong>${num(value)}</strong></div>`;}
+const P=(key,lang=ui.language)=>procurementCopy(key,lang);
+const R=(key,lang=ui.language)=>procurementRawCopy(key,lang);
+function metric(key,value){return procurementStat(key,value,num);}
 function badge(text,color){return `<span class="pv2-badge pv2-${color}">${html(text)}</span>`;}
-function tabs(language){
- const all=[["list","叫貨清單","Danh sách gọi hàng"],["supplier","依供應商","Theo nhà cung cấp"],["group","依產品分類","Theo nhóm sản phẩm"],["history","叫貨紀錄","Lịch sử gọi hàng"],["settings","叫貨設定","Cài đặt gọi hàng"]];
- return `<nav class="pv2-tabs" aria-label="Procurement views">${all.map(([key,zh,vi])=>`<button type="button" class="pv2-tab ${ui.tab===key?"active":""}" data-pv2-action="tab" data-tab="${key}"><strong>${zh}</strong><small>${vi}</small></button>`).join("")}</nav>`;
-}
+function tabs(language){return procurementTabs(ui.tab,language);}
 function filterBar(lang){
  const categories=ui.inventory?.categories||[];
  return `<div class="pv2-filters">
@@ -94,23 +94,9 @@ function filterBar(lang){
  </div>`;
 }
 function productRows(rows,lang,editable){
- if(!rows.length)return `<div class="pv2-empty">${lang==="zh"?"沒有符合條件的產品；請確認資料庫設定。":"Không có sản phẩm phù hợp. Kiểm tra cấu hình Database."}</div>`;
- return `<div class="pv2-table-head"><span></span><span>品名 / Tên sản phẩm</span><span>供應商 / Nhà cung cấp</span><span>平日 / 假日<br>Thường / Lễ</span><span>庫存 / Tồn</span><span>建議 / Đề xuất</span><span>叫貨 / Số gọi</span></div>
- <div class="pv2-product-list">${rows.map(row=>{
- const {item,rule,supplier,stock,plan,selected,amount}=row;
- const ready=Boolean(rule?.enabled&&supplier&&plan?.canOrder);
- const risk=plan?.preArrivalRisk||false;
- const name=nameOf(item,lang),sub=lang==="zh"?item.name_vi:item.name_zh_tw;
- return `<article class="pv2-product" data-pv2-id="${html(item.id)}" data-pv2-category="${html(item.category_code)}" data-pv2-supplier="${html(supplier?.id||"unassigned")}">
- <div class="pv2-cell pv2-select"><input type="checkbox" data-pv2-select="${html(item.id)}" ${selected?"checked":""} ${!ready||!editable?"disabled":""} aria-label="${html(name)}"/></div>
- <div class="pv2-cell pv2-name"><strong>${html(name)}</strong><small>${html(sub)}</small><small>${html(item.unit||"")} · ${html(item.category_code||"")}</small></div>
- <div class="pv2-cell"><span class="pv2-mobile-label">供應商 / NCC</span>${supplier?`<strong>${html(lang==="zh"?supplier.name_zh_tw:supplier.name_vi||supplier.name_zh_tw)}</strong>`:badge(lang==="zh"?"未設定":"Chưa cài đặt","warning")}</div>
- <div class="pv2-cell pv2-use"><span class="pv2-mobile-label">每日用量 / Định mức</span><strong>${rule?num(rule.weekdayDemand):"—"} / ${rule?num(rule.holidayDemand):"—"}</strong><small>${html(item.unit||"")}</small></div>
- <div class="pv2-cell pv2-stock"><span class="pv2-mobile-label">庫存 / Tồn kho</span><strong>${num(stock)}</strong><small>${html(item.unit||"")}</small></div>
- <div class="pv2-cell"><span class="pv2-mobile-label">建議 / Đề xuất</span><strong>${ready?num(plan.orderUnits):"—"}</strong><small>${ready?html(plan.arrival):"未設定 / Chưa cài"}</small>${risk?badge(lang==="zh"?"到貨前可能缺貨":"Có nguy cơ hết trước giao","danger"):""}</div>
- <label class="pv2-cell pv2-quantity"><span class="pv2-mobile-label">叫貨 / Số gọi</span><input type="number" data-pv2-qty="${html(item.id)}" min="0" step="1" value="${num(amount)}" ${!ready||!editable?"disabled":""}/><small>${html(rule?.packageUnit||item.unit||"")}</small></label>
- </article>`;
- }).join("")}</div>`;
+ if(!rows.length)return `<div class="pv2-empty">${P("emptyProducts",lang)}</div>`;
+ return `<div class="pv2-table-head"><span></span><span>${P("productName",lang)}</span><span>${P("supplier",lang)}</span><span>${P("weekdayHoliday",lang)}</span><span>${P("stock",lang)}</span><span>${P("suggested",lang)}</span><span>${P("orderQty",lang)}</span></div>
+ <div class="pv2-product-list">${rows.map(row=>procurementProductCard(row,{language:lang,editable,format:num})).join("")}</div>`;
 }
 function groupsOf(rows,keyFor){
  const groups=new Map();
@@ -213,18 +199,18 @@ function formRule(lang){
  const item=items().find(x=>x.id===ui.editingItem);
  if(!item)return "";
  const rule=ui.ruleDraft||ruleFor(item.id)||{};
- return `<div class="pv2-dialog-backdrop" data-pv2-backdrop><div class="pv2-dialog" role="dialog" aria-modal="true" aria-labelledby="pv2-dialog-title"><form class="pv2-panel pv2-editor" data-pv2-form="rule"><header class="pv2-section-head"><h3 id="pv2-dialog-title">${html(item.name_zh_tw)} / ${html(item.name_vi)}</h3><button type="button" aria-label="Đóng cài đặt sản phẩm" data-pv2-action="close-editor">×</button></header>
+ return procurementSettingsModal({title:html(item.name_zh_tw)+" / "+html(item.name_vi),body:`
  <input type="hidden" name="itemId" value="${html(item.id)}"><input type="hidden" name="revision" value="${rule.revision||0}">
  <div class="pv2-form-grid"><label>供應商 / Nhà cung cấp<select name="supplierId" required><option value="">請選擇 / Chọn NCC</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
  ${[["weekdayDemand","平日用量 / Ngày thường"],["weekendDemand","週末用量 / Cuối tuần"],["holidayDemand","假日用量 / Ngày lễ"],["safetyStock","安全庫存 / Tồn an toàn"],["packageSize","包裝數量 / Số lượng mỗi kiện"]].map(([key,label])=>`<label>${label}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
  <label>叫貨單位 / Đơn vị gọi<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
  ${procurementInventoryDetail(item,lang)}
  <label class="pv2-toggle"><input type="checkbox" name="enabled" ${rule.enabled?"checked":""}>啟用自動建議 / Bật đề xuất tự động</label>
- <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>儲存產品規則 / Lưu định mức</button></div></form></div></div>`;
+ <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>${P("saveRule",lang)}</button></div>`});
 }
 function settingsBody(lang,editable){
  return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>供應商設定 / Cấu hình nhà cung cấp</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">＋新增 / Thêm</button>`:""}</header>
- <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>`<div class="pv2-supplier-card"><strong>${html(s.name_zh_tw)}</strong><small>${html(s.name_vi)}</small><span>休息日 / Ngày nghỉ: ${html(s.closedWeekdays.join(",")||"—")}</span><span>交期 / Giao: ${s.leadDays} 天/ngày</span>${editable?`<button type="button" data-pv2-action="edit-supplier" data-id="${s.id}">編輯 / Sửa</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚未建立供應商。Nhấn Thêm để tạo nhà cung cấp thật trong Database.</p>`}</div></section>
+ <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>procurementSupplierCard({supplier:s,editable,language:lang})).join(""):`<p class="pv2-empty">尚未建立供應商。Nhấn Thêm để tạo nhà cung cấp thật trong Database.</p>`}</div></section>
  ${formSupplier(lang)}
  <section class="pv2-panel"><header class="pv2-section-head"><h3>產品用量設定 / Định mức sản phẩm</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="搜尋產品 / Tìm đúng tên sản phẩm"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
  <section class="pv2-panel"><header class="pv2-section-head"><h3>節日與營業日 / Ngày lễ & ngày hoạt động</h3></header>
@@ -247,13 +233,14 @@ function summary(lang,editable,rows){
 export function procurementV2Page(ctx,{render,site,editable}){
  prepare(site,render,ctx.state.selectedDate);
  const lang=ctx.language;
+ ui.language=lang;
  if(ui.loading&&!ui.data)return `<section class="pv2-shell"><h2>叫貨管理 / Quản lý gọi hàng</h2><div class="pv2-panel">資料讀取中… / Đang tải dữ liệu từ Database…</div></section>`;
  if(ui.error&&!ui.data)return `<section class="pv2-shell"><h2>叫貨管理 / Quản lý gọi hàng</h2><div class="pv2-error" role="alert">Database/API: ${html(ui.error)}</div><button data-pv2-action="refresh">重新整理 / Tải lại</button></section>`;
  const all=lines(),active=all.filter(x=>x.rule?.enabled),alerts=active.filter(x=>x.plan?.preArrivalRisk||((x.plan?.shortage||0)>0));
  const rows=all.filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
  return `<section class="pv2-shell" data-pv2-shell>
  <header class="pv2-title"><div><h2>叫貨管理 <span>Quản lý gọi hàng</span></h2><p>供應商・庫存・假日需求 / Nhà cung cấp · Tồn kho · Nhu cầu ngày lễ</p></div><div class="pv2-sync"><small>${ui.lastSyncedAt?"庫存同步 / Đồng bộ kho: "+new Date(ui.lastSyncedAt).toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"資料同步中 / Đang đồng bộ"}</small><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>⟳ 同步 / Đồng bộ</button></div></header>
- <div class="pv2-stats">${metric("供應商","Nhà cung cấp",suppliers().length)}${metric("產品規則","Sản phẩm có định mức",active.length)}${metric("需要補貨","Cần gọi",alerts.length)}${metric("已建立訂單","Phiếu đã tạo",(ui.data?.orders||[]).length)}</div>
+ <div class="pv2-stats">${metric("supplier",suppliers().length)}${metric("definedRules",active.length)}${metric("needRestock",alerts.length)}${metric("ordersCreated",(ui.data?.orders||[]).length)}</div>
  ${tabs(lang)}
  ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}${ui.error?`<div class="pv2-error" role="alert">${html(ui.error)}</div>`:""}
  <div class="pv2-content">${ui.tab==="history"?historyBody(lang,editable):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}${listBody(lang,editable)}</div>`}
