@@ -19,7 +19,26 @@ function items(){return (ui.inventory?.items||[]).filter(x=>x.active!==false);}
 function ruleFor(itemId){return ui.data?.rules?.find(x=>x.itemId===itemId)||null;}
 function supplierFor(id){return suppliers().find(x=>x.id===id);}
 // Match the Inventory Report authority: only configured physical stock locations count.
-function stockFor(itemId){return (ui.inventory?.stock||[]).filter(x=>x.item_id===itemId&&x.configured!==false).reduce((total,row)=>total+Number(row.quantity||0),0);}
+function stockRowsFor(itemId){return (ui.inventory?.stock||[]).filter(x=>x.item_id===itemId&&x.configured!==false);}
+function stockFor(itemId){return stockRowsFor(itemId).reduce((total,row)=>total+Number(row.quantity||0),0);}
+function procurementInventoryDetail(item,lang){
+ const stocks=stockRowsFor(item.id), locations=new Map((ui.inventory?.locations||[]).map(row=>[String(row.id),row]));
+ const minimum=stocks.reduce((sum,row)=>sum+(row.minimum_enabled===false?0:Number(row.minimum_quantity||0)),0);
+ const group=(ui.inventory?.categories||[]).find(x=>x.code===item.category_code);
+ const receive=(ui.inventory?.receiveDefaults||[]).find(x=>x.site===ui.site&&x.catalog_key===item.catalog_key);
+ const receivingLocation=receive?locations.get(String(receive.location_id)):null;
+ return `<div class="pv2-db-reference"><h4>庫存資料庫 / Dữ liệu trực tiếp từ kho</h4>
+  <div class="pv2-db-fields"><div><small>目前總庫存 / Tổng tồn</small><strong>${num(stockFor(item.id))} ${html(item.unit||"")}</strong></div>
+  <div><small>庫存最低量 / Tồn tối thiểu</small><strong>${num(minimum)} ${html(item.unit||"")}</strong></div>
+  <div><small>分類 / Nhóm</small><strong>${html((lang==="zh"?group?.name_zh_tw:group?.name_vi)||item.category_code||"—")}</strong></div>
+  <div><small>預設收貨位置 / Vị trí nhập mặc định</small><strong>${html((lang==="zh"?receivingLocation?.name_zh_tw:receivingLocation?.name_vi)||"—")}</strong></div></div>
+  <div class="pv2-db-locations">${stocks.map(row=>{
+    const place=locations.get(String(row.location_id));
+    return `<span>${html((lang==="zh"?place?.name_zh_tw:place?.name_vi)||place?.code||"—")}: <strong>${num(row.quantity)} ${html(item.unit||"")}</strong></span>`;
+  }).join("")||"<small>尚無儲位紀錄 / Chưa có số lượng theo vị trí</small>"}</div>
+  <p class="pv2-hint">數量與存放位置讀取現有庫存 API。安全庫存為另外的叫貨設定，不會更改庫存最低量。 Số tồn và vị trí lấy từ API kho; tồn an toàn cho gọi hàng không ghi đè mức tối thiểu của kho.</p>
+ </div>`;
+}
 function incomingFor(itemId){
  return (ui.data?.orders||[]).filter(order=>order.status==="confirmed").flatMap(order=>(order.lines||[]).filter(x=>x.itemId===itemId)
  .map(line=>({expectedArrival:order.expectedArrival,baseQuantity:Number(line.baseQuantity),status:order.status})));
@@ -199,6 +218,7 @@ function formRule(lang){
  <div class="pv2-form-grid"><label>供應商 / Nhà cung cấp<select name="supplierId" required><option value="">請選擇 / Chọn NCC</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
  ${[["weekdayDemand","平日用量 / Ngày thường"],["weekendDemand","週末用量 / Cuối tuần"],["holidayDemand","假日用量 / Ngày lễ"],["safetyStock","安全庫存 / Tồn an toàn"],["packageSize","包裝數量 / Số lượng mỗi kiện"]].map(([key,label])=>`<label>${label}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
  <label>叫貨單位 / Đơn vị gọi<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
+ ${procurementInventoryDetail(item,lang)}
  <label class="pv2-toggle"><input type="checkbox" name="enabled" ${rule.enabled?"checked":""}>啟用自動建議 / Bật đề xuất tự động</label>
  <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>儲存產品規則 / Lưu định mức</button></div></form></div></div>`;
 }
