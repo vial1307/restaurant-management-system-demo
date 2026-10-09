@@ -208,8 +208,18 @@ async function copyText(){
 }
 
 function printPdf(){
+  const host=state.host;
+  const selected=state.selected;
+  const rows=[...(host?.querySelectorAll("[data-report-row]") || [])];
+  rows.forEach((row)=>row.toggleAttribute(
+    "data-report-print-hidden",
+    !selected.has(String(row.dataset.reportRow || ""))
+  ));
   document.body.classList.add("inventory-report-printing");
-  const cleanup=()=>document.body.classList.remove("inventory-report-printing");
+  const cleanup=()=>{
+    document.body.classList.remove("inventory-report-printing");
+    rows.forEach((row)=>row.removeAttribute("data-report-print-hidden"));
+  };
   window.addEventListener("afterprint",cleanup,{once:true});
   window.print?.();
   window.setTimeout(cleanup,1500);
@@ -352,6 +362,7 @@ function bind(){
         state.area="all";
         state.category="all";
         state.search="";
+        state.selected=new Set();
         await loadSite();
         return;
       }
