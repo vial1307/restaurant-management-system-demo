@@ -1,3 +1,18 @@
+## STABLE — PR #229 dedicated Excel export, 2026-10-09
+
+- `ACTIVE_PR: none`.
+- Production application release: `9b4ee6c51886693f3690022b17775e621a4c5a11`; PostgreSQL schema remains `032`.
+- Follow-up to PR #228, scoped only to `#reports`.
+- Inventory Report export actions are now distinct: **TXT / PDF / CSV / Excel / Copy**.
+- CSV remains UTF-8 CSV.
+- Excel now downloads a dedicated Spreadsheet XML `.xls` file with `application/vnd.ms-excel`, bilingual headers, numeric quantity/minimum cells, and only the currently selected report products.
+- Mobile export controls remain the same responsive component: four file actions on normal mobile widths, 2-column fallback at <=420px, plus full-width Copy action.
+- Existing Inventory UI/business logic and literal product-name search semantics were not changed by this PR.
+- Exact PR head `bb56b79c1112f9e0a2b80db991983d5d89248e6d`: Staging #23 PASS, Super Admin Browser #504 PASS, Workforce Approval #652 PASS, Deploy/full regression #1335 PASS.
+- PR #229 squash-merged as `9b4ee6c51886693f3690022b17775e621a4c5a11`.
+- Main Pages #1060 PASS, Staging #24 PASS, Production #1336 PASS: preflight, full regression, exact-SHA deploy and production UI smoke all succeeded.
+- No schema migration, RBAC change, inventory quantity/minimum mutation or transaction semantic change.
+
 ## STABLE — PR #228 Inventory Reports + literal product-name search, 2026-10-09
 
 - `ACTIVE_PR: none`.
