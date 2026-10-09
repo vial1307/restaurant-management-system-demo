@@ -21,6 +21,7 @@ try{
   await page.goto(BASE+"/#procurement",{waitUntil:"domcontentloaded"});
   await page.locator("[data-pv2-shell]").waitFor({timeout:30000});
   await page.locator('[data-pv2-action="tab"][data-tab="settings"]').click();
+  await page.waitForFunction(()=>document.querySelector('[data-pv2-action="tab"][data-tab="settings"]')?.classList.contains("active"),null,{timeout:10000});
   try {
     await page.locator('[data-pv2-action="new-supplier"]').click({timeout:12000});
   } catch (error) {
