@@ -193,21 +193,20 @@ function formRule(lang){
  if(!ui.editingItem)return "";
  const item=items().find(x=>x.id===ui.editingItem);
  if(!item)return "";
- const rule=ruleFor(item.id)||{};
- return `<form class="pv2-panel pv2-editor" data-pv2-form="rule"><header class="pv2-section-head"><h3>${html(item.name_zh_tw)} / ${html(item.name_vi)}</h3><button type="button" data-pv2-action="close-editor">×</button></header>
+ const rule=ui.ruleDraft||ruleFor(item.id)||{};
+ return `<div class="pv2-dialog-backdrop" data-pv2-backdrop><div class="pv2-dialog" role="dialog" aria-modal="true" aria-labelledby="pv2-dialog-title"><form class="pv2-panel pv2-editor" data-pv2-form="rule"><header class="pv2-section-head"><h3 id="pv2-dialog-title">${html(item.name_zh_tw)} / ${html(item.name_vi)}</h3><button type="button" aria-label="Đóng cài đặt sản phẩm" data-pv2-action="close-editor">×</button></header>
  <input type="hidden" name="itemId" value="${html(item.id)}"><input type="hidden" name="revision" value="${rule.revision||0}">
  <div class="pv2-form-grid"><label>供應商 / Nhà cung cấp<select name="supplierId" required><option value="">請選擇 / Chọn NCC</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
  ${[["weekdayDemand","平日用量 / Ngày thường"],["weekendDemand","週末用量 / Cuối tuần"],["holidayDemand","假日用量 / Ngày lễ"],["safetyStock","安全庫存 / Tồn an toàn"],["packageSize","包裝數量 / Số lượng mỗi kiện"]].map(([key,label])=>`<label>${label}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
  <label>叫貨單位 / Đơn vị gọi<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
  <label class="pv2-toggle"><input type="checkbox" name="enabled" ${rule.enabled?"checked":""}>啟用自動建議 / Bật đề xuất tự động</label>
- <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>儲存產品規則 / Lưu định mức</button></div></form>`;
+ <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>儲存產品規則 / Lưu định mức</button></div></form></div></div>`;
 }
 function settingsBody(lang,editable){
  return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>供應商設定 / Cấu hình nhà cung cấp</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">＋新增 / Thêm</button>`:""}</header>
  <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>`<div class="pv2-supplier-card"><strong>${html(s.name_zh_tw)}</strong><small>${html(s.name_vi)}</small><span>休息日 / Ngày nghỉ: ${html(s.closedWeekdays.join(",")||"—")}</span><span>交期 / Giao: ${s.leadDays} 天/ngày</span>${editable?`<button type="button" data-pv2-action="edit-supplier" data-id="${s.id}">編輯 / Sửa</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚未建立供應商。Nhấn Thêm để tạo nhà cung cấp thật trong Database.</p>`}</div></section>
  ${formSupplier(lang)}
  <section class="pv2-panel"><header class="pv2-section-head"><h3>產品用量設定 / Định mức sản phẩm</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="搜尋產品 / Tìm đúng tên sản phẩm"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
- ${formRule(lang)}
  <section class="pv2-panel"><header class="pv2-section-head"><h3>節日與營業日 / Ngày lễ & ngày hoạt động</h3></header>
  <p class="pv2-hint">依日期逐日設定；連假可分別設定每一天。 Thiết lập từng ngày để tính đúng kỳ nghỉ liên tiếp 2–3 ngày.</p>
  <form data-pv2-form="calendar" class="pv2-calendar-form"><input name="date" type="date" required value="${html(ui.date)}"/><select name="type"><option value="normal">一般日 / Ngày thường</option><option value="holiday">假日 / Ngày lễ</option><option value="closed">店休 / Nhà hàng nghỉ</option></select><input name="description" placeholder="備註 / Ghi chú" maxlength="160"/><button class="pv2-primary" type="submit" ${!editable||ui.pending?"disabled":""}>儲存 / Lưu</button></form>
@@ -233,12 +232,12 @@ export function procurementV2Page(ctx,{render,site,editable}){
  const all=lines(),active=all.filter(x=>x.rule?.enabled),alerts=active.filter(x=>x.plan?.preArrivalRisk||((x.plan?.shortage||0)>0));
  const rows=all.filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
  return `<section class="pv2-shell" data-pv2-shell>
- <header class="pv2-title"><div><h2>叫貨管理 <span>Quản lý gọi hàng</span></h2><p>供應商・庫存・假日需求 / Nhà cung cấp · Tồn kho · Nhu cầu ngày lễ</p></div><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>⟳ 同步 / Đồng bộ</button></header>
+ <header class="pv2-title"><div><h2>叫貨管理 <span>Quản lý gọi hàng</span></h2><p>供應商・庫存・假日需求 / Nhà cung cấp · Tồn kho · Nhu cầu ngày lễ</p></div><div class="pv2-sync"><small>${ui.lastSyncedAt?"庫存同步 / Đồng bộ kho: "+new Date(ui.lastSyncedAt).toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"資料同步中 / Đang đồng bộ"}</small><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>⟳ 同步 / Đồng bộ</button></div></header>
  <div class="pv2-stats">${metric("供應商","Nhà cung cấp",suppliers().length)}${metric("產品規則","Sản phẩm có định mức",active.length)}${metric("需要補貨","Cần gọi",alerts.length)}${metric("已建立訂單","Phiếu đã tạo",(ui.data?.orders||[]).length)}</div>
  ${tabs(lang)}
  ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}${ui.error?`<div class="pv2-error" role="alert">${html(ui.error)}</div>`:""}
  <div class="pv2-content">${ui.tab==="history"?historyBody(lang,editable):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}${listBody(lang,editable)}</div>`}
- ${["list","supplier","group"].includes(ui.tab)?summary(lang,editable,rows):""}</div></section>`;
+ ${["list","supplier","group"].includes(ui.tab)?summary(lang,editable,rows):""}</div>${ui.tab==="settings"&&ui.editingItem?formRule(lang):""}</section>`;
 }
 async function submitOrders(render){
  const chosen=lines().filter(x=>ui.selected.has(x.item.id)&&x.supplier&&x.rule?.enabled&&x.amount>0);
@@ -263,8 +262,26 @@ async function submitOrders(render){
 }
 async function refreshAfterMutation(render){
  const site=ui.site;
- const data=await apiRequest("/api/procurement/"+encodeURIComponent(site));
- if(guard(site))ui.data=data;
+ const [data,inventory]=await Promise.all([apiRequest("/api/procurement/"+encodeURIComponent(site)),vpsInventory(site,{force:true})]);
+ if(guard(site)){ui.data=data;ui.inventory=inventory;ui.lastSyncedAt=Date.now();}
+}
+function beginRuleEdit(itemId){
+ const rule=ruleFor(itemId)||{};
+ if(!items().some(item=>item.id===itemId))return;
+ ui.editingItem=itemId;
+ ui.ruleDraft={...rule};
+}
+function rememberRuleFields(root){
+ if(!ui.ruleDraft)return;
+ const form=root.querySelector('[data-pv2-form="rule"]');
+ if(!form)return;
+ const d=new FormData(form);
+ ui.ruleDraft={
+  ...ui.ruleDraft,supplierId:String(d.get("supplierId")||""),
+  weekdayDemand:d.get("weekdayDemand"),weekendDemand:d.get("weekendDemand"),holidayDemand:d.get("holidayDemand"),
+  safetyStock:d.get("safetyStock"),packageSize:d.get("packageSize"),
+  packageUnit:String(d.get("packageUnit")||""),enabled:d.has("enabled")
+ };
 }
 export function mountProcurementV2(root,{render,route}){
  root.addEventListener("click",event=>{
