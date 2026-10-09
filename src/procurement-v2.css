@@ -92,7 +92,7 @@
 .pv2-holidays{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .pv2-holidays span{border-radius:8px;background:#fff1f2;padding:6px 9px;font-size:12px}
 @media(max-width:1180px){.pv2-content{grid-template-columns:minmax(0,1fr)}.pv2-aside{grid-template-columns:repeat(2,minmax(0,1fr))}.pv2-table-head,.pv2-product{grid-template-columns:25px minmax(120px,2fr) minmax(110px,1.2fr) 90px 70px 90px 75px;gap:5px}.pv2-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:760px){.pv2-title{align-items:flex-start}.pv2-title h2{font-size:21px}.pv2-title h2 span{display:block;margin:2px 0 0;font-size:15px}.pv2-title p{font-size:12px}.pv2-tab{flex:1 1 95px;min-width:0}.pv2-tabs{gap:0}.pv2-tab strong{font-size:12px}.pv2-tab small{font-size:10px}.pv2-panel{padding:11px}.pv2-aside{grid-template-columns:1fr}.pv2-table-head{display:none}.pv2-product{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(95px,.55fr);gap:10px 8px;padding:12px 2px}.pv2-select{grid-row:1;grid-column:1}.pv2-name{grid-column:2 / 4;grid-row:1}.pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){grid-column:span 1;background:#f7f9fc;border-radius:9px;padding:8px}.pv2-product>.pv2-cell:nth-child(3){grid-column:1 / 3}.pv2-quantity{grid-column:2 / 4!important}.pv2-mobile-label{display:block;margin-bottom:3px}.pv2-product .pv2-badge{font-size:10px}.pv2-quantity input{width:100%;min-height:42px}.pv2-rule-line{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.pv2-rule-line button{min-height:40px}.pv2-filters>select{max-width:none}}
+@media(max-width:991px){.pv2-title{align-items:flex-start}.pv2-title h2{font-size:21px}.pv2-title h2 span{display:block;margin:2px 0 0;font-size:15px}.pv2-title p{font-size:12px}.pv2-tab{flex:1 1 95px;min-width:0}.pv2-tabs{gap:0}.pv2-tab strong{font-size:12px}.pv2-tab small{font-size:10px}.pv2-panel{padding:11px}.pv2-aside{grid-template-columns:1fr}.pv2-table-head{display:none}.pv2-product{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(95px,.55fr);gap:10px 8px;padding:12px 2px}.pv2-select{grid-row:1;grid-column:1}.pv2-name{grid-column:2 / 4;grid-row:1}.pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){grid-column:span 1;background:#f7f9fc;border-radius:9px;padding:8px}.pv2-product>.pv2-cell:nth-child(3){grid-column:1 / 3}.pv2-quantity{grid-column:2 / 4!important}.pv2-mobile-label{display:block;margin-bottom:3px}.pv2-product .pv2-badge{font-size:10px}.pv2-quantity input{width:100%;min-height:42px}.pv2-rule-line{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.pv2-rule-line button{min-height:40px}.pv2-filters>select{max-width:none}}
 @media(max-width:429px){.pv2-shell{gap:10px}.pv2-stat{padding:10px;min-height:70px}.pv2-stat strong{font-size:22px}.pv2-stat>span{font-size:12px}.pv2-filters>*{flex:1 1 100%!important;max-width:none!important}.pv2-title>.pv2-secondary{min-width:80px;padding:7px}.pv2-title{gap:7px}.pv2-tab{flex:1 1 31%;padding:7px 3px}.pv2-product>.pv2-cell:nth-child(3){grid-column:2 / 4}.pv2-product>.pv2-cell:nth-child(4),.pv2-product>.pv2-cell:nth-child(5),.pv2-product>.pv2-cell:nth-child(6){grid-column:span 1}.pv2-product>.pv2-cell:nth-child(6){grid-column:2 / 4}.pv2-quantity{grid-column:2 / 4!important}.pv2-editor-actions button{flex:1 1 110px}}
 @media(max-width:359px){.pv2-product{grid-template-columns:23px minmax(0,1fr) minmax(0,.65fr)}.pv2-stat{padding:8px}.pv2-stat strong{font-size:20px}.pv2-stat>span{font-size:11px}.pv2-title h2{font-size:18px}.pv2-tab strong{font-size:11px}}
 
@@ -132,7 +132,7 @@
 .pv2-dialog .pv2-section-head button{border:1px solid #dde4ee;border-radius:9px;background:#fff;font-size:22px;min-width:38px;min-height:38px}
 .pv2-dialog .pv2-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
 .pv2-dialog .pv2-editor-actions{position:sticky;bottom:-22px;background:#fff;border-top:1px solid #eaf0f6;padding:12px 0}
-@media(max-width:760px){
+@media(max-width:991px){
  .pv2-calendar-grid{max-width:none}
  .pv2-calendar-day{min-height:43px;font-size:13px}
  .pv2-holiday-picker{padding:11px}
@@ -186,7 +186,7 @@
 .pv2-shell .pv2-quantity input{min-width:0;max-width:100%}
 
 /* Wide monitors: the table owns overflow, never the application document. */
-@media(min-width:761px){
+@media(min-width:992px){
  .pv2-shell .pv2-product-list{overflow-x:auto;overscroll-behavior-inline:contain}
  .pv2-shell .pv2-table-head,.pv2-shell .pv2-product{min-width:690px}
  .pv2-shell .pv2-panel:has(> .pv2-product-list){overflow-x:auto}
@@ -194,7 +194,7 @@
 }
 
 /* Tablets + mobile: preserve a single swipeable navigation row for all 5 tabs. */
-@media(max-width:760px){
+@media(max-width:991px){
  .pv2-shell{gap:12px}
  .pv2-shell .pv2-title{display:flex;flex-direction:column;align-items:stretch;gap:10px}
  .pv2-shell .pv2-title h2{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px;line-height:1.25}
