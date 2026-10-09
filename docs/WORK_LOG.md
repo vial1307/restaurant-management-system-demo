@@ -1,3 +1,24 @@
+## IN PROGRESS — Procurement supplier calendar, product popup, live Inventory sync — 2026-10-10
+
+- Scope PR #230, branch `feat/procurement-responsive-db-v2`. This follow-up does NOT create a new database/schema or update production.
+- Supplier special closures: replaced freeform date textarea with clickable month-grid calendar (two clicks select an inclusive range), native date pickers for start/end and a range-add button, individual date chips/removal, up to 120 configured exception days. Reuses existing `procurement_suppliers.closed_dates` in migration 033; no new tables.
+- Product-rule settings open in a fixed responsive modal with keyboard Escape/Tab handling; no scrolling to a bottom-of-page editor.
+- Product modal shows *read-only authoritative Inventory API data*: bilingual names, categories, unit, configured location-by-location stock, sum of physical stock, existing location minimum and receive-default location; `safetyStock` in procurement remains logically separate from Inventory's minimum.
+- `#procurement` uses existing `vpsInventory(site,{force:true})` plus configured suppliers API. Direct SQL writes to Inventory/Super Admin are picked up through active-tab forced reads every ~30s (plus focus/visibility and existing cloud events), with no new stock tables. Background refresh avoids repainting unsaved supplier/product editors; on refresh failure existing data stays visible with an error.
+- Contract test `tests/procurement-v2-contract-regression.mjs` validates leap year, range reversal, overlap/dedup, invalid dates, maximum 120, UI modal and same Stock API source. Real-browser `tests/procurement-v2-browser-regression.mjs` asserts Desktop/Mobile date selection, persisted supplier changes, product modal, and focus reload.
+- Important: Direct SQL outside the app does not emit the existing SSE broadcaster, so forced GET is polling-based, **not instantaneous realtime**. No invented provider/stock items. Do not merge or promote until fresh staging and regression checks are green.
+
+## IN PROGRESS — Procurement v2 responsive + PostgreSQL supplier policy, 2026-10-10
+
+- Branch: `feat/procurement-responsive-db-v2`. Production remains untouched pending test gates; `ACTIVE_PR` not yet set.
+- Replaces only `#procurement` renderer; includes one shared Desktop/Mobile bilingual UI with list, supplier, category, history and settings tabs.
+- New migration `033_procurement_supplier_calendar.sql`: site supplier calendars, product usage rules linked to `inventory_items.id`, service-day overrides, order headers/lines and idempotency.
+- Procurement API uses authenticated site/role checks and a PostgreSQL transaction for writes; product stock/catalog read existing inventory DB snapshot.
+- No supplier/item rows seeded. Actual supplier names and product associations must be configured from verified operation records.
+- Search reuses `prepareIngredientNameSearchCorpus` / `prepareIngredientNameSearchNeedle`, strict literal bilingual product names, no phonetic aliases.
+- Planned/remaining verification: exact-head JS syntax; SQL staging migration; API auth/round-trip and order semantics; mobile geometry 359/390/430/760px; all branch parity; production smoke only after successful staging.
+- Do not mark DONE/merge until all relevant gates pass. Existing procurement local legacy business-state may remain for historical/backcompat, not authoritative new supplier rules.
+
 ## 2026-10-09 — PR #229 dedicated Excel export production closure
 
 - Followed PR #228 to separate the combined `CSV / Excel` action into dedicated `CSV` and `Excel` actions.

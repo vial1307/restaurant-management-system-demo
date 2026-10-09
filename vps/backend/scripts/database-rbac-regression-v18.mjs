@@ -15,7 +15,7 @@ assert(source.includes(oldCreatedPermission),"database RBAC permission expectati
 assert(source.includes(oldCreatedLogin),"database RBAC login expectation changed; update the schema-027 adapter explicitly");
 
 const migrated = source
-  .replace(oldSchema,'assert.equal(health.data.schema,"032");')
+  .replace(oldSchema,'assert.ok(Number(health.data.schema)>=32);')
   .replace(
     oldCreatedPermission,
     'assert.equal(created.data.user.permission_overrides.settings?.view,true,"schema-029 explicit override must be stored separately from role defaults");\nassert.equal(created.data.user.permissions.settings?.view,true,"schema-029 explicit user override must beat the database role default");\nassert.equal(created.data.user.permissions.settings?.edit,true);'

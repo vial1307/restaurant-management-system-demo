@@ -75,6 +75,11 @@ jobs:
       - name: Branch legacy catalog database contract
         run: node tests/branch-legacy-catalog-materialization-contract-regression.mjs
 
+      - name: Procurement v2 calendar and responsive DB contract
+        run: |
+          node --check vps/backend/src/procurement-routes.mjs
+          node tests/procurement-v2-contract-regression.mjs
+
       - name: Inventory literal search and report contract
         run: node tests/inventory-literal-search-and-report-contract-regression.mjs
 
@@ -319,6 +324,9 @@ jobs:
 
       - name: Desktop and mobile Chromium regression
         run: node tests/browser-regression.mjs
+
+      - name: Procurement V2 interactive calendar and modal browser regression
+        run: node tests/procurement-v2-browser-regression.mjs
 
       - name: Workforce approval browser regression
         env:

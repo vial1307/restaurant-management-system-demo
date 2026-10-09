@@ -29,6 +29,7 @@ import {
 import { assessShiftCapacity, currentStaff, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
 import { mountInventoryReport } from "./inventory-reports.js";
+import { procurementV2Page, mountProcurementV2 } from "./procurement-v2.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
 import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
 import { createTaskDerivationCache } from "./task-derivation-cache.js";
@@ -1761,7 +1762,7 @@ async function persistCatalogStocktakeFields({ site, stockKey, locations, workAr
 function render() {
   const context = currentContext();
   const active = route();
-  const pages = { dashboard, inventory, procurement: procurementPage, reservations: reservationsPage, preparation: preparationPage, menu: management.menuPage, sop: management.sopPage, skills: management.skillsPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
+  const pages = { dashboard, inventory, procurement: (ctx) => procurementV2Page(ctx, {render,site:activeInventorySite(),editable:accountCan("procurement","edit")}), reservations: reservationsPage, preparation: preparationPage, menu: management.menuPage, sop: management.sopPage, skills: management.skillsPage, attendance: management.attendancePage, schedule: management.schedulePage, reports: management.reportsPage, remote: management.remotePage, settings: settingsPage };
   document.documentElement.lang = context.language === "zh" ? "zh-Hant" : "vi";
   document.title = `${context.text[active]} · 食徒 Kitchen OS`;
   const mobileMenu = view.mobileMenuOpen ? `<div class="mobile-menu-backdrop" data-action="close-mobile-menu"><nav class="mobile-menu" aria-label="${escapeHtml(context.language === "zh" ? "全部功能" : "Tất cả chức năng")}"><div class="mobile-menu-heading"><strong>${escapeHtml(context.language === "zh" ? "全部功能" : "Tất cả chức năng")}</strong><button class="icon-button" data-action="close-mobile-menu" aria-label="${escapeHtml(context.text.cancel)}">${icon("close")}</button></div><div class="mobile-menu-grid">${ROUTES.map((key) => navItem(key, active, context.text)).join("")}</div></nav></div>` : "";
@@ -1822,6 +1823,8 @@ function selectServiceDate(date) {
 }
 
 const management = createManagement({ store, view, root, icon, heading, cardHeading, escapeHtml, workAreaLabel, zoneLabel, compactNumber, render, workAreas: operationalWorkAreas });
+
+mountProcurementV2(root,{render,route});
 
 root.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
