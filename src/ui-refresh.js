@@ -117,14 +117,24 @@ function patchText(root=document.body){
 function patchSearchPlaceholders(root=document.body){
   queryWithin(root,'input').forEach(input=>{
     const p=input.getAttribute("placeholder") || "";
-    const explicit=input.dataset.field==="inventorySearch" || input.hasAttribute("data-central-search");
+    const literalInventorySearch=
+      input.dataset.field==="inventorySearch"
+      || input.hasAttribute("data-central-search")
+      || input.hasAttribute("data-op-search")
+      || input.dataset.reportField==="search";
     const looksSearch=input.type==="search" || /tìm|search|搜尋|pinyin|注音/i.test(p);
-    if(!explicit && !looksSearch) return;
-    if(input.dataset.field==="inventorySearch" || /nguyên liệu|食材/i.test(p)){
-      input.placeholder="Tìm nguyên liệu / 食材 / Pinyin / 注音…";
+    if(!literalInventorySearch && !looksSearch) return;
+
+    if(literalInventorySearch){
+      input.placeholder=document.documentElement.lang.startsWith("zh")
+        ? "依產品名稱搜尋…"
+        : "Tìm theo đúng tên sản phẩm…";
+    }else if(/nguyên liệu|食材/i.test(p)){
+      input.placeholder="Tìm nguyên liệu / 食材…";
     }else{
-      input.placeholder="Tìm / 中文 / Tiếng Việt / Pinyin / 注音…";
+      input.placeholder="Tìm / 中文 / Tiếng Việt…";
     }
+
     input.setAttribute("autocomplete","off");
     input.setAttribute("autocorrect","off");
     input.setAttribute("autocapitalize","none");
