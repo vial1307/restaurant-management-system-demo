@@ -1,3 +1,36 @@
+## 2026-10-09 — PR #228 Inventory Reports + literal product-name search production closure
+
+- User required Inventory search and Inventory Reports search to follow the characters actually typed in Vietnamese/Chinese, with no Pinyin, Zhuyin/注音, abbreviation or metadata guessing. Example: `cá` filters actual Vietnamese product names containing `cá`; `魚` filters actual Chinese names containing `魚`.
+- Kept the existing Inventory UI/business logic intact; changed only search behavior/copy where needed.
+- Added Inventory-specific literal search helpers in `src/search-utils.js`: lowercase + NFC + whitespace normalization, field-separated Chinese/Vietnamese name corpus, literal substring matching, Vietnamese diacritics preserved.
+- Migrated branch Inventory Overview/Manage and Receive/Pick/Transfer/Ship operation search to the shared literal name matcher.
+- Audited Central Kitchen and found it still used the older broad Pinyin/location corpus; migrated Central search to the same literal Chinese/Vietnamese product-name corpus.
+- Prevented `ui-refresh.js` and `search-i18n-layer.js` from overwriting literal Inventory/Reports search placeholders or double-filtering through generic phonetic search.
+- Redesigned only **Reports > Inventory report**:
+  - new `src/inventory-reports.js` and `src/inventory-reports.css`;
+  - PostgreSQL-backed site/snapshot/master-data reads;
+  - site, Work Area, category and literal product-name filters;
+  - selectable product rows and select-all/clear;
+  - inventory status summary cards and text preview;
+  - TXT, browser PDF/print, UTF-8 CSV/Excel-compatible export, clipboard Copy;
+  - responsive Desktop/Mobile layout from one component/data flow.
+- Kept non-inventory Reports (daily/SOP/attendance/checks) unchanged.
+- Preserved `index.html` / `vps-entry.html` byte-parity after adding Reports CSS.
+- Added `tests/inventory-literal-search-and-report-contract-regression.mjs` and updated stale static/browser search contracts that previously required `niu rou`, `n r`, Pinyin/注音 or location/category/unit indexing.
+- Exact PR head `5d6f9f7a10b39edc3a54114d255fecce546494cc`:
+  - Staging #21 PASS;
+  - Super Admin Browser #503 PASS;
+  - Workforce Approval #651 PASS;
+  - Workforce Schedule #170 PASS;
+  - Workforce Attendance #62 PASS;
+  - Workforce Payroll #51 PASS;
+  - Deploy/full regression #1333 attempt 1 failed only on a transient Firefox language-toggle timeout after all route traversal; unchanged head rerun attempt 2 PASS.
+- PR #228 squash-merged as `99d2d391fc0123140ee3d221d302ad8dc88df6f2`.
+- Main GitHub Pages #1057 PASS, Staging #22 PASS, Production #1334 PASS.
+- Production #1334 verified preflight PASS, full regression PASS, deploy PASS and production UI smoke PASS on exact release `99d2d391fc0123140ee3d221d302ad8dc88df6f2`.
+- PostgreSQL schema remains `032`; no inventory quantity/minimum mutation, RBAC semantic change or transaction semantic change.
+- Closure: `ACTIVE_PR: none`.
+
 ## 2026-10-08 — PR #226 multi-site Inventory Master Data RBAC repair
 
 - Investigated production toast after PR #225: PostgreSQL remained healthy but site hydration still failed after safe-read retries.
