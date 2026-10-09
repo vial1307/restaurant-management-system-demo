@@ -15,12 +15,12 @@ assert.match(
 );
 assert.match(
   renderSource,
-  /prepareSearchNeedle\s*\(\s*inventorySearchInput\?\.value\s*\|\|\s*["']["']\s*\)/,
-  "render-time search reapply must normalize the current input value",
+  /prepareIngredientNameSearchNeedle\s*\(\s*inventorySearchInput\?\.value\s*\|\|\s*["']["']\s*\)/,
+  "render-time search reapply must prepare the literal product-name query",
 );
 assert.match(
   renderSource,
-  /if\s*\([^)]*inventorySearchInput[^)]*&&[^)]*(?:inventorySearchNeedle|prepareSearchNeedle)[^)]*\)\s*applyInventorySearchDom\s*\(\s*inventorySearchInput\s*\)/,
+  /if\s*\([^)]*inventorySearchInput[^)]*&&[^)]*(?:inventorySearchNeedle|prepareIngredientNameSearchNeedle)[^)]*\)\s*applyInventorySearchDom\s*\(\s*inventorySearchInput\s*\)/,
   "render-time inventory search must run only for a non-empty normalized needle",
 );
 assert.doesNotMatch(

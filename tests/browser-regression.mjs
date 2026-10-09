@@ -253,21 +253,9 @@ async function inventorySearchRoundTrip(page) {
   const before = await visibleRows.count();
   assert(before > 1,"inventory search fixture needs multiple visible rows");
 
-  await input.fill("niu rou");
-  assert.equal(await input.inputValue(),"niu rou");
-  await page.waitForFunction(
-    (beforeCount)=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length < beforeCount,
-    before
-  );
-  const filtered = await visibleRows.count();
-  assert(filtered > 0 && filtered < before,"inventory search must hide non-matching rows");
-  assert((await page.locator(".inventory-row[data-search-hidden]").count()) > 0,"inventory search did not mark hidden rows");
-
-  const meta = page.locator("[data-inventory-search-meta]");
-  await meta.waitFor({state:"visible"});
-  assert.match(await meta.innerText(),new RegExp(`^${filtered} / ${before} `),"inventory search result counter is stale");
-
-  await input.fill("n r");
+  // Chinese literal product-name substring.
+  await input.fill("牛肉");
+  assert.equal(await input.inputValue(),"牛肉");
   await page.waitForFunction(
     (beforeCount)=>{
       const visible=document.querySelectorAll(".inventory-row:not([data-search-hidden])").length;
@@ -275,7 +263,34 @@ async function inventorySearchRoundTrip(page) {
     },
     before
   );
-  assert((await visibleRows.count()) > 0,"Inventory spaced-initial search must return matching rows");
+  let filtered = await visibleRows.count();
+  assert(filtered > 0 && filtered < before,"literal Chinese inventory search must hide non-matching rows");
+  assert((await page.locator(".inventory-row[data-search-hidden]").count()) > 0,"inventory search did not mark hidden rows");
+
+  const meta = page.locator("[data-inventory-search-meta]");
+  await meta.waitFor({state:"visible"});
+  assert.match(await meta.innerText(),new RegExp(`^${filtered} / ${before} `),"inventory search result counter is stale");
+
+  // Vietnamese literal substring, preserving the diacritic.
+  await input.fill("bò");
+  await page.waitForFunction(
+    (beforeCount)=>{
+      const visible=document.querySelectorAll(".inventory-row:not([data-search-hidden])").length;
+      return visible>0 && visible<beforeCount;
+    },
+    before
+  );
+  filtered=await visibleRows.count();
+  assert(filtered > 0 && filtered < before,"literal Vietnamese inventory search must match actual Vietnamese names");
+
+  // Pinyin and initials must never infer the Chinese product name.
+  for (const nonLiteral of ["niu rou","n r"]) {
+    await input.fill(nonLiteral);
+    await page.waitForFunction(()=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length===0);
+    assert.equal(await visibleRows.count(),0,`non-literal Inventory query "${nonLiteral}" must not infer a product`);
+    assert.equal(await page.locator("[data-inventory-search-empty]:visible").count(),1,
+      `non-literal Inventory query "${nonLiteral}" must show the no-result state`);
+  }
 
   await input.fill("__inventory_no_match__");
   await page.waitForFunction(()=>document.querySelectorAll(".inventory-row:not([data-search-hidden])").length===0);
@@ -381,12 +396,12 @@ async function adminDesktop(browser) {
   await assertInventorySearchParityAcrossSurfaces(page);
 
   const overviewSearch=page.locator('[data-field="inventorySearch"]');
-  await overviewSearch.fill("niu rou");
+  await overviewSearch.fill("牛肉");
   const receiveTab=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="in"]').first();
   await receiveTab.click();
   const carriedSearch=page.locator("[data-op-search]");
   await carriedSearch.waitFor({state:"visible"});
-  assert.equal(await carriedSearch.inputValue(),"niu rou","Inventory search must carry from Overview into operation tabs");
+  assert.equal(await carriedSearch.inputValue(),"牛肉","Inventory literal Inventory search must carry from Overview into operation tabs");
   await page.locator("[data-op-search-clear]").click();
   const overviewTab=page.locator('.branch-ops-tabs > [data-action="select-inventory-ops"][data-mode="overview"]').first();
   await overviewTab.click();
@@ -441,7 +456,7 @@ async function adminDesktop(browser) {
         },{key:sample.key,query:sample.zh});
       }
 
-      await search.fill("niu rou");
+      await search.fill("牛肉");
       const filteredHandle=await page.waitForFunction(({before,query})=>{
         const host=[...document.querySelectorAll(".inventory-operations-host")]
           .find((node)=>node.getClientRects().length>0);
@@ -455,7 +470,7 @@ async function adminDesktop(browser) {
         const expected=`${visible.length} / ${before}`;
         if(count?.textContent?.trim()!==expected)return false;
         return {total:cards.length,visible:visible.length,hidden:hidden.length,count:expected};
-      },{before:beforeSearch,query:"niu rou"});
+      },{before:beforeSearch,query:"牛肉"});
       const filteredState=await filteredHandle.jsonValue();
       assert(filteredState,`${mode} search state did not stabilize`);
       assert(filteredState.visible>0&&filteredState.visible<beforeSearch,`${mode} search must hide non-matching operation cards`);
@@ -622,16 +637,16 @@ async function adminDesktop(browser) {
   const centralBefore=await centralRows.count();
   assert(centralBefore > 1,"central inventory should have multiple rows");
   await centralSearch.evaluate((input)=>{
-    input.value="niu rou";
+    input.value="牛肉";
     input.dispatchEvent(new InputEvent("input",{
       bubbles:true,
       composed:true,
-      data:"niu rou",
+      data:"牛肉",
       inputType:"insertCompositionText",
       isComposing:true,
     }));
   });
-  assert.equal(await centralSearch.inputValue(),"niu rou");
+  assert.equal(await centralSearch.inputValue(),"牛肉");
   await page.waitForTimeout(50);
   const centralFiltered=await page.locator(".central-row:visible").count();
   assert(centralFiltered > 0 && centralFiltered < centralBefore,"central search did not filter during IME composition");
@@ -766,8 +781,8 @@ async function roleDesktop(browser, username, checks) {
       await tab.click();
       const search=page.locator("[data-op-search]");
       await search.waitFor({state:"visible"});
-      await search.fill("niu rou");
-      assert.equal(await search.inputValue(),"niu rou");
+      await search.fill("牛肉");
+      assert.equal(await search.inputValue(),"牛肉");
       await search.fill("");
     }
     if(checks.manage === true){

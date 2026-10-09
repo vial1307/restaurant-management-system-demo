@@ -75,6 +75,9 @@ jobs:
       - name: Branch legacy catalog database contract
         run: node tests/branch-legacy-catalog-materialization-contract-regression.mjs
 
+      - name: Inventory literal search and report contract
+        run: node tests/inventory-literal-search-and-report-contract-regression.mjs
+
       - name: Workforce schedule publication regression
         run: node tests/workforce-schedule-publication-regression.mjs
 
@@ -151,6 +154,8 @@ jobs:
           test -f src/business-persistence-status.css
           test -f src/workforce-approval.js
           test -f src/workforce-schedule-publication.js
+          test -f src/inventory-reports.js
+          test -f src/inventory-reports.css
           test -f vps/docker-compose.yml
           test -f vps/docker-compose.staging.yml
           test -f vps/Caddyfile

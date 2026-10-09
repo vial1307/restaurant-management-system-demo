@@ -1,0 +1,127 @@
+.inventory-report-host{display:block}
+.inventory-report-loading,.inventory-report-error{display:flex;min-height:220px;align-items:center;justify-content:center;gap:12px;border:1px solid var(--line);border-radius:18px;background:#fff;padding:28px;text-align:center}
+.inventory-report-error{flex-direction:column}
+.inventory-report-spinner{width:22px;height:22px;border:3px solid #dfe9e5;border-top-color:var(--green);border-radius:50%;animation:inventory-report-spin .8s linear infinite}
+@keyframes inventory-report-spin{to{transform:rotate(360deg)}}
+.inventory-report-shell{display:grid;gap:16px}
+.inventory-report-filter-card,.inventory-report-table-card,.inventory-report-preview{border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:var(--shadow)}
+.inventory-report-filter-card{padding:16px}
+.inventory-report-filter-grid{display:grid;grid-template-columns:1.05fr 1fr 1fr 1.35fr;gap:12px}
+.inventory-report-filter-grid label{display:grid;gap:6px}
+.inventory-report-filter-grid label>span{font-size:12px;font-weight:700;color:#51605c}
+.inventory-report-filter-grid select,.inventory-report-filter-grid input{width:100%;height:44px;border:1px solid #dfe5e3;border-radius:12px;background:#fff;padding:0 12px;color:var(--ink);outline:none}
+.inventory-report-filter-grid select:focus,.inventory-report-filter-grid input:focus{border-color:#78b8a6;box-shadow:0 0 0 3px rgb(21 136 107 / 8%)}
+.inventory-report-search>div{display:flex;align-items:center;gap:8px;border:1px solid #dfe5e3;border-radius:12px;padding:0 11px}
+.inventory-report-search>div:focus-within{border-color:#78b8a6;box-shadow:0 0 0 3px rgb(21 136 107 / 8%)}
+.inventory-report-search>div input{border:0!important;box-shadow:none!important;padding:0}
+.inventory-report-source{display:flex;align-items:center;gap:8px;margin-top:14px;padding:10px 12px;border-radius:12px;background:#edf8f3;color:#31574c;font-size:12px}
+.inventory-report-source .source-dot{width:8px;height:8px;border-radius:50%;background:#19a879;box-shadow:0 0 0 4px rgb(25 168 121 / 10%)}
+.inventory-report-source span:nth-of-type(2){flex:1;color:#61716c}
+.inventory-report-source button{border:0;border-radius:10px;background:#dff3eb;color:#14634e;padding:8px 11px;font-weight:700}
+.inventory-report-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.inventory-report-stats article{display:grid;gap:4px;padding:15px 16px;border:1px solid #e5ece9;border-radius:16px;background:#fff}
+.inventory-report-stats small{color:#6b7774;font-weight:650}
+.inventory-report-stats strong{font-size:26px;line-height:1;color:#1d2c28}
+.inventory-report-stats .stat-ok{background:#f3fbf7;border-color:#d4eee3}
+.inventory-report-stats .stat-low{background:#fffaf0;border-color:#f4e4bf}
+.inventory-report-stats .stat-empty{background:#fff5f3;border-color:#f3d5d1}
+.inventory-report-workspace{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start}
+.inventory-report-table-card{overflow:hidden}
+.inventory-report-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid var(--line)}
+.inventory-report-actions>button,.report-export-inline button,.inventory-report-mobile-export button,.copy-preview{min-height:38px;border:1px solid #dce4e1;border-radius:10px;background:#fff;color:#33443e;padding:8px 11px;font-weight:700}
+.inventory-report-actions>button.active,.report-export-inline .copy-action,.inventory-report-mobile-export .copy-action,.copy-preview{border-color:#168b6d;background:#168b6d;color:#fff}
+.inventory-report-actions>span{margin-left:4px;color:#65716e;font-size:12px}
+.report-export-inline{display:flex;gap:7px;margin-left:auto}
+.report-export-inline button:disabled,.inventory-report-mobile-export button:disabled,.copy-preview:disabled{opacity:.45;cursor:not-allowed}
+.inventory-report-table-wrap{overflow:auto}
+.inventory-report-table{width:100%;min-width:980px;border-collapse:collapse}
+.inventory-report-table th,.inventory-report-table td{padding:11px 10px;border-bottom:1px solid #eef1ef;text-align:left;vertical-align:middle;font-size:12px}
+.inventory-report-table th{position:sticky;top:0;z-index:1;background:#f8faf9;color:#5d6966;font-size:11px;text-transform:none;white-space:nowrap}
+.inventory-report-table tbody tr:hover{background:#fbfdfc}
+.inventory-report-table input[type=checkbox]{width:17px;height:17px;accent-color:#168b6d}
+.report-check-cell{width:34px}
+.report-index-cell{width:40px;color:#7b8783}
+.report-product-cell{min-width:170px}
+.report-product-cell strong,.report-product-cell small{display:block}
+.report-product-cell small{margin-top:2px;color:#7a8783}
+.report-status{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:750;white-space:nowrap}
+.report-status.status-ok{background:#dff4e9;color:#117052}
+.report-status.status-low{background:#fff0ce;color:#a46200}
+.report-status.status-empty{background:#fde1de;color:#bd3832}
+.inventory-report-empty{text-align:center!important;color:#7d8885;padding:28px!important}
+.inventory-report-preview{position:sticky;top:90px;overflow:hidden}
+.preview-heading{display:flex;align-items:center;justify-content:space-between;padding:14px 15px;border-bottom:1px solid var(--line)}
+.preview-heading>div{display:grid;gap:2px}
+.preview-heading small{color:#798581;font-size:11px}
+.preview-heading>span{display:grid;place-items:center;min-width:28px;height:28px;border-radius:999px;background:#e6f4ef;color:#177357;font-size:12px;font-weight:800}
+.inventory-report-preview pre{margin:0;min-height:360px;max-height:520px;overflow:auto;padding:15px;background:#fbfcfb;color:#35423e;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;word-break:break-word}
+.copy-preview{width:calc(100% - 24px);margin:12px}
+.inventory-report-mobile-export{display:none}
+@media (max-width:1180px){
+  .inventory-report-workspace{grid-template-columns:1fr}
+  .inventory-report-preview{position:static}
+  .inventory-report-preview pre{min-height:220px;max-height:360px}
+}
+@media (max-width:860px){
+  .inventory-report-filter-grid{grid-template-columns:1fr 1fr}
+  .inventory-report-stats{grid-template-columns:1fr 1fr}
+  .report-export-inline{display:none}
+  .inventory-report-mobile-export{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;border-top:1px solid var(--line);position:sticky;bottom:68px;background:#fff;z-index:2}
+  .inventory-report-mobile-export .copy-action{grid-column:1/-1}
+  .inventory-report-actions>span{margin-left:auto}
+}
+@media (max-width:640px){
+  .inventory-report-shell{gap:12px}
+  .inventory-report-filter-card{padding:12px;border-radius:14px}
+  .inventory-report-filter-grid{grid-template-columns:1fr}
+  .inventory-report-source{align-items:flex-start;flex-wrap:wrap}
+  .inventory-report-source span:nth-of-type(2){flex-basis:70%}
+  .inventory-report-source button{margin-left:auto}
+  .inventory-report-stats{grid-template-columns:repeat(3,1fr);gap:8px}
+  .inventory-report-stats article{padding:12px}
+  .inventory-report-stats article:first-child{grid-column:1/-1}
+  .inventory-report-stats strong{font-size:22px}
+  .inventory-report-actions{position:sticky;top:0;z-index:3;background:#fff;padding:10px}
+  .inventory-report-actions>button{font-size:11px;padding:7px 9px}
+  .inventory-report-actions>span{width:100%;margin:2px 0 0}
+  .inventory-report-table-wrap{overflow:visible}
+  .inventory-report-table{min-width:0;display:block}
+  .inventory-report-table thead{display:none}
+  .inventory-report-table tbody{display:grid}
+  .inventory-report-table tr{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:6px 10px;padding:11px 12px;border-bottom:1px solid #edf1ef}
+  .inventory-report-table td{display:block;padding:0!important;border:0!important;font-size:12px}
+  .inventory-report-table .report-check-cell{grid-column:1;grid-row:1/3;width:auto;align-self:center}
+  .inventory-report-table .report-index-cell{display:none}
+  .inventory-report-table .report-product-cell{grid-column:2;min-width:0}
+  .inventory-report-table td[data-label="Tồn hiện tại"],.inventory-report-table td[data-label="現有庫存"]{grid-column:3;grid-row:1;font-size:14px;text-align:right}
+  .inventory-report-table td[data-label="Trạng thái"],.inventory-report-table td[data-label="狀態"]{grid-column:3;grid-row:2;text-align:right}
+  .inventory-report-table td[data-label="Danh mục"],.inventory-report-table td[data-label="類別"],
+  .inventory-report-table td[data-label="Khu vực"],.inventory-report-table td[data-label="區域"],
+  .inventory-report-table td[data-label="Đơn vị"],.inventory-report-table td[data-label="單位"],
+  .inventory-report-table td[data-label="Tồn tối thiểu"],.inventory-report-table td[data-label="最低庫存"],
+  .inventory-report-table td[data-label="Vị trí"],.inventory-report-table td[data-label="儲位"]{grid-column:2/4;color:#75817d}
+  .inventory-report-table td[data-label]::before{content:attr(data-label) ": ";font-weight:700;color:#52605c}
+  .inventory-report-mobile-export{bottom:60px}
+  .inventory-report-preview{border-radius:14px;margin-bottom:84px}
+  .inventory-report-preview pre{min-height:190px}
+}
+@media print{
+  body.inventory-report-printing{background:#fff}
+  body.inventory-report-printing .sidebar,
+  body.inventory-report-printing .topbar,
+  body.inventory-report-printing .mobile-nav,
+  body.inventory-report-printing .page-heading,
+  body.inventory-report-printing .report-tabs,
+  body.inventory-report-printing .inventory-report-filter-card,
+  body.inventory-report-printing .inventory-report-stats,
+  body.inventory-report-printing .inventory-report-actions,
+  body.inventory-report-printing .inventory-report-mobile-export,
+  body.inventory-report-printing .copy-preview{display:none!important}
+  body.inventory-report-printing .main-shell{margin:0!important}
+  body.inventory-report-printing .page-content{padding:0!important}
+  body.inventory-report-printing .inventory-report-workspace{display:block}
+  body.inventory-report-printing .inventory-report-table-card{border:0;box-shadow:none}
+  body.inventory-report-printing .inventory-report-table{min-width:0;font-size:10px}
+  body.inventory-report-printing .inventory-report-preview{display:none}
+  body.inventory-report-printing [data-report-print-hidden]{display:none!important}
+}

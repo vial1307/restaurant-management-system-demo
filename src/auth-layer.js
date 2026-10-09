@@ -21,7 +21,7 @@ import {
 } from "./inventory-cloud.js";
 import { inventorySites, inventoryUiGroups } from "./inventory-master-data.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
-import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches } from "./search-utils.js";
+import { ingredientNameSearchMatches, prepareIngredientNameSearchCorpus, prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { isAdminAccount, normalizeAccountPermissions } from "./account-permissions.js";
 
 const AUTH_KEY = "shitu-kitchen-auth-v1";
@@ -178,8 +178,8 @@ function esc(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<"
 
 function centralSearchField(query = "", language = "vi") {
   const placeholder = language === "zh"
-    ? "搜尋品項、Pinyin/注音、儲位…"
-    : "Tìm tên, Pinyin/注音 hoặc vị trí…";
+    ? "依產品名稱搜尋…"
+    : "Tìm theo đúng tên sản phẩm…";
   return `<label class="central-search-box">
     <svg class="central-search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     <input type="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="search" inputmode="search" data-central-search placeholder="${esc(placeholder)}" value="${esc(query)}" />
@@ -554,31 +554,8 @@ function centralWorkAreaOverviewCards(items, workMap, language) {
   }).join("")}</div>`;
 }
 
-function centralItemSearchText(item, rows=[item]) {
-  const workArea=String(item?.workArea || centralDefaultWorkArea() || "");
-  const zones=(rows || []).flatMap((row)=>{
-    const zone=String(row?.zone || "");
-    return [
-      zone,
-      zone ? centralZoneLabel(zone,"zh") : "",
-      zone ? centralZoneLabel(zone,"vi") : "",
-    ];
-  });
-  return [
-    item?.zh,
-    item?.vi,
-    item?.itemKey,
-    item?.catalogKey,
-    item?.unit,
-    workArea,
-    workArea ? centralWorkAreaLabel(workArea,"zh") : "",
-    workArea ? centralWorkAreaLabel(workArea,"vi") : "",
-    ...zones,
-  ].filter(Boolean).join(" ");
-}
-
-function centralItemSearchCorpus(item, rows=[item]) {
-  return prepareSearchCorpus(centralItemSearchText(item,rows));
+function centralItemSearchCorpus(item) {
+  return prepareIngredientNameSearchCorpus(item?.zh,item?.vi);
 }
 
 function stockView(items, selectedZone, query, directAdjust = false, { inventoryView="storage", canManageCatalog=false, operationsEnabled=false, workMap={} } = {}) {
@@ -751,11 +728,11 @@ function cloudHistoryView(log) {
 
 function applyCentralSearchDom(content, query) {
   const rows = [...content.querySelectorAll(".central-row, .central-manage-row")];
-  const needle = prepareSearchNeedle(query);
+  const needle = prepareIngredientNameSearchNeedle(query);
   let visible = 0;
   rows.forEach((row) => {
-    const corpus = row.dataset.centralSearchCorpus || prepareSearchCorpus(row.textContent || "");
-    const show = !needle || preparedSearchMatches(corpus,needle);
+    const corpus = row.dataset.centralSearchCorpus || "";
+    const show = !needle || ingredientNameSearchMatches(corpus,needle);
     row.hidden = !show;
     row.toggleAttribute("data-central-search-hidden",!show);
     if (show) visible += 1;

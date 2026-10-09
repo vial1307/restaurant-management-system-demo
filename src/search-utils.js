@@ -118,3 +118,32 @@ export function searchMatches(text, query) {
   if (!needle) return true;
   return preparedSearchMatches(prepareSearchCorpus(text), needle);
 }
+
+
+function normalizeLiteralIngredientSearch(value) {
+  return String(value || "")
+    .toLocaleLowerCase("vi")
+    .normalize("NFC")
+    .trim()
+    .replace(/\s+/gu, " ");
+}
+
+export function prepareIngredientNameSearchCorpus(...names) {
+  return names
+    .flat()
+    .filter((value) => value !== null && value !== undefined && String(value).trim() !== "")
+    .map(normalizeLiteralIngredientSearch)
+    .join("\u001e");
+}
+
+export function prepareIngredientNameSearchNeedle(query) {
+  return normalizeLiteralIngredientSearch(query);
+}
+
+export function ingredientNameSearchMatches(corpus, needle) {
+  if (!needle) return true;
+  markSearchEvaluation();
+  return String(corpus || "")
+    .split("\u001e")
+    .some((name) => name.includes(needle));
+}

@@ -125,9 +125,11 @@ function installSearchEnhancer() {
     const isMain = input.dataset.field === "inventorySearch";
     const isCentral = input.hasAttribute("data-central-search");
     const isOperation = input.hasAttribute("data-op-search");
-    // Inventory searches own their state and DOM filtering. Do not let the
-    // generic layer process them a second time.
-    if (isMain || isCentral || isOperation) return;
+    const isInventoryReport = input.dataset.reportField === "search";
+    // Inventory and Inventory Report searches own their state and literal
+    // product-name filtering. Do not let the generic phonetic layer process
+    // them a second time.
+    if (isMain || isCentral || isOperation || isInventoryReport) return;
 
     const placeholder = input.getAttribute("placeholder") || "";
     const isGenericSearch = input.type === "search" || /tìm|search|搜尋|pinyin|注音/i.test(placeholder);

@@ -1,7 +1,7 @@
 import { mountInventoryOperations } from "./inventory-operations.js";
 import { localeFor, SECONDARY, translate } from "./i18n.js";
 import { preserveInventoryEditor, watchInventoryEditor } from "./inventory-editor-refresh.js";
-import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches, searchMatches } from "./search-utils.js";
+import { ingredientNameSearchMatches, prepareIngredientNameSearchCorpus, prepareIngredientNameSearchNeedle, prepareSearchCorpus } from "./search-utils.js";
 import { accountCan as accountCanPermission, currentAccountSession } from "./account-permissions.js";
 import {
   buildGeneratedTasks,
@@ -28,6 +28,7 @@ import {
 } from "./inventory-master-data.js";
 import { assessShiftCapacity, currentStaff, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
+import { mountInventoryReport } from "./inventory-reports.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
 import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
 import { createTaskDerivationCache } from "./task-derivation-cache.js";
@@ -827,7 +828,7 @@ function storageInventoryRow(item, context) {
   const working = record.workInventory.find((entry) => entry.stockKey === item.stockKey);
   const source = storageSources(item, record, item.zone)[0];
   const canRestock = inventoryRestock(item) > 0 && source;
-  const searchCorpus=prepareSearchCorpus(inventoryItemSearchText(item,{site}));
+  const searchCorpus=prepareIngredientNameSearchCorpus(item?.label,item?.labelVi);
   return `<article class="inventory-row storage-row" data-inventory-search-corpus="${escapeHtml(searchCorpus)}"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="item" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     <label class="inventory-zone"><span class="mobile-field-label">${escapeHtml(text.storageLocation)}</span>${canRelocate ? `<select class="inventory-select" data-field="item" data-key="zone" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-zone="${escapeHtml(item.zone)}" aria-label="${escapeHtml(text.storageLocation)}">${storageGroups.map((zone) => `<option value="${zone.id}" ${item.zone === zone.id ? "selected" : ""}>${escapeHtml(zone[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(zoneLabel(item.zone, language))}</span>`}</label>
@@ -854,14 +855,7 @@ function workInventoryRow(item, context) {
       .filter((entry) => entry.stockKey === item.stockKey && entry.zone === zone)
       .reduce((total, entry) => total + entry.quantity, 0),
   }));
-  const searchCorpus=prepareSearchCorpus(inventoryItemSearchText(item,{
-    site,
-    extra:sources.flatMap((entry)=>[
-      entry.zone,
-      zoneLabel(entry.zone,"zh",site),
-      zoneLabel(entry.zone,"vi",site),
-    ]),
-  }));
+  const searchCorpus=prepareIngredientNameSearchCorpus(item?.label,item?.labelVi);
   return `<article class="inventory-row work-row" data-inventory-search-corpus="${escapeHtml(searchCorpus)}"><div class="inventory-item-name"><span class="inventory-status-dot ${status}"></span><div><strong>${escapeHtml(itemName(item, language))}</strong><small>${escapeHtml(itemSecondary(item, language))}</small></div></div>
     <label class="inventory-work-area"><span class="mobile-field-label">${escapeHtml(text.workstation)}</span>${canWorkAreaEdit ? `<select class="inventory-select" data-field="workItem" data-key="workArea" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-current-work-area="${escapeHtml(item.workArea)}" aria-label="${escapeHtml(text.workstation)}">${workAreas.map((area) => `<option value="${area.id}" ${item.workArea === area.id ? "selected" : ""}>${escapeHtml(area[language])}</option>`).join("")}</select>` : `<span class="inventory-readonly-field">${escapeHtml(workAreas.find((area) => area.id === item.workArea)?.[language] || item.workArea)}</span>`}</label>
     ${quantityControl(item, "workItem")}<div class="inventory-minimum">${canMinimum ? numberInput(item.minimum, `data-field="workItem" data-key="minimum" data-id="${escapeHtml(item.id)}" data-stock-key="${escapeHtml(item.stockKey)}" data-work-area="${escapeHtml(item.workArea)}" data-cloud-item-id="${escapeHtml(item.cloudItemId||"")}" data-cloud-location-id="${escapeHtml(item.cloudLocationId||"")}"`, "minimum-input") : `<strong class="minimum-readonly">${escapeHtml(item.minimum)}</strong>`}<small>${escapeHtml(item.unit)}</small></div>
@@ -1092,7 +1086,7 @@ function inventoryProductRow(product, context) {
     : product.status==="low" ? text.lowStock
     : product.status==="near" ? (language==="zh"?"接近不足":"Gần hết")
     : text.ready;
-  const searchCorpus=prepareSearchCorpus(inventoryProductSearchText(product,activeInventorySite()));
+  const searchCorpus=prepareIngredientNameSearchCorpus(product?.label,product?.labelVi);
   return `<article class="inventory-row inventory-product-row" data-stock-key="${escapeHtml(product.stockKey)}" data-inventory-search-corpus="${escapeHtml(searchCorpus)}">
     <div class="inventory-product-identity"><span class="inventory-status-dot ${product.status==="near"?"low":product.status}"></span><div><strong>${escapeHtml(language==="zh"?product.label:product.labelVi)}</strong><small>${escapeHtml(language==="zh"?product.labelVi:product.label)}${product.categoryCode?` · ${escapeHtml(product.categoryCode)}`:""}</small></div></div>
     <div class="inventory-product-unit"><span class="mobile-field-label">${language==="zh"?"單位":"Đơn vị"}</span><strong>${escapeHtml(product.unit)}</strong></div>
@@ -1242,8 +1236,8 @@ function inventoryProductDetailOverlay(context, record) {
 
 function inventorySearchControl(language, text, totalCount) {
   const placeholder = language === "zh"
-    ? "搜尋品項、拼音/注音、縮寫或儲位…"
-    : "Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…";
+    ? "依產品名稱搜尋…"
+    : "Tìm theo đúng tên sản phẩm…";
   const label = language === "zh" ? "搜尋庫存" : "Tìm kiếm tồn kho";
   const clearLabel = language === "zh" ? "清除" : "Xóa";
   const initialMeta = language === "zh" ? `${totalCount} 筆` : `${totalCount} sản phẩm`;
@@ -1783,8 +1777,10 @@ function render() {
   syncReceiveZoneOptions(root.querySelector('[data-form="add-item"],[data-form="edit-item"]'));
   watchInventoryEditor(root.querySelector('#ingredient-product-form'));
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
-  const inventorySearchNeedle = prepareSearchNeedle(inventorySearchInput?.value || "");
+  const inventorySearchNeedle = prepareIngredientNameSearchNeedle(inventorySearchInput?.value || "");
   if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);
+  const reportHost=root.querySelector("[data-inventory-report-host]");
+  if (reportHost) void mountInventoryReport(reportHost,{language:context.language});
   const opsHost=root.querySelector("[data-branch-inventory-operations]");
   const historyHost=root.querySelector("[data-branch-inventory-history]");
   if (historyHost && inventoryCloudState()==="ready") {
@@ -2240,33 +2236,36 @@ const inventorySearchCorpusCache = new WeakMap();
 
 function inventoryRowSearchCorpus(row) {
   if (inventorySearchCorpusCache.has(row)) return inventorySearchCorpusCache.get(row);
-  const corpus = row.dataset.inventorySearchCorpus || prepareSearchCorpus(row.textContent || "");
+  const corpus = row.dataset.inventorySearchCorpus || "";
   inventorySearchCorpusCache.set(row, corpus);
   return corpus;
 }
 
-function inventoryProductIdentitySearchText(record, stockKey, site=activeInventorySite()) {
+function inventoryProductIdentitySearchCorpus(record, stockKey, site=activeInventorySite()) {
   if (!record || !stockKey) return "";
   const products=inventoryProductModels(record,site);
   const product=products.find((entry)=>String(entry.stockKey||"")===String(stockKey||""));
-  return product ? inventoryProductSearchText(product,site) : "";
+  return product
+    ? prepareIngredientNameSearchCorpus(product?.label,product?.labelVi)
+    : "";
 }
 
 function primeInventoryRowSearchCorpus(row, record, site=activeInventorySite()) {
   if (!row || inventorySearchCorpusCache.has(row)) return;
+  const existing=String(row.dataset.inventorySearchCorpus || "");
+  if (existing) {
+    inventorySearchCorpusCache.set(row,existing);
+    return;
+  }
   const stockKey=String(row.dataset.stockKey || row.dataset.inventoryStockKey || "");
-  const productText=inventoryProductIdentitySearchText(record,stockKey,site);
-  if (!productText) return;
-  inventorySearchCorpusCache.set(row,prepareSearchCorpus([
-    row.dataset.inventorySearchCorpus || row.textContent || "",
-    productText,
-  ].join(" ")));
+  const corpus=inventoryProductIdentitySearchCorpus(record,stockKey,site);
+  inventorySearchCorpusCache.set(row,corpus);
 }
 
 function applyInventorySearchDom(input) {
   if (!input?.isConnected) return;
   const query = input.value || "";
-  const needle = prepareSearchNeedle(query);
+  const needle = prepareIngredientNameSearchNeedle(query);
   view.search = query;
 
   const page = input.closest(".page-content") || root;
@@ -2283,7 +2282,7 @@ function applyInventorySearchDom(input) {
     let visibleInGroup = 0;
     group.querySelectorAll(".inventory-row").forEach((row) => {
       primeInventoryRowSearchCorpus(row,record,site);
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+      const visible = !needle || ingredientNameSearchMatches(inventoryRowSearchCorpus(row),needle);
       row.hidden = !visible;
       row.toggleAttribute("data-search-hidden", !visible);
       if (visible) visibleInGroup += 1;
@@ -2299,7 +2298,7 @@ function applyInventorySearchDom(input) {
   const looseRows = [...table.querySelectorAll(":scope > .inventory-row")];
   looseRows.forEach((row) => {
     primeInventoryRowSearchCorpus(row,record,site);
-      const visible = !needle || preparedSearchMatches(inventoryRowSearchCorpus(row), needle);
+    const visible = !needle || ingredientNameSearchMatches(inventoryRowSearchCorpus(row),needle);
     row.hidden = !visible;
     row.toggleAttribute("data-search-hidden", !visible);
     if (visible) visibleTotal += 1;
