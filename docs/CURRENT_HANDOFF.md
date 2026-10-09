@@ -1,3 +1,14 @@
+## IN PROGRESS — Procurement v2 responsive + PostgreSQL supplier policy, 2026-10-10
+
+- Branch: `feat/procurement-responsive-db-v2`. Production remains untouched pending test gates; `ACTIVE_PR` not yet set.
+- Replaces only `#procurement` renderer; includes one shared Desktop/Mobile bilingual UI with list, supplier, category, history and settings tabs.
+- New migration `033_procurement_supplier_calendar.sql`: site supplier calendars, product usage rules linked to `inventory_items.id`, service-day overrides, order headers/lines and idempotency.
+- Procurement API uses authenticated site/role checks and a PostgreSQL transaction for writes; product stock/catalog read existing inventory DB snapshot.
+- No supplier/item rows seeded. Actual supplier names and product associations must be configured from verified operation records.
+- Search reuses `prepareIngredientNameSearchCorpus` / `prepareIngredientNameSearchNeedle`, strict literal bilingual product names, no phonetic aliases.
+- Planned/remaining verification: exact-head JS syntax; SQL staging migration; API auth/round-trip and order semantics; mobile geometry 359/390/430/760px; all branch parity; production smoke only after successful staging.
+- Do not mark DONE/merge until all relevant gates pass. Existing procurement local legacy business-state may remain for historical/backcompat, not authoritative new supplier rules.
+
 ## STABLE — PR #229 dedicated Excel export, 2026-10-09
 
 - `ACTIVE_PR: none`.
