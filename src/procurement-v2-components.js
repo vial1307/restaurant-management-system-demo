@@ -70,3 +70,23 @@ export function procurementProductCard(row,{language="vi",editable=false,format}
       (!ready||!editable?" disabled":"")+'/>'+
       '<small>'+safe(rule?.packageUnit||item.unit||"")+"</small></label></article>";
 }
+
+
+// Filters use the same canonical inventory category/supplier data at every breakpoint.
+export function procurementFilterBar({language="vi",search="",supplierFilter="all",categoryFilter="all",
+  orderDate="",suppliers=[],categories=[]}){
+  const safe=procurementEscape,copy=(key)=>procurementCopy(key,language);
+  return '<div class="pv2-filters">'+
+    '<label class="pv2-search"><span>⌕</span><input type="search" data-pv2-search value="'+safe(search)+
+      '" placeholder="'+copy("search")+'" autocomplete="off"/><button type="button" data-pv2-action="clear-search" aria-label="'+
+      copy("searchClear")+'">×</button></label>'+
+    '<select data-pv2-filter="supplier" aria-label="'+copy("supplier")+'"><option value="all">'+copy("allSuppliers")+'</option>'+
+    suppliers.map(x=>'<option value="'+safe(x.id)+'"'+(supplierFilter===x.id?" selected":"")+'>'+
+      safe(x.name_zh_tw)+' · '+safe(x.name_vi)+"</option>").join("")+
+    '<option value="unassigned"'+(supplierFilter==="unassigned"?" selected":"")+'>'+copy("unassignedSupplier")+'</option></select>'+
+    '<select data-pv2-filter="category" aria-label="'+copy("category")+'"><option value="all">'+copy("allGroups")+'</option>'+
+    categories.map(x=>'<option value="'+safe(x.code)+'"'+(categoryFilter===x.code?" selected":"")+'>'+
+      safe(language==="zh"?x.name_zh_tw:x.name_vi)+"</option>").join("")+"</select>"+
+    '<input type="date" data-pv2-date value="'+safe(orderDate)+'" aria-label="'+copy("orderDate")+'">'+
+    '<span class="pv2-result" data-pv2-results></span></div>';
+}
