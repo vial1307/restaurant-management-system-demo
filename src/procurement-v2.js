@@ -1,10 +1,11 @@
 import { apiRequest, vpsInventory } from "./vps-api.js";
 import { ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { addCalendarDays, planProcurementLine } from "./procurement-planner.js";
+import { procurementAddClosedDates, procurementCalendarMonth, procurementMonthCells, procurementMoveMonth, validProcurementDate } from "./procurement-calendar-picker.js";
 
 const ui={ site:"",data:null,inventory:null,loading:false,error:"",tab:"list",supplier:"all",category:"all",
  search:"",date:"",selected:new Set(),overrides:new Map(),editingSupplier:null,editingItem:null,pending:false,notice:"",
- requestKeys:new Map(),loadVersion:0 };
+ requestKeys:new Map(),loadVersion:0,lastSyncedAt:0,supplierDraft:null,supplierClosedDates:[],calendarMonth:"",calendarAnchor:null,calendarError:"",rangeStart:"",rangeEnd:"",ruleDraft:null };
 const html=(value)=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=(v)=>Number(v||0).toLocaleString("en-US",{maximumFractionDigits:3});
 const errorLabel=(error)=>error?.code||error?.message||String(error||"UNKNOWN_ERROR");
@@ -17,7 +18,8 @@ function suppliers(){return (ui.data?.suppliers||[]).filter(x=>x.active);}
 function items(){return (ui.inventory?.items||[]).filter(x=>x.active!==false);}
 function ruleFor(itemId){return ui.data?.rules?.find(x=>x.itemId===itemId)||null;}
 function supplierFor(id){return suppliers().find(x=>x.id===id);}
-function stockFor(itemId){return (ui.inventory?.stock||[]).filter(x=>x.item_id===itemId).reduce((total,row)=>total+Number(row.quantity||0),0);}
+// Match the Inventory Report authority: only configured physical stock locations count.
+function stockFor(itemId){return (ui.inventory?.stock||[]).filter(x=>x.item_id===itemId&&x.configured!==false).reduce((total,row)=>total+Number(row.quantity||0),0);}
 function incomingFor(itemId){
  return (ui.data?.orders||[]).filter(order=>order.status==="confirmed").flatMap(order=>(order.lines||[]).filter(x=>x.itemId===itemId)
  .map(line=>({expectedArrival:order.expectedArrival,baseQuantity:Number(line.baseQuantity),status:order.status})));
@@ -44,15 +46,15 @@ async function refresh(site,render){
     vpsInventory(site,{force:true})
   ]);
   if(guard(site)&&version===ui.loadVersion){
-    ui.data=data;ui.inventory=inventory;ui.error="";
+    ui.data=data;ui.inventory=inventory;ui.error="";ui.lastSyncedAt=Date.now();
   }
  }catch(error){if(guard(site)&&version===ui.loadVersion)ui.error=errorLabel(error);}
- finally{if(guard(site)&&version===ui.loadVersion){ui.loading=false;render();}}
+ finally{if(guard(site)&&version===ui.loadVersion){ui.loading=false;if(ui.editingSupplier===null&&!ui.editingItem)render();}}
 }
 function prepare(site,render,date){
  if(ui.site===site)return;
  ui.site=site;ui.data=null;ui.inventory=null;ui.search="";ui.supplier="all";ui.category="all";ui.tab="list";
- ui.selected.clear();ui.overrides.clear();ui.requestKeys.clear();ui.error="";ui.loading=false;
+ ui.selected.clear();ui.overrides.clear();ui.requestKeys.clear();ui.error="";ui.loading=false;ui.editingItem=null;ui.editingSupplier=null;ui.supplierDraft=null;ui.ruleDraft=null;ui.lastSyncedAt=0;
  ui.date=date||new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
  void refresh(site,render);
 }
@@ -122,23 +124,71 @@ function historyBody(lang,editable){
  ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>叫貨 / Đặt</small><strong>${html(o.orderDate)}</strong></div><div><small>預計到貨 / Dự kiến giao</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">供應商已確認 / NCC đã xác nhận</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">已完成進貨 / Đã nhập kho</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
  <p class="pv2-hint">叫貨單不會自動入庫；到貨後請至「進貨入庫」確認數量。 Đơn gọi hàng không tự tăng tồn kho; phải nhận hàng tại mục Nhập kho.</p></section>`;
 }
+
+function beginSupplierEdit(id){
+ const saved=id==="new"?{}:suppliers().find(s=>s.id===id);
+ if(id!=="new"&&!saved)return;
+ ui.editingSupplier=id;
+ ui.supplierDraft={
+  id:saved?.id||"",revision:Number(saved?.revision||0),nameZhTw:saved?.nameZhTw||"",nameVi:saved?.nameVi||"",
+  phone:saved?.phone||"",cutoffTime:saved?.cutoffTime||"12:00",leadDays:Number(saved?.leadDays??1),
+  reviewDays:Number(saved?.reviewDays??1),active:saved?.active!==false,
+  closedWeekdays:[...(saved?.closedWeekdays||[])]
+ };
+ ui.supplierClosedDates=[...new Set((saved?.closedDates||[]).filter(validProcurementDate))].sort();
+ ui.calendarMonth=procurementCalendarMonth(ui.supplierClosedDates.find(x=>x>=ui.date)||ui.date);
+ ui.calendarAnchor=null;ui.calendarError="";ui.rangeStart="";ui.rangeEnd="";
+}
+function rememberSupplierFields(root){
+ const form=root.querySelector('[data-pv2-form="supplier"]');
+ if(!form||!ui.supplierDraft)return;
+ const data=new FormData(form);
+ ui.supplierDraft={
+  ...ui.supplierDraft,nameZhTw:String(data.get("nameZhTw")||""),nameVi:String(data.get("nameVi")||""),
+  phone:String(data.get("phone")||""),cutoffTime:String(data.get("cutoffTime")||"12:00"),
+  leadDays:Number(data.get("leadDays")),reviewDays:Number(data.get("reviewDays")),
+  closedWeekdays:data.getAll("closedWeekdays").map(Number)
+ };
+ ui.rangeStart=String(data.get("rangeStart")||"");
+ ui.rangeEnd=String(data.get("rangeEnd")||"");
+}
+function supplierCalendar(){
+ const month=ui.calendarMonth||procurementCalendarMonth(ui.date);
+ const cells=procurementMonthCells(month), dates=new Set(ui.supplierClosedDates);
+ const labels=["一 / T2","二 / T3","三 / T4","四 / T5","五 / T6","六 / T7","日 / CN"];
+ return `<section class="pv2-holiday-picker" aria-label="選擇休息日期 / Chọn ngày nghỉ">
+ <div class="pv2-calendar-head"><strong>特別休假 / Ngày nghỉ đặc biệt</strong><div class="pv2-calendar-navigation"><button type="button" data-pv2-action="calendar-month-prev" aria-label="Tháng trước">‹</button><span>${html(month)}</span><button type="button" data-pv2-action="calendar-month-next" aria-label="Tháng sau">›</button></div></div>
+ <p class="pv2-hint">點選開始日，再點選結束日，會選取整個日期區間。 Chạm ngày bắt đầu rồi ngày kết thúc để chọn cả khoảng; chọn cùng một ngày hai lần để chọn một ngày.</p>
+ <div class="pv2-calendar-grid" role="group" aria-label="${html(month)}">${labels.map(x=>`<span class="pv2-weekday-label">${x}</span>`).join("")}
+ ${cells.map(date=>date?`<button type="button" class="pv2-calendar-day ${dates.has(date)?"selected":""} ${ui.calendarAnchor===date?"anchor":""}" data-pv2-action="calendar-day" data-date="${date}" aria-pressed="${dates.has(date)}" aria-label="${date}" ${ui.pending?"disabled":""}>${Number(date.slice(8))}</button>`:`<span class="pv2-calendar-blank" aria-hidden="true"></span>`).join("")}</div>
+ <div class="pv2-calendar-range">
+  <label>開始 / Từ ngày<input type="date" name="rangeStart" value="${html(ui.rangeStart)}"></label>
+  <label>結束 / Đến ngày<input type="date" name="rangeEnd" value="${html(ui.rangeEnd)}"></label>
+  <button type="button" class="pv2-secondary" data-pv2-action="calendar-add-range" ${ui.pending?"disabled":""}>＋加入日期 / Thêm khoảng</button>
+ </div>
+ <div class="pv2-calendar-selected"><strong>已選取 ${ui.supplierClosedDates.length} 天 / Đã chọn ${ui.supplierClosedDates.length} ngày</strong><button type="button" data-pv2-action="calendar-clear" ${!ui.supplierClosedDates.length||ui.pending?"disabled":""}>清除全部 / Xóa tất cả</button></div>
+ <div class="pv2-calendar-chips" aria-live="polite">${ui.supplierClosedDates.map(date=>`<button type="button" data-pv2-action="calendar-remove" data-date="${date}" class="pv2-date-chip" aria-label="Xóa ${date}" ${ui.pending?"disabled":""}>${date} ×</button>`).join("")||`<small>尚未選擇 / Chưa chọn ngày nào</small>`}</div>
+ ${ui.calendarAnchor?`<p class="pv2-hint" role="status">起始日期 / Ngày bắt đầu: ${ui.calendarAnchor}. 再選擇結束日期 / Chọn ngày kết thúc.</p>`:""}
+ ${ui.calendarError?`<div class="pv2-error" role="alert">${html(ui.calendarError)}</div>`:""}
+ </section>`;
+}
 function formSupplier(lang){
- const editing=ui.editingSupplier;
- if(editing===null)return "";
- const sup=editing==="new"?{}:suppliers().find(s=>s.id===editing)||{};
- const closed=new Set(sup.closedWeekdays||[]);
- return `<form class="pv2-panel pv2-editor" data-pv2-form="supplier"><header class="pv2-section-head"><h3>供應商設定 / Cài nhà cung cấp</h3><button type="button" data-pv2-action="close-editor">×</button></header>
- <input type="hidden" name="id" value="${html(sup.id||"")}"/><input type="hidden" name="revision" value="${html(sup.revision||0)}"/>
- <div class="pv2-form-grid"><label>中文名稱 / Tên tiếng Trung<input name="nameZhTw" required maxlength="120" value="${html(sup.nameZhTw||"")}"></label>
- <label>越文名稱 / Tên tiếng Việt<input name="nameVi" maxlength="120" value="${html(sup.nameVi||"")}"></label>
- <label>電話 / Số điện thoại<input name="phone" maxlength="60" value="${html(sup.phone||"")}"></label>
- <label>截單時間 / Giờ chốt đơn<input type="time" name="cutoffTime" required value="${html(sup.cutoffTime||"12:00")}"></label>
- <label>交貨天數 / Lead time<input type="number" name="leadDays" min="0" max="60" required value="${sup.leadDays??1}"></label>
- <label>訂貨週期 / Chu kỳ gọi<input type="number" name="reviewDays" min="1" max="30" required value="${sup.reviewDays??1}"></label></div>
+ if(ui.editingSupplier===null)return "";
+ const draft=ui.supplierDraft||{};
+ const closed=new Set(draft.closedWeekdays||[]);
+ return `<form class="pv2-panel pv2-editor" data-pv2-form="supplier"><header class="pv2-section-head"><h3>供應商設定 / Cài nhà cung cấp</h3><button type="button" data-pv2-action="close-editor" aria-label="Đóng">×</button></header>
+ <input type="hidden" name="id" value="${html(draft.id||"")}"><input type="hidden" name="revision" value="${Number(draft.revision||0)}">
+ <div class="pv2-form-grid"><label>中文名稱 / Tên tiếng Trung<input name="nameZhTw" required maxlength="120" value="${html(draft.nameZhTw||"")}"></label>
+ <label>越文名稱 / Tên tiếng Việt<input name="nameVi" maxlength="120" value="${html(draft.nameVi||"")}"></label>
+ <label>電話 / Số điện thoại<input name="phone" maxlength="60" value="${html(draft.phone||"")}"></label>
+ <label>截單時間 / Giờ chốt đơn<input type="time" name="cutoffTime" required value="${html(draft.cutoffTime||"12:00")}"></label>
+ <label>交貨天數 / Lead time<input type="number" name="leadDays" min="0" max="60" required value="${draft.leadDays??1}"></label>
+ <label>訂貨週期 / Chu kỳ gọi<input type="number" name="reviewDays" min="1" max="30" required value="${draft.reviewDays??1}"></label></div>
  <fieldset><legend>固定休息日 / Nghỉ cố định</legend><div class="pv2-weekdays">${["日 / CN","一 / T2","二 / T3","三 / T4","四 / T5","五 / T6","六 / T7"].map((label,n)=>`<label><input type="checkbox" name="closedWeekdays" value="${n}" ${closed.has(n)?"checked":""}>${label}</label>`).join("")}</div></fieldset>
- <label>特別休假日期 / Ngày nghỉ đặc biệt (YYYY-MM-DD, mỗi dòng một ngày)<textarea name="closedDates" rows="3" placeholder="2026-10-12">${html((sup.closedDates||[]).join("\n"))}</textarea></label>
+ ${supplierCalendar()}
  <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>儲存供應商 / Lưu NCC</button></div></form>`;
 }
+
 function formRule(lang){
  if(!ui.editingItem)return "";
  const item=items().find(x=>x.id===ui.editingItem);
