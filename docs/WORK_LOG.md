@@ -1,3 +1,7 @@
+## 2026-10-10 — Follow-up Procurement tab state fix (IN PROGRESS)
+
+PR #231 merged (8fef917), but post-merge Production regression failed on an intermittent Settings tab reset. Production deploy and smoke were correctly skipped. Follow-up fixes Procurement UI site rehydration to preserve the selected tab and enhances the browser regression. No DB/business rule changes. Requires new PR CI, Staging and post-merge Production verification.
+
 ## IN PROGRESS — Procurement V2 i18n, UI components and design-token standardization — 2026-10-10
 
 - Continuation of PR #231 on branch `fix/procurement-mobile-layout-parity`; user approved Mobile layout and requested standardization. Do not merge/deploy before CI and browser certification.
