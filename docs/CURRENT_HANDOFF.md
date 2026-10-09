@@ -1,3 +1,12 @@
+## IN PROGRESS — Procurement V2 Mobile typography/layout parity — 2026-10-10
+
+- Branch: `fix/procurement-mobile-layout-parity` off merge commit `1405b95`; scoped to `src/procurement-v2.css` and browser layout regression. No DB migration, backend, Stock API, search rule or business logic changes.
+- On phones/tablets ≤760px five bilingual tabs retain equal heights in one horizontal scroll row, rather than wrapping 3+2 with broken labels.
+- Mobile stock/order cards render product and bilingual name on their own header, supplier on one full-width row, then demand/stock and suggestion/quantity as two aligned columns with adequate touch dimensions.
+- Summary/stat cards, filters, date picker, supplier cards, per-product settings rows, calendar and product modal have responsive min-width/overflow handling. Desktop table remains readable.
+- Browser E2E `tests/procurement-v2-browser-regression.mjs` now validates widths 320,359,375,390,430,600,760,768,1024,1440 for horizontal document overflow, clipped card controls and inconsistent tab/stat heights.
+- Must pass staging, browser/DB gates and production checks before publishing. This is CSS-only; no data re-seed and no hand-coded mobile product set.
+
 ## IN PROGRESS — Procurement supplier calendar, product popup, live Inventory sync — 2026-10-10
 
 - Scope PR #230, branch `feat/procurement-responsive-db-v2`. This follow-up does NOT create a new database/schema or update production.
