@@ -31,6 +31,8 @@ const ops=fs.readFileSync("src/inventory-operations.js","utf8");
 const reports=fs.readFileSync("src/inventory-reports.js","utf8");
 const reportCss=fs.readFileSync("src/inventory-reports.css","utf8");
 const management=fs.readFileSync("src/management.js","utf8");
+const uiRefresh=fs.readFileSync("src/ui-refresh.js","utf8");
+const searchI18n=fs.readFileSync("src/search-i18n-layer.js","utf8");
 
 assert.match(app,/prepareIngredientNameSearchNeedle/);
 assert.match(app,/ingredientNameSearchMatches/);
@@ -59,6 +61,11 @@ assert.match(management,/data-inventory-report-host/);
 assert.match(management,/PostgreSQL/);
 assert.match(reportCss,/@media \(max-width:640px\)/);
 assert.match(reportCss,/@media print/);
+assert.match(reportCss,/data-report-print-hidden/);
 assert.doesNotMatch(reportCss,/\.inventory-page\b/,"Reports stylesheet must not redesign the existing Inventory page");
+assert.match(uiRefresh,/Tìm theo đúng tên sản phẩm/);
+assert.match(uiRefresh,/依產品名稱搜尋/);
+assert.match(searchI18n,/isInventoryReport/);
+assert.match(searchI18n,/input\.dataset\.reportField === "search"/);
 
 console.log("INVENTORY_LITERAL_SEARCH_AND_REPORT_CONTRACT_OK");
