@@ -12,7 +12,7 @@
 }
 
 
-.pv2-shell{color:var(--pv2-text);font-family:var(--pv2-font-ui);min-width:0;display:grid;gap:var(--pv2-space-shell)
+.pv2-shell{color:var(--pv2-text);font-family:var(--pv2-font-ui);min-width:0;display:grid;gap:var(--pv2-space-shell)}
 .pv2-shell *{box-sizing:border-box}
 .pv2-shell button,.pv2-shell input,.pv2-shell select,.pv2-shell textarea{font:inherit}
 .pv2-shell button{cursor:pointer}
