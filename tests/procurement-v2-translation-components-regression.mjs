@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { TEXT } from "../src/i18n.js";
 import {
  procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,
- procurementSettingsModal,procurementProductCard,procurementSupplierCard
+ procurementSettingsModal,procurementProductCard,procurementSupplierCard,procurementFilterBar
 } from "../src/procurement-v2-components.js";
 
 const zh=TEXT.zh.procurementUi,vi=TEXT.vi.procurementUi;
@@ -29,6 +29,10 @@ assert.match(panel,/CONTENT/);assert.match(panel,/Lịch sử gọi hàng/);
 const modal=procurementSettingsModal({title:"產品 / Sản phẩm",body:"CONTENT"});
 assert.match(modal,/role="dialog" aria-modal="true"/);
 assert.match(modal,/data-pv2-form="rule"/);
+const filter=procurementFilterBar({language:"vi",search:"cá",supplierFilter:"all",categoryFilter:"all",orderDate:"2026-10-10",suppliers:[],categories:[]});
+assert.match(filter,/data-pv2-search/);assert.match(filter,/data-pv2-filter="supplier"/);
+assert.match(filter,/data-pv2-filter="category"/);assert.match(filter,/data-pv2-date/);
+assert.match(filter,/cá/);
 const supplier=procurementSupplierCard({supplier:{id:"id-1",name_zh_tw:"惡意<script>",name_vi:"Nhà cung cấp",closedWeekdays:[],leadDays:2},editable:true,language:"vi"});
 assert.doesNotMatch(supplier,/<script>/);assert.match(supplier,/&lt;script&gt;/);
 assert.match(supplier,/data-pv2-action="edit-supplier"/);
