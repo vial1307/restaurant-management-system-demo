@@ -100,7 +100,7 @@ assert.match(ui,/ui\.ruleDraft/);
 assert.match(ui,/window\.setInterval/);
 assert.match(ui,/\},30000\)/,"DB direct SQL changes are polled at 30 seconds");
 assert.match(ui,/vpsInventory\(site,\{force:true\}\)/);
-assert.match(ui,/row\.configured!==false/,"stock quantity must match Inventory Report configured locations");
+assert.match(ui,/x\.configured!==false/,"stock quantity must match Inventory Report configured locations");
 assert.match(ui,/ui\.inventory\?\.receiveDefaults/);
 assert.match(ui,/row\.minimum_enabled===false/);
 assert.match(ui,/ui\.inventory\?\.categories/);
