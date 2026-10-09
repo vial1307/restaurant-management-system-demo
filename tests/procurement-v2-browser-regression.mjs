@@ -57,7 +57,7 @@ try{
   // A single component must fit narrow phones, tablets and desktop without clipping.
   // The only allowed horizontal scrolling surface is the mobile tab strip.
   await page.locator('[data-pv2-action="tab"][data-tab="list"]').click();
-  for(const width of [320,359,375,390,430,600,760,768,1024,1440]){
+  for(const width of [320,359,375,390,430,600,760,768,820,900,960,991,992,1024,1440]){
     await page.setViewportSize({width,height:844});
     const measure=await page.evaluate(()=>{
       const bounds=(element)=>{const r=element.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width,height:r.height,scrollWidth:element.scrollWidth,clientWidth:element.clientWidth}};
@@ -82,7 +82,7 @@ try{
       assert(measure.nav.scrollWidth>measure.nav.clientWidth,
        `${width}px mobile nav should scroll in one row`);
     }
-    if(width<=760){
+    if(width<=991){
       assert(measure.tabs.every(x=>Math.abs(x.height-measure.tabs[0].height)<2),
        `${width}px tabs must stay aligned`);
       assert(measure.stats.every(x=>Math.abs(x.height-measure.stats[0].height)<2),
