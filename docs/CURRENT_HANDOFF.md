@@ -1,3 +1,13 @@
+## IN PROGRESS — Procurement V2 i18n, UI components and design-token standardization — 2026-10-10
+
+- Continuation of PR #231 on branch `fix/procurement-mobile-layout-parity`; user approved Mobile layout and requested standardization. Do not merge/deploy before CI and browser certification.
+- Added >120 keys under **existing** `src/i18n.js` `TEXT.zh.procurementUi` and `TEXT.vi.procurementUi` for labels, help copy, statuses, form controls and notification text.
+- Added `src/procurement-v2-components.js`: pure reusable Tabs, Stat, Panel, ProductCard, SupplierCard, FilterBar and SettingsModal HTML components; they receive site/supplier/inventory data from the existing DB-backed `src/procurement-v2.js` caller and own no master data/state.
+- Reused existing language preference from `ctx.language`; zh renders Traditional Chinese, vi renders paired Traditional Chinese / Vietnamese labels as established in Procurement V2. Translation catalog parity and HTML escaping are tested.
+- Centralized core colors, borders, typography, radius and spacing as `--pv2-*` design tokens in `src/procurement-v2.css`, used by the same stylesheet for Desktop/Mobile.
+- No SQL migrations, backend authorization changes, business calculation changes, stock duplication or altered inventory literal-search semantics.
+- Required gates: `tests/procurement-v2-contract-regression.mjs`, `tests/procurement-v2-translation-components-regression.mjs`, real Chromium tests including mobile widths 320/359/390/430/760/768/991/1024 and CSS/clipping, Staging, Super Admin, DB and production smoke. User confirmation must not substitute failing CI.
+
 ## IN PROGRESS — Procurement V2 Mobile typography/layout parity — 2026-10-10
 
 - Branch: `fix/procurement-mobile-layout-parity` off merge commit `1405b95`; scoped to `src/procurement-v2.css` and browser layout regression. No DB migration, backend, Stock API, search rule or business logic changes.
