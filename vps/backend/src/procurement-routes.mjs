@@ -61,7 +61,7 @@ export async function registerProcurementRoutes(app) {
       pool.query("select * from public.procurement_suppliers where site_code=$1 order by active desc,name_zh_tw", [ctx.site]),
       pool.query("select * from public.procurement_product_rules where site_code=$1", [ctx.site]),
       pool.query("select service_date,day_type,description from public.procurement_service_calendar where site_code=$1 and service_date between current_date-interval '30 days' and current_date+interval '400 days' order by service_date",[ctx.site]),
-      pool.query("select o.id,o.supplier_id,o.order_date,o.expected_arrival,o.status,o.note,o.created_at,coalesce(json_agg(json_build_object('itemId',l.item_id,'packageCount',l.package_count,'packageSize',l.package_size,'baseQuantity',l.base_quantity,'packageUnit',l.package_unit)) filter (where l.item_id is not null),'[]'::json) as lines from public.procurement_orders o left join public.procurement_order_lines l on l.order_id=o.id where o.site_code=$1 group by o.id order by o.created_at desc limit 100",[ctx.site]),
+      pool.query("select o.id,o.supplier_id,o.order_date,o.expected_arrival,o.status,o.note,o.created_at,coalesce(json_agg(json_build_object('itemId',l.item_id,'packageCount',l.package_count,'packageSize',l.package_size,'baseQuantity',l.base_quantity,'packageUnit',l.package_unit)) filter (where l.item_id is not null),'[]'::json) as lines from public.procurement_supplier_orders o left join public.procurement_supplier_order_lines l on l.order_id=o.id where o.site_code=$1 group by o.id order by o.created_at desc limit 100",[ctx.site]),
     ]);
     return { site:ctx.site, suppliers:suppliers.rows.map(supplierRow), rules:rules.rows.map(ruleRow),
       calendar:calendar.rows.map(row=>({date:dateKey(row.service_date),type:row.day_type,description:row.description})),
@@ -142,11 +142,11 @@ export async function registerProcurementRoutes(app) {
     if(!["confirmed","received","cancelled"].includes(next))return validationReply(reply);
     try{
       const result=await withTransaction(async client=>{
-        const current=(await client.query("select * from public.procurement_orders where id=$1 and site_code=$2 for update",[orderId,ctx.site])).rows[0];
+        const current=(await client.query("select * from public.procurement_supplier_orders where id=$1 and site_code=$2 for update",[orderId,ctx.site])).rows[0];
         if(!current)throw Object.assign(new Error("PROCUREMENT_ORDER_NOT_FOUND"),{statusCode:404});
         const allowedChanges={submitted:["confirmed","cancelled"],confirmed:["received","cancelled"],received:[],cancelled:[]};
         if(!allowedChanges[current.status].includes(next))throw Object.assign(new Error("INVALID_ORDER_STATUS_TRANSITION"),{statusCode:409});
-        const after=(await client.query("update public.procurement_orders set status=$3,updated_at=now() where id=$1 and site_code=$2 returning *",[orderId,ctx.site,next])).rows[0];
+        const after=(await client.query("update public.procurement_supplier_orders set status=$3,updated_at=now() where id=$1 and site_code=$2 returning *",[orderId,ctx.site,next])).rows[0];
         await audit(client,ctx,"procurement.order.status",orderId,current,after);
         return {id:after.id,status:after.status};
       });
@@ -164,7 +164,7 @@ export async function registerProcurementRoutes(app) {
       new Set(lines.map(x=>x.itemId)).size!==lines.length) return validationReply(reply);
     try {
       const result=await withTransaction(async client=>{
-        const previous=(await client.query("select id from public.procurement_orders where site_code=$1 and request_key=$2",[ctx.site,b.requestKey])).rows[0];
+        const previous=(await client.query("select id from public.procurement_supplier_orders where site_code=$1 and request_key=$2",[ctx.site,b.requestKey])).rows[0];
         if(previous)return {id:previous.id,alreadyExists:true};
         const supplier=(await client.query("select id from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
         if(!supplier)throw Object.assign(new Error("SUPPLIER_NOT_IN_SITE"),{statusCode:400});
@@ -178,11 +178,11 @@ export async function registerProcurementRoutes(app) {
         const rules=(await client.query("select r.item_id,r.package_size,r.package_unit from public.procurement_product_rules r join public.inventory_items i on i.id=r.item_id where r.site_code=$1 and r.supplier_id=$2 and r.enabled=true and i.active=true and split_part(i.item_key,':',1)=$1",[ctx.site,b.supplierId])).rows;
         const byItem=new Map(rules.map(row=>[row.item_id,row]));
         for(const line of lines)if(!byItem.has(line.itemId))throw Object.assign(new Error("ORDER_LINE_NOT_ASSIGNED"),{statusCode:400});
-        const header=(await client.query("insert into public.procurement_orders(site_code,supplier_id,request_key,order_date,expected_arrival,note,actor_user_id,actor_username) values($1,$2,$3,$4,$5,$6,$7,$8) returning id",
+        const header=(await client.query("insert into public.procurement_supplier_orders(site_code,supplier_id,request_key,order_date,expected_arrival,note,actor_user_id,actor_username) values($1,$2,$3,$4,$5,$6,$7,$8) returning id",
           [ctx.site,b.supplierId,b.requestKey,b.orderDate,b.expectedArrival,textValue(b.note,500),ctx.user.id,ctx.user.username])).rows[0];
         for(const line of lines){
           const rule=byItem.get(line.itemId), count=Number(line.packageCount),size=Number(rule.package_size);
-          await client.query("insert into public.procurement_order_lines(order_id,item_id,package_count,package_size,base_quantity,package_unit) values($1,$2,$3,$4,$5,$6)",
+          await client.query("insert into public.procurement_supplier_order_lines(order_id,item_id,package_count,package_size,base_quantity,package_unit) values($1,$2,$3,$4,$5,$6)",
             [header.id,line.itemId,count,size,count*size,rule.package_unit]);
         }
         await audit(client,ctx,"procurement.order.submit",header.id,null,{supplierId:b.supplierId,lines,expectedArrival:b.expectedArrival});
