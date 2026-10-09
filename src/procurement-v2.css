@@ -95,3 +95,62 @@
 @media(max-width:760px){.pv2-title{align-items:flex-start}.pv2-title h2{font-size:21px}.pv2-title h2 span{display:block;margin:2px 0 0;font-size:15px}.pv2-title p{font-size:12px}.pv2-tab{flex:1 1 95px;min-width:0}.pv2-tabs{gap:0}.pv2-tab strong{font-size:12px}.pv2-tab small{font-size:10px}.pv2-panel{padding:11px}.pv2-aside{grid-template-columns:1fr}.pv2-table-head{display:none}.pv2-product{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(95px,.55fr);gap:10px 8px;padding:12px 2px}.pv2-select{grid-row:1;grid-column:1}.pv2-name{grid-column:2 / 4;grid-row:1}.pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){grid-column:span 1;background:#f7f9fc;border-radius:9px;padding:8px}.pv2-product>.pv2-cell:nth-child(3){grid-column:1 / 3}.pv2-quantity{grid-column:2 / 4!important}.pv2-mobile-label{display:block;margin-bottom:3px}.pv2-product .pv2-badge{font-size:10px}.pv2-quantity input{width:100%;min-height:42px}.pv2-rule-line{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.pv2-rule-line button{min-height:40px}.pv2-filters>select{max-width:none}}
 @media(max-width:429px){.pv2-shell{gap:10px}.pv2-stat{padding:10px;min-height:70px}.pv2-stat strong{font-size:22px}.pv2-stat>span{font-size:12px}.pv2-filters>*{flex:1 1 100%!important;max-width:none!important}.pv2-title>.pv2-secondary{min-width:80px;padding:7px}.pv2-title{gap:7px}.pv2-tab{flex:1 1 31%;padding:7px 3px}.pv2-product>.pv2-cell:nth-child(3){grid-column:2 / 4}.pv2-product>.pv2-cell:nth-child(4),.pv2-product>.pv2-cell:nth-child(5),.pv2-product>.pv2-cell:nth-child(6){grid-column:span 1}.pv2-product>.pv2-cell:nth-child(6){grid-column:2 / 4}.pv2-quantity{grid-column:2 / 4!important}.pv2-editor-actions button{flex:1 1 110px}}
 @media(max-width:359px){.pv2-product{grid-template-columns:23px minmax(0,1fr) minmax(0,.65fr)}.pv2-stat{padding:8px}.pv2-stat strong{font-size:20px}.pv2-stat>span{font-size:11px}.pv2-title h2{font-size:18px}.pv2-tab strong{font-size:11px}}
+
+
+/* Procurement V2 enhancements: no duplicate warehouse state, only presentation. */
+.pv2-sync{display:flex;align-items:flex-end;flex-direction:column;gap:6px;min-width:135px}
+.pv2-sync small{font-size:11px;text-align:right;white-space:nowrap}
+.pv2-holiday-picker{display:grid;gap:13px;border:1px solid var(--pv2-line);background:#f9fbfe;border-radius:12px;padding:14px;min-width:0}
+.pv2-calendar-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pv2-calendar-head strong{font-size:14px}
+.pv2-calendar-navigation{display:flex;align-items:center;gap:8px}
+.pv2-calendar-navigation span{min-width:100px;text-align:center;font-weight:750}
+.pv2-calendar-navigation button{width:36px;height:36px;border-radius:9px;border:1px solid #d5e1f1;background:#fff;color:#1a538f;font-size:22px;line-height:1}
+.pv2-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;width:100%;max-width:510px}
+.pv2-weekday-label{text-align:center;font-size:11px;white-space:nowrap;color:#71829c;padding:4px 0}
+.pv2-calendar-day{border:1px solid #e4eaf3;border-radius:9px;background:#fff;color:#304967;font-size:13px;font-weight:650;min-height:39px;min-width:0;padding:5px;text-align:center;transition:background .12s ease,border-color .12s ease}
+.pv2-calendar-day:hover{border-color:#8ab4fa;background:#eaf2ff}
+.pv2-calendar-day.selected{background:#d9e9ff;border-color:#72a8fc;color:#155bbd}
+.pv2-calendar-day.anchor{background:#1765ec;border-color:#1765ec;color:#fff;box-shadow:0 0 0 2px #c2ddff}
+.pv2-calendar-blank{min-height:39px}
+.pv2-calendar-range{display:flex;align-items:end;flex-wrap:wrap;gap:9px}
+.pv2-calendar-range>label{min-width:150px;flex:1 1 160px}
+.pv2-calendar-range input{display:block;width:100%;margin-top:6px}
+.pv2-calendar-range button{min-height:40px;flex:1 1 160px}
+.pv2-calendar-selected{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;font-size:12px}
+.pv2-calendar-selected button{border:0;background:transparent;color:#bf2c48;font-size:12px;padding:5px}
+.pv2-calendar-chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center;max-height:130px;overflow-y:auto;min-height:30px}
+.pv2-calendar-chips small{padding:4px}
+.pv2-date-chip{border:1px solid #c4d9f7;border-radius:8px;background:#e7f0ff;color:#1b578d;font-size:12px;min-height:31px;padding:5px 9px}
+.pv2-date-chip:hover{border-color:#f0b4c5;background:#fff2f5;color:#b72c48}
+/* Product demand editing: one fixed dialog on both Desktop and Mobile. */
+.pv2-dialog-backdrop{position:fixed;inset:0;z-index:10500;background:rgba(17,32,52,.57);display:flex;align-items:center;justify-content:center;overflow:auto;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overscroll-behavior:contain}
+.pv2-dialog{background:#fff;color:var(--pv2-text);width:min(720px,100%);max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain;box-shadow:0 24px 72px rgba(15,26,46,.32);border-radius:16px}
+.pv2-dialog .pv2-panel{border:none;padding:22px;overflow:visible}
+.pv2-dialog .pv2-section-head{position:sticky;top:-22px;z-index:1;background:#fff;padding-top:4px;padding-bottom:13px;border-bottom:1px solid #eaf0f6;min-width:0}
+.pv2-dialog .pv2-section-head h3{font-size:18px;min-width:0;overflow-wrap:anywhere}
+.pv2-dialog .pv2-section-head button{border:1px solid #dde4ee;border-radius:9px;background:#fff;font-size:22px;min-width:38px;min-height:38px}
+.pv2-dialog .pv2-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.pv2-dialog .pv2-editor-actions{position:sticky;bottom:-22px;background:#fff;border-top:1px solid #eaf0f6;padding:12px 0}
+@media(max-width:760px){
+ .pv2-calendar-grid{max-width:none}
+ .pv2-calendar-day{min-height:43px;font-size:13px}
+ .pv2-holiday-picker{padding:11px}
+ .pv2-dialog{max-height:calc(100dvh - 12px);border-radius:13px}
+ .pv2-dialog .pv2-panel{padding:16px}
+ .pv2-dialog .pv2-section-head{top:-16px}
+ .pv2-dialog .pv2-editor-actions{bottom:-16px}
+ .pv2-dialog .pv2-form-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:480px){
+ .pv2-calendar-grid{gap:3px}
+ .pv2-weekday-label{font-size:9px;letter-spacing:-.2px}
+ .pv2-calendar-day{min-height:41px;border-radius:7px}
+ .pv2-calendar-range>label{flex:1 1 100%}
+ .pv2-calendar-range>button{flex:1 1 100%}
+ .pv2-dialog{width:100%;max-height:calc(100dvh - 12px)}
+ .pv2-dialog .pv2-panel{padding:14px}
+ .pv2-dialog .pv2-form-grid{grid-template-columns:1fr}
+ .pv2-dialog .pv2-section-head h3{font-size:16px}
+ .pv2-sync small{font-size:10px;max-width:115px;white-space:normal}
+}
