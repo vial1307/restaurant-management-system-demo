@@ -41,6 +41,12 @@ const card=procurementProductCard({item,rule:null,supplier:null,stock:6,plan:nul
 assert.match(card,/Cá hồi/);assert.match(card,/鮭魚/);assert.match(card,/data-pv2-qty="item-1"/);
 assert.match(card,/6/);assert.match(card,/disabled/);
 const css=fs.readFileSync("src/procurement-v2.css","utf8");
+assert.equal((css.match(/\{/g)||[]).length,(css.match(/\}/g)||[]).length,
+ "CSS blocks must be balanced; an unclosed rule suppresses mobile media queries");
+assert.match(css,/\.pv2-shell\{color:[^}]+\}/,
+ "Root UI rule must be closed before all responsive component selectors");
+assert.match(css,/@media\(max-width:991px\)\{[\s\S]*?\.pv2-shell \.pv2-tabs\{[^}]*flex-wrap:nowrap/,
+ "The mobile navigation must remain a single swipeable row");
 const main=fs.readFileSync("src/procurement-v2.js","utf8");
 for(const token of ["--pv2-primary","--pv2-border","--pv2-font-ui","--pv2-radius-card","--pv2-space-md"])assert(css.includes(token),"missing design token "+token);
 assert(css.includes("var(--pv2-primary)"),"styles should consume design tokens");
