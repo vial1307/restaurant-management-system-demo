@@ -32,11 +32,17 @@ async function allowed(request,reply,mode="view") {
   if (!user) return null;
   const site=String(request.params.site || "");
   if (!(await activeSite(site))) { reply.code(400).send({error:"INVALID_SITE"}); return null; }
-  if (!siteAllowed(user,site) || !hasPermission(user,"procurement",mode)) {
+  if (!hasPermission(user,"procurement",mode)) {
     reply.code(403).send({error:"PROCUREMENT_PERMISSION_DENIED"}); return null;
   }
+  // Multi-site read scope is the exact same DB policy as /api/inventory/:site.
+  // A legacy home-site match must never block a legitimately granted inventory.view.
   if (mode==="view" && !(await inventoryActionAllowed(user,"inventory.view",{site}))) {
     reply.code(403).send({error:"INVENTORY_VIEW_NOT_ALLOWED"}); return null;
+  }
+  // Cross-site viewing is not an authorization grant to mutate supplier policy.
+  if (mode==="edit" && !siteAllowed(user,site)) {
+    reply.code(403).send({error:"PROCUREMENT_SITE_EDIT_NOT_ALLOWED"}); return null;
   }
   return {user,site};
 }
