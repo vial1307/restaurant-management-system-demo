@@ -1,3 +1,10 @@
+## IN PROGRESS — Procurement selected tab reset during site hydration (2026-10-10)
+
+- Previous refactor PR #231 merged at `8fef917`; production workflow `37984156669` correctly blocked before deploy because Chromium sometimes lost the settings tab when the inventory site was reinitialized.
+- Follow-up branch: `fix/procurement-preserve-tab-state`. Preserve `ui.tab` through site rehydration; reset only site-specific inventory snapshot, filters, drafts and selected items. No Database changes, no new supplier/product data, no RBAC edits.
+- Strengthen browser regression: the selected Settings tab must be visibly active before creating a supplier; static contract prevents reintroducing `ui.tab="list"` on site switch.
+- Require Staging exact-head PASS and all PR CI gates before new merge, then post-merge Production smoke. **Production has NOT been updated by PR #231 as of this log.**
+
 ## IN PROGRESS — Procurement V2 i18n, UI components and design-token standardization — 2026-10-10
 
 - Continuation of PR #231 on branch `fix/procurement-mobile-layout-parity`; user approved Mobile layout and requested standardization. Do not merge/deploy before CI and browser certification.
