@@ -19,7 +19,7 @@ assert.equal(plan.preArrivalRisk,true,"flag unavoidable shortage before supplier
 assert.equal(planProcurementLine({orderDate:"2026-10-11",supplier,calendar,stock:0,rule,incoming:[]}).canOrder,false);
 assert.equal(consumptionForDay("2026-10-11",rule,new Map([["2026-10-11","closed"]])),0,"restaurant closed day consumes zero");
 assert.equal(consumptionForDay("2026-10-11",rule,new Map([["2026-10-11","holiday"]])),12);
-const covered=planProcurementLine({orderDate:"2026-10-10",supplier,calendar,stock:15,rule,incoming:[{expectedArrival:"2026-10-12",baseQuantity:30,status:"submitted"}]});
+const covered=planProcurementLine({orderDate:"2026-10-10",supplier,calendar,stock:15,rule,incoming:[{expectedArrival:"2026-10-12",baseQuantity:30,status:"confirmed"}]});
 assert.equal(covered.orderUnits,0,"account for confirmed incoming deliveries before horizon end");
 const fish=prepareIngredientNameSearchCorpus("鮭魚","Cá hồi");
 const beef=prepareIngredientNameSearchCorpus("牛肉","Thịt bò");
@@ -60,6 +60,7 @@ assert.match(server,/inventoryActionAllowed\(user,"inventory.view"/);
 assert.match(server,/STALE_PRODUCT_RULE/);
 assert.match(server,/STALE_SUPPLIER_REVISION/);
 assert.match(server,/ORDER_LINE_NOT_ASSIGNED/);
+assert.match(server,/PROCUREMENT_PERMISSION_DENIED/);
 assert.match(migration,/references public.inventory_items\(id\)/);
 assert.match(migration,/unique \(site_code,request_key\)/);
 assert.doesNotMatch(migration,/insert into public.procurement_suppliers/i,"never seed unverified supplier names");
