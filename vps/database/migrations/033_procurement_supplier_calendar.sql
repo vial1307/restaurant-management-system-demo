@@ -52,7 +52,7 @@ create table if not exists public.procurement_service_calendar (
   primary key (site_code,service_date)
 );
 
-create table if not exists public.procurement_orders (
+create table if not exists public.procurement_supplier_orders (
   id uuid primary key default gen_random_uuid(),
   site_code text not null references public.sites(code) on update cascade on delete cascade,
   supplier_id uuid not null,
@@ -68,11 +68,11 @@ create table if not exists public.procurement_orders (
   unique (site_code,request_key),
   foreign key (site_code,supplier_id) references public.procurement_suppliers(site_code,id)
 );
-create index if not exists procurement_orders_site_date_idx
-  on public.procurement_orders(site_code,created_at desc);
+create index if not exists procurement_supplier_orders_site_date_idx
+  on public.procurement_supplier_orders(site_code,created_at desc);
 
-create table if not exists public.procurement_order_lines (
-  order_id uuid not null references public.procurement_orders(id) on delete cascade,
+create table if not exists public.procurement_supplier_order_lines (
+  order_id uuid not null references public.procurement_supplier_orders(id) on delete cascade,
   item_id uuid not null references public.inventory_items(id),
   package_count numeric(14,3) not null check (package_count > 0),
   package_size numeric(14,3) not null check (package_size > 0),
