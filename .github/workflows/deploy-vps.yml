@@ -79,6 +79,7 @@ jobs:
         run: |
           node --check vps/backend/src/procurement-routes.mjs
           node tests/procurement-v2-contract-regression.mjs
+          node tests/procurement-v2-translation-components-regression.mjs
 
       - name: Inventory literal search and report contract
         run: node tests/inventory-literal-search-and-report-contract-regression.mjs
