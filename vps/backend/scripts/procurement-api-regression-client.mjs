@@ -54,6 +54,7 @@ try {
  const otherSite=await api("/api/procurement/yongji/suppliers",{method:"POST",cookie:manager,body:supplierBody});
  assert.equal(otherSite.status,403,"No cross-site supplier write");
  const {rows:[before]}=await db.query("select coalesce(sum(s.quantity),0)::text as total from public.inventory_stock s where s.item_id=$1",[item.id]);
+ const {rows:[beforeTransactions]}=await db.query("select count(*)::int as count from public.inventory_transactions where item_id=$1 and action='receive'",[item.id]);
  const requestKey=randomUUID(),expectedArrival=plus(tomorrow,1);
  const orderBody={supplierId:supplier.id,orderDate:tomorrow,expectedArrival,requestKey,
    lines:[{itemId:item.id,packageCount:3}]};
@@ -81,6 +82,6 @@ try {
  const {rows:[after]}=await db.query("select coalesce(sum(s.quantity),0)::text as total from public.inventory_stock s where s.item_id=$1",[item.id]);
  assert.equal(after.total,before.total,"Creating procurement order must not touch physical stock");
  const {rows:[tx]}=await db.query("select count(*)::int as count from public.inventory_transactions where item_id=$1 and action='receive'",[item.id]);
- assert.equal(tx.count,0,"Do not forge inventory receipts");
+ assert.equal(tx.count,beforeTransactions.count,"Do not forge inventory receipts");
  console.log("PROCUREMENT_API_DB_ROUNDTRIP_OK");
 }finally{await db.end();}
