@@ -49,7 +49,7 @@ try{
   await page.keyboard.press("Escape");
   assert.equal(await page.locator('[role="dialog"]').count(),0,"Escape must close popup");
   await page.locator('[data-pv2-action="edit-rule"]').first().click();
-  await page.locator('[data-pv2-form="rule"] button[data-pv2-action="close-editor"]').click();
+  await page.locator('[data-pv2-form="rule"] .pv2-editor-actions button[data-pv2-action="close-editor"]').click();
   assert.equal(await page.locator('[role="dialog"]').count(),0,"Cancel must close popup");
   const responsePromise=page.waitForResponse(r=>/\/api\/inventory\/(fuxing|central|yongji)/.test(r.url())&&r.request().method()==="GET",{timeout:10000});
   await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
