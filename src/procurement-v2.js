@@ -288,13 +288,39 @@ export function mountProcurementV2(root,{render,route}){
    const el=event.target.closest("[data-pv2-action]");if(!el||route()!=="procurement")return;
    event.preventDefault();event.stopImmediatePropagation();
    const action=el.dataset.pv2Action;
-   if(action==="tab"){ui.tab=el.dataset.tab;ui.notice="";render();}
+   if(action==="tab"){ui.tab=el.dataset.tab;ui.notice="";ui.editingItem=null;ui.editingSupplier=null;ui.ruleDraft=null;ui.supplierDraft=null;render();}
    if(action==="refresh"){void refresh(ui.site,render);}
    if(action==="clear-search"){ui.search="";const input=root.querySelector("[data-pv2-search]");if(input){input.value="";input.dispatchEvent(new Event("input",{bubbles:true}));input.focus();}}
-   if(action==="new-supplier"){ui.editingSupplier="new";render();}
-   if(action==="edit-supplier"){ui.editingSupplier=el.dataset.id;render();}
-   if(action==="edit-rule"){ui.editingItem=el.dataset.id;render();}
-   if(action==="close-editor"){ui.editingSupplier=null;ui.editingItem=null;render();}
+   if(action==="new-supplier"){beginSupplierEdit("new");render();}
+   if(action==="edit-supplier"){beginSupplierEdit(el.dataset.id);render();}
+   if(action==="edit-rule"){beginRuleEdit(el.dataset.id);render();root.querySelector('[data-pv2-form="rule"] select[name="supplierId"]')?.focus();}
+   if(action==="close-editor"&&!ui.pending){const lastItem=ui.editingItem;ui.editingSupplier=null;ui.editingItem=null;ui.supplierDraft=null;ui.ruleDraft=null;ui.calendarAnchor=null;render();if(lastItem)root.querySelector('[data-pv2-action="edit-rule"][data-id="'+lastItem+'"]')?.focus();}
+
+   if(action.startsWith("calendar-") && ui.editingSupplier!==null && !ui.pending){
+     rememberSupplierFields(root);
+     ui.calendarError="";
+     try{
+       if(action==="calendar-month-prev")ui.calendarMonth=procurementMoveMonth(ui.calendarMonth,-1);
+       if(action==="calendar-month-next")ui.calendarMonth=procurementMoveMonth(ui.calendarMonth,1);
+       if(action==="calendar-day"){
+         const date=el.dataset.date;
+         if(!validProcurementDate(date))throw new Error("INVALID_CALENDAR_DATE");
+         if(!ui.calendarAnchor){ui.calendarAnchor=date;ui.rangeStart=date;ui.rangeEnd="";}
+         else{
+           ui.supplierClosedDates=procurementAddClosedDates(ui.supplierClosedDates,ui.calendarAnchor,date);
+           ui.rangeStart=ui.calendarAnchor;ui.rangeEnd=date;ui.calendarAnchor=null;
+         }
+       }
+       if(action==="calendar-add-range"){
+         if(!validProcurementDate(ui.rangeStart)||!validProcurementDate(ui.rangeEnd))throw new Error("CHOOSE_START_AND_END_DATE");
+         ui.supplierClosedDates=procurementAddClosedDates(ui.supplierClosedDates,ui.rangeStart,ui.rangeEnd);
+         ui.calendarAnchor=null;
+       }
+       if(action==="calendar-remove")ui.supplierClosedDates=ui.supplierClosedDates.filter(x=>x!==el.dataset.date);
+       if(action==="calendar-clear"){ui.supplierClosedDates=[];ui.calendarAnchor=null;}
+     }catch(e){ui.calendarError=String(e.message||e);}
+     render();
+   }
    if(action==="submit"&&!ui.pending)void submitOrders(render);
    if(action==="order-status"&&!ui.pending) {
      const requested=el.dataset.status,id=el.dataset.id;
@@ -315,7 +341,11 @@ export function mountProcurementV2(root,{render,route}){
    }
  });
  root.addEventListener("input",event=>{
-   const el=event.target;if(!el.matches?.("[data-pv2-search]")||route()!=="procurement"||event.isComposing)return;
+   const el=event.target;
+   if(route()!=="procurement"||event.isComposing)return;
+   if(el.closest?.('[data-pv2-form="supplier"]'))rememberSupplierFields(root);
+   if(el.closest?.('[data-pv2-form="rule"]'))rememberRuleFields(root);
+   if(!el.matches?.("[data-pv2-search]"))return;
    ui.search=el.value;
    const needle=prepareIngredientNameSearchNeedle(ui.search);
    let visible=0;
@@ -329,6 +359,8 @@ export function mountProcurementV2(root,{render,route}){
  root.addEventListener("change",event=>{
    if(route()!=="procurement")return;
    const el=event.target;
+   if(el.closest?.('[data-pv2-form="supplier"]'))rememberSupplierFields(root);
+   if(el.closest?.('[data-pv2-form="rule"]'))rememberRuleFields(root);
    if(el.dataset.pv2Filter){event.stopImmediatePropagation();ui[el.dataset.pv2Filter]=el.value;render();}
    if(el.dataset.pv2Date!==undefined){event.stopImmediatePropagation();ui.date=el.value;ui.selected.clear();ui.overrides.clear();render();}
    if(el.dataset.pv2Select){event.stopImmediatePropagation();if(el.checked)ui.selected.add(el.dataset.pv2Select);else ui.selected.delete(el.dataset.pv2Select);render();}
@@ -343,7 +375,7 @@ export function mountProcurementV2(root,{render,route}){
     endpoint="suppliers";body={ id:data.get("id")||undefined,revision:Number(data.get("revision")||0),
       nameZhTw:data.get("nameZhTw"),nameVi:data.get("nameVi"),phone:data.get("phone"),
       cutoffTime:data.get("cutoffTime"),leadDays:Number(data.get("leadDays")),reviewDays:Number(data.get("reviewDays")),
-      closedWeekdays:data.getAll("closedWeekdays").map(Number),closedDates:String(data.get("closedDates")||"").split(/[,\n]/).map(x=>x.trim()).filter(Boolean),active:true };
+      closedWeekdays:data.getAll("closedWeekdays").map(Number),closedDates:[...ui.supplierClosedDates],active:true };
   }else if(type==="rule"){
     endpoint="rules";body={itemId:data.get("itemId"),revision:Number(data.get("revision")||0),supplierId:data.get("supplierId"),
       weekdayDemand:Number(data.get("weekdayDemand")),weekendDemand:Number(data.get("weekendDemand")),
@@ -356,7 +388,7 @@ export function mountProcurementV2(root,{render,route}){
   const site=ui.site;
   void apiRequest("/api/procurement/"+encodeURIComponent(site)+"/"+endpoint,{method:"POST",body})
     .then(()=>refreshAfterMutation(render))
-    .then(()=>{ui.editingItem=null;ui.editingSupplier=null;ui.notice="儲存成功 / Đã lưu vào Database";})
+    .then(()=>{ui.editingItem=null;ui.editingSupplier=null;ui.ruleDraft=null;ui.supplierDraft=null;ui.notice="儲存成功 / Đã lưu vào Database";})
     .catch(error=>{ui.notice="儲存失敗 / Lưu thất bại: "+errorLabel(error);})
     .finally(()=>{ui.pending=false;render();});
  });
@@ -365,5 +397,32 @@ export function mountProcurementV2(root,{render,route}){
    void refresh(ui.site,render);
   }
  });
- window.addEventListener("focus",()=>{if(route()==="procurement"&&!ui.loading)void refresh(ui.site,render);});
+ root.addEventListener("click",event=>{
+   if(route()!=="procurement"||!event.target.matches?.("[data-pv2-backdrop]")||ui.pending)return;
+   ui.editingItem=null;ui.ruleDraft=null;render();
+ });
+ window.addEventListener("keydown",event=>{
+   if(route()!=="procurement"||!ui.editingItem||ui.pending)return;
+   if(event.key==="Escape"){event.preventDefault();ui.editingItem=null;ui.ruleDraft=null;render();return;}
+   if(event.key==="Tab"){
+     const modal=root.querySelector(".pv2-dialog");if(!modal)return;
+     const targets=[...modal.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
+     if(!targets.length)return;
+     const first=targets[0],last=targets.at(-1);
+     if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+     else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+   }
+ });
+ // DB edits via direct SQL do not necessarily publish SSE. A forced GET keeps the
+ // existing Inventory snapshot authoritative without inventing another stock DB.
+ // Native inventory-cloud SSE and focus/visibility refresh remain the fast paths.
+ window.setInterval(()=>{
+   if(route()!=="procurement"||document.visibilityState!=="visible"||!ui.site||ui.loading||ui.pending)return;
+   if(Date.now()-ui.lastSyncedAt<25000)return;
+   void refresh(ui.site,render);
+ },30000);
+ window.addEventListener("visibilitychange",()=>{
+   if(document.visibilityState==="visible"&&route()==="procurement"&&!ui.loading&&!ui.pending)void refresh(ui.site,render);
+ });
+ window.addEventListener("focus",()=>{if(route()==="procurement"&&!ui.loading&&!ui.pending)void refresh(ui.site,render);});
 }
