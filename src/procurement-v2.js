@@ -28,16 +28,16 @@ function procurementInventoryDetail(item,lang){
  const group=(ui.inventory?.categories||[]).find(x=>x.code===item.category_code);
  const receive=(ui.inventory?.receiveDefaults||[]).find(x=>x.site===ui.site&&x.catalog_key===item.catalog_key);
  const receivingLocation=receive?locations.get(String(receive.location_id)):null;
- return `<div class="pv2-db-reference"><h4>庫存資料庫 / Dữ liệu trực tiếp từ kho</h4>
-  <div class="pv2-db-fields"><div><small>目前總庫存 / Tổng tồn</small><strong>${num(stockFor(item.id))} ${html(item.unit||"")}</strong></div>
-  <div><small>庫存最低量 / Tồn tối thiểu</small><strong>${num(minimum)} ${html(item.unit||"")}</strong></div>
-  <div><small>分類 / Nhóm</small><strong>${html((lang==="zh"?group?.name_zh_tw:group?.name_vi)||item.category_code||"—")}</strong></div>
-  <div><small>預設收貨位置 / Vị trí nhập mặc định</small><strong>${html((lang==="zh"?receivingLocation?.name_zh_tw:receivingLocation?.name_vi)||"—")}</strong></div></div>
+ return `<div class="pv2-db-reference"><h4>${P("stockDatabase",lang)}</h4>
+  <div class="pv2-db-fields"><div><small>${P("stockTotal",lang)}</small><strong>${num(stockFor(item.id))} ${html(item.unit||"")}</strong></div>
+  <div><small>${P("stockMinimum",lang)}</small><strong>${num(minimum)} ${html(item.unit||"")}</strong></div>
+  <div><small>${P("category",lang)}</small><strong>${html((lang==="zh"?group?.name_zh_tw:group?.name_vi)||item.category_code||"—")}</strong></div>
+  <div><small>${P("defaultReceiving",lang)}</small><strong>${html((lang==="zh"?receivingLocation?.name_zh_tw:receivingLocation?.name_vi)||"—")}</strong></div></div>
   <div class="pv2-db-locations">${stocks.map(row=>{
     const place=locations.get(String(row.location_id));
     return `<span>${html((lang==="zh"?place?.name_zh_tw:place?.name_vi)||place?.code||"—")}: <strong>${num(row.quantity)} ${html(item.unit||"")}</strong></span>`;
   }).join("")||"<small>尚無儲位紀錄 / Chưa có số lượng theo vị trí</small>"}</div>
-  <p class="pv2-hint">數量與存放位置讀取現有庫存 API。安全庫存為另外的叫貨設定，不會更改庫存最低量。 Số tồn và vị trí lấy từ API kho; tồn an toàn cho gọi hàng không ghi đè mức tối thiểu của kho.</p>
+  <p class="pv2-hint">${P("inventoryHint",lang)}</p>
  </div>`;
 }
 function incomingFor(itemId){
@@ -80,6 +80,7 @@ function prepare(site,render,date){
 }
 const P=(key,lang=ui.language)=>procurementCopy(key,lang);
 const R=(key,lang=ui.language)=>procurementRawCopy(key,lang);
+const N=(key,lang=ui.language)=>lang==="zh"?R(key,"zh"):R(key,"zh")+" / "+R(key,"vi");
 function metric(key,value){return procurementStat(key,value,num);}
 function badge(text,color){return `<span class="pv2-badge pv2-${color}">${html(text)}</span>`;}
 function tabs(language){return procurementTabs(ui.tab,language);}
@@ -125,9 +126,9 @@ function listBody(lang,editable){
 }
 function historyBody(lang,editable){
  const orders=ui.data?.orders||[];
- return `<section class="pv2-panel"><header class="pv2-section-head"><h3>叫貨紀錄 / Lịch sử gọi hàng</h3></header>
- ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>叫貨 / Đặt</small><strong>${html(o.orderDate)}</strong></div><div><small>預計到貨 / Dự kiến giao</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">供應商已確認 / NCC đã xác nhận</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">已完成進貨 / Đã nhập kho</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
- <p class="pv2-hint">叫貨單不會自動入庫；到貨後請至「進貨入庫」確認數量。 Đơn gọi hàng không tự tăng tồn kho; phải nhận hàng tại mục Nhập kho.</p></section>`;
+ return `<section class="pv2-panel"><header class="pv2-section-head"><h3>${P("history",lang)}</h3></header>
+ ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
+ <p class="pv2-hint">${P("historyHint",lang)}</p></section>`;
 }
 
 function beginSupplierEdit(id){
@@ -162,16 +163,16 @@ function supplierCalendar(){
  const cells=procurementMonthCells(month), dates=new Set(ui.supplierClosedDates);
  const labels=["一 / T2","二 / T3","三 / T4","四 / T5","五 / T6","六 / T7","日 / CN"];
  return `<section class="pv2-holiday-picker" aria-label="選擇休息日期 / Chọn ngày nghỉ">
- <div class="pv2-calendar-head"><strong>特別休假 / Ngày nghỉ đặc biệt</strong><div class="pv2-calendar-navigation"><button type="button" data-pv2-action="calendar-month-prev" aria-label="Tháng trước">‹</button><span>${html(month)}</span><button type="button" data-pv2-action="calendar-month-next" aria-label="Tháng sau">›</button></div></div>
- <p class="pv2-hint">點選開始日，再點選結束日，會選取整個日期區間。 Chạm ngày bắt đầu rồi ngày kết thúc để chọn cả khoảng; chọn cùng một ngày hai lần để chọn một ngày.</p>
+ <div class="pv2-calendar-head"><strong>${P("specialClosed",lang)}</strong><div class="pv2-calendar-navigation"><button type="button" data-pv2-action="calendar-month-prev" aria-label="Tháng trước">‹</button><span>${html(month)}</span><button type="button" data-pv2-action="calendar-month-next" aria-label="Tháng sau">›</button></div></div>
+ <p class="pv2-hint">${P("calendarInstruction",lang)}</p>
  <div class="pv2-calendar-grid" role="group" aria-label="${html(month)}">${labels.map(x=>`<span class="pv2-weekday-label">${x}</span>`).join("")}
  ${cells.map(date=>date?`<button type="button" class="pv2-calendar-day ${dates.has(date)?"selected":""} ${ui.calendarAnchor===date?"anchor":""}" data-pv2-action="calendar-day" data-date="${date}" aria-pressed="${dates.has(date)}" aria-label="${date}" ${ui.pending?"disabled":""}>${Number(date.slice(8))}</button>`:`<span class="pv2-calendar-blank" aria-hidden="true"></span>`).join("")}</div>
  <div class="pv2-calendar-range">
-  <label>開始 / Từ ngày<input type="date" name="rangeStart" value="${html(ui.rangeStart)}"></label>
-  <label>結束 / Đến ngày<input type="date" name="rangeEnd" value="${html(ui.rangeEnd)}"></label>
-  <button type="button" class="pv2-secondary" data-pv2-action="calendar-add-range" ${ui.pending?"disabled":""}>＋加入日期 / Thêm khoảng</button>
+  <label>${P("fromDate",lang)}<input type="date" name="rangeStart" value="${html(ui.rangeStart)}"></label>
+  <label>${P("toDate",lang)}<input type="date" name="rangeEnd" value="${html(ui.rangeEnd)}"></label>
+  <button type="button" class="pv2-secondary" data-pv2-action="calendar-add-range" ${ui.pending?"disabled":""}>${P("addRange",lang)}</button>
  </div>
- <div class="pv2-calendar-selected"><strong>已選取 ${ui.supplierClosedDates.length} 天 / Đã chọn ${ui.supplierClosedDates.length} ngày</strong><button type="button" data-pv2-action="calendar-clear" ${!ui.supplierClosedDates.length||ui.pending?"disabled":""}>清除全部 / Xóa tất cả</button></div>
+ <div class="pv2-calendar-selected"><strong>已選取 ${ui.supplierClosedDates.length} 天 / Đã chọn ${ui.supplierClosedDates.length} ngày</strong><button type="button" data-pv2-action="calendar-clear" ${!ui.supplierClosedDates.length||ui.pending?"disabled":""}>${P("clearAll",lang)}</button></div>
  <div class="pv2-calendar-chips" aria-live="polite">${ui.supplierClosedDates.map(date=>`<button type="button" data-pv2-action="calendar-remove" data-date="${date}" class="pv2-date-chip" aria-label="Xóa ${date}" ${ui.pending?"disabled":""}>${date} ×</button>`).join("")||`<small>尚未選擇 / Chưa chọn ngày nào</small>`}</div>
  ${ui.calendarAnchor?`<p class="pv2-hint" role="status">起始日期 / Ngày bắt đầu: ${ui.calendarAnchor}. 再選擇結束日期 / Chọn ngày kết thúc.</p>`:""}
  ${ui.calendarError?`<div class="pv2-error" role="alert">${html(ui.calendarError)}</div>`:""}
@@ -181,17 +182,17 @@ function formSupplier(lang){
  if(ui.editingSupplier===null)return "";
  const draft=ui.supplierDraft||{};
  const closed=new Set(draft.closedWeekdays||[]);
- return `<form class="pv2-panel pv2-editor" data-pv2-form="supplier"><header class="pv2-section-head"><h3>供應商設定 / Cài nhà cung cấp</h3><button type="button" data-pv2-action="close-editor" aria-label="Đóng">×</button></header>
+ return `<form class="pv2-panel pv2-editor" data-pv2-form="supplier"><header class="pv2-section-head"><h3>${P("supplierEditor",lang)}</h3><button type="button" data-pv2-action="close-editor" aria-label="Đóng">×</button></header>
  <input type="hidden" name="id" value="${html(draft.id||"")}"><input type="hidden" name="revision" value="${Number(draft.revision||0)}">
- <div class="pv2-form-grid"><label>中文名稱 / Tên tiếng Trung<input name="nameZhTw" required maxlength="120" value="${html(draft.nameZhTw||"")}"></label>
- <label>越文名稱 / Tên tiếng Việt<input name="nameVi" maxlength="120" value="${html(draft.nameVi||"")}"></label>
- <label>電話 / Số điện thoại<input name="phone" maxlength="60" value="${html(draft.phone||"")}"></label>
- <label>截單時間 / Giờ chốt đơn<input type="time" name="cutoffTime" required value="${html(draft.cutoffTime||"12:00")}"></label>
- <label>交貨天數 / Lead time<input type="number" name="leadDays" min="0" max="60" required value="${draft.leadDays??1}"></label>
- <label>訂貨週期 / Chu kỳ gọi<input type="number" name="reviewDays" min="1" max="30" required value="${draft.reviewDays??1}"></label></div>
- <fieldset><legend>固定休息日 / Nghỉ cố định</legend><div class="pv2-weekdays">${["日 / CN","一 / T2","二 / T3","三 / T4","四 / T5","五 / T6","六 / T7"].map((label,n)=>`<label><input type="checkbox" name="closedWeekdays" value="${n}" ${closed.has(n)?"checked":""}>${label}</label>`).join("")}</div></fieldset>
+ <div class="pv2-form-grid"><label>${P("nameChinese",lang)}<input name="nameZhTw" required maxlength="120" value="${html(draft.nameZhTw||"")}"></label>
+ <label>${P("nameVietnamese",lang)}<input name="nameVi" maxlength="120" value="${html(draft.nameVi||"")}"></label>
+ <label>${P("phone",lang)}<input name="phone" maxlength="60" value="${html(draft.phone||"")}"></label>
+ <label>${P("cutoff",lang)}<input type="time" name="cutoffTime" required value="${html(draft.cutoffTime||"12:00")}"></label>
+ <label>${P("leadDays",lang)}<input type="number" name="leadDays" min="0" max="60" required value="${draft.leadDays??1}"></label>
+ <label>${P("reviewDays",lang)}<input type="number" name="reviewDays" min="1" max="30" required value="${draft.reviewDays??1}"></label></div>
+ <fieldset><legend>${P("weeklyClosures",lang)}</legend><div class="pv2-weekdays">${["日 / CN","一 / T2","二 / T3","三 / T4","四 / T5","五 / T6","六 / T7"].map((label,n)=>`<label><input type="checkbox" name="closedWeekdays" value="${n}" ${closed.has(n)?"checked":""}>${label}</label>`).join("")}</div></fieldset>
  ${supplierCalendar()}
- <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>儲存供應商 / Lưu NCC</button></div></form>`;
+ <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">${P("cancel",lang)}</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>${P("saveSupplier",lang)}</button></div></form>`;
 }
 
 function formRule(lang){
@@ -201,21 +202,21 @@ function formRule(lang){
  const rule=ui.ruleDraft||ruleFor(item.id)||{};
  return procurementSettingsModal({title:html(item.name_zh_tw)+" / "+html(item.name_vi),body:`
  <input type="hidden" name="itemId" value="${html(item.id)}"><input type="hidden" name="revision" value="${rule.revision||0}">
- <div class="pv2-form-grid"><label>供應商 / Nhà cung cấp<select name="supplierId" required><option value="">請選擇 / Chọn NCC</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
+ <div class="pv2-form-grid"><label>${P("supplier",lang)}<select name="supplierId" required><option value="">${P("selectSupplier",lang)}</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
  ${[["weekdayDemand","平日用量 / Ngày thường"],["weekendDemand","週末用量 / Cuối tuần"],["holidayDemand","假日用量 / Ngày lễ"],["safetyStock","安全庫存 / Tồn an toàn"],["packageSize","包裝數量 / Số lượng mỗi kiện"]].map(([key,label])=>`<label>${label}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
- <label>叫貨單位 / Đơn vị gọi<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
+ <label>${P("orderUnit",lang)}<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
  ${procurementInventoryDetail(item,lang)}
- <label class="pv2-toggle"><input type="checkbox" name="enabled" ${rule.enabled?"checked":""}>啟用自動建議 / Bật đề xuất tự động</label>
- <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">取消 / Hủy</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>${P("saveRule",lang)}</button></div>`});
+ <label class="pv2-toggle"><input type="checkbox" name="enabled" ${rule.enabled?"checked":""}>${P("enableSuggestions",lang)}</label>
+ <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">${P("cancel",lang)}</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>${P("saveRule",lang)}</button></div>`});
 }
 function settingsBody(lang,editable){
- return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>供應商設定 / Cấu hình nhà cung cấp</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">＋新增 / Thêm</button>`:""}</header>
+ return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>${P("supplierSettings",lang)}</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">${P("addSupplier",lang)}</button>`:""}</header>
  <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>procurementSupplierCard({supplier:s,editable,language:lang})).join(""):`<p class="pv2-empty">尚未建立供應商。Nhấn Thêm để tạo nhà cung cấp thật trong Database.</p>`}</div></section>
  ${formSupplier(lang)}
- <section class="pv2-panel"><header class="pv2-section-head"><h3>產品用量設定 / Định mức sản phẩm</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="搜尋產品 / Tìm đúng tên sản phẩm"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
- <section class="pv2-panel"><header class="pv2-section-head"><h3>節日與營業日 / Ngày lễ & ngày hoạt động</h3></header>
- <p class="pv2-hint">依日期逐日設定；連假可分別設定每一天。 Thiết lập từng ngày để tính đúng kỳ nghỉ liên tiếp 2–3 ngày.</p>
- <form data-pv2-form="calendar" class="pv2-calendar-form"><input name="date" type="date" required value="${html(ui.date)}"/><select name="type"><option value="normal">一般日 / Ngày thường</option><option value="holiday">假日 / Ngày lễ</option><option value="closed">店休 / Nhà hàng nghỉ</option></select><input name="description" placeholder="備註 / Ghi chú" maxlength="160"/><button class="pv2-primary" type="submit" ${!editable||ui.pending?"disabled":""}>儲存 / Lưu</button></form>
+ <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("productRules",lang)}</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="${P("searchSettings",lang)}"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
+ <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("holidaysAndOpening",lang)}</h3></header>
+ <p class="pv2-hint">${P("holidayInstruction",lang)}</p>
+ <form data-pv2-form="calendar" class="pv2-calendar-form"><input name="date" type="date" required value="${html(ui.date)}"/><select name="type"><option value="normal">${P("normalDay",lang)}</option><option value="holiday">${P("holidayDay",lang)}</option><option value="closed">${P("closedDay",lang)}</option></select><input name="description" placeholder="${P("notes",lang)}" maxlength="160"/><button class="pv2-primary" type="submit" ${!editable||ui.pending?"disabled":""}>${P("save",lang)}</button></form>
  <div class="pv2-holidays">${(ui.data?.calendar||[]).filter(x=>x.type!=="normal").slice(0,50).map(x=>`<span>${html(x.date)} · ${html(x.type==="holiday"?"假日 / Lễ":"店休 / Nghỉ")}</span>`).join("")||"—"}</div></section></div>`;
 }
 function summary(lang,editable,rows){
@@ -223,23 +224,23 @@ function summary(lang,editable,rows){
  const count=selected.length;
  const total=selected.reduce((n,x)=>n+Number(x.amount),0);
  const supplierCount=new Set(selected.map(x=>x.supplier.id)).size;
- return `<aside class="pv2-aside"><div class="pv2-panel"><h3>叫貨摘要 / Tóm tắt gọi hàng</h3><div class="pv2-summary-num">${num(count)} <small>項 / sản phẩm</small></div><p>供應商 / Nhà cung cấp: <strong>${supplierCount}</strong></p><p>包裝單位總數 / Tổng kiện: <strong>${num(total)}</strong></p>
+ return `<aside class="pv2-aside"><div class="pv2-panel"><h3>${P("summary",lang)}</h3><div class="pv2-summary-num">${num(count)} <small>項 / sản phẩm</small></div><p>供應商 / Nhà cung cấp: <strong>${supplierCount}</strong></p><p>包裝單位總數 / Tổng kiện: <strong>${num(total)}</strong></p>
  <div class="pv2-note">${selected.map(x=>`<div><span>${html(nameOf(x.item,lang))}</span><strong>${num(x.amount)} ${html(x.rule.packageUnit||x.item.unit||"")}</strong></div>`).join("")||"尚未選取 / Chưa chọn sản phẩm"}</div>
  <button type="button" class="pv2-primary pv2-wide" data-pv2-action="submit" ${!editable||!count||ui.pending?"disabled":""}>${ui.pending?"儲存中… / Đang lưu…":"建立叫貨單 / Lập phiếu gọi hàng"}</button>
- <button type="button" class="pv2-secondary pv2-wide" data-pv2-action="copy" ${!count?"disabled":""}>複製清單 / Sao chép danh sách</button>
- <p class="pv2-hint">不會直接發送給供應商，也不會改變庫存。Không tự gửi cho NCC hoặc thay đổi tồn kho.</p></div>
- <div class="pv2-panel"><h3>供應商休假 / Lịch nghỉ NCC</h3>${suppliers().map(s=>`<div class="pv2-supplier-short"><strong>${html(s.name_zh_tw)}</strong><small>${html(s.name_vi)}</small><span>${html(s.closedDates.slice(0,3).join(", ")||"固定 / Cố định")}</span></div>`).join("")||"—"}</div></aside>`;
+ <button type="button" class="pv2-secondary pv2-wide" data-pv2-action="copy" ${!count?"disabled":""}>${P("copy",lang)}</button>
+ <p class="pv2-hint">${P("externalHint",lang)}</p></div>
+ <div class="pv2-panel"><h3>${P("supplierClosed",lang)}</h3>${suppliers().map(s=>`<div class="pv2-supplier-short"><strong>${html(s.name_zh_tw)}</strong><small>${html(s.name_vi)}</small><span>${html(s.closedDates.slice(0,3).join(", ")||"固定 / Cố định")}</span></div>`).join("")||"—"}</div></aside>`;
 }
 export function procurementV2Page(ctx,{render,site,editable}){
  prepare(site,render,ctx.state.selectedDate);
  const lang=ctx.language;
  ui.language=lang;
- if(ui.loading&&!ui.data)return `<section class="pv2-shell"><h2>叫貨管理 / Quản lý gọi hàng</h2><div class="pv2-panel">資料讀取中… / Đang tải dữ liệu từ Database…</div></section>`;
- if(ui.error&&!ui.data)return `<section class="pv2-shell"><h2>叫貨管理 / Quản lý gọi hàng</h2><div class="pv2-error" role="alert">Database/API: ${html(ui.error)}</div><button data-pv2-action="refresh">重新整理 / Tải lại</button></section>`;
+ if(ui.loading&&!ui.data)return `<section class="pv2-shell"><h2>${P("title",lang)}</h2><div class="pv2-panel">${P("loading",lang)}</div></section>`;
+ if(ui.error&&!ui.data)return `<section class="pv2-shell"><h2>${P("title",lang)}</h2><div class="pv2-error" role="alert">Database/API: ${html(ui.error)}</div><button data-pv2-action="refresh">${P("refresh",lang)}</button></section>`;
  const all=lines(),active=all.filter(x=>x.rule?.enabled),alerts=active.filter(x=>x.plan?.preArrivalRisk||((x.plan?.shortage||0)>0));
  const rows=all.filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
  return `<section class="pv2-shell" data-pv2-shell>
- <header class="pv2-title"><div><h2>叫貨管理 <span>Quản lý gọi hàng</span></h2><p>供應商・庫存・假日需求 / Nhà cung cấp · Tồn kho · Nhu cầu ngày lễ</p></div><div class="pv2-sync"><small>${ui.lastSyncedAt?"庫存同步 / Đồng bộ kho: "+new Date(ui.lastSyncedAt).toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"資料同步中 / Đang đồng bộ"}</small><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>⟳ 同步 / Đồng bộ</button></div></header>
+ <header class="pv2-title"><div><h2>叫貨管理 <span>Quản lý gọi hàng</span></h2><p>供應商・庫存・假日需求 / Nhà cung cấp · Tồn kho · Nhu cầu ngày lễ</p></div><div class="pv2-sync"><small>${ui.lastSyncedAt?"庫存同步 / Đồng bộ kho: "+new Date(ui.lastSyncedAt).toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"資料同步中 / Đang đồng bộ"}</small><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>${P("sync",lang)}</button></div></header>
  <div class="pv2-stats">${metric("supplier",suppliers().length)}${metric("definedRules",active.length)}${metric("needRestock",alerts.length)}${metric("ordersCreated",(ui.data?.orders||[]).length)}</div>
  ${tabs(lang)}
  ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}${ui.error?`<div class="pv2-error" role="alert">${html(ui.error)}</div>`:""}
