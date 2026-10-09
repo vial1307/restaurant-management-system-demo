@@ -29,6 +29,7 @@ on:
       - "vps/backend/src/inventory-access.mjs"
       - "vps/backend/src/inventory-access-admin-routes.mjs"
       - "vps/backend/scripts/master-data-regression-client.mjs"
+      - "vps/backend/scripts/procurement-api-regression-client.mjs"
       - "vps/backend/scripts/super-admin-regression-client.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - "docs/spec-deltas/2026-09-16-master-data-admin-panel.md"
@@ -61,6 +62,7 @@ on:
       - "vps/backend/src/inventory-access.mjs"
       - "vps/backend/src/inventory-access-admin-routes.mjs"
       - "vps/backend/scripts/master-data-regression-client.mjs"
+      - "vps/backend/scripts/procurement-api-regression-client.mjs"
       - "vps/backend/scripts/super-admin-regression-client.mjs"
       - "vps/backend/scripts/regression-setup.mjs"
       - "docs/spec-deltas/2026-09-16-master-data-admin-panel.md"
@@ -161,6 +163,11 @@ jobs:
 
       - name: Super Admin API and RBAC regression
         run: node vps/backend/scripts/super-admin-regression-client.mjs
+
+      - name: Procurement API and PostgreSQL round-trip regression
+        run: |
+          node --check vps/backend/scripts/procurement-api-regression-client.mjs
+          node vps/backend/scripts/procurement-api-regression-client.mjs
 
       - name: Dump API log on failure
         if: failure()
