@@ -6,7 +6,6 @@ const ui={ site:"",data:null,inventory:null,loading:false,error:"",tab:"list",su
  search:"",date:"",selected:new Set(),overrides:new Map(),editingSupplier:null,editingItem:null,pending:false,notice:"",
  requestKeys:new Map(),loadVersion:0 };
 const html=(value)=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const t=(zh,vi,lang)=>lang==="zh"?zh:${zh}<small>${vi}</small>`;
 const num=(v)=>Number(v||0).toLocaleString("en-US",{maximumFractionDigits:3});
 const errorLabel=(error)=>error?.code||error?.message||String(error||"UNKNOWN_ERROR");
 const identifier=()=>globalThis.crypto?.randomUUID?.()||"00000000-0000-4000-8000-"+Math.random().toString(16).slice(2).padEnd(12,"0").slice(0,12);
