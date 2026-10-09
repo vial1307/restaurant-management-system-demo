@@ -22,6 +22,10 @@ function incomingFor(itemId){
  return (ui.data?.orders||[]).filter(order=>order.status==="submitted").flatMap(order=>(order.lines||[]).filter(x=>x.itemId===itemId)
  .map(line=>({expectedArrival:order.expectedArrival,baseQuantity:Number(line.baseQuantity),status:order.status})));
 }
+function itemMatches(item,query=ui.search){
+ const needle=prepareIngredientNameSearchNeedle(query);
+ return ingredientNameSearchMatches(prepareIngredientNameSearchCorpus(item.name_zh_tw,item.name_vi),needle);
+}
 function lines(){
  return items().map(item=>{
    const rule=ruleFor(item.id),supplier=supplierFor(rule?.supplierId),stock=stockFor(item.id);
@@ -40,7 +44,7 @@ async function refresh(site,render){
     vpsInventory(site,{force:true})
   ]);
   if(guard(site)&&version===ui.loadVersion){
-    ui.data=data;ui.inventory=inventory;ui.error="";ui.selected.clear();ui.overrides.clear();ui.requestKeys.clear();
+    ui.data=data;ui.inventory=inventory;ui.error="";
   }
  }catch(error){if(guard(site)&&version===ui.loadVersion)ui.error=errorLabel(error);}
  finally{if(guard(site)&&version===ui.loadVersion){ui.loading=false;render();}}
@@ -93,7 +97,7 @@ function groupsOf(rows,keyFor){
  return [...groups];
 }
 function listBody(lang,editable){
- let rows=lines().filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category));
+ let rows=lines().filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
  if(ui.tab==="supplier"){
   const groups=groupsOf(rows,r=>r.supplier?.id||"unassigned");
   return groups.map(([key,subRows])=>{
@@ -152,7 +156,7 @@ function settingsBody(lang,editable){
  return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>供應商設定 / Cấu hình nhà cung cấp</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">＋新增 / Thêm</button>`:""}</header>
  <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>`<div class="pv2-supplier-card"><strong>${html(s.name_zh_tw)}</strong><small>${html(s.name_vi)}</small><span>休息日 / Ngày nghỉ: ${html(s.closedWeekdays.join(",")||"—")}</span><span>交期 / Giao: ${s.leadDays} 天/ngày</span>${editable?`<button type="button" data-pv2-action="edit-supplier" data-id="${s.id}">編輯 / Sửa</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚未建立供應商。Nhấn Thêm để tạo nhà cung cấp thật trong Database.</p>`}</div></section>
  ${formSupplier(lang)}
- <section class="pv2-panel"><header class="pv2-section-head"><h3>產品用量設定 / Định mức sản phẩm</h3></header><div class="pv2-settings-list">${items().map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
+ <section class="pv2-panel"><header class="pv2-section-head"><h3>產品用量設定 / Định mức sản phẩm</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="搜尋產品 / Tìm đúng tên sản phẩm"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
  ${formRule(lang)}
  <section class="pv2-panel"><header class="pv2-section-head"><h3>節日與營業日 / Ngày lễ & ngày hoạt động</h3></header>
  <p class="pv2-hint">依日期逐日設定；連假可分別設定每一天。 Thiết lập từng ngày để tính đúng kỳ nghỉ liên tiếp 2–3 ngày.</p>
@@ -177,12 +181,12 @@ export function procurementV2Page(ctx,{render,site,editable}){
  if(ui.loading&&!ui.data)return `<section class="pv2-shell"><h2>叫貨管理 / Quản lý gọi hàng</h2><div class="pv2-panel">資料讀取中… / Đang tải dữ liệu từ Database…</div></section>`;
  if(ui.error&&!ui.data)return `<section class="pv2-shell"><h2>叫貨管理 / Quản lý gọi hàng</h2><div class="pv2-error" role="alert">Database/API: ${html(ui.error)}</div><button data-pv2-action="refresh">重新整理 / Tải lại</button></section>`;
  const all=lines(),active=all.filter(x=>x.rule?.enabled),alerts=active.filter(x=>x.plan?.preArrivalRisk||((x.plan?.shortage||0)>0));
- const rows=all.filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category));
+ const rows=all.filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
  return `<section class="pv2-shell" data-pv2-shell>
  <header class="pv2-title"><div><h2>叫貨管理 <span>Quản lý gọi hàng</span></h2><p>供應商・庫存・假日需求 / Nhà cung cấp · Tồn kho · Nhu cầu ngày lễ</p></div><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>⟳ 同步 / Đồng bộ</button></header>
  <div class="pv2-stats">${metric("供應商","Nhà cung cấp",suppliers().length)}${metric("產品規則","Sản phẩm có định mức",active.length)}${metric("需要補貨","Cần gọi",alerts.length)}${metric("已建立訂單","Phiếu đã tạo",(ui.data?.orders||[]).length)}</div>
  ${tabs(lang)}
- ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}
+ ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}${ui.error?`<div class="pv2-error" role="alert">${html(ui.error)}</div>`:""}
  <div class="pv2-content">${ui.tab==="history"?historyBody(lang):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}${listBody(lang,editable)}</div>`}
  ${["list","supplier","group"].includes(ui.tab)?summary(lang,editable,rows):""}</div></section>`;
 }
