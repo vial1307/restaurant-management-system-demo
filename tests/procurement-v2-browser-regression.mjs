@@ -21,7 +21,26 @@ try{
   await page.goto(BASE+"/#procurement",{waitUntil:"domcontentloaded"});
   await page.locator("[data-pv2-shell]").waitFor({timeout:30000});
   await page.locator('[data-pv2-action="tab"][data-tab="settings"]').click();
-  await page.locator('[data-pv2-action="new-supplier"]').click();
+  try {
+    await page.locator('[data-pv2-action="new-supplier"]').click({timeout:12000});
+  } catch (error) {
+    const diagnostic=await page.evaluate(()=>{
+      const session=JSON.parse(localStorage.getItem("shitu-kitchen-auth-v1")||"null");
+      const tabs=[...document.querySelectorAll('[data-pv2-action="tab"]')].map(el=>({tab:el.dataset.tab,active:el.classList.contains("active")}));
+      return {
+        route:location.hash,
+        role:session?.accountRole||session?.role,
+        site:session?.location,
+        procurementPermissions:session?.permissions?.procurement,
+        tabs,
+        settingsVisible:Boolean(document.querySelector(".pv2-settings")),
+        newSupplierButtons:document.querySelectorAll('[data-pv2-action="new-supplier"]').length,
+        shellText:document.querySelector(".pv2-shell")?.innerText.slice(0,450),
+        authFormVisible:Boolean(document.querySelector("#auth-login-form"))
+      };
+    });
+    throw new Error("PROCUREMENT_SUPPLIER_BUTTON_MISSING "+JSON.stringify(diagnostic)+"; "+String(error));
+  }
   const supplier=page.locator('[data-pv2-form="supplier"]');
   await supplier.locator('[name="nameZhTw"]').fill("測試連休供應商");
   await supplier.locator('[name="nameVi"]').fill("Nhà cung cấp thử lịch");
