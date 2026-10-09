@@ -64,4 +64,49 @@ assert.match(server,/PROCUREMENT_PERMISSION_DENIED/);
 assert.match(migration,/references public.inventory_items\(id\)/);
 assert.match(migration,/unique \(site_code,request_key\)/);
 assert.doesNotMatch(migration,/insert into public.procurement_suppliers/i,"never seed unverified supplier names");
+
+import {
+  validProcurementDate,procurementDateRange,procurementAddClosedDates,
+  procurementMoveMonth,procurementMonthCells,procurementCalendarMonth
+} from "../src/procurement-calendar-picker.js";
+
+assert.equal(validProcurementDate("2026-10-12"),true);
+assert.equal(validProcurementDate("2026-02-30"),false,"invalid calendar dates rejected");
+assert.deepEqual(procurementDateRange("2026-10-10","2026-10-12"),["2026-10-10","2026-10-11","2026-10-12"]);
+assert.deepEqual(procurementDateRange("2026-10-12","2026-10-10"),["2026-10-10","2026-10-11","2026-10-12"],"reverse click order accepted");
+assert.deepEqual(procurementAddClosedDates(["2026-10-11"],"2026-10-10","2026-10-12"),["2026-10-10","2026-10-11","2026-10-12"]);
+assert.deepEqual(procurementAddClosedDates(["2026-10-11","2026-10-12"],"2026-10-12","2026-10-12"),["2026-10-11","2026-10-12"],"overlap deduped");
+assert.throws(()=>procurementDateRange("2026-10-01","2027-03-01"),/TOO_MANY_CLOSED_DATES/);
+assert.throws(()=>procurementAddClosedDates(["2026-10-11"],"2026-10-13","2026-10-15",{limit:3}),/TOO_MANY_CLOSED_DATES/);
+assert.equal(procurementMoveMonth("2026-12",1),"2027-01");
+assert.equal(procurementMoveMonth("2026-01",-1),"2025-12");
+assert.equal(procurementCalendarMonth("2026-10-10"),"2026-10");
+const feb=procurementMonthCells("2028-02").filter(Boolean);
+assert.equal(feb.length,29,"leap year calendar");
+assert.equal(feb[0],"2028-02-01");
+assert.equal(feb.at(-1),"2028-02-29");
+assert.match(ui,/data-pv2-action="calendar-day"/);
+assert.match(ui,/data-pv2-action="calendar-add-range"/);
+assert.match(ui,/data-pv2-action="calendar-remove"/);
+assert.match(ui,/data-pv2-action="calendar-clear"/);
+assert.match(ui,/name="rangeStart" value="/);
+assert.match(ui,/name="rangeEnd" value="/);
+assert.doesNotMatch(ui,/textarea name="closedDates"/,"no manual typed holiday list remains");
+assert.match(ui,/closedDates:\[\.\.\.ui\.supplierClosedDates\]/,"persist selected calendar dates to existing supplier table");
+assert.match(ui,/role="dialog" aria-modal="true"/,"product settings must be modal");
+assert.match(ui,/data-pv2-backdrop/);
+assert.match(ui,/event\.key==="Escape"/);
+assert.match(ui,/ui\.ruleDraft/);
+assert.match(ui,/window\.setInterval/);
+assert.match(ui,/\},30000\)/,"DB direct SQL changes are polled at 30 seconds");
+assert.match(ui,/vpsInventory\(site,\{force:true\}\)/);
+assert.match(ui,/row\.configured!==false/,"stock quantity must match Inventory Report configured locations");
+assert.match(ui,/ui\.inventory\?\.receiveDefaults/);
+assert.match(ui,/row\.minimum_enabled===false/);
+assert.match(ui,/ui\.inventory\?\.categories/);
+assert.match(ui,/ui\.inventory\?\.locations/);
+assert.match(css,/\.pv2-calendar-grid/);
+assert.match(css,/\.pv2-dialog-backdrop/);
+assert.match(css,/@media\(max-width:480px\)/);
+
 console.log("PROCUREMENT_V2_CONTRACT_OK");
