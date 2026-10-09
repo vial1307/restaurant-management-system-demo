@@ -50,7 +50,7 @@ assert.match(ui,/navigator.clipboard.writeText/);
 assert.match(ui,/role="status"/);
 assert.match(css,/@media\(max-width:359px\)/);
 assert.match(css,/@media\(max-width:429px\)/);
-assert.match(css,/@media\(max-width:760px\)/);
+assert.match(css,/@media\(max-width:991px\)/,"card layout must begin early enough for the existing sidebar at tablet widths");
 assert.match(css,/\.pv2-product\[hidden\]/);
 assert.equal(html,vpsEntry,"VPS/static entry parity");
 assert.match(html,/procurement-v2.css/);
