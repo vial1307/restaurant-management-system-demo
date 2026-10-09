@@ -3,7 +3,14 @@ import { hasPermission, requireUser, siteAllowed } from "./auth.mjs";
 import { activeSite } from "./site-registry.mjs";
 import { inventoryActionAllowed } from "./inventory-access.mjs";
 
-const validDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || "")) && !Number.isNaN(Date.parse(s + "T12:00:00Z"));
+const validDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s||"")) && (() => {
+ const d=new Date(s+"T12:00:00Z");return Number.isFinite(d.valueOf())&&d.toISOString().slice(0,10)===s;
+})();
+const taipeiParts=()=>Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).filter(x=>x.type!=="literal").map(x=>[x.type,x.value]));
+const plusDays=(s,n)=>{const d=new Date(s+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
+const isSupplierClosed=(date,s)=>s.closed_weekdays.includes(new Date(date+"T12:00:00Z").getUTCDay())||s.closed_dates.map(dateKey).includes(date);
+function suggestedArrival(orderDate,s){let d=plusDays(orderDate,Number(s.lead_days));for(let i=0;i<90&&isSupplierClosed(d,s);i++)d=plusDays(d,1);return d;}
+
 const intRange = (v,min,max) => Number.isInteger(Number(v)) && Number(v)>=min && Number(v)<=max;
 const qty = (v,min=0) => Number.isFinite(Number(v)) && Number(v)>=min && Number(v)<=10000000;
 const textValue = (v,max=120) => String(v ?? "").trim().slice(0,max);
@@ -93,7 +100,7 @@ export async function registerProcurementRoutes(app) {
         const item=(await client.query("select id,item_key from public.inventory_items where id=$1 and active=true",[b.itemId])).rows[0];
         if (!item || !item.item_key.startsWith(ctx.site+":")) throw Object.assign(new Error("PRODUCT_NOT_IN_SITE"),{statusCode:400});
         if (b.supplierId) {
-          const supplier=(await client.query("select id from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
+          const supplier=(await client.query("select * from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
           if (!supplier) throw Object.assign(new Error("SUPPLIER_NOT_IN_SITE"),{statusCode:400});
         }
         const prev=(await client.query("select * from public.procurement_product_rules where site_code=$1 and item_id=$2 for update",[ctx.site,b.itemId])).rows[0];
@@ -123,6 +130,24 @@ export async function registerProcurementRoutes(app) {
     return {calendar:result};
   });
 
+  app.post("/api/procurement/:site/orders/:id/status",async(request,reply)=>{
+    const ctx=await allowed(request,reply,"edit");if(!ctx)return;
+    const next=String(request.body?.status||""),orderId=String(request.params.id||"");
+    if(!["confirmed","received","cancelled"].includes(next))return validationReply(reply);
+    try{
+      const result=await withTransaction(async client=>{
+        const current=(await client.query("select * from public.procurement_orders where id=$1 and site_code=$2 for update",[orderId,ctx.site])).rows[0];
+        if(!current)throw Object.assign(new Error("PROCUREMENT_ORDER_NOT_FOUND"),{statusCode:404});
+        const allowedChanges={submitted:["confirmed","cancelled"],confirmed:["received","cancelled"],received:[],cancelled:[]};
+        if(!allowedChanges[current.status].includes(next))throw Object.assign(new Error("INVALID_ORDER_STATUS_TRANSITION"),{statusCode:409});
+        const after=(await client.query("update public.procurement_orders set status=$3,updated_at=now() where id=$1 and site_code=$2 returning *",[orderId,ctx.site,next])).rows[0];
+        await audit(client,ctx,"procurement.order.status",orderId,current,after);
+        return {id:after.id,status:after.status};
+      });
+      return {order:result};
+    }catch(error){return reply.code(error.statusCode||500).send({error:error.message||"ORDER_STATUS_FAILED"});}
+  });
+
   app.post("/api/procurement/:site/orders", async (request,reply) => {
     const ctx=await allowed(request,reply,"edit"); if (!ctx) return;
     const b=request.body || {};
@@ -137,6 +162,13 @@ export async function registerProcurementRoutes(app) {
         if(previous)return {id:previous.id,alreadyExists:true};
         const supplier=(await client.query("select id from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
         if(!supplier)throw Object.assign(new Error("SUPPLIER_NOT_IN_SITE"),{statusCode:400});
+        const now=taipeiParts(),today=now.year+"-"+now.month+"-"+now.day;
+        if(b.orderDate<today)throw Object.assign(new Error("ORDER_DATE_IN_PAST"),{statusCode:400});
+        if(isSupplierClosed(b.orderDate,supplier))throw Object.assign(new Error("SUPPLIER_CLOSED"),{statusCode:409});
+        if(b.orderDate===today&&(now.hour+":"+now.minute)>=String(supplier.cutoff_time).slice(0,5))
+          throw Object.assign(new Error("ORDER_CUTOFF_PASSED"),{statusCode:409});
+        if(suggestedArrival(b.orderDate,supplier)!==b.expectedArrival)
+          throw Object.assign(new Error("EXPECTED_ARRIVAL_CHANGED"),{statusCode:409});
         const rules=(await client.query("select r.item_id,r.package_size,r.package_unit from public.procurement_product_rules r join public.inventory_items i on i.id=r.item_id where r.site_code=$1 and r.supplier_id=$2 and r.enabled=true and i.active=true and split_part(i.item_key,':',1)=$1",[ctx.site,b.supplierId])).rows;
         const byItem=new Map(rules.map(row=>[row.item_id,row]));
         for(const line of lines)if(!byItem.has(line.itemId))throw Object.assign(new Error("ORDER_LINE_NOT_ASSIGNED"),{statusCode:400});
