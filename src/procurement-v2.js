@@ -90,7 +90,7 @@ function filterBar(lang){
 }
 function productRows(rows,lang,editable){
  if(!rows.length)return `<div class="pv2-empty">${P("emptyProducts",lang)}</div>`;
- return `<div class="pv2-table-head"><span></span><span>${P("productName",lang)}</span><span>${P("supplier",lang)}</span><span>${P("weekdayHoliday",lang)}</span><span>${P("stock",lang)}</span><span>${P("suggested",lang)}</span><span>${P("orderQty",lang)}</span></div>
+ return `<div class="pv2-table-head"><span></span>${["productName","supplier","weekdayHoliday","stock","suggested","orderQty"].map(key=>`<span><strong>${html(R(key,"zh"))}</strong><small>${lang==="zh"?"":html(R(key,"vi"))}</small></span>`).join("")}</div>
  <div class="pv2-product-list">${rows.map(row=>procurementProductCard(row,{language:lang,editable,format:num})).join("")}</div>`;
 }
 function groupsOf(rows,keyFor){
