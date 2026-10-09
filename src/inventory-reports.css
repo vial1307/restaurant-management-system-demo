@@ -66,7 +66,7 @@
   .inventory-report-filter-grid{grid-template-columns:1fr 1fr}
   .inventory-report-stats{grid-template-columns:1fr 1fr}
   .report-export-inline{display:none}
-  .inventory-report-mobile-export{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;border-top:1px solid var(--line);position:sticky;bottom:68px;background:#fff;z-index:2}
+  .inventory-report-mobile-export{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:12px;border-top:1px solid var(--line);position:sticky;bottom:68px;background:#fff;z-index:2}
   .inventory-report-mobile-export .copy-action{grid-column:1/-1}
   .inventory-report-actions>span{margin-left:auto}
 }
@@ -104,6 +104,9 @@
   .inventory-report-mobile-export{bottom:60px}
   .inventory-report-preview{border-radius:14px;margin-bottom:84px}
   .inventory-report-preview pre{min-height:190px}
+}
+@media (max-width:420px){
+  .inventory-report-mobile-export{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media print{
   body.inventory-report-printing{background:#fff}
