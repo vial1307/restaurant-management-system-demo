@@ -670,15 +670,26 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
 
   function reportsPage(context) {
     const { state, text, language } = context;
-    const data = reportData(context);
     const allowed = permitted(state, "reports:export");
     const reportTypes = [
-      { id: "daily", label: language === "zh" ? "每日負荷" : "Báo cáo theo ngày" },
       { id: "inventory", label: text.inventoryReport },
+      { id: "daily", label: language === "zh" ? "每日負荷" : "Báo cáo theo ngày" },
       { id: "sop", label: text.sopReport },
       { id: "attendance", label: text.attendanceReport },
       { id: "checks", label: text.checksReport },
     ];
+    const tabs = `<div class="zone-tabs report-tabs">${reportTypes.map((report) => `<button class="filter-tab ${report.id === view.reportType ? "selected" : ""}" data-action="report-type" data-report="${report.id}">${escapeHtml(report.label)}</button>`).join("")}</div>`;
+
+    if (view.reportType === "inventory") {
+      return `${heading(
+        language === "zh" ? "庫存報表" : "Báo cáo tồn kho",
+        language === "zh"
+          ? "直接從 PostgreSQL 讀取分店、品項、儲位與庫存資料；Super Admin 的變更會反映在此。"
+          : "Đọc trực tiếp chi nhánh, sản phẩm, vị trí và tồn kho từ PostgreSQL; thay đổi trong Super Admin được phản ánh tại đây."
+      )}${tabs}<section class="inventory-report-host" data-inventory-report-host data-report-export="${allowed ? "1" : "0"}" aria-live="polite"></section>`;
+    }
+
+    const data = reportData(context);
     const targetOptions = view.reportScope === "person"
       ? state.operations.staff.filter((member) => member.active).map((member) => ({ id: member.id, label: member.name }))
       : view.reportScope === "department"
@@ -691,7 +702,7 @@ export function createManagement({ store, view, root, icon, heading, cardHeading
     const body = data.rows.length
       ? data.rows.map((row) => `<tr>${row.map((value) => `<td>${escapeHtml(typeof value === "number" ? compactNumber(value, language) : value)}</td>`).join("")}</tr>`).join("")
       : `<tr><td colspan="${data.columns.length}">${escapeHtml(text.noItems)}</td></tr>`;
-    return `${heading(text.reports, text.reportsSubtitle, actions)}<div class="zone-tabs report-tabs">${reportTypes.map((report) => `<button class="filter-tab ${report.id === view.reportType ? "selected" : ""}" data-action="report-type" data-report="${report.id}">${escapeHtml(report.label)}</button>`).join("")}</div><section class="card report-filter-card"><label><span>${language === "zh" ? "範圍" : "Phạm vi"}</span><select data-field="report-scope"><option value="all" ${view.reportScope === "all" ? "selected" : ""}>${language === "zh" ? "全部" : "Tổng hợp"}</option><option value="person" ${view.reportScope === "person" ? "selected" : ""}>${language === "zh" ? "個人" : "Từng người"}</option><option value="department" ${view.reportScope === "department" ? "selected" : ""}>${language === "zh" ? "部門" : "Từng bộ phận"}</option></select></label><label><span>${language === "zh" ? "對象" : "Đối tượng"}</span><select data-field="report-target">${targetOptions.map((option) => `<option value="${escapeHtml(option.id)}" ${view.reportTarget === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "工作分類" : "Phân loại công việc"}</span><select data-field="report-category"><option value="all">${language === "zh" ? "全部分類" : "Tất cả phân loại"}</option>${categories.map((job) => `<option value="${escapeHtml(job.id)}" ${view.reportCategory === job.id ? "selected" : ""}>${escapeHtml(language === "zh" ? job.label : job.labelVi)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "開始日期" : "Từ ngày"}</span><input type="date" value="${escapeHtml(from)}" data-field="report-from" /></label><label><span>${language === "zh" ? "結束日期" : "Đến ngày"}</span><input type="date" value="${escapeHtml(to)}" data-field="report-to" /></label></section><article class="card report-card">${cardHeading(data.title, `<span class="tag tag-neutral">${escapeHtml(from)} → ${escapeHtml(to)} · ${data.rows.length}</span>`)}<div class="report-table-wrap"><table class="report-table"><thead><tr>${data.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div></article>`;
+    return `${heading(text.reports, text.reportsSubtitle, actions)}${tabs}<section class="card report-filter-card"><label><span>${language === "zh" ? "範圍" : "Phạm vi"}</span><select data-field="report-scope"><option value="all" ${view.reportScope === "all" ? "selected" : ""}>${language === "zh" ? "全部" : "Tổng hợp"}</option><option value="person" ${view.reportScope === "person" ? "selected" : ""}>${language === "zh" ? "個人" : "Từng người"}</option><option value="department" ${view.reportScope === "department" ? "selected" : ""}>${language === "zh" ? "部門" : "Từng bộ phận"}</option></select></label><label><span>${language === "zh" ? "對象" : "Đối tượng"}</span><select data-field="report-target">${targetOptions.map((option) => `<option value="${escapeHtml(option.id)}" ${view.reportTarget === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "工作分類" : "Phân loại công việc"}</span><select data-field="report-category"><option value="all">${language === "zh" ? "全部分類" : "Tất cả phân loại"}</option>${categories.map((job) => `<option value="${escapeHtml(job.id)}" ${view.reportCategory === job.id ? "selected" : ""}>${escapeHtml(language === "zh" ? job.label : job.labelVi)}</option>`).join("")}</select></label><label><span>${language === "zh" ? "開始日期" : "Từ ngày"}</span><input type="date" value="${escapeHtml(from)}" data-field="report-from" /></label><label><span>${language === "zh" ? "結束日期" : "Đến ngày"}</span><input type="date" value="${escapeHtml(to)}" data-field="report-to" /></label></section><article class="card report-card">${cardHeading(data.title, `<span class="tag tag-neutral">${escapeHtml(from)} → ${escapeHtml(to)} · ${data.rows.length}</span>`)}<div class="report-table-wrap"><table class="report-table"><thead><tr>${data.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div></article>`;
   }
 
   function staffCard(context) {
