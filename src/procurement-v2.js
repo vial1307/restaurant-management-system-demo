@@ -1,5 +1,5 @@
 import { apiRequest, vpsInventory } from "./vps-api.js";
-import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,procurementSettingsModal,procurementSupplierCard,procurementProductCard } from "./procurement-v2-components.js";
+import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,procurementSettingsModal,procurementSupplierCard,procurementProductCard,procurementFilterBar } from "./procurement-v2-components.js";
 import { ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { addCalendarDays, planProcurementLine } from "./procurement-planner.js";
 import { procurementAddClosedDates, procurementCalendarMonth, procurementMonthCells, procurementMoveMonth, validProcurementDate } from "./procurement-calendar-picker.js";
@@ -85,14 +85,8 @@ function metric(key,value){return procurementStat(key,value,num);}
 function badge(text,color){return `<span class="pv2-badge pv2-${color}">${html(text)}</span>`;}
 function tabs(language){return procurementTabs(ui.tab,language);}
 function filterBar(lang){
- const categories=ui.inventory?.categories||[];
- return `<div class="pv2-filters">
-  <label class="pv2-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="${P("search",lang)}" autocomplete="off" /><button type="button" data-pv2-action="clear-search" aria-label="${P("searchClear",lang)}">×</button></label>
-  <select data-pv2-filter="supplier" aria-label="Supplier"><option value="all">${P("allSuppliers",lang)}</option>${suppliers().map(s=>`<option value="${s.id}" ${ui.supplier===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}<option value="unassigned" ${ui.supplier==="unassigned"?"selected":""}>${P("unassignedSupplier",lang)}</option></select>
-  <select data-pv2-filter="category" aria-label="Category"><option value="all">${P("allGroups",lang)}</option>${categories.map(x=>`<option value="${html(x.code)}" ${ui.category===x.code?"selected":""}>${html(lang==="zh"?x.name_zh_tw:x.name_vi)}</option>`).join("")}</select>
-  <input type="date" data-pv2-date value="${html(ui.date)}" aria-label="${P("orderDate",lang)}">
-  <span class="pv2-result" data-pv2-results></span>
- </div>`;
+ return procurementFilterBar({language:lang,search:ui.search,supplierFilter:ui.supplier,
+  categoryFilter:ui.category,orderDate:ui.date,suppliers:suppliers(),categories:ui.inventory?.categories||[]});
 }
 function productRows(rows,lang,editable){
  if(!rows.length)return `<div class="pv2-empty">${P("emptyProducts",lang)}</div>`;
@@ -119,7 +113,7 @@ function listBody(lang,editable){
   return groups.map(([key,groupRows])=>{
     const group=(ui.inventory?.categories||[]).find(x=>x.code===key);
     const label=group?(lang==="zh"?group.name_zh_tw:group.name_vi):P("uncategorized",lang);
-    return `<section class="pv2-panel"><header class="pv2-section-head"><h3>▦ ${html(label)}</h3><small>${groupRows.length} 項 / sản phẩm</small></header>${productRows(groupRows,lang,editable)}</section>`;
+    return `<section class="pv2-panel"><header class="pv2-section-head"><h3>▦ ${html(label)}</h3><small>${groupRows.length} ${P("itemsUnit",lang)}</small></header>${productRows(groupRows,lang,editable)}</section>`;
   }).join("")||productRows([],lang,editable);
  }
  return procurementPanel({body:productRows(rows,lang,editable),language:lang});
@@ -127,7 +121,7 @@ function listBody(lang,editable){
 function historyBody(lang,editable){
  const orders=ui.data?.orders||[];
  return `<section class="pv2-panel"><header class="pv2-section-head"><h3>${P("history",lang)}</h3></header>
- ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||P("supplier",lang))}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">${P("noHistory",lang)}</p>`}
+ ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||P("supplier",lang))}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(P(({submitted:"statusSubmitted",confirmed:"statusConfirmed",received:"statusReceived",cancelled:"statusCancelled"})[o.status]||"statusSubmitted",lang),"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">${P("noHistory",lang)}</p>`}
  <p class="pv2-hint">${P("historyHint",lang)}</p></section>`;
 }
 
