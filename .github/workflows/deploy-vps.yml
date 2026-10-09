@@ -325,6 +325,9 @@ jobs:
       - name: Desktop and mobile Chromium regression
         run: node tests/browser-regression.mjs
 
+      - name: Procurement V2 interactive calendar and modal browser regression
+        run: node tests/procurement-v2-browser-regression.mjs
+
       - name: Workforce approval browser regression
         env:
           WORKFORCE_APPROVAL_ONLY: "1"
