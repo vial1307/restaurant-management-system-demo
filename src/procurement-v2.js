@@ -116,10 +116,10 @@ function listBody(lang,editable){
  }
  return `<section class="pv2-panel">${productRows(rows,lang,editable)}</section>`;
 }
-function historyBody(lang){
+function historyBody(lang,editable){
  const orders=ui.data?.orders||[];
  return `<section class="pv2-panel"><header class="pv2-section-head"><h3>叫貨紀錄 / Lịch sử gọi hàng</h3></header>
- ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>叫貨 / Đặt</small><strong>${html(o.orderDate)}</strong></div><div><small>預計到貨 / Dự kiến giao</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">供應商已確認 / NCC đã xác nhận</button>`:""}${o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">已完成進貨 / Đã nhập kho</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
+ ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>叫貨 / Đặt</small><strong>${html(o.orderDate)}</strong></div><div><small>預計到貨 / Dự kiến giao</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">供應商已確認 / NCC đã xác nhận</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">已完成進貨 / Đã nhập kho</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
  <p class="pv2-hint">叫貨單不會自動入庫；到貨後請至「進貨入庫」確認數量。 Đơn gọi hàng không tự tăng tồn kho; phải nhận hàng tại mục Nhập kho.</p></section>`;
 }
 function formSupplier(lang){
@@ -187,7 +187,7 @@ export function procurementV2Page(ctx,{render,site,editable}){
  <div class="pv2-stats">${metric("供應商","Nhà cung cấp",suppliers().length)}${metric("產品規則","Sản phẩm có định mức",active.length)}${metric("需要補貨","Cần gọi",alerts.length)}${metric("已建立訂單","Phiếu đã tạo",(ui.data?.orders||[]).length)}</div>
  ${tabs(lang)}
  ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}${ui.error?`<div class="pv2-error" role="alert">${html(ui.error)}</div>`:""}
- <div class="pv2-content">${ui.tab==="history"?historyBody(lang):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}${listBody(lang,editable)}</div>`}
+ <div class="pv2-content">${ui.tab==="history"?historyBody(lang,editable):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}${listBody(lang,editable)}</div>`}
  ${["list","supplier","group"].includes(ui.tab)?summary(lang,editable,rows):""}</div></section>`;
 }
 async function submitOrders(render){
