@@ -1,37 +1,50 @@
+/* Procurement design system: canonical tokens for all device sizes and view components. */
+.pv2-shell{
+ --pv2-primary:#1765ec;--pv2-primary-soft:#f0f6ff;
+ --pv2-primary-border:#c7d5eb;--pv2-ink:#1f3350;--pv2-muted:#6b7f98;
+ --pv2-muted-2:#71829c;--pv2-border:#e5eaf3;--pv2-surface:#fff;
+ --pv2-surface-soft:#f6f8fc;--pv2-alert:#b92f2f;--pv2-success:#12804f;
+ --pv2-radius-sm:8px;--pv2-radius-md:9px;--pv2-radius-card:12px;
+ --pv2-space-xs:4px;--pv2-space-sm:8px;--pv2-space-md:12px;--pv2-space-lg:16px;
+ --pv2-font-ui:Inter,"Noto Sans TC","Segoe UI",sans-serif;
+ --pv2-blue:var(--pv2-primary);--pv2-line:var(--pv2-border);
+ --pv2-text:var(--pv2-ink);--pv2-soft:var(--pv2-surface-soft);
+}
 
-.pv2-shell{--pv2-blue:#1765ec;--pv2-line:#e5eaf3;--pv2-text:#1f3350;--pv2-soft:#f6f8fc;color:var(--pv2-text);font-family:Inter,"Noto Sans TC","Segoe UI",sans-serif;min-width:0;display:grid;gap:14px}
+
+.pv2-shell{color:var(--pv2-text);font-family:var(--pv2-font-ui);min-width:0;display:grid;gap:14px}
 .pv2-shell *{box-sizing:border-box}
 .pv2-shell button,.pv2-shell input,.pv2-shell select,.pv2-shell textarea{font:inherit}
 .pv2-shell button{cursor:pointer}
 .pv2-shell button:disabled,.pv2-shell input:disabled{cursor:not-allowed;opacity:.55}
-.pv2-shell small{display:block;font-size:12px;line-height:1.4;color:#6b7f98;font-weight:400}
-.pv2-shell :is(input,select,textarea){min-height:40px;border:1px solid #d7e0ec;border-radius:9px;padding:8px 10px;max-width:100%;min-width:0;background:#fff;color:var(--pv2-text);outline-offset:2px}
+.pv2-shell small{display:block;font-size:12px;line-height:1.4;color:var(--pv2-muted);font-weight:400}
+.pv2-shell :is(input,select,textarea){min-height:40px;border:1px solid #d7e0ec;border-radius:var(--pv2-radius-md);padding:8px 10px;max-width:100%;min-width:0;background:#fff;color:var(--pv2-text);outline-offset:2px}
 .pv2-shell :is(input,select,textarea):focus-visible,.pv2-shell button:focus-visible{outline:2px solid #2e70ef;outline-offset:2px}
 .pv2-shell input[type=checkbox]{width:18px;height:18px;min-height:18px;accent-color:var(--pv2-blue);padding:0;flex:0 0 18px}
 .pv2-title{display:flex;justify-content:space-between;align-items:center;gap:16px;min-width:0}
 .pv2-title h2{font-size:25px;line-height:1.2;margin:0 0 5px;font-weight:800}
 .pv2-title h2 span{font-weight:700;font-size:19px;margin-left:9px}
-.pv2-title p{color:#71829c;font-size:13px;margin:0}
-.pv2-primary,.pv2-secondary{border:1px solid #c7d5eb;border-radius:9px;min-height:42px;padding:9px 15px;background:#fff;color:var(--pv2-blue);font-size:13px;font-weight:700}
+.pv2-title p{color:var(--pv2-muted-2);font-size:13px;margin:0}
+.pv2-primary,.pv2-secondary{border:1px solid var(--pv2-primary-border);border-radius:var(--pv2-radius-md);min-height:42px;padding:9px 15px;background:#fff;color:var(--pv2-blue);font-size:13px;font-weight:700}
 .pv2-primary{background:var(--pv2-blue);border-color:var(--pv2-blue);color:#fff}
 .pv2-wide{width:100%;margin-top:10px}
 .pv2-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .pv2-stat{background:#fff;border:1px solid var(--pv2-line);border-radius:13px;padding:14px 16px;display:flex;justify-content:space-between;gap:8px;min-width:0;align-items:center}
 .pv2-stat>span{font-weight:700;font-size:15px}
 .pv2-stat strong{font-size:26px;color:var(--pv2-blue);white-space:nowrap}
-.pv2-tabs{display:flex;align-items:stretch;gap:4px;border:1px solid var(--pv2-line);border-radius:12px;background:#fff;padding:5px;min-width:0;flex-wrap:wrap}
+.pv2-tabs{display:flex;align-items:stretch;gap:4px;border:1px solid var(--pv2-line);border-radius:var(--pv2-radius-card);background:#fff;padding:5px;min-width:0;flex-wrap:wrap}
 .pv2-tab{border:0;border-bottom:3px solid transparent;background:transparent;min-width:104px;flex:1 1 118px;border-radius:6px 6px 0 0;padding:10px 7px;color:#475d7e}
-.pv2-tab.active{color:var(--pv2-blue);border-bottom-color:var(--pv2-blue);background:#f0f6ff}
+.pv2-tab.active{color:var(--pv2-blue);border-bottom-color:var(--pv2-blue);background:var(--pv2-primary-soft)}
 .pv2-tab strong{font-size:14px}
 .pv2-content{display:grid;grid-template-columns:minmax(0,1fr) 266px;gap:12px;align-items:start;min-width:0}
 .pv2-main,.pv2-aside,.pv2-settings{display:grid;gap:12px;min-width:0}
-.pv2-panel{border:1px solid var(--pv2-line);border-radius:12px;background:#fff;min-width:0;overflow:hidden;padding:14px}
+.pv2-panel{border:1px solid var(--pv2-line);border-radius:var(--pv2-radius-card);background:#fff;min-width:0;overflow:hidden;padding:14px}
 .pv2-aside .pv2-panel{padding:15px}
 .pv2-panel h3{margin:0;font-size:16px}
 .pv2-section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .pv2-section-head button{min-height:38px}
 .pv2-filters{display:flex;gap:9px;align-items:center;flex-wrap:wrap;min-width:0}
-.pv2-search{min-width:180px;flex:1 1 260px;display:flex;align-items:center;border:1px solid #d7e0ec;border-radius:9px;background:#fff;overflow:hidden}
+.pv2-search{min-width:180px;flex:1 1 260px;display:flex;align-items:center;border:1px solid #d7e0ec;border-radius:var(--pv2-radius-md);background:#fff;overflow:hidden}
 .pv2-search>span{font-size:21px;padding-left:10px}
 .pv2-search input{width:100%;border:0;min-width:0;background:transparent}
 .pv2-search input:focus-visible{outline:0}
@@ -40,7 +53,7 @@
 .pv2-filters>input[type=date]{flex:0 1 160px}
 .pv2-result{color:#6b7d90;font-size:12px}
 .pv2-table-head,.pv2-product{display:grid;grid-template-columns:28px minmax(135px,2fr) minmax(115px,1.35fr) minmax(92px,1.05fr) minmax(70px,.65fr) minmax(110px,1fr) minmax(83px,.9fr);gap:8px;align-items:center;min-width:0}
-.pv2-table-head{padding:11px 8px;background:#f1f5fb;color:#59718f;font-size:11px;font-weight:700;border-radius:8px 8px 0 0;line-height:1.4}
+.pv2-table-head{padding:11px 8px;background:#f1f5fb;color:#59718f;font-size:11px;font-weight:700;border-radius:var(--pv2-radius-sm) 8px 0 0;line-height:1.4}
 .pv2-product-list{min-width:0}
 .pv2-product{border-bottom:1px solid #edf0f6;padding:12px 8px;min-height:76px}
 .pv2-product:last-child{border-bottom:0}
@@ -50,13 +63,13 @@
 .pv2-name strong{font-size:14px}
 .pv2-name small{margin-top:2px}
 .pv2-select{text-align:center}
-.pv2-stock strong{color:#12804f}
+.pv2-stock strong{color:var(--pv2-success)}
 .pv2-use strong{color:#b83c38}
 .pv2-quantity input{width:100%;min-width:0;text-align:center;font-weight:700}
 .pv2-mobile-label{display:none;color:#6b7d90;font-size:11px}
-.pv2-badge{display:inline-block;font-size:11px;border-radius:8px;padding:4px 6px;line-height:1.3}
+.pv2-badge{display:inline-block;font-size:11px;border-radius:var(--pv2-radius-sm);padding:4px 6px;line-height:1.3}
 .pv2-warning{background:#fff1d9;color:#ad6400}
-.pv2-danger{background:#ffebeb;color:#b92f2f}
+.pv2-danger{background:#ffebeb;color:var(--pv2-alert)}
 .pv2-neutral{background:#eff3f7;color:#60758a}
 .pv2-summary-num{font-size:30px;font-weight:800;color:#dc3d48}
 .pv2-summary-num small{display:inline}
@@ -69,7 +82,7 @@
 .pv2-supplier-short>span{font-size:11px;color:#7b8594}
 .pv2-empty{padding:20px;color:#74849a;font-size:13px}
 .pv2-order-row>div{min-width:110px;display:grid;gap:3px;font-size:13px}
-.pv2-notice,.pv2-error{border:1px solid #b9d6f7;border-radius:9px;padding:10px 14px;background:#eef6ff;color:#165799;font-size:13px;overflow-wrap:anywhere}
+.pv2-notice,.pv2-error{border:1px solid #b9d6f7;border-radius:var(--pv2-radius-md);padding:10px 14px;background:#eef6ff;color:#165799;font-size:13px;overflow-wrap:anywhere}
 .pv2-error{color:#a31b2d;border-color:#f2bdc6;background:#fff0f2}
 .pv2-supplier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px}
 .pv2-supplier-card{display:grid;gap:8px;border:1px solid #e5ecf4;background:#f9fbff;border-radius:11px;padding:13px;font-size:13px}
@@ -90,9 +103,9 @@
 .pv2-calendar-form input{flex:1 1 150px}
 .pv2-calendar-form select{flex:1 1 160px}
 .pv2-holidays{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.pv2-holidays span{border-radius:8px;background:#fff1f2;padding:6px 9px;font-size:12px}
+.pv2-holidays span{border-radius:var(--pv2-radius-sm);background:#fff1f2;padding:6px 9px;font-size:12px}
 @media(max-width:1180px){.pv2-content{grid-template-columns:minmax(0,1fr)}.pv2-aside{grid-template-columns:repeat(2,minmax(0,1fr))}.pv2-table-head,.pv2-product{grid-template-columns:25px minmax(120px,2fr) minmax(110px,1.2fr) 90px 70px 90px 75px;gap:5px}.pv2-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:991px){.pv2-title{align-items:flex-start}.pv2-title h2{font-size:21px}.pv2-title h2 span{display:block;margin:2px 0 0;font-size:15px}.pv2-title p{font-size:12px}.pv2-tab{flex:1 1 95px;min-width:0}.pv2-tabs{gap:0}.pv2-tab strong{font-size:12px}.pv2-tab small{font-size:10px}.pv2-panel{padding:11px}.pv2-aside{grid-template-columns:1fr}.pv2-table-head{display:none}.pv2-product{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(95px,.55fr);gap:10px 8px;padding:12px 2px}.pv2-select{grid-row:1;grid-column:1}.pv2-name{grid-column:2 / 4;grid-row:1}.pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){grid-column:span 1;background:#f7f9fc;border-radius:9px;padding:8px}.pv2-product>.pv2-cell:nth-child(3){grid-column:1 / 3}.pv2-quantity{grid-column:2 / 4!important}.pv2-mobile-label{display:block;margin-bottom:3px}.pv2-product .pv2-badge{font-size:10px}.pv2-quantity input{width:100%;min-height:42px}.pv2-rule-line{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.pv2-rule-line button{min-height:40px}.pv2-filters>select{max-width:none}}
+@media(max-width:991px){.pv2-title{align-items:flex-start}.pv2-title h2{font-size:21px}.pv2-title h2 span{display:block;margin:2px 0 0;font-size:15px}.pv2-title p{font-size:12px}.pv2-tab{flex:1 1 95px;min-width:0}.pv2-tabs{gap:0}.pv2-tab strong{font-size:12px}.pv2-tab small{font-size:10px}.pv2-panel{padding:11px}.pv2-aside{grid-template-columns:1fr}.pv2-table-head{display:none}.pv2-product{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(95px,.55fr);gap:10px 8px;padding:12px 2px}.pv2-select{grid-row:1;grid-column:1}.pv2-name{grid-column:2 / 4;grid-row:1}.pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){grid-column:span 1;background:#f7f9fc;border-radius:var(--pv2-radius-md);padding:8px}.pv2-product>.pv2-cell:nth-child(3){grid-column:1 / 3}.pv2-quantity{grid-column:2 / 4!important}.pv2-mobile-label{display:block;margin-bottom:3px}.pv2-product .pv2-badge{font-size:10px}.pv2-quantity input{width:100%;min-height:42px}.pv2-rule-line{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.pv2-rule-line button{min-height:40px}.pv2-filters>select{max-width:none}}
 @media(max-width:429px){.pv2-shell{gap:10px}.pv2-stat{padding:10px;min-height:70px}.pv2-stat strong{font-size:22px}.pv2-stat>span{font-size:12px}.pv2-filters>*{flex:1 1 100%!important;max-width:none!important}.pv2-title>.pv2-secondary{min-width:80px;padding:7px}.pv2-title{gap:7px}.pv2-tab{flex:1 1 31%;padding:7px 3px}.pv2-product>.pv2-cell:nth-child(3){grid-column:2 / 4}.pv2-product>.pv2-cell:nth-child(4),.pv2-product>.pv2-cell:nth-child(5),.pv2-product>.pv2-cell:nth-child(6){grid-column:span 1}.pv2-product>.pv2-cell:nth-child(6){grid-column:2 / 4}.pv2-quantity{grid-column:2 / 4!important}.pv2-editor-actions button{flex:1 1 110px}}
 @media(max-width:359px){.pv2-product{grid-template-columns:23px minmax(0,1fr) minmax(0,.65fr)}.pv2-stat{padding:8px}.pv2-stat strong{font-size:20px}.pv2-stat>span{font-size:11px}.pv2-title h2{font-size:18px}.pv2-tab strong{font-size:11px}}
 
@@ -100,18 +113,18 @@
 /* Procurement V2 enhancements: no duplicate warehouse state, only presentation. */
 .pv2-sync{display:flex;align-items:flex-end;flex-direction:column;gap:6px;min-width:135px}
 .pv2-sync small{font-size:11px;text-align:right;white-space:nowrap}
-.pv2-holiday-picker{display:grid;gap:13px;border:1px solid var(--pv2-line);background:#f9fbfe;border-radius:12px;padding:14px;min-width:0}
+.pv2-holiday-picker{display:grid;gap:13px;border:1px solid var(--pv2-line);background:#f9fbfe;border-radius:var(--pv2-radius-card);padding:14px;min-width:0}
 .pv2-calendar-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .pv2-calendar-head strong{font-size:14px}
 .pv2-calendar-navigation{display:flex;align-items:center;gap:8px}
 .pv2-calendar-navigation span{min-width:100px;text-align:center;font-weight:750}
-.pv2-calendar-navigation button{width:36px;height:36px;border-radius:9px;border:1px solid #d5e1f1;background:#fff;color:#1a538f;font-size:22px;line-height:1}
+.pv2-calendar-navigation button{width:36px;height:36px;border-radius:var(--pv2-radius-md);border:1px solid #d5e1f1;background:#fff;color:#1a538f;font-size:22px;line-height:1}
 .pv2-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;width:100%;max-width:510px}
-.pv2-weekday-label{text-align:center;font-size:11px;white-space:nowrap;color:#71829c;padding:4px 0}
-.pv2-calendar-day{border:1px solid #e4eaf3;border-radius:9px;background:#fff;color:#304967;font-size:13px;font-weight:650;min-height:39px;min-width:0;padding:5px;text-align:center;transition:background .12s ease,border-color .12s ease}
+.pv2-weekday-label{text-align:center;font-size:11px;white-space:nowrap;color:var(--pv2-muted-2);padding:4px 0}
+.pv2-calendar-day{border:1px solid #e4eaf3;border-radius:var(--pv2-radius-md);background:#fff;color:#304967;font-size:13px;font-weight:650;min-height:39px;min-width:0;padding:5px;text-align:center;transition:background .12s ease,border-color .12s ease}
 .pv2-calendar-day:hover{border-color:#8ab4fa;background:#eaf2ff}
 .pv2-calendar-day.selected{background:#d9e9ff;border-color:#72a8fc;color:#155bbd}
-.pv2-calendar-day.anchor{background:#1765ec;border-color:#1765ec;color:#fff;box-shadow:0 0 0 2px #c2ddff}
+.pv2-calendar-day.anchor{background:var(--pv2-primary);border-color:var(--pv2-primary);color:#fff;box-shadow:0 0 0 2px #c2ddff}
 .pv2-calendar-blank{min-height:39px}
 .pv2-calendar-range{display:flex;align-items:end;flex-wrap:wrap;gap:9px}
 .pv2-calendar-range>label{min-width:150px;flex:1 1 160px}
@@ -121,7 +134,7 @@
 .pv2-calendar-selected button{border:0;background:transparent;color:#bf2c48;font-size:12px;padding:5px}
 .pv2-calendar-chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center;max-height:130px;overflow-y:auto;min-height:30px}
 .pv2-calendar-chips small{padding:4px}
-.pv2-date-chip{border:1px solid #c4d9f7;border-radius:8px;background:#e7f0ff;color:#1b578d;font-size:12px;min-height:31px;padding:5px 9px}
+.pv2-date-chip{border:1px solid #c4d9f7;border-radius:var(--pv2-radius-sm);background:#e7f0ff;color:#1b578d;font-size:12px;min-height:31px;padding:5px 9px}
 .pv2-date-chip:hover{border-color:#f0b4c5;background:#fff2f5;color:#b72c48}
 /* Product demand editing: one fixed dialog on both Desktop and Mobile. */
 .pv2-dialog-backdrop{position:fixed;inset:0;z-index:10500;background:rgba(17,32,52,.57);display:flex;align-items:center;justify-content:center;overflow:auto;padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overscroll-behavior:contain}
@@ -129,7 +142,7 @@
 .pv2-dialog .pv2-panel{border:none;padding:22px;overflow:visible}
 .pv2-dialog .pv2-section-head{position:sticky;top:-22px;z-index:1;background:#fff;padding-top:4px;padding-bottom:13px;border-bottom:1px solid #eaf0f6;min-width:0}
 .pv2-dialog .pv2-section-head h3{font-size:18px;min-width:0;overflow-wrap:anywhere}
-.pv2-dialog .pv2-section-head button{border:1px solid #dde4ee;border-radius:9px;background:#fff;font-size:22px;min-width:38px;min-height:38px}
+.pv2-dialog .pv2-section-head button{border:1px solid #dde4ee;border-radius:var(--pv2-radius-md);background:#fff;font-size:22px;min-width:38px;min-height:38px}
 .pv2-dialog .pv2-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
 .pv2-dialog .pv2-editor-actions{position:sticky;bottom:-22px;background:#fff;border-top:1px solid #eaf0f6;padding:12px 0}
 @media(max-width:991px){
@@ -156,13 +169,13 @@
 }
 
 
-.pv2-db-reference{margin:14px 0;border:1px solid #dbe8fa;border-radius:12px;background:#f3f8ff;padding:14px;display:grid;gap:12px}
+.pv2-db-reference{margin:14px 0;border:1px solid #dbe8fa;border-radius:var(--pv2-radius-card);background:#f3f8ff;padding:14px;display:grid;gap:12px}
 .pv2-db-reference h4{font-size:13px;margin:0;color:#29588e}
 .pv2-db-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .pv2-db-fields>div{display:grid;gap:3px;min-width:0}
 .pv2-db-fields strong{font-size:13px;overflow-wrap:anywhere}
 .pv2-db-locations{display:flex;flex-wrap:wrap;gap:7px}
-.pv2-db-locations span{display:inline-flex;gap:5px;align-items:center;border:1px solid #dce5f2;border-radius:8px;background:#fff;padding:6px 8px;font-size:12px}
+.pv2-db-locations span{display:inline-flex;gap:5px;align-items:center;border:1px solid #dce5f2;border-radius:var(--pv2-radius-sm);background:#fff;padding:6px 8px;font-size:12px}
 .pv2-db-reference .pv2-hint{margin:0}
 @media(max-width:450px){.pv2-db-fields{grid-template-columns:1fr 1fr;gap:8px}.pv2-db-reference{padding:10px}}
 
@@ -209,7 +222,7 @@
  .pv2-shell .pv2-stat>span small{font-size:11px;line-height:1.3;margin-top:3px}
  .pv2-shell .pv2-stat strong{font-size:24px;line-height:1.15}
  .pv2-shell .pv2-tabs{display:flex;flex-wrap:nowrap;gap:5px;padding:5px;max-width:100%;width:100%;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
- .pv2-shell .pv2-tab{flex:0 0 118px;min-width:118px;max-width:118px;min-height:63px;scroll-snap-align:start;padding:8px 5px;border-radius:8px}
+ .pv2-shell .pv2-tab{flex:0 0 118px;min-width:118px;max-width:118px;min-height:63px;scroll-snap-align:start;padding:8px 5px;border-radius:var(--pv2-radius-sm)}
  .pv2-shell .pv2-tab strong{font-size:13px;white-space:nowrap}
  .pv2-shell .pv2-tab small{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
  .pv2-shell .pv2-content{grid-template-columns:minmax(0,1fr)}
@@ -221,14 +234,14 @@
  .pv2-shell .pv2-filters>.pv2-result{justify-self:end;align-self:center}
  .pv2-shell .pv2-table-head{display:none}
  .pv2-shell .pv2-product-list{display:grid;gap:9px;min-width:0}
- .pv2-shell .pv2-product{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border:1px solid #e5ebf4;border-radius:12px;padding:12px;min-width:0;min-height:0;background:#fff;align-items:stretch}
+ .pv2-shell .pv2-product{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;border:1px solid #e5ebf4;border-radius:var(--pv2-radius-card);padding:12px;min-width:0;min-height:0;background:#fff;align-items:stretch}
  .pv2-shell .pv2-product:last-child{border-bottom:1px solid #e5ebf4}
  .pv2-shell .pv2-product>.pv2-cell{min-width:0}
  .pv2-shell .pv2-product>.pv2-select{grid-column:1;grid-row:1;display:flex;align-items:flex-start;justify-content:flex-start;background:none!important;padding:5px 0 0 2px!important}
  .pv2-shell .pv2-product>.pv2-name{grid-column:1 / -1;grid-row:1;padding:0 0 10px 29px;min-width:0;border-bottom:1px solid #ebf0f6}
  .pv2-shell .pv2-product>.pv2-name strong{font-size:15px;line-height:1.4;overflow-wrap:anywhere}
  .pv2-shell .pv2-product>.pv2-name small{font-size:12px;line-height:1.35;overflow-wrap:anywhere}
- .pv2-shell .pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){display:flex;flex-direction:column;align-items:flex-start;gap:3px;border-radius:9px;background:#f5f8fc;padding:10px;min-width:0}
+ .pv2-shell .pv2-product>.pv2-cell:not(.pv2-select):not(.pv2-name){display:flex;flex-direction:column;align-items:flex-start;gap:3px;border-radius:var(--pv2-radius-md);background:#f5f8fc;padding:10px;min-width:0}
  .pv2-shell .pv2-product>.pv2-cell:nth-child(3){grid-column:1 / -1;grid-row:auto}
  .pv2-shell .pv2-product>.pv2-cell:nth-child(4){grid-column:1;grid-row:auto}
  .pv2-shell .pv2-product>.pv2-cell:nth-child(5){grid-column:2;grid-row:auto}
