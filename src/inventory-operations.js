@@ -8,7 +8,7 @@ import {
   inventoryCloudState,
   syncInventoryNow,
 } from "./inventory-cloud.js";
-import { prepareSearchCorpus, prepareSearchNeedle, preparedSearchMatches } from "./search-utils.js";
+import { ingredientNameSearchMatches, prepareIngredientNameSearchCorpus, prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import {
   INVENTORY_SITES,
   directBranchTransfer,
@@ -23,7 +23,7 @@ const TEXT = {
     pick:"Lấy hàng · 領貨",
     transfer:"Điều chuyển · 庫存轉撥",
     ship:"Xuất hàng · 出貨",
-    search:"Tìm tên, Pinyin/注音, viết tắt hoặc vị trí…",
+    search:"Tìm theo đúng tên sản phẩm…",
     from:"Từ kho · 來源儲位",
     to:"Đến · 目的地",
     destination:"Kho nhận · 目的儲位",
@@ -61,7 +61,7 @@ const TEXT = {
   },
   zh: {
     in:"進貨入庫",pick:"領貨",transfer:"庫存轉撥",ship:"出貨",
-    search:"搜尋品項、Pinyin/注音、縮寫或儲位…",from:"來源儲位",to:"目的地",destination:"目的儲位",
+    search:"依產品名稱搜尋…",from:"來源儲位",to:"目的地",destination:"目的儲位",
     current:"現有庫存",quantity:"數量",inbound:"入庫",pickAction:"領貨",move:"轉撥",shipAction:"出貨",
     workDestination:"工作區",picked:"已領貨",useAction:"使用",returnAction:"歸位",returnTo:"歸位儲位",returnedTo:"已歸位至",shipSite:"收貨據點",
     fixedDestination:"分店已有此品項，收貨儲位依分店設定自動帶入。",singleDestination:"分店此品項只有一個存放儲位，系統已自動選擇。",flexibleDestination:"分店尚無此品項，本次請選擇實際存放位置。",needsManagerDestination:"分店已有此品項但有多個儲位，尚未設定固定收貨儲位；請分店主管先完成設定。",fixedBadge:"依分店設定",singleBadge:"自動帶入",flexibleBadge:"分店未建品項",needsManagerBadge:"需主管設定",shipFixed:"已出貨並更新至正確收貨儲位。",
@@ -80,66 +80,17 @@ function langText(language){ return TEXT[language==="zh"?"zh":"vi"]; }
 function itemLabel(item,language){
   return language==="zh" ? item.zh : `${item.vi || item.zh} · ${item.zh}`;
 }
-function operationSearchText(item){
-  const allLocations=[...(item.locations||[]),...(item.workLocations||[])];
-  const locationText=allLocations
-    .flatMap((loc)=>[
-      loc.zh,
-      loc.vi,
-      loc.labelZh,
-      loc.labelVi,
-      loc.name_zh_tw,
-      loc.name_vi,
-      loc.code,
-      loc.zone,
-      loc.workArea,
-      loc.storageGroup,
-      loc.metadata?.ui_key,
-      loc.metadata?.work_area,
-      loc.metadata?.storage_group,
-    ])
-    .filter(Boolean);
-  const receiveLocation=allLocations
-    .find((loc)=>String(loc.code||"")===String(item.receiveLocationCode||""));
-  return [
-    item.zh,
-    item.vi,
-    item.label,
-    item.labelVi,
-    item.stockKey,
-    item.itemKey,
-    item.catalogKey,
-    item.unit,
-    item.unitCode,
-    item.categoryCode,
-    item.category?.code,
-    item.category?.name_zh_tw,
-    item.category?.name_vi,
-    item.unitMaster?.code,
-    item.unitMaster?.symbol,
-    item.unitMaster?.name_zh_tw,
-    item.unitMaster?.name_vi,
-    item.workArea,
-    item.workAreaMaster?.id,
-    item.workAreaMaster?.code,
-    item.workAreaMaster?.zh,
-    item.workAreaMaster?.vi,
-    item.workAreaMaster?.name_zh_tw,
-    item.workAreaMaster?.name_vi,
-    item.receiveZone,
-    item.receiveLocationCode,
-    receiveLocation?.zh,
-    receiveLocation?.vi,
-    receiveLocation?.name_zh_tw,
-    receiveLocation?.name_vi,
-    ...locationText,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
 function operationSearchCorpus(item){
-  return prepareSearchCorpus(operationSearchText(item));
+  return prepareIngredientNameSearchCorpus(
+    item?.zh,
+    item?.name_zh_tw,
+    item?.label,
+    item?.vi,
+    item?.name_vi,
+    item?.labelVi,
+  );
 }
+
 function locationLabel(location,language){
   return language==="zh" ? location.name_zh_tw || location.zh : `${location.name_vi || location.vi || location.name_zh_tw} · ${location.name_zh_tw || location.zh}`;
 }
@@ -267,17 +218,17 @@ function applyOperationSearch(host,state) {
   if (!input) return;
 
   const query = input.value || "";
-  const needle = prepareSearchNeedle(query);
+  const needle = prepareIngredientNameSearchNeedle(query);
   state.search = query;
   if (typeof state.onSearchChange === "function") state.onSearchChange(query);
   const exactFocus = Boolean(state.focusItemKey && query === state.focusSearch);
   const cards = [...host.querySelectorAll("[data-op-item]")];
   let visible = 0;
   cards.forEach((card) => {
-    const corpus = card.dataset.opSearchCorpus || prepareSearchCorpus(card.textContent || "");
+    const corpus = card.dataset.opSearchCorpus || "";
     const show = exactFocus
       ? card.dataset.opItemKey === state.focusItemKey
-      : !needle || preparedSearchMatches(corpus,needle);
+      : !needle || ingredientNameSearchMatches(corpus,needle);
     card.hidden = !show;
     card.toggleAttribute("data-op-search-hidden",!show);
     if (show) visible += 1;
