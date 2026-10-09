@@ -186,6 +186,69 @@ function downloadCsv(){
   download(`inventory-report-${state.site||"site"}.csv`,"text/csv;charset=utf-8",csv);
 }
 
+
+function xmlCell(value,type="String"){
+  const escaped=String(value??"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&apos;");
+  return `<Cell><Data ss:Type="${type}">${escaped}</Data></Cell>`;
+}
+
+function downloadExcel(){
+  const rows=selectedRows();
+  const site=state.sites.find((entry)=>entry.code===state.site);
+  const headers=[
+    t("Tên tiếng Việt","越文名稱"),
+    t("Tên tiếng Trung","中文名稱"),
+    t("Danh mục","類別"),
+    t("Khu vực làm việc","工作區"),
+    t("Đơn vị","單位"),
+    t("Tồn hiện tại","現有庫存"),
+    t("Tồn tối thiểu","最低庫存"),
+    t("Trạng thái","狀態"),
+    t("Vị trí","儲位"),
+  ];
+  const body=rows.map((row)=>[
+    xmlCell(row.vi),
+    xmlCell(row.zh),
+    xmlCell(categoryName(row.category)),
+    xmlCell(areaName(row.workArea)),
+    xmlCell(row.unit),
+    xmlCell(row.quantity,"Number"),
+    xmlCell(row.minimum,"Number"),
+    xmlCell(statusLabel(row.status)),
+    xmlCell(row.locations.join(" | ")),
+  ].join("")).map((cells)=>`<Row>${cells}</Row>`).join("");
+  const title=esc(t("Báo cáo tồn kho","庫存報表"));
+  const branch=esc(siteName(site));
+  const workbook=`<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#EAF5F1" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="14"/></Style>
+ </Styles>
+ <Worksheet ss:Name="${title}">
+  <Table>
+   <Row ss:StyleID="Title"><Cell ss:MergeAcross="8"><Data ss:Type="String">${title} · ${branch}</Data></Cell></Row>
+   <Row ss:StyleID="Header">${headers.map((header)=>xmlCell(header)).join("")}</Row>
+   ${body}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+  download(
+    `inventory-report-${state.site||"site"}.xls`,
+    "application/vnd.ms-excel;charset=utf-8",
+    workbook
+  );
+}
+
 async function copyText(){
   const text=reportText();
   try{
@@ -309,7 +372,8 @@ function render(){
             <div class="report-export-inline">
               <button type="button" data-report-action="txt" ${canExport?"":"disabled"}>TXT</button>
               <button type="button" data-report-action="pdf" ${canExport?"":"disabled"}>PDF</button>
-              <button type="button" data-report-action="csv" ${canExport?"":"disabled"}>CSV / Excel</button>
+              <button type="button" data-report-action="csv" ${canExport?"":"disabled"}>CSV</button>
+              <button type="button" data-report-action="excel" ${canExport?"":"disabled"}>Excel</button>
               <button type="button" class="copy-action" data-report-action="copy" ${canExport?"":"disabled"}>▣ ${esc(t("Copy dữ liệu","複製資料"))}</button>
             </div>
           </div>
@@ -334,6 +398,7 @@ function render(){
             <button type="button" data-report-action="txt" ${canExport?"":"disabled"}>TXT</button>
             <button type="button" data-report-action="pdf" ${canExport?"":"disabled"}>PDF</button>
             <button type="button" data-report-action="csv" ${canExport?"":"disabled"}>CSV</button>
+            <button type="button" data-report-action="excel" ${canExport?"":"disabled"}>Excel</button>
             <button type="button" class="copy-action" data-report-action="copy" ${canExport?"":"disabled"}>▣ ${esc(t("Copy nội dung","複製文字"))}</button>
           </div>
         </div>
@@ -398,6 +463,7 @@ function bind(){
       }
       if(action==="txt"){ downloadTxt(); return; }
       if(action==="csv"){ downloadCsv(); return; }
+      if(action==="excel"){ downloadExcel(); return; }
       if(action==="pdf"){ printPdf(); return; }
       if(action==="copy"){ await copyText(); }
     });

@@ -54,12 +54,18 @@ assert.match(reports,/data-report-action="copy"/);
 assert.match(reports,/data-report-action="txt"/);
 assert.match(reports,/data-report-action="pdf"/);
 assert.match(reports,/data-report-action="csv"/);
+assert.match(reports,/data-report-action="excel"/);
 assert.match(reports,/navigator\.clipboard\.writeText/);
 assert.match(reports,/new Blob/);
+assert.match(reports,/function downloadExcel\(\)/);
+assert.match(reports,/application\/vnd\.ms-excel/);
+assert.match(reports,/inventory-report-\$\{state\.site\|\|"site"\}\.xls/);
+assert.match(reports,/Excel\.Sheet/);
 
 assert.match(management,/data-inventory-report-host/);
 assert.match(management,/PostgreSQL/);
 assert.match(reportCss,/@media \(max-width:640px\)/);
+assert.match(reportCss,/@media \(max-width:420px\)/);
 assert.match(reportCss,/@media print/);
 assert.match(reportCss,/data-report-print-hidden/);
 assert.doesNotMatch(reportCss,/\.inventory-page\b/,"Reports stylesheet must not redesign the existing Inventory page");
