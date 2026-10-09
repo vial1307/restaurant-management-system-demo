@@ -44,7 +44,7 @@ export function planProcurementLine({orderDate,stock,rule,supplier,calendar=[],i
     if(d<first)beforeArrival+=usage;
   }
   const confirmedIncoming=(incoming||[])
-    .filter(x=>x.expectedArrival<=next&&x.status==="submitted")
+    .filter(x=>x.expectedArrival<=next&&x.status==="confirmed")
     .reduce((total,x)=>total+Number(x.baseQuantity||0),0);
   const available=Math.max(0,Number(stock||0));
   const safety=Math.max(0,Number(rule.safetyStock||0));
@@ -54,7 +54,7 @@ export function planProcurementLine({orderDate,stock,rule,supplier,calendar=[],i
   return {
     canOrder:true,arrival:first,nextArrival:next,days,demand,beforeArrival,
     stock:available,incoming:confirmedIncoming,safety,shortage,
-    preArrivalRisk:available+incoming.filter(x=>x.expectedArrival<first&&x.status==="submitted").reduce((t,x)=>t+Number(x.baseQuantity||0),0)<beforeArrival,
+    preArrivalRisk:available+incoming.filter(x=>x.expectedArrival<first&&x.status==="confirmed").reduce((t,x)=>t+Number(x.baseQuantity||0),0)<beforeArrival,
     packageSize,orderUnits,orderQuantity:orderUnits*packageSize,
     remaining:available+confirmedIncoming+orderUnits*packageSize-demand,
   };
