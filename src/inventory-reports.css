@@ -123,4 +123,5 @@
   body.inventory-report-printing .inventory-report-table-card{border:0;box-shadow:none}
   body.inventory-report-printing .inventory-report-table{min-width:0;font-size:10px}
   body.inventory-report-printing .inventory-report-preview{display:none}
+  body.inventory-report-printing [data-report-print-hidden]{display:none!important}
 }
