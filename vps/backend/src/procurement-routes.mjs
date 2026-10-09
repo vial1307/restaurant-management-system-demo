@@ -166,7 +166,7 @@ export async function registerProcurementRoutes(app) {
       const result=await withTransaction(async client=>{
         const previous=(await client.query("select id from public.procurement_supplier_orders where site_code=$1 and request_key=$2",[ctx.site,b.requestKey])).rows[0];
         if(previous)return {id:previous.id,alreadyExists:true};
-        const supplier=(await client.query("select id from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
+        const supplier=(await client.query("select * from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
         if(!supplier)throw Object.assign(new Error("SUPPLIER_NOT_IN_SITE"),{statusCode:400});
         const now=taipeiParts(),today=now.year+"-"+now.month+"-"+now.day;
         if(b.orderDate<today)throw Object.assign(new Error("ORDER_DATE_IN_PAST"),{statusCode:400});
