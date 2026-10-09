@@ -1,3 +1,17 @@
+## 2026-10-09 — PR #229 dedicated Excel export production closure
+
+- Followed PR #228 to separate the combined `CSV / Excel` action into dedicated `CSV` and `Excel` actions.
+- Added Spreadsheet XML `.xls` export with bilingual report headers and numeric inventory fields; file MIME is `application/vnd.ms-excel`.
+- Export remains selection-aware: only selected report products are written to the Excel workbook.
+- Preserved TXT, PDF/browser-print, CSV and Copy behavior.
+- Updated responsive mobile export grid for TXT / PDF / CSV / Excel plus Copy; <=420px falls back to two columns.
+- Regression contract now requires `data-report-action="excel"`, Excel MIME and `.xls` output.
+- Exact PR head `bb56b79c1112f9e0a2b80db991983d5d89248e6d`: Staging #23 PASS, Super Admin Browser #504 PASS, Workforce Approval #652 PASS, Deploy/full regression #1335 PASS.
+- PR #229 squash-merged as `9b4ee6c51886693f3690022b17775e621a4c5a11`.
+- Main Pages #1060 PASS; Staging #24 PASS; Production #1336 PASS including preflight, full regression, deploy and production UI smoke.
+- Production runtime release `9b4ee6c`, schema `032`.
+- No database/schema/RBAC/stock mutation.
+
 ## 2026-10-09 — PR #228 Inventory Reports + literal product-name search production closure
 
 - User required Inventory search and Inventory Reports search to follow the characters actually typed in Vietnamese/Chinese, with no Pinyin, Zhuyin/注音, abbreviation or metadata guessing. Example: `cá` filters actual Vietnamese product names containing `cá`; `魚` filters actual Chinese names containing `魚`.
