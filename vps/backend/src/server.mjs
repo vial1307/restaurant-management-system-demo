@@ -9,6 +9,7 @@ import { registerInventoryRealtime } from "./inventory-realtime.mjs";
 import { readInventorySnapshot } from "./inventory-read-model.mjs";
 import { readMasterDataSnapshotForUser } from "./master-data-routes.mjs";
 import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
+import { registerProcurementRoutes } from "./procurement-routes.mjs";
 import { hydrateUserAccess } from "./access-control.mjs";
 import { activeSite } from "./site-registry.mjs";
 import { inventoryActionAllowed } from "./inventory-access.mjs";
@@ -36,6 +37,7 @@ await registerInventoryRealtime(app);
 await registerAdminRoutes(app);
 await registerInventoryExtraRoutes(app);
 await registerBusinessStateRoutes(app);
+await registerProcurementRoutes(app);
 
 app.get("/api/health", async () => {
   const [db, migration, fingerprint] = await Promise.all([
