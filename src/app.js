@@ -28,6 +28,7 @@ import {
 } from "./inventory-master-data.js";
 import { assessShiftCapacity, currentStaff, roleLabel } from "./operations.js";
 import { createManagement } from "./management.js";
+import { mountInventoryReport } from "./inventory-reports.js";
 import { attachBusinessStateSync } from "./business-state-sync.js";
 import { defineLazyDerivedProperties } from "./lazy-derived-context.js";
 import { createTaskDerivationCache } from "./task-derivation-cache.js";
@@ -1778,6 +1779,8 @@ function render() {
   const inventorySearchInput = root.querySelector('[data-field="inventorySearch"]');
   const inventorySearchNeedle = prepareIngredientNameSearchNeedle(inventorySearchInput?.value || "");
   if (inventorySearchInput && inventorySearchNeedle) applyInventorySearchDom(inventorySearchInput);
+  const reportHost=root.querySelector("[data-inventory-report-host]");
+  if (reportHost) void mountInventoryReport(reportHost,{language:context.language});
   const opsHost=root.querySelector("[data-branch-inventory-operations]");
   const historyHost=root.querySelector("[data-branch-inventory-history]");
   if (historyHost && inventoryCloudState()==="ready") {
