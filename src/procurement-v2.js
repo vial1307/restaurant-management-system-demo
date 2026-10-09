@@ -73,7 +73,10 @@ async function refresh(site,render){
 }
 function prepare(site,render,date){
  if(ui.site===site)return;
- ui.site=site;ui.data=null;ui.inventory=null;ui.search="";ui.supplier="all";ui.category="all";ui.tab="list";
+ // Preserve the current Procurement tab when the site registry/auth session rehydrates.
+ // Only site-specific filters, drafts and DB snapshots are reset; moving to a new site
+ // must not silently discard the user\'s current navigation selection.
+ ui.site=site;ui.data=null;ui.inventory=null;ui.search="";ui.supplier="all";ui.category="all";
  ui.selected.clear();ui.overrides.clear();ui.requestKeys.clear();ui.error="";ui.loading=false;ui.editingItem=null;ui.editingSupplier=null;ui.supplierDraft=null;ui.ruleDraft=null;ui.lastSyncedAt=0;
  ui.date=date||new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
  void refresh(site,render);
