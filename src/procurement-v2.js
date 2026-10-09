@@ -19,7 +19,7 @@ function ruleFor(itemId){return ui.data?.rules?.find(x=>x.itemId===itemId)||null
 function supplierFor(id){return suppliers().find(x=>x.id===id);}
 function stockFor(itemId){return (ui.inventory?.stock||[]).filter(x=>x.item_id===itemId).reduce((total,row)=>total+Number(row.quantity||0),0);}
 function incomingFor(itemId){
- return (ui.data?.orders||[]).filter(order=>order.status==="submitted").flatMap(order=>(order.lines||[]).filter(x=>x.itemId===itemId)
+ return (ui.data?.orders||[]).filter(order=>order.status==="confirmed").flatMap(order=>(order.lines||[]).filter(x=>x.itemId===itemId)
  .map(line=>({expectedArrival:order.expectedArrival,baseQuantity:Number(line.baseQuantity),status:order.status})));
 }
 function itemMatches(item,query=ui.search){
@@ -119,7 +119,7 @@ function listBody(lang,editable){
 function historyBody(lang){
  const orders=ui.data?.orders||[];
  return `<section class="pv2-panel"><header class="pv2-section-head"><h3>叫貨紀錄 / Lịch sử gọi hàng</h3></header>
- ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>叫貨 / Đặt</small><strong>${html(o.orderDate)}</strong></div><div><small>預計到貨 / Dự kiến giao</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
+ ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||"供應商 / Nhà cung cấp")}</small></div><div><small>叫貨 / Đặt</small><strong>${html(o.orderDate)}</strong></div><div><small>預計到貨 / Dự kiến giao</small><strong>${html(o.expectedArrival)}</strong></div>${badge(o.status,"neutral")}${o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">供應商已確認 / NCC đã xác nhận</button>`:""}${o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">已完成進貨 / Đã nhập kho</button>`:""}</div>`).join(""):`<p class="pv2-empty">尚無叫貨紀錄 / Chưa có lịch sử gọi hàng</p>`}
  <p class="pv2-hint">叫貨單不會自動入庫；到貨後請至「進貨入庫」確認數量。 Đơn gọi hàng không tự tăng tồn kho; phải nhận hàng tại mục Nhập kho.</p></section>`;
 }
 function formSupplier(lang){
@@ -229,6 +229,18 @@ export function mountProcurementV2(root,{render,route}){
    if(action==="edit-rule"){ui.editingItem=el.dataset.id;render();}
    if(action==="close-editor"){ui.editingSupplier=null;ui.editingItem=null;render();}
    if(action==="submit"&&!ui.pending)void submitOrders(render);
+   if(action==="order-status"&&!ui.pending) {
+     const requested=el.dataset.status,id=el.dataset.id;
+     const prompt=requested==="received"?"請先在進貨入庫完成實際入庫，再將此單標記已收貨。Bạn đã nhập kho thực tế trước khi đóng phiếu?":"供應商已明確確認接受此張訂單嗎？Nhà cung cấp đã xác nhận đơn này?";
+     if(window.confirm(prompt)){
+       ui.pending=true;ui.notice="處理中… / Đang cập nhật…";render();
+       void apiRequest("/api/procurement/"+encodeURIComponent(ui.site)+"/orders/"+encodeURIComponent(id)+"/status",{method:"POST",body:{status:requested}})
+        .then(()=>refreshAfterMutation(render))
+        .then(()=>{ui.notice="狀態已更新 / Đã cập nhật trạng thái";})
+        .catch(e=>{ui.notice="更新失敗 / Lỗi cập nhật: "+errorLabel(e);})
+        .finally(()=>{ui.pending=false;render();});
+     }
+   }
    if(action==="copy"){
      const chosen=lines().filter(x=>ui.selected.has(x.item.id)&&x.amount>0);
      const text=chosen.map(x=>nameOf(x.item,"zh")+" / "+nameOf(x.item,"vi")+" — "+x.amount+" "+(x.rule?.packageUnit||x.item.unit||"")).join("\n");
