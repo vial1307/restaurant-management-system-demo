@@ -541,6 +541,12 @@ Data-changing UI must show pending, database-confirmed success, and explicit val
 - A restricted role/site must receive 403 when attempting supplier/product rule or order mutation.
 - Staging and full desktop/mobile regressions are mandatory before production release.
 
+### 8.6 UI follow-up: calendar, modal and existing Inventory authority
+
+Supplier exception dates are picked on a bilingual month calendar or via two native date inputs for an inclusive multi-day range. The selected dates persist as `closed_dates` in the already defined Procurement supplier record (maximum 120); freeform date text entry has been removed. Product demand editing appears in a modal on Desktop and Mobile. Product modal explicitly displays read-only Stock DB quantity, configured storage/work locations, per-location minimums, category and receive-default location from the existing Inventory snapshot; no duplicate Inventory storage schema is introduced. Product purchase safety stock is distinct from Inventory location minimums.
+
+Procurement foreground refresh forces the same Inventory GET as Inventory Report approximately every 30 seconds and immediately after window focus/tab visibility or native inventory update events. This makes changes by a Super Admin's direct SQL operation visible without relying on inventory SSE that direct SQL may bypass. It is bounded polling, not zero-latency push. Never discard an unsaved supplier/product editor during an automatic refresh. Stage and browser-test Desktop/Mobile calendar and dialog before production release.
+
 ### 8.6 Historical behavior
 Prior implementations contained configured default procurement products, group-level supplier schedules and factory-stock warnings. Those data structures are historical compatibility only and must not be treated as current supplier/master authority. Factory replenishment and existing inventory alerts remain separate operations until a dedicated migration is verified.
 
