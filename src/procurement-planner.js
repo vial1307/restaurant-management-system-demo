@@ -50,7 +50,7 @@ export function planProcurementLine({orderDate,stock,rule,supplier,calendar=[],i
   const safety=Math.max(0,Number(rule.safetyStock||0));
   const shortage=Math.max(0,demand+safety-available-confirmedIncoming);
   const packageSize=Number(rule.packageSize||1);
-  const orderUnits=Math.ceil((shortage/packageSize)-1e-9);
+  const orderUnits=shortage===0?0:Math.ceil((shortage/packageSize)-1e-9);
   return {
     canOrder:true,arrival:first,nextArrival:next,days,demand,beforeArrival,
     stock:available,incoming:confirmedIncoming,safety,shortage,
