@@ -499,38 +499,52 @@ Empty/high-priority items must appear ahead of normal low-stock work.
 
 ---
 
-## 8. Procurement / calling suppliers
+## 8. Procurement / calling suppliers (v2, 2026-10-10)
 
-Current planned products include operational rules for:
+### 8.1 PostgreSQL authority and compatibility
+Procurement at `#procurement` reads the selected inventory site from the existing authenticated site switcher.
+The current catalog, product names, categories, units and quantities come from `GET /api/inventory/:site`, never an independent static procurement list.
+Supplier profiles, dates of closure, per-item demand rules, service-day exceptions and order history are stored in PostgreSQL migration `033_procurement_supplier_calendar.sql` and read through `GET /api/procurement/:site`.
+No unverified supplier identity or product relationship may be seeded. Each item is bound to a supplier through a DB row referencing its authoritative `inventory_items.id`.
+Existing storage/work stock remains physically separate and is only read by procurement; creating a procurement order does not change stock. Receiving is performed through the existing audited inventory receive workflow.
 
-- 粗麵 / thick noodles: 5 斤 per package
-- 細麵 / thin noodles: 2.5 斤 per package
-- 冷凍麵 / frozen noodles: 30 pieces per box
-- 顆白菜 / baby cabbage: 2 斤 per package
-- 高麗菜 / cabbage: counted by head
+### 8.2 Presentation and responsive UI
+One shared UI module supplies desktop, tablet and mobile layouts. Tabs:
+1. 叫貨清單 / Danh sách gọi hàng
+2. 依供應商 / Theo nhà cung cấp
+3. 依產品分類 / Theo nhóm sản phẩm
+4. 叫貨紀錄 / Lịch sử gọi hàng
+5. 叫貨設定 / Cài đặt gọi hàng
 
-Current demand examples in code:
+The product-name search matches only literal characters of DB `name_vi` and `name_zh_tw`; accent marks are preserved, and it must not infer aliases, Zhuyin, Pinyin, abbreviations, units, locations or categories.
+This follows the Inventory literal-search contract of PR #228, which takes precedence over older generic search guidance.
+Desktop/mobile controls must preserve feature parity down to 359px, with no fake static company/product records.
 
-- thick noodles: 5 斤 weekday/weekend baseline
-- thin noodles: 2.5 斤 weekday/weekend baseline
-- frozen noodles: 30 weekday, 45 weekend baseline
-- 顆白菜: 4 斤 weekday, 6 斤 weekend
+### 8.3 Supplier calendar and product demand
+Each supplier has a site-scoped profile with Chinese/Vietnamese names, optional contact, weekly closed weekdays, one-off closed dates, cutoff time, lead days and review cadence. These settings are editable only by users with site-scoped procurement edit permission.
+Each site/item has optional enabled product rule with assigned supplier, weekday demand, weekend demand, holiday demand, safety stock, package size and package unit.
+Holiday/opening-day overrides are site/date-scoped: normal, holiday or closed. An explicitly closed restaurant day contributes zero routine demand, whereas supplier closure shifts expected arrival without erasing restaurant demand.
+The selected order date is interpreted in Asia/Taipei calendar dates.
 
-Procurement calculation considers:
+### 8.4 Recommendation and safety
+Compute first permissible vendor receipt date using configured lead time and supplier closure calendar, and next review-cycle receipt date likewise.
+Sum consumption day-by-day from order date through (but not including) the next receipt, using weekday/weekend/holiday rule by date. Subtract usable current DB stock and outstanding submitted order quantity due within that window, then add safety stock. Clamp below zero and round UP to whole package counts. Report risk of stockout before the newly requested shipment can arrive.
+For multiple consecutive supplier closed/holiday dates, carry the forecast across the full interruption automatically.
+Manual override of package count is permitted; only selected and enabled items may enter an order.
+Orders use authenticated API, server-side site/edit authorization, verified site-item/supplier relationships, PostgreSQL transaction, audit log and idempotency key. Order creation only records a procurement order: it must never impersonate having contacted suppliers or receiving physical stock.
+Data-changing UI must show pending, database-confirmed success, and explicit validation/conflict/network failures. In particular stale revisions must not silently overwrite another device's supplier/product settings.
 
-- current stock
-- incoming stock
-- expected demand
-- supplier closed days
-- coverage until next orderable date
-- package size rounding
+### 8.5 Acceptance examples
+- For holidays Oct 10–12, 2026 (12 units/day) followed by a normal day Oct 13 (5 units), supplier closed Oct 11–12, lead time 1 day, safety 2, stock 3, package 10, suggested purchase = 4 packages. A pre-arrival shortage warning is also required.
+- A Chinese literal query `魚` matches Chinese DB product names containing `魚`; Vietnamese `cá` matches names containing `cá`, while `ca`, Pinyin and Zhuyin do not implicitly match.
+- A purchase order is not inventory receipt and must not change `inventory_stock`.
+- A restricted role/site must receive 403 when attempting supplier/product rule or order mutation.
+- Staging and full desktop/mobile regressions are mandatory before production release.
 
-Factory-item planning is based on 大冷凍 current quantity versus minimum quantity.
-
-Supplier/closed-day rules must remain configurable rather than hard-coded as restaurant policy forever.
+### 8.6 Historical behavior
+Prior implementations contained configured default procurement products, group-level supplier schedules and factory-stock warnings. Those data structures are historical compatibility only and must not be treated as current supplier/master authority. Factory replenishment and existing inventory alerts remain separate operations until a dedicated migration is verified.
 
 ---
-
 ## 9. Reservations
 
 Reservation input tracks lunch and dinner tables.
