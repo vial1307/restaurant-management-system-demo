@@ -54,4 +54,5 @@ assert.match(main,/procurementSettingsModal\(/);
 assert.match(main,/const P=\(key,lang=ui.language\)=>procurementCopy/);
 assert.match(main,/ui\.language=lang/);
 assert.doesNotMatch(main,/const all=\[\["list","叫貨清單"/,"must not maintain a duplicate hard-coded tab list");
+assert(!main.includes('ui.category="all";ui.tab="list"'),"Tab state must survive asynchronous site reloads");
 console.log("PROCUREMENT_TRANSLATION_COMPONENT_CONTRACT_OK");
