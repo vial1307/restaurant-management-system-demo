@@ -59,7 +59,7 @@ create table if not exists public.procurement_orders (
   request_key uuid not null,
   order_date date not null,
   expected_arrival date not null,
-  status text not null default 'submitted' check (status in ('submitted','received','cancelled')),
+  status text not null default 'submitted' check (status in ('submitted','confirmed','received','cancelled')),
   note text not null default '',
   actor_user_id uuid references public.app_users(id) on delete set null,
   actor_username text,
