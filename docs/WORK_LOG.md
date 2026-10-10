@@ -1,3 +1,11 @@
+## 2026-10-11 — Supplier selector production repair done (PR #239)
+
+- User screenshot showed Fuxing Procurement product modal dropdown choices as dot separators instead of supplier names. Backend supplier serializer emits `nameZhTw/nameVi`; frontend supplier displays read `name_zh_tw/name_vi` incorrectly. Inventory products legitimately use snake_case, untouched.
+- Implemented shared escaped `procurementSupplierName()` in `src/procurement-v2-components.js`, updated all Procurement vendor UI usages in `src/procurement-v2.js` and components; Chinese-only names render without orphan separators. Added unit/static CI and a Desktop/Mobile authenticated supplier-save-to-UI browser regression (including empty/separator options, bilingual names and HTML escaping).
+- Test failures were **test fixture bugs** and fixed before merge: an incomplete product rule fixture showed `undefined` daily demand, and repeated Desktop/Mobile vendor creation generated 2 entries while assertion required exactly one. Final exact PR HEAD `7d970b2`: Staging run `38083026712` PASS, full PR regression run `38083026788` PASS. PR #239 squash-merged main runtime `295b9f6`.
+- Post-merge Staging `38083595035` PASS, Production `38083657473` PASS: preflight, backend/DB browser regression, backup `/opt/kitchen-os/backups/kitchen_os_20261010T203201Z.dump`, deploy code `295b9f6`, PostgreSQL schema `035`, production app/DB health and UI smoke PASS.
+- This is presentation/UI only; no supplier/inventory/Procurement business data write or inferred vendor mapping. Existing 6 Fuxing supplier DB names added earlier under separate audit `38074558198`. Warehouse-linked default safety and custom override remain live and unchanged. Next operator question: verify individual supplier→product mappings and closure dates, no automatic orders.
+
 ## 2026-10-11 — Screenshot-based Procurement vendor selector blank-name bug
 
 - Confirmed screenshot showed selector entries `·` for the authenticated user on Production Gọi hàng. API `supplierRow()` returns `nameZhTw/nameVi`; Procurement UI used snake_case name fields that belong to Inventory item/location snapshots. This affects selector, supplier cards and filters, order/group titles and product cards.
