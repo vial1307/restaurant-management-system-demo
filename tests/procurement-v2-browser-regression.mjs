@@ -78,6 +78,27 @@ try{
   await safetyMode.selectOption("inventory");
   assert.equal(await safetyInput.getAttribute("readonly"),"","return to live Inventory mode");
 
+  // Persist a custom value through the authorized VPS API, then restore the
+  // Inventory-linked default; both states must round-trip through PostgreSQL.
+  await safetyMode.selectOption("custom");
+  await safetyInput.fill("5");
+  await dialog.locator('[data-pv2-form="rule"] button[type="submit"]').click();
+  await dialog.waitFor({state:"detached",timeout:15000});
+  await page.locator('[data-pv2-action="edit-rule"]').first().click();
+  const savedDialog=page.locator('[role="dialog"][aria-modal="true"]');
+  await savedDialog.waitFor({state:"visible"});
+  assert.equal(await savedDialog.locator('[name="safetyStockMode"]').inputValue(),"custom","custom source must survive API/database reload");
+  assert.equal(await savedDialog.locator('[name="safetyStock"]').inputValue(),"5","manual safety must persist after reload");
+  await savedDialog.locator('[name="safetyStockMode"]').selectOption("inventory");
+  await savedDialog.locator('[data-pv2-form="rule"] button[type="submit"]').click();
+  await savedDialog.waitFor({state:"detached",timeout:15000});
+  await page.locator('[data-pv2-action="edit-rule"]').first().click();
+  const linkedDialog=page.locator('[role="dialog"][aria-modal="true"]');
+  await linkedDialog.waitFor({state:"visible"});
+  assert.equal(await linkedDialog.locator('[name="safetyStockMode"]').inputValue(),"inventory","linked source must survive DB reload");
+  assert.equal(await linkedDialog.locator('[name="safetyStock"]').getAttribute("readonly"),"","linked value is locked to Inventory");
+
+
   assert.equal(await dialog.locator('[name="reorderNumerator"]').inputValue(),"1");
   assert.equal(await dialog.locator('[name="reorderDenominator"]').inputValue(),"3");
   const bounds=await dialog.boundingBox();
