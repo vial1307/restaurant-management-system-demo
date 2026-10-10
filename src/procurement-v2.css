@@ -323,3 +323,7 @@
  .pv2-reorder-settings .pv2-form-grid{grid-template-columns:minmax(0,1fr)}
  .pv2-reorder-settings{padding:10px}
 }
+
+/* Inventory-linked safety quantity is a live DB reference, not a second editable stock ledger. */
+.pv2-dialog input[name="safetyStock"][readonly]{background:#f1f5fa;color:#4b607a;opacity:1;cursor:default}
+.pv2-dialog .pv2-form-grid label{min-width:0;overflow-wrap:anywhere}
