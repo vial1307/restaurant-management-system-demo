@@ -67,6 +67,17 @@ try{
     "location-aware reorder warning must be in existing product settings");
   assert.equal(await dialog.locator('[name="reorderLocationId"]').count(),1);
   assert.equal(await dialog.locator('[name="reorderReferenceQuantity"]').count(),1);
+  const safetyMode=dialog.locator('[name="safetyStockMode"]');
+  const safetyInput=dialog.locator('[name="safetyStock"]');
+  assert.equal(await safetyMode.count(),1,"safety source selector must exist on mobile and desktop");
+  assert.equal(await safetyMode.inputValue(),"inventory","Inventory minimum is the default safety source");
+  assert.equal(await safetyInput.getAttribute("readonly"),"","linked Inventory safety is not independently editable");
+  await safetyMode.selectOption("custom");
+  assert.equal(await safetyInput.getAttribute("readonly"),null,"manual safety must be editable after explicit selection");
+  await safetyInput.fill("5");
+  await safetyMode.selectOption("inventory");
+  assert.equal(await safetyInput.getAttribute("readonly"),"","return to live Inventory mode");
+
   assert.equal(await dialog.locator('[name="reorderNumerator"]').inputValue(),"1");
   assert.equal(await dialog.locator('[name="reorderDenominator"]').inputValue(),"3");
   const bounds=await dialog.boundingBox();
