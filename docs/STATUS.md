@@ -1,3 +1,11 @@
+## STABLE — Procurement V2 / Fuxing stock reorder alert (verified 2026-10-10; status updated 2026-10-11)
+
+- `ACTIVE_PR: none` for the Procurement V2 completed workstream. Production application `13c1ceb` (full main SHA `13c1cebff0254fae5dda2295ff16b4bd8679b5f8`); production PostgreSQL schema `034`.
+- Main Staging #90, Production #1402 (full preflight, browser/database regression, deploy and UI smoke), and Inventory Site Audit #718 all PASS on this exact release. PR #233 is merged, not pending deployment.
+- One-time Fuxing configuration: `鴨肉丸` at DB work location `海鮮區`, unit `包`, reference 1.000 包 = user-confirmed 30 viên, reorder warning at 1/3 = 10 viên or less. Guarded Production backup + write + verification workflow `38039572403` PASS; production health PASS. Inventory quantity was **not modified** (work location was 0 包 at verification).
+- No automatic supplier order; no assumed supplier mapping, inventory seed, or Thursday closure policy. Other procurement notes still need explicit item/location/vendor and unit verification.
+- **NEXT:** map the remaining verified Fuxing supplier SOP rules in PostgreSQL; independently improve Handoff auto-refresh/force-refresh; optionally review VPS storage. Keep older IN PROGRESS sections below for historical audit, not current state.
+
 ## IN PROGRESS — Procurement v2 responsive + PostgreSQL supplier policy, 2026-10-10
 
 - Branch: `feat/procurement-responsive-db-v2`. Production remains untouched pending test gates; `ACTIVE_PR` not yet set.
