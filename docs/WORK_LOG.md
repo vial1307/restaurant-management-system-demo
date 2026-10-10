@@ -1,3 +1,10 @@
+## 2026-10-11 — Screenshot-based Procurement vendor selector blank-name bug
+
+- Confirmed screenshot showed selector entries `·` for the authenticated user on Production Gọi hàng. API `supplierRow()` returns `nameZhTw/nameVi`; Procurement UI used snake_case name fields that belong to Inventory item/location snapshots. This affects selector, supplier cards and filters, order/group titles and product cards.
+- Code fix on `fix/procurement-supplier-api-name-fields-20261011`: shared escaped supplier display helper, camelCase usage on every Procurement supplier display, omit separator when Vietnamese name absent, unit/XSS regressions and browser server-save-to-UI assertion Desktop/Mobile. No changes to database supplier values or stored stock/safety minima.
+- Baseline Production deployment `d18d28c`, schema `035` verified PASS via workflow `38076014722` attempt 2 (first blocked before deploy due flaky 320px login, rerun passed). Six Fuxing supplier name rows were inserted in prior guarded workflow `38074558198`, not recreated by this patch.
+- UI patch NOT DEPLOYED until exact-head staging/full CI + main production smoke. No supplier mappings, automatic orders or calendar closure defaults inferred.
+
 ## 2026-10-11 — Fuxing supplier registry applied; Procurement Inventory-sourced safety workstream opened
 
 - Guarded GitHub Actions run `38074558198` PASS against production `13c1ceb` schema `034`. Backup: `/opt/kitchen-os/backups/kitchen_os_20261010T180821Z.dump`. Created six site-scoped active supplier name rows 聯興/濱江/津鼎/寶綠/漁鴻/南門 with blank Vietnamese alias and no manually guessed phone, shutdown weekdays/dates or item linkage. Each was verified by readback with **0 assigned product rules**; audit events generated. No inventory/safety quantity, orders or stock movements updated.
