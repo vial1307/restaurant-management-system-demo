@@ -1,3 +1,11 @@
+## CONFIRMED PARTIAL UNBLOCK — Fuxing 臥櫃 alias / distinct 盒 vs 包 (2026-10-11)
+
+- Operator identified **臥櫃 = second-floor freezer**, existing Fuxing location code `fuxing-lengdongerlou` (currently DB label `大冷凍`); not `fuxing-large-freezer`. Seafood station 海鮮台 uses `fuxing-work-seafood` / 海鮮區. Alias-only confirmation: no new location, rename or stock movement.
+- **`1 盒 ≠ 1 包` confirmed.** Conversion ratio is unspecified; never apply SOP 盒 quantities to existing 豬肉蛋餃 / 牛肉蛋餃 rows stored in 包 without a verified product-specific packaging rule.
+- `三記魚餃` DB unit 盒; SOP requests 臥櫃 10 and 海鮮台 10, while current DB minimums at those exact locations are 20 and 1 盒 (audit `38068035044`). Still **NOT APPLIED**, pending meaning of target versus reorder threshold and authorized audited API update.
+- `排骨酥` minimum 3 斤 already matches prior SOP; do not change. Supplier/product linkage and conditional closure calendars remain unverified.
+- **No Production mutation or runtime code change for this confirmation.** `ACTIVE_PR: none`. Historical BLOCKED audit below remains as prior timeline, with its location identity uncertainty superseded by this header.
+
 ## BLOCKED — Verify Fuxing supplier SOP location/unit mapping (read-only audit 2026-10-11)
 
 - Run `38068035044` PASS against production schema `034`; **no writes**. Runtime deployment remains `13c1ceb`, previously verified.

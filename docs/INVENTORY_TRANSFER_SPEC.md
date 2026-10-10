@@ -48,6 +48,10 @@ Same current storage model as 復興店:
 - 廚房冰箱
 - work locations for 麵區 / 湯區 / 海鮮區 / 肉區
 
+**Fuxing operational location alias (confirmed 2026-10-11):** The SOP term `臥櫃` means the second-floor freezer (Vietnamese: tủ đông tầng 2). Its existing DB location code is `fuxing-lengdongerlou`, whose currently stored label is `大冷凍`. It is distinct from `fuxing-large-freezer`, which also displays `大冷凍`. Do not merge, rename, seed or transfer stock merely because the two labels look identical. SOP `海鮮台` means the existing `fuxing-work-seafood` / `海鮮區` work location.
+
+**Unit safety:** `盒` and `包` are distinct inventory units (`1 盒 ≠ 1 包`). Do not infer a conversion rate or apply a location minimum/stock quantity expressed in one unit to an item stored in the other. An authorized, item-specific verified conversion or separate product configuration is required.
+
 ## 3. 進貨入庫 / Inbound
 
 Purpose: inventory enters the selected site from outside Kitchen OS.
