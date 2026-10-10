@@ -1,0 +1,88 @@
+name: One-time Fuxing Remaining Procurement SOP Readonly Audit
+on:
+  push:
+    branches: [ops/audit-fuxing-remaining-sop-20261011]
+    paths:
+      - .github/workflows/audit-fuxing-supplier-sop-20261011.yml
+permissions:
+  contents: read
+jobs:
+  inventory-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Require authorized VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+      - name: Audit Fuxing product locations stock minimums and supplier mapping (read-only)
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          set -a
+          source .env
+          set +a
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin transaction read only;
+          select 'SCHEMA|' || coalesce(max(version),'unknown') from public.schema_migrations;
+          select concat_ws('|','LOCATION',l.id::text,l.code,l.name_zh_tw,l.name_vi,l.kind)
+            from public.inventory_locations l
+            where l.active=true and l.site='fuxing'
+              and (l.name_zh_tw like '%海鮮%' or l.name_zh_tw like '%臥櫃%'
+                   or l.code like '%chest%' or l.code like '%freezer%')
+            order by l.kind,l.code limit 40;
+          select concat_ws('|','ITEM',i.id::text,i.item_key,i.name_zh_tw,i.name_vi,i.unit,i.work_area)
+            from public.inventory_items i
+            where i.active=true and split_part(i.item_key,':',1)='fuxing'
+              and (i.name_zh_tw in ('三記魚餃','豬肉蛋餃','牛肉蛋餃','排骨酥','鴨肉丸')
+                   or i.name_zh_tw like '%魚餃%' or i.name_zh_tw like '%蛋餃%'
+                   or i.name_zh_tw like '%排骨酥%')
+            order by i.name_zh_tw,i.item_key limit 70;
+          select concat_ws('|','STOCK',i.item_key,i.name_zh_tw,i.unit,l.code,l.name_zh_tw,
+                 s.quantity::text,s.minimum_quantity::text,l.kind)
+            from public.inventory_stock s
+            join public.inventory_items i on i.id=s.item_id
+            join public.inventory_locations l on l.id=s.location_id
+            where i.active=true and l.active=true and l.site='fuxing'
+              and split_part(i.item_key,':',1)='fuxing'
+              and (i.name_zh_tw in ('三記魚餃','豬肉蛋餃','牛肉蛋餃','排骨酥','鴨肉丸')
+                   or i.name_zh_tw like '%魚餃%' or i.name_zh_tw like '%蛋餃%'
+                   or i.name_zh_tw like '%排骨酥%')
+            order by i.name_zh_tw,l.kind,l.code limit 100;
+          select concat_ws('|','SUPPLIER',s.id::text,s.name_zh_tw,s.name_vi,s.active::text,
+                 array_to_string(s.closed_weekdays,','),coalesce(array_to_string(s.closed_dates,','),''),
+                 s.cutoff_time::text,s.lead_days::text,s.review_days::text)
+            from public.procurement_suppliers s
+            where s.site_code='fuxing' and s.active=true
+            order by s.name_zh_tw limit 50;
+          select concat_ws('|','PROCUREMENT_RULE',i.item_key,i.name_zh_tw,i.unit,
+                 r.enabled::text,coalesce(s.name_zh_tw,'UNASSIGNED'),
+                 r.safety_stock::text,r.reorder_alert_enabled::text,
+                 coalesce(l.name_zh_tw,'NO_REORDER_LOCATION'),
+                 coalesce(r.reorder_reference_quantity::text,'NO_REFERENCE'),
+                 r.reorder_numerator::text,r.reorder_denominator::text)
+            from public.procurement_product_rules r
+            join public.inventory_items i on i.id=r.item_id
+            left join public.procurement_suppliers s on s.id=r.supplier_id and s.site_code=r.site_code
+            left join public.inventory_locations l on l.id=r.reorder_location_id
+            where r.site_code='fuxing' and i.active=true
+              and (i.name_zh_tw in ('三記魚餃','豬肉蛋餃','牛肉蛋餃','排骨酥','鴨肉丸')
+                   or i.name_zh_tw like '%魚餃%' or i.name_zh_tw like '%蛋餃%'
+                   or i.name_zh_tw like '%排骨酥%')
+            order by i.name_zh_tw limit 70;
+          commit;
+          SQL
+          echo "FUXING_REMAINING_SOP_READ_ONLY_OK"
+          REMOTE
