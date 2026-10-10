@@ -1,3 +1,10 @@
+## DONE — Production Procurement supplier-name UI and live Inventory-derived safety (2026-10-11)
+
+- **Release `295b9f6`, DB schema `035`, Production health PASS** (app/database OK). PR #239 merged; main Staging `38083595035` PASS, full gated deploy + browser + Production UI smoke `38083657473` PASS. Backup `kitchen_os_20261010T203201Z.dump`.
+- Operator reported Chinese supplier dropdown rendered bare `·` from API name field mismatch. Fixed using correct `nameZhTw/nameVi`, shared bilingual/Chinese-only display across modal, cards, supplier filter, supplier groups and history. End-to-end Desktop/Mobile CI confirmed vendor names, no blank options; no API/database data mutation in UI fix.
+- Six Fuxing supplier names already saved in PostgreSQL (ops `38074558198`); **no product associations or vendor closure days are verified**. Procurement `安全庫存` defaults to live enabled configured Warehouse minima, with optional manual custom mode from existing migration `035` (PR #238 deployed earlier).
+- Physical inventory stock, minimums, alerts, original 盒/包 distinct units, suppliers schedules, purchase orders unchanged by PR #239. `ACTIVE_PR: none` for completed supplier display workstream. NEXT: verified product-vendor mapping and closure rules only after operator confirmation.
+
 ## IN PROGRESS — Procurement supplier dropdown blank name UI bug (2026-10-11)
 
 - Operator screenshot on live Production showed the supplier selector options as dots because backend API responds with `nameZhTw/nameVi` but UI mistakenly accessed `name_zh_tw/name_vi`.
