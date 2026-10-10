@@ -63,8 +63,7 @@ jobs:
             name text;
             matches integer;
             existing_active boolean;
-            existing_id uuid;
-            new_id uuid;
+                        new_id uuid;
           begin
             if not exists(select 1 from public.schema_migrations where version='034') then
               raise exception 'EXPECTED_SCHEMA_034_MISSING';
@@ -73,8 +72,8 @@ jobs:
               raise exception 'FUXING_SITE_NOT_ACTIVE';
             end if;
             foreach name in array array['聯興','濱江','津鼎','寶綠','漁鴻','南門']::text[] loop
-              select count(*),bool_and(active),min(id)
-                into matches,existing_active,existing_id
+              select count(*),bool_and(active)
+                into matches,existing_active
                 from public.procurement_suppliers
                 where site_code='fuxing' and name_zh_tw=name;
               if matches>1 then
