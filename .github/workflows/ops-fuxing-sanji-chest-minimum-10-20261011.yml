@@ -1,0 +1,152 @@
+name: One-time Fuxing Sanji Fish Dumpling Chest Minimum 10 Boxes
+on:
+  push:
+    branches: [ops/fuxing-sanji-chest-minimum-10-20261011]
+    paths:
+      - .github/workflows/ops-fuxing-sanji-chest-minimum-10-20261011.yml
+permissions:
+  contents: read
+jobs:
+  guarded-apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require authorized VPS SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+      - name: Verify exact production release and take mandatory backup before changing minimum
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          CURRENT_RELEASE="$(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          echo "Production release: $CURRENT_RELEASE"
+          test "$CURRENT_RELEASE" = "13c1ceb"
+          source .env
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin transaction read only;
+          select 'SCHEMA|'||max(version) from public.schema_migrations;
+          select concat_ws('|','PRECHECK',i.item_key,i.name_zh_tw,i.unit,l.code,l.site,l.name_zh_tw,
+                 s.quantity::text,s.minimum_quantity::text,s.minimum_enabled::text)
+            from public.inventory_items i
+            join public.inventory_stock s on s.item_id=i.id
+            join public.inventory_locations l on l.id=s.location_id
+            where i.item_key='fuxing:freezer-sanji-fish-dumpling'
+              and l.code='fuxing-lengdongerlou';
+          commit;
+          SQL
+          bash vps/scripts/backup.sh 2>/dev/null || bash scripts/backup.sh
+          echo "MANDATORY_FUXING_SANJI_BACKUP_COMPLETED"
+          REMOTE
+      - name: Apply one guarded location minimum change with stock unchanged and an auditable transaction
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          set -a
+          source .env
+          set +a
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin;
+          set local lock_timeout='10s';
+          do $apply$
+          declare
+            v_item uuid;
+            v_location uuid;
+            v_before numeric(14,3);
+            v_qty numeric(14,3);
+            v_after_qty numeric(14,3);
+          begin
+            if not exists(select 1 from public.schema_migrations where version='034') then
+              raise exception 'EXPECTED_PROCUREMENT_SCHEMA_034_MISSING';
+            end if;
+            select i.id into strict v_item
+              from public.inventory_items i
+              where i.id='78d0c256-559e-4666-a618-89129fc35dea'
+                and i.item_key='fuxing:freezer-sanji-fish-dumpling'
+                and i.name_zh_tw='三記魚餃'
+                and i.unit='盒'
+                and i.active=true;
+            select l.id into strict v_location
+              from public.inventory_locations l
+              where l.code='fuxing-lengdongerlou'
+                and l.site='fuxing' and l.kind='storage' and l.active=true;
+            select s.minimum_quantity,s.quantity into strict v_before,v_qty
+              from public.inventory_stock s
+              where s.item_id=v_item and s.location_id=v_location
+              for update;
+            if v_before = 10.000 then
+              raise notice 'SANJI_MINIMUM_ALREADY_10_BOXES_NO_UPDATE';
+            elsif v_before = 20.000 then
+              update public.inventory_stock
+                set minimum_quantity=10.000,minimum_enabled=true,updated_at=now()
+                where item_id=v_item and location_id=v_location;
+              insert into public.inventory_transactions
+                (item_id,source_location_id,destination_location_id,action,amount,note,
+                 actor_user_id,actor_username,metadata)
+                values
+                (v_item,v_location,null,'adjust',10.000,
+                 'Fuxing 三記魚餃 臥櫃(二樓冷凍櫃) 最低維持10盒 / Operator confirmed 2026-10-11',
+                 null,'github-actions:approved-ops-maintenance',
+                 jsonb_build_object(
+                   'operation','set_minimum','before_minimum',v_before,
+                   'after_minimum',10.000,'site','fuxing',
+                   'location_code','fuxing-lengdongerlou',
+                   'item_key','fuxing:freezer-sanji-fish-dumpling',
+                   'request_date','2026-10-11',
+                   'origin','one-time-user-approved-ops-workflow',
+                   'stock_quantity_unchanged',true));
+              raise notice 'SANJI_SECOND_FLOOR_MINIMUM_CHANGED_20_TO_10_BOXES';
+            else
+              raise exception 'STALE_MINIMUM_EXPECTED_20_OR_10_ACTUAL_%',v_before;
+            end if;
+            select s.quantity into strict v_after_qty from public.inventory_stock s
+              where s.item_id=v_item and s.location_id=v_location;
+            if v_qty is distinct from v_after_qty then
+              raise exception 'STOCK_QUANTITY_CHANGED_ROLLBACK';
+            end if;
+            if not exists (
+              select 1 from public.inventory_stock s
+              where s.item_id=v_item and s.location_id=v_location
+                and s.minimum_quantity=10.000 and s.minimum_enabled=true
+            ) then
+              raise exception 'POST_WRITE_MINIMUM_VERIFICATION_FAILED';
+            end if;
+          end
+          $apply$;
+          commit;
+          select concat_ws('|','VERIFIED_MINIMUM',i.item_key,i.name_zh_tw,i.unit,l.code,
+                 s.minimum_quantity::text,s.quantity::text,s.minimum_enabled::text)
+            from public.inventory_stock s
+            join public.inventory_items i on i.id=s.item_id
+            join public.inventory_locations l on l.id=s.location_id
+            where i.item_key='fuxing:freezer-sanji-fish-dumpling'
+              and l.code='fuxing-lengdongerlou';
+          select concat_ws('|','OTHER_LOCATION_UNCHANGED',l.code,s.quantity::text,s.minimum_quantity::text)
+            from public.inventory_stock s
+            join public.inventory_items i on i.id=s.item_id
+            join public.inventory_locations l on l.id=s.location_id
+            where i.item_key='fuxing:freezer-sanji-fish-dumpling'
+              and l.code='fuxing-work-seafood';
+          SQL
+          echo "FUXING_SANJI_CHEST_MINIMUM_10_BOXES_OK"
+          REMOTE
+      - name: Verify production API and release remain healthy
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          test "$(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')" = "13c1ceb"
+          echo "PRODUCTION_AFTER_MINIMUM_HEALTH_OK"
