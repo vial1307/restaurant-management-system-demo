@@ -24,7 +24,7 @@ function supplierRow(row) {
 function ruleRow(row) {
   return { itemId:row.item_id, supplierId:row.supplier_id, weekdayDemand:Number(row.weekday_demand),
     weekendDemand:Number(row.weekend_demand), holidayDemand:Number(row.holiday_demand),
-    safetyStock:Number(row.safety_stock), packageSize:Number(row.package_size),
+    safetyStock:Number(row.safety_stock), safetyStockMode:row.safety_stock_mode||"inventory", packageSize:Number(row.package_size),
     packageUnit:row.package_unit, enabled:row.enabled, revision:row.revision,
     reorderAlertEnabled:row.reorder_alert_enabled===true,
     reorderLocationId:row.reorder_location_id||null,
@@ -104,7 +104,7 @@ export async function registerProcurementRoutes(app) {
     const ctx=await allowed(request,reply,"edit"); if (!ctx) return;
     const b=request.body || {};
     if (!b.itemId || !qty(b.weekdayDemand) || !qty(b.weekendDemand) || !qty(b.holidayDemand) ||
-      !qty(b.safetyStock) || !qty(b.packageSize,0.001) || !Number.isInteger(Number(b.revision ?? 0)))
+      !qty(b.safetyStock) || !["inventory","custom"].includes(b.safetyStockMode||"inventory") || !qty(b.packageSize,0.001) || !Number.isInteger(Number(b.revision ?? 0)))
       return validationReply(reply);
     const thresholdEnabled=b.reorderAlertEnabled===true;
     const thresholdLocation=thresholdEnabled?String(b.reorderLocationId||""):null;
@@ -134,8 +134,8 @@ export async function registerProcurementRoutes(app) {
         const prev=(await client.query("select * from public.procurement_product_rules where site_code=$1 and item_id=$2 for update",[ctx.site,b.itemId])).rows[0];
         if (Number(b.revision||0)!==Number(prev?.revision||0)) throw Object.assign(new Error("STALE_PRODUCT_RULE"),{statusCode:409});
         const current=(await client.query(
-          "insert into public.procurement_product_rules(site_code,item_id,supplier_id,weekday_demand,weekend_demand,holiday_demand,safety_stock,package_size,package_unit,enabled,updated_by,reorder_alert_enabled,reorder_location_id,reorder_reference_quantity,reorder_numerator,reorder_denominator) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) on conflict(site_code,item_id) do update set supplier_id=excluded.supplier_id,weekday_demand=excluded.weekday_demand,weekend_demand=excluded.weekend_demand,holiday_demand=excluded.holiday_demand,safety_stock=excluded.safety_stock,package_size=excluded.package_size,package_unit=excluded.package_unit,enabled=excluded.enabled,reorder_alert_enabled=excluded.reorder_alert_enabled,reorder_location_id=excluded.reorder_location_id,reorder_reference_quantity=excluded.reorder_reference_quantity,reorder_numerator=excluded.reorder_numerator,reorder_denominator=excluded.reorder_denominator,revision=procurement_product_rules.revision+1,updated_by=excluded.updated_by,updated_at=now() returning *",
-          [ctx.site,b.itemId,b.supplierId||null,Number(b.weekdayDemand),Number(b.weekendDemand),Number(b.holidayDemand),Number(b.safetyStock),Number(b.packageSize),textValue(b.packageUnit,32),b.enabled===true,ctx.user.id,thresholdEnabled,thresholdLocation,thresholdReference,numerator,denominator]
+          "insert into public.procurement_product_rules(site_code,item_id,supplier_id,weekday_demand,weekend_demand,holiday_demand,safety_stock,package_size,package_unit,enabled,updated_by,reorder_alert_enabled,reorder_location_id,reorder_reference_quantity,reorder_numerator,reorder_denominator,safety_stock_mode) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) on conflict(site_code,item_id) do update set supplier_id=excluded.supplier_id,weekday_demand=excluded.weekday_demand,weekend_demand=excluded.weekend_demand,holiday_demand=excluded.holiday_demand,safety_stock=excluded.safety_stock,package_size=excluded.package_size,package_unit=excluded.package_unit,enabled=excluded.enabled,reorder_alert_enabled=excluded.reorder_alert_enabled,reorder_location_id=excluded.reorder_location_id,reorder_reference_quantity=excluded.reorder_reference_quantity,reorder_numerator=excluded.reorder_numerator,reorder_denominator=excluded.reorder_denominator,safety_stock_mode=excluded.safety_stock_mode,revision=procurement_product_rules.revision+1,updated_by=excluded.updated_by,updated_at=now() returning *",
+          [ctx.site,b.itemId,b.supplierId||null,Number(b.weekdayDemand),Number(b.weekendDemand),Number(b.holidayDemand),Number(b.safetyStock),Number(b.packageSize),textValue(b.packageUnit,32),b.enabled===true,ctx.user.id,thresholdEnabled,thresholdLocation,thresholdReference,numerator,denominator,b.safetyStockMode||"inventory"]
         )).rows[0];
         await audit(client,ctx,"procurement.rule.upsert",b.itemId,prev||null,current);
         return ruleRow(current);
