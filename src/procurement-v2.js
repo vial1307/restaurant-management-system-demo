@@ -3,6 +3,7 @@ import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,proc
 import { ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { addCalendarDays, planProcurementLine } from "./procurement-planner.js";
 import { evaluateLocationReorderAlert } from "./procurement-threshold.js";
+import { inventorySafetyStock, effectiveProcurementSafetyStock } from "./procurement-safety-stock.js";
 import { procurementAddClosedDates, procurementCalendarMonth, procurementMonthCells, procurementMoveMonth, validProcurementDate } from "./procurement-calendar-picker.js";
 
 const ui={ language:"vi",site:"",data:null,inventory:null,loading:false,error:"",tab:"list",supplier:"all",category:"all",
@@ -52,10 +53,11 @@ function itemMatches(item,query=ui.search){
 function lines(){
  return items().map(item=>{
    const rule=ruleFor(item.id),supplier=supplierFor(rule?.supplierId),stock=stockFor(item.id);
-   const plan=supplier&&rule?planProcurementLine({orderDate:ui.date,stock,rule,supplier,calendar:ui.data.calendar,incoming:incomingFor(item.id)}):null;
+   const safety=effectiveProcurementSafetyStock(rule,stockRowsFor(item.id));
+   const plan=supplier&&rule?planProcurementLine({orderDate:ui.date,stock,rule:{...rule,safetyStock:safety.value},supplier,calendar:ui.data.calendar,incoming:incomingFor(item.id)}):null;
    const key=item.id, selected=ui.selected.has(key), override=ui.overrides.get(key);
    const threshold=evaluateLocationReorderAlert({rule,stockRows:stockRowsFor(item.id)});
-   return {item,rule,supplier,stock,plan,threshold,selected,amount:override===undefined ? plan?.orderUnits||0:override};
+   return {item,rule,supplier,stock,plan,threshold,safetyStockValue:safety.value,safetyStockSource:safety.source,selected,amount:override===undefined ? plan?.orderUnits||0:override};
  });
 }
 async function refresh(site,render){
@@ -202,7 +204,10 @@ function formRule(lang){
  return procurementSettingsModal({title:html(item.name_zh_tw)+" / "+html(item.name_vi),body:`
  <input type="hidden" name="itemId" value="${html(item.id)}"><input type="hidden" name="revision" value="${rule.revision||0}">
  <div class="pv2-form-grid"><label>${P("supplier",lang)}<select name="supplierId" required><option value="">${P("selectSupplier",lang)}</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
- ${["weekdayDemand","weekendDemand","holidayDemand","safetyStock","packageSize"].map(key=>`<label>${P(key,lang)}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
+ ${["weekdayDemand","weekendDemand","holidayDemand","packageSize"].map(key=>`<label>${P(key,lang)}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
+ <label>${P("safetyStockSource",lang)}<select name="safetyStockMode" data-pv2-safety-source><option value="inventory" ${(rule.safetyStockMode||"inventory")==="inventory"?"selected":""}>${P("safetyFromInventory",lang)}</option><option value="custom" ${rule.safetyStockMode==="custom"?"selected":""}>${P("safetyCustom",lang)}</option></select></label>
+ <label>${P("safetyStock",lang)}<input type="number" name="safetyStock" min="0" step="0.001" required ${(rule.safetyStockMode||"inventory")==="inventory"?"readonly":""} value="${html((rule.safetyStockMode||"inventory")==="inventory"?inventorySafetyStock(stockRowsFor(item.id)):(rule.safetyStock??0))}"></label>
+ <p class="pv2-hint">${P("safetyStockHint",lang)}</p>
  <label>${P("orderUnit",lang)}<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
  ${procurementInventoryDetail(item,lang)}
  <fieldset class="pv2-reorder-settings"><legend>${P("ratioAlertTitle",lang)}</legend>
@@ -303,7 +308,7 @@ function rememberRuleFields(root){
  ui.ruleDraft={
   ...ui.ruleDraft,supplierId:String(d.get("supplierId")||""),
   weekdayDemand:d.get("weekdayDemand"),weekendDemand:d.get("weekendDemand"),holidayDemand:d.get("holidayDemand"),
-  safetyStock:d.get("safetyStock"),packageSize:d.get("packageSize"),
+  safetyStock:d.get("safetyStock"),safetyStockMode:d.get("safetyStockMode")||"inventory",packageSize:d.get("packageSize"),
   packageUnit:String(d.get("packageUnit")||""),enabled:d.has("enabled"),
   reorderAlertEnabled:d.has("reorderAlertEnabled"),reorderLocationId:String(d.get("reorderLocationId")||""),
   reorderReferenceQuantity:d.get("reorderReferenceQuantity"),reorderNumerator:d.get("reorderNumerator"),
@@ -387,6 +392,10 @@ export function mountProcurementV2(root,{render,route}){
    if(route()!=="procurement")return;
    const el=event.target;
    if(el.closest?.('[data-pv2-form="supplier"]'))rememberSupplierFields(root);
+   if(el.matches?.('[name="safetyStockMode"]')){
+     const field=el.form?.querySelector('[name="safetyStock"]');
+     if(field){field.readOnly=el.value!=="custom";if(el.value==="inventory")field.value=String(inventorySafetyStock(stockRowsFor(ui.editingItem)));}
+   }
    if(el.closest?.('[data-pv2-form="rule"]'))rememberRuleFields(root);
    if(el.dataset.pv2Filter){event.stopImmediatePropagation();ui[el.dataset.pv2Filter]=el.value;render();}
    if(el.dataset.pv2Date!==undefined){event.stopImmediatePropagation();ui.date=el.value;ui.selected.clear();ui.overrides.clear();render();}
@@ -406,7 +415,7 @@ export function mountProcurementV2(root,{render,route}){
   }else if(type==="rule"){
     endpoint="rules";body={itemId:data.get("itemId"),revision:Number(data.get("revision")||0),supplierId:data.get("supplierId"),
       weekdayDemand:Number(data.get("weekdayDemand")),weekendDemand:Number(data.get("weekendDemand")),
-      holidayDemand:Number(data.get("holidayDemand")),safetyStock:Number(data.get("safetyStock")),
+      holidayDemand:Number(data.get("holidayDemand")),safetyStock:Number(data.get("safetyStock")),safetyStockMode:data.get("safetyStockMode")||"inventory",
       packageSize:Number(data.get("packageSize")),packageUnit:data.get("packageUnit"),enabled:data.has("enabled"),
       reorderAlertEnabled:data.has("reorderAlertEnabled"),
       reorderLocationId:data.get("reorderLocationId")||null,
