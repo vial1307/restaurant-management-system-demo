@@ -44,7 +44,7 @@ export function procurementSupplierCard({supplier,editable,language}){
     (editable?'<button type="button" data-pv2-action="edit-supplier" data-id="'+safe(supplier.id)+'">'+procurementCopy("edit",language)+'</button>':"")+"</div>";
 }
 export function procurementProductCard(row,{language="vi",editable=false,format}){
-  const {item,rule,supplier,stock,plan,threshold,selected,amount}=row;
+  const {item,rule,supplier,stock,plan,threshold,selected,amount,safetyStockValue}=row;
   const safe=procurementEscape, label=(key)=>procurementCopy(key,language);
   const ready=Boolean(rule?.enabled&&supplier&&plan?.canOrder),risk=Boolean(plan?.preArrivalRisk);
   const name=language==="zh"?item.name_zh_tw||item.name_vi:item.name_vi||item.name_zh_tw;
@@ -64,7 +64,7 @@ export function procurementProductCard(row,{language="vi",editable=false,format}
     '<div class="pv2-cell pv2-use"><span class="pv2-mobile-label">'+label("dailyUsage")+'</span><strong>'+
       (rule?value(rule.weekdayDemand):"—")+" / "+(rule?value(rule.holidayDemand):"—")+'</strong><small>'+safe(item.unit||"")+"</small></div>"+
     '<div class="pv2-cell pv2-stock"><span class="pv2-mobile-label">'+label("stockQty")+'</span><strong>'+
-      value(stock)+'</strong><small>'+safe(item.unit||"")+"</small></div>"+
+      value(stock)+'</strong><small>'+safe(item.unit||"")+'</small><small>'+label("safetyStock")+': '+value(safetyStockValue??0)+' '+safe(item.unit||"")+"</small></div>"+
     '<div class="pv2-cell"><span class="pv2-mobile-label">'+label("suggested")+'</span><strong>'+
       (ready?value(plan.orderUnits):"—")+'</strong><small>'+ (ready?safe(plan.arrival):label("notConfigured"))+'</small>'+
       (risk?badge("riskBeforeArrival","danger"):"")+"</div>"+

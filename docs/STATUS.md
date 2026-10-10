@@ -1,3 +1,10 @@
+## IN PROGRESS — Procurement warehouse-linked safety + registered Fuxing vendors (2026-10-11)
+
+- Six active Fuxing supplier name rows **已建立 / đã thêm**: 聯興, 濱江, 津鼎, 寶綠, 漁鴻, 南門. Production scoped op `38074558198` PASS after backup and read-back, 0 product links for each. Unverified delivery/closure schedule defaults are NOT certified operational schedules; do not infer automatic ordering.
+- Pending runtime PR `feat/procurement-inventory-minimum-as-safety-20261011`: per-item default derives effective `安全庫存` from sum of enabled, configured Inventory per-location minimums, live from stock read model, and exposes explicit editable custom override. Schema migration `035`, same API/format for all sites/viewport classes. **NOT DEPLOYED YET** until staging and production pass.
+- The existing Warehouse minimum (三記魚餃 10 盒 at second-floor 臥櫃) remains authoritative; no stock movement, supplier/product auto-association or unit conversion. Verified runtime still `13c1ceb` schema `034` before this feature deploy.
+- NEXT: exact-head PR CI → isolated Staging → Production smoke, then update this header to release + schema and real API evidence.
+
 ## DONE — Fuxing 三記魚餃 second-floor freezer minimum 10 boxes (2026-10-11)
 
 - Confirmed standing minimum `10 盒` at existing `fuxing-lengdongerlou` (臥櫃 = tủ đông tầng 2), for exact `三記魚餃` item, unit `盒`.

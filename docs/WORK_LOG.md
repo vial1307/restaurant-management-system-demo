@@ -1,3 +1,10 @@
+## 2026-10-11 — Fuxing supplier registry applied; Procurement Inventory-sourced safety workstream opened
+
+- Guarded GitHub Actions run `38074558198` PASS against production `13c1ceb` schema `034`. Backup: `/opt/kitchen-os/backups/kitchen_os_20261010T180821Z.dump`. Created six site-scoped active supplier name rows 聯興/濱江/津鼎/寶綠/漁鴻/南門 with blank Vietnamese alias and no manually guessed phone, shutdown weekdays/dates or item linkage. Each was verified by readback with **0 assigned product rules**; audit events generated. No inventory/safety quantity, orders or stock movements updated.
+- First ops workflow `38074448231` failed before any write due PostgreSQL not supporting `min(uuid)`. Corrected workflow `38074558198` succeeded. Do not call unverified supplier schedule defaults authoritative or assign product mappings by name guessing.
+- Implementing separate runtime feature on `feat/procurement-inventory-minimum-as-safety-20261011`: migration `035`, server `safety_stock_mode` validation/response/audit, UI live Inventory configured-minimum aggregation, planner effective value, mode chooser manual override, i18n, desktop/mobile tests. No duplicate Inventory ledger.
+- STAGING / Production deployment **PENDING**; runtime code `13c1ceb` and schema `034` stay in production until exact-head gates pass. No claim of published feature before deployment.
+
 ## 2026-10-11 — Production operations: Fuxing 三記魚餃 臥櫃 minimum 10 盒
 
 - User specified `臥櫃 10 盒` must be maintained in second-floor freezer. Existing `fuxing-lengdongerlou` is authoritative and distinct from `fuxing-large-freezer`.
