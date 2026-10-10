@@ -1,3 +1,13 @@
+## IN PROGRESS — Procurement location-based fractional reorder SOP (2026-10-10)
+
+- User confirmed `鴨肉丸 海鮮台 餘 1/3 叫貨` means **trigger a reorder warning once 1/3 of the full/reference quantity remains at the Seafood Work Area**. Do not interpret "3/1" as three pieces or auto-place any supplier order.
+- Branch `feat/procurement-ratio-stock-alert`. Extend existing `procurement_product_rules` via additive migration 034 with opt-in `reorder_alert_enabled`, FK `reorder_location_id`, configurable full/reference quantity, and integer numerator/denominator (defaults 1/3). No new Inventory tables, stock data, suppliers or fictional inventory entries.
+- Per-item popup now requires authorized editor to select one of that exact item's configured Inventory location-stock rows, verify full/restock quantity, and enable the threshold. Formula: `remaining * denominator <= reference * numerator`. Missing/stale/archived location stock is NOT treated as zero.
+- Read-only stock remains authoritative from `GET /api/inventory/:site` and existing live refresh. Backend validates product and location belong to authenticated site, with optimistic revisions and audit; no auto-order, receiving transaction or supplier message occurs.
+- Remaining manual mapping: user must confirm branch/site and identify the actual `鴨肉丸` item and `海鮮台` location within that branch; the system must not match by guessed display names or hardcode supplier records. The operator must enter the confirmed `補滿基準量` (full stock before use); no arbitrary baseline assumed.
+- Other supplier SOP statements (聯興, 濱江, 津鼎, 寶綠, 腐皮, 漁鴻, 南門 and fish dumpling/egg dumpling/ribs minima) remain documented for mapping to existing procurement suppliers, inventory items and location minimums; do not write guessed default inventory quantities or treat Thursday as an unconditional closure.
+- Must pass migrations, API round-trip, exact-name Search regression, desktop/mobile browser, staging, merge/main CI, production smoke before DONE.
+
 ## 2026-10-10 — Follow-up Procurement tab state fix (IN PROGRESS)
 
 PR #231 merged (8fef917), but post-merge Production regression failed on an intermittent Settings tab reset. Production deploy and smoke were correctly skipped. Follow-up fixes Procurement UI site rehydration to preserve the selected tab and enhances the browser regression. No DB/business rule changes. Requires new PR CI, Staging and post-merge Production verification.
