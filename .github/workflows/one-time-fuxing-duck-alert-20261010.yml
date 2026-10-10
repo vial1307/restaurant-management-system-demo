@@ -1,0 +1,182 @@
+name: One-time Fuxing Duck 10 of 30 Alert Apply
+on:
+  push:
+    branches:
+      - ops/fuxing-duck-reorder-rule-20261010
+    paths:
+      - .github/workflows/one-time-fuxing-duck-alert-20261010.yml
+permissions:
+  contents: read
+concurrency:
+  group: kitchen-os-production-maintenance-apply
+  cancel-in-progress: false
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require authorized VPS SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+      - name: Verify release and create mandatory production backup
+        run: |
+          set -euo pipefail
+          RELEASE="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          echo "Production release before change: $RELEASE"
+          test "$RELEASE" = "13c1ceb"
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          bash repo/vps/scripts/backup.sh
+          echo "MANDATORY_BACKUP_COMPLETED"
+          REMOTE
+      - name: Configure exact Fuxing rule in existing Procurement DB
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          set -a
+          source .env
+          set +a
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin transaction isolation level serializable;
+          do $apply$
+          declare
+            v_item constant uuid := 'cc94c2f7-84e3-4c9b-8fe7-1b06bc689301';
+            v_location constant uuid := 'c0d41e3f-743c-462d-89fd-9fd933f5dc9e';
+            v_stock_count integer;
+            v_existing public.procurement_product_rules%rowtype;
+            v_present boolean;
+            v_stock_before text;
+            v_stock_after text;
+          begin
+            if not exists (
+              select 1 from public.inventory_items i
+              where i.id=v_item and i.item_key='fuxing:freezer-duck-meatball'
+                and i.name_zh_tw='鴨肉丸' and i.unit='包' and i.active=true
+            ) then
+              raise exception 'FUXING_DUCK_ITEM_IDENTITY_OR_UNIT_CHANGED';
+            end if;
+            if not exists (
+              select 1 from public.inventory_locations l
+              where l.id=v_location and l.site='fuxing'
+                and l.code='fuxing-work-seafood' and l.name_zh_tw='海鮮區'
+                and l.kind='work' and l.active=true
+            ) then
+              raise exception 'FUXING_SEAFOOD_WORK_AREA_IDENTITY_CHANGED';
+            end if;
+            select count(*) into v_stock_count
+            from public.inventory_stock s
+            left join public.inventory_item_locations il
+              on il.item_id=s.item_id and il.location_id=s.location_id
+            where s.item_id=v_item and s.location_id=v_location
+              and coalesce(il.active,true)=true;
+            if v_stock_count<>1 then
+              raise exception 'FUXING_DUCK_SEAFOOD_STOCK_ROW_MISSING_OR_INACTIVE';
+            end if;
+            if not exists (
+              select 1 from public.sites st where st.code='fuxing' and st.active=true
+            ) then
+              raise exception 'FUXING_SITE_NOT_ACTIVE';
+            end if;
+            if not exists (
+              select 1 from public.schema_migrations where version='034'
+            ) then
+              raise exception 'PROCUREMENT_SCHEMA_034_NOT_APPLIED';
+            end if;
+            select md5(coalesce(string_agg(s.location_id::text || '=' || s.quantity::text,
+                                           ',' order by s.location_id::text),''))
+              into v_stock_before
+            from public.inventory_stock s where s.item_id=v_item;
+            select * into v_existing
+              from public.procurement_product_rules r
+              where r.site_code='fuxing' and r.item_id=v_item for update;
+            v_present := found;
+            if v_present then
+              if v_existing.reorder_alert_enabled
+                and (v_existing.reorder_location_id is distinct from v_location
+                  or v_existing.reorder_reference_quantity is distinct from 1.000
+                  or v_existing.reorder_numerator is distinct from 1
+                  or v_existing.reorder_denominator is distinct from 3) then
+                raise exception 'EXISTING_DIFFERENT_ENABLED_REORDER_RULE';
+              end if;
+              if not v_existing.reorder_alert_enabled
+                or v_existing.reorder_location_id is distinct from v_location
+                or v_existing.reorder_reference_quantity is distinct from 1.000
+                or v_existing.reorder_numerator is distinct from 1
+                or v_existing.reorder_denominator is distinct from 3 then
+                update public.procurement_product_rules
+                set reorder_alert_enabled=true, reorder_location_id=v_location,
+                    reorder_reference_quantity=1.000,
+                    reorder_numerator=1, reorder_denominator=3,
+                    revision=revision+1, updated_at=now()
+                where site_code='fuxing' and item_id=v_item;
+                raise notice 'UPDATED_EXISTING_PROCUREMENT_RULE_WITHOUT_OTHER_FIELDS';
+              else
+                raise notice 'REORDER_RULE_ALREADY_MATCHES';
+              end if;
+            else
+              insert into public.procurement_product_rules
+                (site_code,item_id,package_unit,enabled,
+                 reorder_alert_enabled,reorder_location_id,reorder_reference_quantity,
+                 reorder_numerator,reorder_denominator)
+                values ('fuxing',v_item,'包',false,true,v_location,1.000,1,3);
+              raise notice 'CREATED_ALERT_ONLY_PROCUREMENT_RULE_NO_ORDER';
+            end if;
+            select md5(coalesce(string_agg(s.location_id::text || '=' || s.quantity::text,
+                                           ',' order by s.location_id::text),''))
+              into v_stock_after
+            from public.inventory_stock s where s.item_id=v_item;
+            if v_stock_before is distinct from v_stock_after then
+              raise exception 'INVENTORY_STOCK_CHANGED_DURING_ALERT_CONFIGURATION';
+            end if;
+            if not exists (
+              select 1 from public.procurement_product_rules r
+              where r.site_code='fuxing' and r.item_id=v_item
+                and r.reorder_alert_enabled=true and r.reorder_location_id=v_location
+                and r.reorder_reference_quantity=1.000
+                and r.reorder_numerator=1 and r.reorder_denominator=3
+            ) then
+              raise exception 'FUXING_DUCK_RULE_POST_WRITE_VERIFICATION_FAILED';
+            end if;
+          end $apply$;
+          commit;
+          select concat_ws('|','VERIFIED_RULE',r.site_code,i.name_zh_tw,i.unit,
+             l.name_zh_tw,r.reorder_alert_enabled::text,
+             r.reorder_reference_quantity::text,
+             r.reorder_numerator::text,r.reorder_denominator::text,
+             r.revision::text,coalesce(r.supplier_id::text,'none'))
+          from public.procurement_product_rules r
+          join public.inventory_items i on i.id=r.item_id
+          join public.inventory_locations l on l.id=r.reorder_location_id
+          where r.site_code='fuxing'
+            and r.item_id='cc94c2f7-84e3-4c9b-8fe7-1b06bc689301';
+          select concat_ws('|','VERIFIED_STOCK_UNCHANGED',l.name_zh_tw,s.quantity::text,i.unit)
+          from public.inventory_stock s
+          join public.inventory_items i on i.id=s.item_id
+          join public.inventory_locations l on l.id=s.location_id
+          where s.item_id='cc94c2f7-84e3-4c9b-8fe7-1b06bc689301'
+          order by l.name_zh_tw;
+          SQL
+          echo "FUXING_DUCK_REORDER_10_OF_30_APPLIED_OK"
+          REMOTE
+      - name: Verify website and API remain healthy
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/api/health
+          echo
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE
+          echo
+          echo "PRODUCTION_HEALTH_AFTER_FUXING_ALERT_OK"
