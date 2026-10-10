@@ -15,6 +15,14 @@ export function procurementRawCopy(key,language="vi"){
   if(typeof raw!=="string")throw new Error("MISSING_PROCUREMENT_I18N_KEY:"+key);
   return raw;
 }
+// Supplier API uses camelCase (supplierRow); Inventory item/category snapshots
+// use snake_case. Never mix the two contracts or show a separator-only option.
+export function procurementSupplierName(supplier,{language="zh",bilingual=false}={}){
+  const zh=String(supplier?.nameZhTw??"").trim();
+  const vi=String(supplier?.nameVi??"").trim();
+  if(bilingual)return [zh,vi].filter(Boolean).join(" · ")||"—";
+  return (language==="vi"?vi||zh:zh||vi)||"—";
+}
 export function procurementTabs(active,language="vi"){
   const tabs=[["list","tabList"],["supplier","tabSupplier"],["group","tabGroup"],["history","tabHistory"],["settings","tabSettings"]];
   return '<nav class="pv2-tabs" aria-label="'+procurementCopy("title",language,{paired:false})+'">'+
@@ -38,7 +46,7 @@ export function procurementSettingsModal({title,body}){
 }
 export function procurementSupplierCard({supplier,editable,language}){
   const safe=procurementEscape;
-  return '<div class="pv2-supplier-card"><strong>'+safe(supplier.name_zh_tw)+'</strong><small>'+safe(supplier.name_vi)+'</small>'+
+  return '<div class="pv2-supplier-card"><strong>'+safe(procurementSupplierName(supplier,{language:"zh"}))+'</strong>'+(supplier.nameVi?'<small>'+safe(supplier.nameVi)+'</small>':"")+
     '<span>'+procurementCopy("restDays",language)+': '+safe(supplier.closedWeekdays.join(",")||"—")+'</span>'+
     '<span>'+procurementCopy("delivery",language)+': '+Number(supplier.leadDays)+' '+procurementCopy("daysUnit",language)+'</span>'+
     (editable?'<button type="button" data-pv2-action="edit-supplier" data-id="'+safe(supplier.id)+'">'+procurementCopy("edit",language)+'</button>':"")+"</div>";
@@ -60,7 +68,7 @@ export function procurementProductCard(row,{language="vi",editable=false,format}
         label("ratioAlertRemaining")+" "+value(threshold.remaining)+" ≤ "+value(threshold.threshold)+"</span>":"")+
       (threshold?.status==="missingStock"?'<small role="status">'+label("ratioAlertMissing")+"</small>":"")+"</div>"+
     '<div class="pv2-cell"><span class="pv2-mobile-label">'+label("supplierShort")+'</span>'+
-      (supplier?'<strong>'+safe(language==="zh"?supplier.name_zh_tw:supplier.name_vi||supplier.name_zh_tw)+"</strong>":badge("notConfigured","warning"))+"</div>"+
+      (supplier?'<strong>'+safe(procurementSupplierName(supplier,{language}))+"</strong>":badge("notConfigured","warning"))+"</div>"+
     '<div class="pv2-cell pv2-use"><span class="pv2-mobile-label">'+label("dailyUsage")+'</span><strong>'+
       (rule?value(rule.weekdayDemand):"—")+" / "+(rule?value(rule.holidayDemand):"—")+'</strong><small>'+safe(item.unit||"")+"</small></div>"+
     '<div class="pv2-cell pv2-stock"><span class="pv2-mobile-label">'+label("stockQty")+'</span><strong>'+
@@ -85,7 +93,7 @@ export function procurementFilterBar({language="vi",search="",supplierFilter="al
       copy("searchClear")+'">×</button></label>'+
     '<select data-pv2-filter="supplier" aria-label="'+copy("supplier")+'"><option value="all">'+copy("allSuppliers")+'</option>'+
     suppliers.map(x=>'<option value="'+safe(x.id)+'"'+(supplierFilter===x.id?" selected":"")+'>'+
-      safe(x.name_zh_tw)+' · '+safe(x.name_vi)+"</option>").join("")+
+      safe(procurementSupplierName(x,{bilingual:true}))+"</option>").join("")+
     '<option value="unassigned"'+(supplierFilter==="unassigned"?" selected":"")+'>'+copy("unassignedSupplier")+'</option></select>'+
     '<select data-pv2-filter="category" aria-label="'+copy("category")+'"><option value="all">'+copy("allGroups")+'</option>'+
     categories.map(x=>'<option value="'+safe(x.code)+'"'+(categoryFilter===x.code?" selected":"")+'>'+
