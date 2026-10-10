@@ -1,3 +1,12 @@
+## BLOCKED — Verify Fuxing supplier SOP location/unit mapping (read-only audit 2026-10-11)
+
+- Run `38068035044` PASS against production schema `034`; **no writes**. Runtime deployment remains `13c1ceb`, previously verified.
+- `三記魚餃`: 廚房冰箱 20/1 盒; another DB `大冷凍` location 0/20 盒; 海鮮區 0/1 盒. Distinct storage location IDs `fuxing-large-freezer` and `fuxing-lengdongerlou` share the display name `大冷凍`.
+- `豬肉蛋餃`: 大冷凍 1/1 包, 海鮮區 0/0 包; `牛肉蛋餃`: 大冷凍 10/10 包, 海鮮區 0/0 包; SOP calls these `盒`, conversion unconfirmed.
+- `排骨酥`: 大冷凍 3/3 斤; SOP's 3 斤 minimum already exists. `鴨肉丸`: 1/3 alert remains enabled, work location stock 0 包.
+- No active Fuxing procurement supplier rows were returned. **BLOCKED on** operator mapping of `臥櫃` to actual location, `盒` vs `包`, and verified supplier assignments before new DB writes. Keep `ACTIVE_PR: none` for runtime.
+- One-link Handoff auto-poll and Super Admin forced-refresh remain separate, unimplemented workstreams.
+
 ## STABLE — Procurement V2 / Fuxing stock reorder alert (verified 2026-10-10; status updated 2026-10-11)
 
 - `ACTIVE_PR: none` for the Procurement V2 completed workstream. Production application `13c1ceb` (full main SHA `13c1cebff0254fae5dda2295ff16b4bd8679b5f8`); production PostgreSQL schema `034`.
