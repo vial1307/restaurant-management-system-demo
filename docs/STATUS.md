@@ -1,3 +1,10 @@
+## IN PROGRESS — Procurement supplier dropdown blank name UI bug (2026-10-11)
+
+- Operator screenshot on live Production showed the supplier selector options as dots because backend API responds with `nameZhTw/nameVi` but UI mistakenly accessed `name_zh_tw/name_vi`.
+- Workstream `fix/procurement-supplier-api-name-fields-20261011`: centralize supplier name presentation from camelCase, use Chinese-only fallback when Vietnamese alias empty, repair all Procurement supplier UI and tests; keep Inventory item/location snake_case untouched. No DB writes or guessed supplier assignments.
+- Last confirmed Production runtime `d18d28c` and schema `035` (deploy, health + smoke PASS run `38076014722`, attempt 2). Six Fuxing supplier records exist (ops `38074558198`). UI patch not yet deployed pending gates.
+- `ACTIVE_PR: pending`. NEXT: PR/Staging tests -> merge -> production exact-head smoke.
+
 ## IN PROGRESS — Procurement warehouse-linked safety + registered Fuxing vendors (2026-10-11)
 
 - Six active Fuxing supplier name rows **已建立 / đã thêm**: 聯興, 濱江, 津鼎, 寶綠, 漁鴻, 南門. Production scoped op `38074558198` PASS after backup and read-back, 0 product links for each. Unverified delivery/closure schedule defaults are NOT certified operational schedules; do not infer automatic ordering.

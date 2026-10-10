@@ -1,5 +1,5 @@
 import { apiRequest, vpsInventory } from "./vps-api.js";
-import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,procurementSettingsModal,procurementSupplierCard,procurementProductCard,procurementFilterBar } from "./procurement-v2-components.js";
+import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,procurementSettingsModal,procurementSupplierCard,procurementProductCard,procurementFilterBar,procurementSupplierName } from "./procurement-v2-components.js";
 import { ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { addCalendarDays, planProcurementLine } from "./procurement-planner.js";
 import { evaluateLocationReorderAlert } from "./procurement-threshold.js";
@@ -111,7 +111,7 @@ function listBody(lang,editable){
   const groups=groupsOf(rows,r=>r.supplier?.id||"unassigned");
   return groups.map(([key,subRows])=>{
    const sup=supplierFor(key);
-   const label=sup?sup.name_zh_tw+" / "+(sup.name_vi||""):P("unassigned",lang);
+   const label=sup?procurementSupplierName(sup,{bilingual:true}):P("unassigned",lang);
    return `<section class="pv2-panel"><header class="pv2-section-head"><h3>🏭 ${html(label)}</h3><small>${subRows.length} ${P("itemsUnit",lang)}</small></header>${productRows(subRows,lang,editable)}</section>`;
   }).join("")||productRows([],lang,editable);
  }
@@ -128,7 +128,7 @@ function listBody(lang,editable){
 function historyBody(lang,editable){
  const orders=ui.data?.orders||[];
  return `<section class="pv2-panel"><header class="pv2-section-head"><h3>${P("history",lang)}</h3></header>
- ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.name_zh_tw||P("supplier",lang))}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(P(({submitted:"statusSubmitted",confirmed:"statusConfirmed",received:"statusReceived",cancelled:"statusCancelled"})[o.status]||"statusSubmitted",lang),"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">${P("noHistory",lang)}</p>`}
+ ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.nameZhTw||P("supplier",lang))}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(P(({submitted:"statusSubmitted",confirmed:"statusConfirmed",received:"statusReceived",cancelled:"statusCancelled"})[o.status]||"statusSubmitted",lang),"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">${P("noHistory",lang)}</p>`}
  <p class="pv2-hint">${P("historyHint",lang)}</p></section>`;
 }
 
@@ -203,7 +203,7 @@ function formRule(lang){
  const rule=ui.ruleDraft||ruleFor(item.id)||{};
  return procurementSettingsModal({title:html(item.name_zh_tw)+" / "+html(item.name_vi),body:`
  <input type="hidden" name="itemId" value="${html(item.id)}"><input type="hidden" name="revision" value="${rule.revision||0}">
- <div class="pv2-form-grid"><label>${P("supplier",lang)}<select name="supplierId"><option value="">${P("selectSupplier",lang)}</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(s.name_zh_tw)} · ${html(s.name_vi)}</option>`).join("")}</select></label>
+ <div class="pv2-form-grid"><label>${P("supplier",lang)}<select name="supplierId"><option value="">${P("selectSupplier",lang)}</option>${suppliers().map(s=>`<option value="${s.id}" ${rule.supplierId===s.id?"selected":""}>${html(procurementSupplierName(s,{bilingual:true}))}</option>`).join("")}</select></label>
  ${["weekdayDemand","weekendDemand","holidayDemand","packageSize"].map(key=>`<label>${P(key,lang)}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
  <label>${P("safetyStockSource",lang)}<select name="safetyStockMode" data-pv2-safety-source><option value="inventory" ${(rule.safetyStockMode||"inventory")==="inventory"?"selected":""}>${P("safetyFromInventory",lang)}</option><option value="custom" ${rule.safetyStockMode==="custom"?"selected":""}>${P("safetyCustom",lang)}</option></select></label>
  <label>${P("safetyStock",lang)}<input type="number" name="safetyStock" min="0" step="0.001" required ${(rule.safetyStockMode||"inventory")==="inventory"?"readonly":""} value="${html((rule.safetyStockMode||"inventory")==="inventory"?inventorySafetyStock(stockRowsFor(item.id)):(rule.safetyStock??0))}"></label>
@@ -234,7 +234,7 @@ function settingsBody(lang,editable){
  return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>${P("supplierSettings",lang)}</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">${P("addSupplier",lang)}</button>`:""}</header>
  <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>procurementSupplierCard({supplier:s,editable,language:lang})).join(""):`<p class="pv2-empty">${P("noSuppliers",lang)}</p>`}</div></section>
  ${formSupplier(lang)}
- <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("productRules",lang)}</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="${P("searchSettings",lang)}"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.name_zh_tw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
+ <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("productRules",lang)}</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="${P("searchSettings",lang)}"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.nameZhTw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
  <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("holidaysAndOpening",lang)}</h3></header>
  <p class="pv2-hint">${P("holidayInstruction",lang)}</p>
  <form data-pv2-form="calendar" class="pv2-calendar-form"><input name="date" type="date" required value="${html(ui.date)}"/><select name="type"><option value="normal">${P("normalDay",lang)}</option><option value="holiday">${P("holidayDay",lang)}</option><option value="closed">${P("closedDay",lang)}</option></select><input name="description" placeholder="${P("notes",lang)}" maxlength="160"/><button class="pv2-primary" type="submit" ${!editable||ui.pending?"disabled":""}>${P("save",lang)}</button></form>
@@ -250,7 +250,7 @@ function summary(lang,editable,rows){
  <button type="button" class="pv2-primary pv2-wide" data-pv2-action="submit" ${!editable||!count||ui.pending?"disabled":""}>${P(ui.pending?"saving":"createOrder",lang)}</button>
  <button type="button" class="pv2-secondary pv2-wide" data-pv2-action="copy" ${!count?"disabled":""}>${P("copy",lang)}</button>
  <p class="pv2-hint">${P("externalHint",lang)}</p></div>
- <div class="pv2-panel"><h3>${P("supplierClosed",lang)}</h3>${suppliers().map(s=>`<div class="pv2-supplier-short"><strong>${html(s.name_zh_tw)}</strong><small>${html(s.name_vi)}</small><span>${html(s.closedDates.slice(0,3).join(", ")||P("fixed",lang))}</span></div>`).join("")||"—"}</div></aside>`;
+ <div class="pv2-panel"><h3>${P("supplierClosed",lang)}</h3>${suppliers().map(s=>`<div class="pv2-supplier-short"><strong>${html(procurementSupplierName(s,{language:"zh"}))}</strong>${s.nameVi?`<small>${html(s.nameVi)}</small>`:""}<span>${html(s.closedDates.slice(0,3).join(", ")||P("fixed",lang))}</span></div>`).join("")||"—"}</div></aside>`;
 }
 export function procurementV2Page(ctx,{render,site,editable}){
  prepare(site,render,ctx.state.selectedDate);

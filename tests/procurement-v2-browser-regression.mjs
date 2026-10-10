@@ -58,9 +58,24 @@ try{
   assert.equal(await supplier.locator(".pv2-date-chip").count(),4,"remove single selected day");
   await supplier.locator('button[type="submit"]').click();
   await page.locator('[data-pv2-form="supplier"]').waitFor({state:"detached",timeout:15000});
+  // API returns supplierRow() as nameZhTw/nameVi. After a server write + refresh,
+  // all supplier presentation surfaces must show names, never "." or "·" alone.
+  await page.waitForFunction(()=>[...document.querySelectorAll(".pv2-supplier-card strong")]
+    .some(el=>el.textContent.includes("測試連休供應商")));
+  assert((await page.locator(".pv2-supplier-card").filter({hasText:"測試連休供應商"}).count())>=1,
+    "supplier list must display API camelCase Chinese name");
+
   await page.locator('[data-pv2-action="edit-rule"]').first().click();
   const dialog=page.locator('[role="dialog"][aria-modal="true"]');
   await dialog.waitFor({state:"visible"});
+  const matchingSupplier=dialog.locator('[name="supplierId"] option').filter({hasText:"測試連休供應商"});
+  assert((await matchingSupplier.count())>=1,"product supplier dropdown must show actual saved name");
+  assert.match(await matchingSupplier.first().textContent(),/Nhà cung cấp thử lịch/,
+    "Vietnamese supplier alias must appear when supplied");
+  const vendorLabels=(await dialog.locator('[name="supplierId"] option').allTextContents()).slice(1);
+  assert(vendorLabels.every(name=>name.trim()&&name.trim()!=="·"&&name.trim()!=="—"),
+    "No supplier option may be a blank name or a bare separator");
+
   assert.equal(await dialog.locator('[data-pv2-form="rule"]').count(),1,"product settings are in popup");
   assert.equal(await dialog.locator(".pv2-db-reference").count(),1,"modal reuses warehouse stock and locations");
   assert.equal(await dialog.locator('[name="reorderAlertEnabled"]').count(),1,
