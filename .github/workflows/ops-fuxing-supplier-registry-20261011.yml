@@ -1,0 +1,122 @@
+name: One-time Fuxing Supplier Name Registry (Operator SOP)
+on:
+  push:
+    branches: [ops/fuxing-supplier-name-registry-20261011]
+    paths:
+      - .github/workflows/ops-fuxing-supplier-registry-20261011.yml
+permissions:
+  contents: read
+jobs:
+  guarded-supplier-registry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Require authorized VPS SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+      - name: Verify release schema and backup before a guarded supplier-name registry write
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          test "$(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')" = "13c1ceb"
+          set -a
+          source .env
+          set +a
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin transaction read only;
+          select 'SCHEMA|'||max(version) from public.schema_migrations;
+          select concat_ws('|','EXISTING_SUPPLIER',site_code,name_zh_tw,active::text)
+          from public.procurement_suppliers
+          where site_code='fuxing' and name_zh_tw in ('聯興','濱江','津鼎','寶綠','漁鴻','南門');
+          commit;
+          SQL
+          bash repo/vps/scripts/backup.sh
+          echo "FUXING_SUPPLIERS_BACKUP_OK"
+          REMOTE
+      - name: Register only verified Fuxing supplier display names without inventory or ordering relationships
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          set -a
+          source .env
+          set +a
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin;
+          set local lock_timeout='10s';
+          do $apply$
+          declare
+            name text;
+            matches integer;
+            existing_active boolean;
+            existing_id uuid;
+            new_id uuid;
+          begin
+            if not exists(select 1 from public.schema_migrations where version='034') then
+              raise exception 'EXPECTED_SCHEMA_034_MISSING';
+            end if;
+            if not exists(select 1 from public.sites where code='fuxing' and active=true) then
+              raise exception 'FUXING_SITE_NOT_ACTIVE';
+            end if;
+            foreach name in array array['聯興','濱江','津鼎','寶綠','漁鴻','南門']::text[] loop
+              select count(*),bool_and(active),min(id)
+                into matches,existing_active,existing_id
+                from public.procurement_suppliers
+                where site_code='fuxing' and name_zh_tw=name;
+              if matches>1 then
+                raise exception 'DUPLICATE_SUPPLIER_NAME_%',name;
+              elsif matches=1 then
+                if existing_active is distinct from true then
+                  raise exception 'EXISTING_SUPPLIER_INACTIVE_%_MANUAL_REVIEW',name;
+                end if;
+                raise notice 'SUPPLIER_ALREADY_EXISTS_%',name;
+              else
+                insert into public.procurement_suppliers(site_code,name_zh_tw,name_vi,active)
+                values('fuxing',name,'',true)
+                returning id into new_id;
+                insert into public.audit_logs(actor_user_id,actor_username,action,entity_type,entity_id,site,before_data,after_data,metadata)
+                values(null,'github-actions:approved-ops-maintenance','procurement.supplier.create',
+                       'procurement',new_id::text,'fuxing','null'::jsonb,
+                       jsonb_build_object('name_zh_tw',name,'active',true,'site_code','fuxing'),
+                       jsonb_build_object('operation','register_confirmed_supplier_name',
+                         'sop_origin','operator-2026-10-10',
+                         'schedule_verified',false,'item_mapping_verified',false,
+                         'automatic_order_enabled',false));
+                raise notice 'SUPPLIER_CREATED_%',name;
+              end if;
+            end loop;
+          end
+          $apply$;
+          commit;
+          select concat_ws('|','VERIFIED_SUPPLIER',s.name_zh_tw,s.site_code,s.active::text,
+                 s.name_vi,s.closed_weekdays::text,coalesce(assign.assigned,0)::text)
+            from public.procurement_suppliers s
+            left join lateral (
+              select count(*) as assigned from public.procurement_product_rules r
+              where r.site_code='fuxing' and r.supplier_id=s.id
+            ) assign on true
+            where s.site_code='fuxing' and s.name_zh_tw in ('聯興','濱江','津鼎','寶綠','漁鴻','南門')
+            order by s.name_zh_tw;
+          SQL
+          echo "FUXING_SUPPLIER_NAME_REGISTRY_OK"
+          REMOTE
+      - name: Confirm runtime unaffected
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 http://82.47.180.185/api/health
+          test "$(curl --fail --silent --show-error http://82.47.180.185/RELEASE | tr -d '[:space:]')" = "13c1ceb"
+          echo "SUPPLIER_REGISTRY_PRODUCTION_HEALTH_OK"
