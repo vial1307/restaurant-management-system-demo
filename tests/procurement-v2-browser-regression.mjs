@@ -63,6 +63,12 @@ try{
   await dialog.waitFor({state:"visible"});
   assert.equal(await dialog.locator('[data-pv2-form="rule"]').count(),1,"product settings are in popup");
   assert.equal(await dialog.locator(".pv2-db-reference").count(),1,"modal reuses warehouse stock and locations");
+  assert.equal(await dialog.locator('[name="reorderAlertEnabled"]').count(),1,
+    "location-aware reorder warning must be in existing product settings");
+  assert.equal(await dialog.locator('[name="reorderLocationId"]').count(),1);
+  assert.equal(await dialog.locator('[name="reorderReferenceQuantity"]').count(),1);
+  assert.equal(await dialog.locator('[name="reorderNumerator"]').inputValue(),"1");
+  assert.equal(await dialog.locator('[name="reorderDenominator"]').inputValue(),"3");
   const bounds=await dialog.boundingBox();
   assert(bounds && bounds.x>=0 && bounds.y>=0 && bounds.width<=viewport.width+2,
    `dialog must fit viewport ${viewport.width}px: ${JSON.stringify(bounds)}`);

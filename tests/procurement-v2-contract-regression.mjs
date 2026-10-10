@@ -118,4 +118,19 @@ assert.match(ui,/procurementSettingsModal\(/);
 assert.match(ui,/procurementTabs\(/);
 assert.match(ui,/procurementStat\(/);
 assert.match(ui,/procurementPanel\(/);
+
+const locationMigration=fs.readFileSync("vps/database/migrations/034_procurement_location_fraction_alert.sql","utf8");
+assert.match(locationMigration,/alter table public.procurement_product_rules/);
+assert.match(locationMigration,/references public.inventory_locations\(id\)/);
+assert.doesNotMatch(locationMigration,/create table/i,"Do not create a second inventory or supplier database");
+assert.doesNotMatch(locationMigration,/insert into/i,"Do not seed unverified suppliers or item/location IDs");
+assert.match(server,/REORDER_LOCATION_NOT_IN_INVENTORY/,"Must validate canonical Inventory site and item-location relationship");
+assert.match(server,/reorder_alert_enabled/);
+assert.match(ui,/reorderAlertEnabled/);
+assert.match(ui,/stockRowsFor\(item.id\)/);
+assert.match(ui,/evaluateLocationReorderAlert/);
+assert.match(uiAndComponents,/ratioAlertTriggered/);
+assert.match(ui,/data.get\("reorderLocationId"\)/);
+assert.match(css,/\.pv2-reorder-settings/);
+
 console.log("PROCUREMENT_V2_CONTRACT_OK");

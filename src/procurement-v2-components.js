@@ -44,7 +44,7 @@ export function procurementSupplierCard({supplier,editable,language}){
     (editable?'<button type="button" data-pv2-action="edit-supplier" data-id="'+safe(supplier.id)+'">'+procurementCopy("edit",language)+'</button>':"")+"</div>";
 }
 export function procurementProductCard(row,{language="vi",editable=false,format}){
-  const {item,rule,supplier,stock,plan,selected,amount}=row;
+  const {item,rule,supplier,stock,plan,threshold,selected,amount}=row;
   const safe=procurementEscape, label=(key)=>procurementCopy(key,language);
   const ready=Boolean(rule?.enabled&&supplier&&plan?.canOrder),risk=Boolean(plan?.preArrivalRisk);
   const name=language==="zh"?item.name_zh_tw||item.name_vi:item.name_vi||item.name_zh_tw;
@@ -55,7 +55,10 @@ export function procurementProductCard(row,{language="vi",editable=false,format}
     '<div class="pv2-cell pv2-select"><input type="checkbox" data-pv2-select="'+safe(item.id)+'"'+(selected?" checked":"")+
       (!ready||!editable?" disabled":"")+' aria-label="'+safe(name)+'"/></div>'+
     '<div class="pv2-cell pv2-name"><strong>'+safe(name)+'</strong><small>'+safe(alternate)+'</small><small>'+
-      safe(item.unit||"")+' · '+safe(item.category_code||"")+"</small></div>"+
+      safe(item.unit||"")+' · '+safe(item.category_code||"")+"</small>"+
+      (threshold?.triggered?'<span class="pv2-badge pv2-danger" role="status">'+label("ratioAlertTriggered")+': '+
+        label("ratioAlertRemaining")+" "+value(threshold.remaining)+" ≤ "+value(threshold.threshold)+"</span>":"")+
+      (threshold?.status==="missingStock"?'<small role="status">'+label("ratioAlertMissing")+"</small>":"")+"</div>"+
     '<div class="pv2-cell"><span class="pv2-mobile-label">'+label("supplierShort")+'</span>'+
       (supplier?'<strong>'+safe(language==="zh"?supplier.name_zh_tw:supplier.name_vi||supplier.name_zh_tw)+"</strong>":badge("notConfigured","warning"))+"</div>"+
     '<div class="pv2-cell pv2-use"><span class="pv2-mobile-label">'+label("dailyUsage")+'</span><strong>'+

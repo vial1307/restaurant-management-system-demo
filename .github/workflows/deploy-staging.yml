@@ -79,6 +79,7 @@ jobs:
           set -euo pipefail
           for file in src/*.js tests/*.mjs vps/backend/src/procurement-routes.mjs; do node --check "$file"; done
           node tests/procurement-v2-contract-regression.mjs
+          node tests/procurement-location-threshold-regression.mjs
           node tests/procurement-v2-translation-components-regression.mjs
           bash -n vps/scripts/deploy-staging.sh
           bash -n vps/scripts/schema-fingerprint.sh

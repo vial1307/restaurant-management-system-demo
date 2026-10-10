@@ -25,7 +25,12 @@ function ruleRow(row) {
   return { itemId:row.item_id, supplierId:row.supplier_id, weekdayDemand:Number(row.weekday_demand),
     weekendDemand:Number(row.weekend_demand), holidayDemand:Number(row.holiday_demand),
     safetyStock:Number(row.safety_stock), packageSize:Number(row.package_size),
-    packageUnit:row.package_unit, enabled:row.enabled, revision:row.revision };
+    packageUnit:row.package_unit, enabled:row.enabled, revision:row.revision,
+    reorderAlertEnabled:row.reorder_alert_enabled===true,
+    reorderLocationId:row.reorder_location_id||null,
+    reorderReferenceQuantity:row.reorder_reference_quantity===null?null:Number(row.reorder_reference_quantity),
+    reorderNumerator:Number(row.reorder_numerator??1),
+    reorderDenominator:Number(row.reorder_denominator??3) };
 }
 async function allowed(request,reply,mode="view") {
   const user=await requireUser(request,reply);
@@ -101,6 +106,14 @@ export async function registerProcurementRoutes(app) {
     if (!b.itemId || !qty(b.weekdayDemand) || !qty(b.weekendDemand) || !qty(b.holidayDemand) ||
       !qty(b.safetyStock) || !qty(b.packageSize,0.001) || !Number.isInteger(Number(b.revision ?? 0)))
       return validationReply(reply);
+    const thresholdEnabled=b.reorderAlertEnabled===true;
+    const thresholdLocation=thresholdEnabled?String(b.reorderLocationId||""):null;
+    const thresholdReference=thresholdEnabled?Number(b.reorderReferenceQuantity):null;
+    const numerator=Number(b.reorderNumerator??1);
+    const denominator=Number(b.reorderDenominator??3);
+    if(!intRange(numerator,1,1000)||!intRange(denominator,1,1000)||numerator>denominator||
+      (thresholdEnabled&&(!thresholdLocation||!qty(thresholdReference,0.001)||thresholdReference<=0)))
+      return validationReply(reply,"INVALID_REORDER_THRESHOLD");
     try {
       const rule=await withTransaction(async client=>{
         const item=(await client.query("select id,item_key from public.inventory_items where id=$1 and active=true",[b.itemId])).rows[0];
@@ -109,11 +122,20 @@ export async function registerProcurementRoutes(app) {
           const supplier=(await client.query("select * from public.procurement_suppliers where id=$1 and site_code=$2 and active=true",[b.supplierId,ctx.site])).rows[0];
           if (!supplier) throw Object.assign(new Error("SUPPLIER_NOT_IN_SITE"),{statusCode:400});
         }
+        if(thresholdEnabled){
+          // Site and location must already exist in the canonical Inventory DB.
+          // Do not create a secondary stock record or infer a location by its display name.
+          const validLocation=(await client.query(
+            "select s.item_id from public.inventory_stock s join public.inventory_locations l on l.id=s.location_id left join public.inventory_item_locations il on il.item_id=s.item_id and il.location_id=s.location_id where s.item_id=$1 and s.location_id=$2 and l.site=$3 and l.active=true and coalesce(il.active,true)=true",
+            [b.itemId,thresholdLocation,ctx.site]
+          )).rows[0];
+          if(!validLocation)throw Object.assign(new Error("REORDER_LOCATION_NOT_IN_INVENTORY"),{statusCode:400});
+        }
         const prev=(await client.query("select * from public.procurement_product_rules where site_code=$1 and item_id=$2 for update",[ctx.site,b.itemId])).rows[0];
         if (Number(b.revision||0)!==Number(prev?.revision||0)) throw Object.assign(new Error("STALE_PRODUCT_RULE"),{statusCode:409});
         const current=(await client.query(
-          "insert into public.procurement_product_rules(site_code,item_id,supplier_id,weekday_demand,weekend_demand,holiday_demand,safety_stock,package_size,package_unit,enabled,updated_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) on conflict(site_code,item_id) do update set supplier_id=excluded.supplier_id,weekday_demand=excluded.weekday_demand,weekend_demand=excluded.weekend_demand,holiday_demand=excluded.holiday_demand,safety_stock=excluded.safety_stock,package_size=excluded.package_size,package_unit=excluded.package_unit,enabled=excluded.enabled,revision=procurement_product_rules.revision+1,updated_by=excluded.updated_by,updated_at=now() returning *",
-          [ctx.site,b.itemId,b.supplierId||null,Number(b.weekdayDemand),Number(b.weekendDemand),Number(b.holidayDemand),Number(b.safetyStock),Number(b.packageSize),textValue(b.packageUnit,32),b.enabled===true,ctx.user.id]
+          "insert into public.procurement_product_rules(site_code,item_id,supplier_id,weekday_demand,weekend_demand,holiday_demand,safety_stock,package_size,package_unit,enabled,updated_by,reorder_alert_enabled,reorder_location_id,reorder_reference_quantity,reorder_numerator,reorder_denominator) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) on conflict(site_code,item_id) do update set supplier_id=excluded.supplier_id,weekday_demand=excluded.weekday_demand,weekend_demand=excluded.weekend_demand,holiday_demand=excluded.holiday_demand,safety_stock=excluded.safety_stock,package_size=excluded.package_size,package_unit=excluded.package_unit,enabled=excluded.enabled,reorder_alert_enabled=excluded.reorder_alert_enabled,reorder_location_id=excluded.reorder_location_id,reorder_reference_quantity=excluded.reorder_reference_quantity,reorder_numerator=excluded.reorder_numerator,reorder_denominator=excluded.reorder_denominator,revision=procurement_product_rules.revision+1,updated_by=excluded.updated_by,updated_at=now() returning *",
+          [ctx.site,b.itemId,b.supplierId||null,Number(b.weekdayDemand),Number(b.weekendDemand),Number(b.holidayDemand),Number(b.safetyStock),Number(b.packageSize),textValue(b.packageUnit,32),b.enabled===true,ctx.user.id,thresholdEnabled,thresholdLocation,thresholdReference,numerator,denominator]
         )).rows[0];
         await audit(client,ctx,"procurement.rule.upsert",b.itemId,prev||null,current);
         return ruleRow(current);
