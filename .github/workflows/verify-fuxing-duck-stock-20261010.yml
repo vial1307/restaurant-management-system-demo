@@ -1,0 +1,76 @@
+name: One-time Fuxing Duck Work Area Readonly Audit
+on:
+  push:
+    branches: [ops/verify-fuxing-duck-stock-20261010]
+    paths:
+      - .github/workflows/verify-fuxing-duck-stock-20261010.yml
+permissions:
+  contents: read
+jobs:
+  inventory-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Require authorized VPS SSH secret
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: test -n "$VPS_SSH_KEY"
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+      - name: Inspect exact Fuxing inventory records without writes
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/kitchen-os
+          set -a
+          source .env
+          set +a
+          docker compose --env-file .env exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<'SQL'
+          begin transaction read only;
+          select 'SCHEMA|' || coalesce(max(version),'unknown') from public.schema_migrations;
+          select 'EXACT_ITEM_COUNT|' || count(*) from public.inventory_items
+            where active=true and split_part(item_key,':',1)='fuxing' and name_zh_tw='鴨肉丸';
+          select 'EXACT_LOCATION_COUNT|' || count(*) from public.inventory_locations
+            where active=true and site='fuxing' and name_zh_tw='海鮮台';
+          select concat_ws('|','ITEM',i.id::text,i.item_key,i.name_zh_tw,i.name_vi,i.unit,i.work_area)
+            from public.inventory_items i
+            where i.active=true and split_part(i.item_key,':',1)='fuxing'
+              and (i.name_zh_tw='鴨肉丸' or i.name_zh_tw like '%鴨肉丸%' or i.name_zh_tw like '%鴨%丸%')
+            order by i.name_zh_tw, i.item_key limit 15;
+          select concat_ws('|','LOCATION',l.id::text,l.code,l.name_zh_tw,l.name_vi,l.kind,l.active::text)
+            from public.inventory_locations l
+            where l.active=true and l.site='fuxing'
+              and (l.name_zh_tw='海鮮台' or l.name_zh_tw like '%海鮮%')
+            order by l.name_zh_tw,l.code limit 15;
+          select concat_ws('|','STOCK',i.id::text,l.id::text,i.name_zh_tw,i.unit,l.name_zh_tw,
+                      s.quantity::text,s.minimum_quantity::text,l.kind)
+            from public.inventory_stock s
+            join public.inventory_items i on i.id=s.item_id
+            join public.inventory_locations l on l.id=s.location_id
+            where i.active=true and l.active=true and l.site='fuxing'
+              and split_part(i.item_key,':',1)='fuxing'
+              and (i.name_zh_tw like '%鴨肉丸%' or i.name_zh_tw like '%鴨%丸%')
+            order by i.name_zh_tw,l.name_zh_tw limit 20;
+          select concat_ws('|','RULE',i.name_zh_tw,i.unit,r.reorder_alert_enabled::text,
+                 coalesce(r.reorder_location_id::text,'-'),
+                 coalesce(r.reorder_reference_quantity::text,'-'),
+                 r.reorder_numerator::text,r.reorder_denominator::text,
+                 r.revision::text,r.enabled::text)
+            from public.procurement_product_rules r
+            join public.inventory_items i on i.id=r.item_id
+            where r.site_code='fuxing' and i.active=true
+              and (i.name_zh_tw='鴨肉丸' or i.name_zh_tw like '%鴨肉丸%')
+            order by i.name_zh_tw limit 10;
+          commit;
+          SQL
+          echo "FUXING_DUCK_STOCK_READ_ONLY_OK"
+          REMOTE
