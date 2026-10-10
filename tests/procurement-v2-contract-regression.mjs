@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {supplierClosed,nextReceiptDate,consumptionForDay,planProcurementLine} from "../src/procurement-planner.js";
 import {ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle} from "../src/search-utils.js";
+import {inventorySafetyStock,effectiveProcurementSafetyStock} from "../src/procurement-safety-stock.js";
 
 const supplier={closedWeekdays:[0],closedDates:["2026-10-12"],leadDays:1,reviewDays:2};
 const calendar=[{date:"2026-10-10",type:"holiday"},{date:"2026-10-11",type:"holiday"},{date:"2026-10-12",type:"holiday"}];
@@ -21,6 +22,23 @@ assert.equal(consumptionForDay("2026-10-11",rule,new Map([["2026-10-11","closed"
 assert.equal(consumptionForDay("2026-10-11",rule,new Map([["2026-10-11","holiday"]])),12);
 const covered=planProcurementLine({orderDate:"2026-10-10",supplier,calendar,stock:15,rule,incoming:[{expectedArrival:"2026-10-12",baseQuantity:30,status:"confirmed"}]});
 assert.equal(covered.orderUnits,0,"account for confirmed incoming deliveries before horizon end");
+const warehouseMinima=[
+ {location_id:"floor-2",configured:true,minimum_enabled:true,minimum_quantity:10,quantity:0},
+ {location_id:"work-area",configured:true,minimum_enabled:true,minimum_quantity:4,quantity:2},
+ {location_id:"disabled",configured:true,minimum_enabled:false,minimum_quantity:99,quantity:0},
+ {location_id:"archived",configured:false,minimum_enabled:true,minimum_quantity:500,quantity:0}
+];
+assert.equal(inventorySafetyStock(warehouseMinima),14,"sum only enabled configured existing Inventory location minima");
+assert.equal(effectiveProcurementSafetyStock(null,warehouseMinima).value,14,"unconfigured Procurement uses Inventory minima");
+assert.deepEqual(effectiveProcurementSafetyStock({safetyStockMode:"inventory",safetyStock:777},warehouseMinima),{source:"inventory",value:14});
+assert.deepEqual(effectiveProcurementSafetyStock({safetyStockMode:"custom",safetyStock:3},warehouseMinima),{source:"custom",value:3});
+assert.deepEqual(effectiveProcurementSafetyStock({safetyStockMode:"custom",safetyStock:0},warehouseMinima),{source:"custom",value:0});
+assert.equal(inventorySafetyStock([{configured:true,minimum_enabled:true,minimum_quantity:-3}]),0,"do not invent negative safety stock");
+const inherited=effectiveProcurementSafetyStock({safetyStockMode:"inventory",safetyStock:0},warehouseMinima);
+const inheritedPlan=planProcurementLine({orderDate:"2026-10-10",supplier,calendar,stock:3,rule:{...rule,safetyStock:inherited.value},incoming:[]});
+assert.equal(inheritedPlan.safety,14,"actual planner receives live Inventory safety, not the separate default 0");
+assert.equal(inheritedPlan.orderUnits,6,"inherited minimum impacts purchase planning");
+
 const fish=prepareIngredientNameSearchCorpus("鮭魚","Cá hồi");
 const beef=prepareIngredientNameSearchCorpus("牛肉","Thịt bò");
 const match=(corpus,input)=>ingredientNameSearchMatches(corpus,prepareIngredientNameSearchNeedle(input));
@@ -125,6 +143,18 @@ assert.match(locationMigration,/references public.inventory_locations\(id\)/);
 assert.doesNotMatch(locationMigration,/create table/i,"Do not create a second inventory or supplier database");
 assert.doesNotMatch(locationMigration,/insert into/i,"Do not seed unverified suppliers or item/location IDs");
 assert.match(server,/REORDER_LOCATION_NOT_IN_INVENTORY/,"Must validate canonical Inventory site and item-location relationship");
+assert.match(server,/safety_stock_mode=excluded.safety_stock_mode/,"API must persist explicit safety source");
+assert.match(server,/safetyStockMode:row.safety_stock_mode/,"API must return saved safety source");
+assert.match(server,/\["inventory","custom"\]/,"API must enforce approved safety modes");
+assert.match(ui,/effectiveProcurementSafetyStock\(rule,stockRowsFor\(item.id\)\)/);
+assert.match(ui,/rule:\{\.\.\.rule,safetyStock:safety.value\}/,"purchase plan must use effective safety");
+assert.match(ui,/name="safetyStockMode"/,"manual mode selection must be in product modal");
+assert.match(ui,/data.get\("safetyStockMode"\)/,"mode must roundtrip through authenticated API");
+assert.match(ui,/name="safetyStock"/,"custom numeric safety input must remain available");
+const safetyMigration=fs.readFileSync("vps/database/migrations/035_procurement_safety_stock_source.sql","utf8");
+assert.match(safetyMigration,/add column if not exists safety_stock_mode/);
+assert.match(safetyMigration,/default 'inventory'/);
+assert.doesNotMatch(safetyMigration,/insert into public.inventory_stock|update public.inventory_stock|insert into public.procurement_suppliers/i);
 assert.match(server,/reorder_alert_enabled/);
 assert.match(ui,/reorderAlertEnabled/);
 assert.match(ui,/stockRowsFor\(item.id\)/);
