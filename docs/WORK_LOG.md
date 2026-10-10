@@ -1,3 +1,13 @@
+## 2026-10-11 — Procurement V2 deployment + Fuxing 1/3 reorder closure (verified 2026-10-10)
+
+- Confirmed PR #233 was squash/merge completed to main `13c1cebff0254fae5dda2295ff16b4bd8679b5f8`; previous #231 settings-tab regression was repaired by PR #232 before production promotion.
+- On exact main SHA, Staging run `38032815646` (#90) PASS and production run `38032869837` (#1402) PASS, including DB/schema/API, Desktop/Mobile Chromium/full-device, preflight, deployment and production UI smoke. Inventory Site Production Audit run `38033494586` (#718) PASS. Release health `{"app":"ok","database":"ok","schema":"034","release":"13c1ceb","environment":"production"}`.
+- Fuxing read-only audit `38038924307` verified actual item `fuxing:freezer-duck-meatball` / `鴨肉丸`, stored in `包`; Seafood work location is named `海鮮區` in DB (not literally `海鮮台`). Audit stock: work 0.000 包, freezer 1.000 包.
+- One-time rule apply run `38039572403` PASS. It verified production release `13c1ceb`, created backup `/opt/kitchen-os/backups/kitchen_os_20261010T085546Z.dump`, wrote/read-back only the site-scoped existing Procurement rule with `reorder_alert_enabled=true`, `reorder_reference_quantity=1.000` 包, ratio 1:3 (user-confirmed full pack 30 viên ⇒ reorder when remaining <=10 viên), and verified Inventory stock unchanged. Post-write production health `app=ok, database=ok, schema=034`.
+- This is an alert; it does **not** place an order, receive stock, add a vendor, or mutate inventory quantities. Direct DB evidence came from GitHub Actions logs, not an interactive logged-in browser session.
+- Remaining tasks are separately tracked: other supplier/order SOPs need verified DB identities/units before enabling; one-link Handoff remains refresh-on-load without auto-poll; Super Admin Handoff metadata retains the documented 5-minute cache unless separately changed.
+- Older IN PROGRESS sections below are retained verbatim as development history; current Procurement V2 release and Fuxing single-item operational rule are production-verified.
+
 ## IN PROGRESS — Procurement location-based fractional reorder SOP (2026-10-10)
 
 - User confirmed `鴨肉丸 海鮮台 餘 1/3 叫貨` means **trigger a reorder warning once 1/3 of the full/reference quantity remains at the Seafood Work Area**. Do not interpret "3/1" as three pieces or auto-place any supplier order.
