@@ -1,3 +1,10 @@
+## DONE — Fuxing 三記魚餃 second-floor freezer minimum 10 boxes (2026-10-11)
+
+- Confirmed standing minimum `10 盒` at existing `fuxing-lengdongerlou` (臥櫃 = tủ đông tầng 2), for exact `三記魚餃` item, unit `盒`.
+- Workflow `38073984898` PASS: backup `kitchen_os_20261010T175959Z.dump`, guarded audited Inventory minimum update **20 → 10 盒**; after: minimum `10.000`, stock quantity remains `0.000`, `minimum_enabled=true`. `海鮮區` stays `0/1 盒`, unmodified. Production health PASS / runtime release `13c1ceb` / schema `034`.
+- First run `38073953553` failed at backup path and made no DB changes; corrected second run PASS. No supplier, order, receiving, inventory quantity or Product Unit mutation.
+- **NEXT:** confirm if 海鮮台 10 盒 also means maintain minimum 10 at Seafood Work Area; separate egg-dumpling 盒/包 conversion/identity and supplier mapping remain BLOCKED. `ACTIVE_PR: none` for runtime.
+
 ## CONFIRMED PARTIAL UNBLOCK — Fuxing 臥櫃 alias / distinct 盒 vs 包 (2026-10-11)
 
 - Operator identified **臥櫃 = second-floor freezer**, existing Fuxing location code `fuxing-lengdongerlou` (currently DB label `大冷凍`); not `fuxing-large-freezer`. Seafood station 海鮮台 uses `fuxing-work-seafood` / 海鮮區. Alias-only confirmation: no new location, rename or stock movement.
