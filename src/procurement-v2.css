@@ -311,3 +311,15 @@
  .pv2-shell .pv2-weekday-label{font-size:9px;letter-spacing:-.2px;white-space:nowrap}
  .pv2-shell .pv2-calendar-day{padding:3px;min-width:0}
 }
+
+
+/* Optional location-specific Procurement warning, same source on all devices. */
+.pv2-reorder-settings{border:1px solid var(--pv2-border);border-radius:var(--pv2-radius-card);background:var(--pv2-surface-soft);margin:14px 0;padding:var(--pv2-space-md);display:grid;gap:12px;min-width:0}
+.pv2-reorder-settings legend{padding:0 7px;font-weight:650;color:var(--pv2-ink)}
+.pv2-reorder-settings .pv2-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.pv2-reorder-settings .pv2-hint{margin:0;line-height:1.5}
+.pv2-product .pv2-name .pv2-badge{display:inline-block;margin-top:5px;white-space:normal;max-width:100%;line-height:1.5;overflow-wrap:break-word}
+@media(max-width:600px){
+ .pv2-reorder-settings .pv2-form-grid{grid-template-columns:minmax(0,1fr)}
+ .pv2-reorder-settings{padding:10px}
+}
