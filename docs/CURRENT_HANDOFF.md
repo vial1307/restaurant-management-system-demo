@@ -1,3 +1,13 @@
+## BLOCKED — Fuxing supplier/minimum mapping audit (2026-10-11; READ-ONLY)
+
+- **ACTIVE_PR: none** for runtime changes. A production read-only audit of the next Fuxing supplier SOP records succeeded in one-time Actions run `38068035044` (`ops/audit-fuxing-remaining-sop-20261011`), against PostgreSQL schema `034`. No Inventory, Procurement, supplier or site rows were written.
+- Actual Fuxing items found: `三記魚餃` (`fuxing:freezer-sanji-fish-dumpling`, `盒`); `豬肉蛋餃` (`fuxing:freezer-pork-egg-dumpling`, `包`); `牛肉蛋餃` (`fuxing:freezer-beef-egg-dumpling`, `包`); `排骨酥` (`fuxing:freezer-crispy-ribs`, `斤`). `鴨肉丸` 1/3 rule remains configured.
+- Stock/minimum at audit: `三記魚餃` 廚房冰箱 **20/1 盒**, `fuxing-lengdongerlou` 大冷凍 **0/20 盒**, 海鮮區 **0/1 盒**; `豬肉蛋餃` `fuxing-lengdongerlou` 大冷凍 **1/1 包**, 海鮮區 **0/0 包**; `牛肉蛋餃` same 大冷凍 **10/10 包**, 海鮮區 **0/0 包**; `排骨酥` `fuxing-large-freezer` 大冷凍 **3/3 斤**, 麵區 **0/0 斤**; `鴨肉丸` work 海鮮區 **0/0 包**, 1/3 Procurement alert enabled (full reference 1 包 = 30 viên).
+- **Identity conflicts:** two separately coded storage locations `fuxing-large-freezer` and `fuxing-lengdongerlou` both display `大冷凍`; the SOP label `臥櫃` cannot be assigned to either without operator validation. Pork/beef egg dumplings use DB unit `包` while SOP says `盒`; no conversion is verified.
+- **Supplier mapping:** read-only query returned no active `procurement_suppliers` records for Fuxing. Do not seed suppliers or assign `南門`, `津鼎`, `寶綠`, `漁鴻`, `聯興`, `濱江` by a guessed association. Do not assume Thursday is a weekly closed day.
+- **NEXT gated action:** confirm actual `臥櫃` storage location ID, egg-dumpling `盒`↔`包` unit conversion, and supplier/product relationships with the operator; then adjust only verified location minimum / procurement rules through audited DB-backed operations and re-test Desktop/Mobile/Super Admin. Existing `排骨酥` minimum 3 斤 already matches the SOP and should not be rewritten.
+- The previous STABLE section below remains authoritative for verified production code release `13c1ceb`; the new audit is not a new production deployment.
+
 ## STABLE — Procurement V2 production closure + Fuxing 鴨肉丸 1/3 reorder policy (verified 2026-10-10; handoff updated 2026-10-11)
 
 - **ACTIVE_PR: none** for this completed Procurement workstream. Canonical main SHA and verified production release: `13c1cebff0254fae5dda2295ff16b4bd8679b5f8` (`13c1ceb`); production PostgreSQL schema `034`. Do not infer an active PR from unrelated old open pull requests.
