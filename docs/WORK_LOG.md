@@ -1,3 +1,11 @@
+## 2026-10-11 — Operator confirmation: Fuxing second-floor 臥櫃, non-equivalent 盒/包
+
+- User confirmed that `臥櫃` corresponds to tủ đông tầng 2 (second-floor freezer). Existing verified DB code is `fuxing-lengdongerlou`; display name remains `大冷凍` with a separate `fuxing-large-freezer` row also displaying 大冷凍. The SOP's `海鮮台` resolves to `fuxing-work-seafood` / 海鮮區.
+- User explicitly confirmed `1 盒` differs from `1 包`. No conversion factor was provided and **none is implied**. Egg dumpling SOP quantities expressed in 盒 must not overwrite stored 包 minimums/stock or be automatically converted.
+- Reconciled existing read-only audit `38068035044`: `三記魚餃` uses DB unit `盒`; original SOP says 臥櫃 10, 海鮮台 10. Existing DB minimums are 20 and 1 盒 respectively, so a target/threshold interpretation check is still required before authorized `inventory.minimum.edit` edits; this log records no database write.
+- Do not change `排骨酥` existing 3 斤 minimum, create a supplier, assign an unverified product/supplier mapping, or infer market calendar closures.
+- Documentation update only; no app/API/schema/location rename, quantity/minimum update or stock movement. Continue with targeted API-authorized change after remaining specific checks.
+
 ## 2026-10-11 — Fuxing remaining supplier SOP read-only DB audit (no mutations)
 
 - Added one-time `push` audit workflow only on ops branch `ops/audit-fuxing-remaining-sop-20261011`; run `38068035044` PASS. Production schema `034`; transaction `BEGIN TRANSACTION READ ONLY` and no data updates.
