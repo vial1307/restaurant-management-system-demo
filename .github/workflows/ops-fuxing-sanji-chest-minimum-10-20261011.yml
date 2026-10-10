@@ -47,7 +47,7 @@ jobs:
               and l.code='fuxing-lengdongerlou';
           commit;
           SQL
-          bash vps/scripts/backup.sh 2>/dev/null || bash scripts/backup.sh
+          bash repo/vps/scripts/backup.sh
           echo "MANDATORY_FUXING_SANJI_BACKUP_COMPLETED"
           REMOTE
       - name: Apply one guarded location minimum change with stock unchanged and an auditable transaction
