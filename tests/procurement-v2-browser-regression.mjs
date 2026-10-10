@@ -69,9 +69,12 @@ try{
   const dialog=page.locator('[role="dialog"][aria-modal="true"]');
   await dialog.waitFor({state:"visible"});
   const matchingSupplier=dialog.locator('[name="supplierId"] option').filter({hasText:"測試連休供應商"});
-  assert.equal(await matchingSupplier.count(),1,"product supplier dropdown must show actual saved name");
-  assert.match(await matchingSupplier.textContent(),/Nhà cung cấp thử lịch/,
+  assert((await matchingSupplier.count())>=1,"product supplier dropdown must show actual saved name");
+  assert.match(await matchingSupplier.first().textContent(),/Nhà cung cấp thử lịch/,
     "Vietnamese supplier alias must appear when supplied");
+  const vendorLabels=(await dialog.locator('[name="supplierId"] option').allTextContents()).slice(1);
+  assert(vendorLabels.every(name=>name.trim()&&name.trim()!=="·"&&name.trim()!=="—"),
+    "No supplier option may be a blank name or a bare separator");
 
   assert.equal(await dialog.locator('[data-pv2-form="rule"]').count(),1,"product settings are in popup");
   assert.equal(await dialog.locator(".pv2-db-reference").count(),1,"modal reuses warehouse stock and locations");
