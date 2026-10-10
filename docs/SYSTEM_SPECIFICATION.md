@@ -526,6 +526,14 @@ Each site/item has optional enabled product rule with assigned supplier, weekday
 Holiday/opening-day overrides are site/date-scoped: normal, holiday or closed. An explicitly closed restaurant day contributes zero routine demand, whereas supplier closure shifts expected arrival without erasing restaurant demand.
 The selected order date is interpreted in Asia/Taipei calendar dates.
 
+### 8.3.1 Fuxing operational SOP alias and unit guard (confirmed 2026-10-11)
+
+The Fuxing supplier SOP label `臥櫃` identifies the **second-floor freezer** (tủ đông tầng 2), which is the existing Inventory location `fuxing-lengdongerlou`. It is distinct from `fuxing-large-freezer`, although both currently display `大冷凍`. The SOP label `海鮮台` identifies `fuxing-work-seafood` (displayed `海鮮區`). Resolve these aliases from the verified operator mapping and existing inventory location IDs; do not add another location, merge locations, or introduce an independent stock ledger.
+
+The operator confirmed `1 盒 ≠ 1 包`. `盒` and `包` are distinct units; no numerical conversion has been supplied. In particular, the `豬肉蛋餃` and `牛肉蛋餃` supplier SOPs use `盒`, but existing Fuxing Inventory records use `包`. Those SOP quantities cannot be persisted into existing Inventory minima/demand fields without an explicitly verified product-specific conversion or distinct SKU configuration. Suppress inferred equivalence, silently converted alerts and automatic orders.
+
+The SOP `三記魚餃 臥櫃10 海鮮台10` concerns a product stored in `盒`; current inspected minimums at these exact locations were 20 and 1 盒. Do not automatically overwrite minimums merely from descriptive SOP text: confirm whether the stated numbers are replenishment target stock or reorder-warning thresholds, then use existing authenticated `inventory.minimum.edit` API with stale-value check, audit and cross-device validation. No inventory modification is implied by documenting this alias.
+
 ### 8.4 Recommendation and safety
 Compute first permissible vendor receipt date using configured lead time and supplier closure calendar, and next review-cycle receipt date likewise.
 Sum consumption day-by-day from order date through (but not including) the next receipt, using weekday/weekend/holiday rule by date. Subtract usable current DB stock and outstanding submitted order quantity due within that window, then add safety stock. Clamp below zero and round UP to whole package counts. Report risk of stockout before the newly requested shipment can arrive.
