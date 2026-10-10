@@ -519,6 +519,8 @@ One shared UI module supplies desktop, tablet and mobile layouts. Tabs:
 The product-name search matches only literal characters of DB `name_vi` and `name_zh_tw`; accent marks are preserved, and it must not infer aliases, Zhuyin, Pinyin, abbreviations, units, locations or categories.
 This follows the Inventory literal-search contract of PR #228, which takes precedence over older generic search guidance.
 Desktop/mobile controls must preserve feature parity down to 359px, with no fake static company/product records.
+Supplier API `GET /api/procurement/:site` returns vendor names as **`nameZhTw` and `nameVi`** (camelCase), unlike Inventory item/category/location names (`name_zh_tw`/`name_vi` snake_case). Every Procurement vendor selector, settings card, filter, supplier grouping, history and order/product card must render from the supplier API fields. When `nameVi` is empty, display the Chinese name without an orphan `·` separator. Treat blank visible vendor names as a data contract rendering error; never infer that a blank display means the supplier row is absent. Escape untrusted names and verify Chinese-only and bilingual cases on Desktop/Mobile.
+
 
 ### 8.3 Supplier calendar and product demand
 Each supplier has a site-scoped profile with Chinese/Vietnamese names, optional contact, weekly closed weekdays, one-off closed dates, cutoff time, lead days and review cadence. These settings are editable only by users with site-scoped procurement edit permission.
