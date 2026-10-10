@@ -1,3 +1,12 @@
+## 2026-10-11 — Production operations: Fuxing 三記魚餃 臥櫃 minimum 10 盒
+
+- User specified `臥櫃 10 盒` must be maintained in second-floor freezer. Existing `fuxing-lengdongerlou` is authoritative and distinct from `fuxing-large-freezer`.
+- First guarded workflow run `38073953553` failed at backup script path, before write. The corrected one-time workflow `38073984898` succeeded fully, including preflight, PostgreSQL backup, atomic update + inventory audit, after-write reread and production API/release health.
+- Preflight record `PRECHECK|fuxing:freezer-sanji-fish-dumpling|三記魚餃|盒|fuxing-lengdongerlou|fuxing|大冷凍|0.000|20.000|true`. Production backup `/opt/kitchen-os/backups/kitchen_os_20261010T175959Z.dump` created before mutation. DB transaction guarded item ID/key, active location/site, exact unit and expected previous minimum. `inventory_transactions` record created with operation `set_minimum`, old/new minima, operator-confirmed request provenance, and no stock movement.
+- Verified DB `VERIFIED_MINIMUM|fuxing:freezer-sanji-fish-dumpling|三記魚餃|盒|fuxing-lengdongerlou|10.000|0.000|true`; Seafood Work Area `fuxing-work-seafood` untouched: `OTHER_LOCATION_UNCHANGED|fuxing-work-seafood|0.000|1.000`.
+- Post-check production `{"app":"ok","database":"ok","schema":"034","release":"13c1ceb"}` and `PRODUCTION_AFTER_MINIMUM_HEALTH_OK`. No software release change, new SKU, supplier/order or quantity adjustment.
+- Open item: user has NOT yet confirmed `海鮮台 10 盒` as a separate standing minimum, so that location's minimum remains 1 盒; `盒` and `包` have no confirmed conversion for egg-dumpling SOPs.
+
 ## 2026-10-11 — Operator confirmation: Fuxing second-floor 臥櫃, non-equivalent 盒/包
 
 - User confirmed that `臥櫃` corresponds to tủ đông tầng 2 (second-floor freezer). Existing verified DB code is `fuxing-lengdongerlou`; display name remains `大冷凍` with a separate `fuxing-large-freezer` row also displaying 大冷凍. The SOP's `海鮮台` resolves to `fuxing-work-seafood` / 海鮮區.
