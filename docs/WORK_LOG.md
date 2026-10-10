@@ -1,3 +1,12 @@
+## 2026-10-11 — Fuxing remaining supplier SOP read-only DB audit (no mutations)
+
+- Added one-time `push` audit workflow only on ops branch `ops/audit-fuxing-remaining-sop-20261011`; run `38068035044` PASS. Production schema `034`; transaction `BEGIN TRANSACTION READ ONLY` and no data updates.
+- Confirmed exact Fuxing product identities/units: `三記魚餃` = `fuxing:freezer-sanji-fish-dumpling` / `盒`; `豬肉蛋餃` = `fuxing:freezer-pork-egg-dumpling` / `包`; `牛肉蛋餃` = `fuxing:freezer-beef-egg-dumpling` / `包`; `排骨酥` = `fuxing:freezer-crispy-ribs` / `斤`.
+- Stock/minimum pairs (quantity/minimum) for requested sites and locations: 三記魚餃 廚房冰箱 `20/1 盒`, 大冷凍 code `fuxing-lengdongerlou` `0/20 盒`, 海鮮區 `0/1 盒`; 豬肉蛋餃 same 大冷凍 `1/1 包`, 海鮮區 `0/0 包`; 牛肉蛋餃 same 大冷凍 `10/10 包`, 海鮮區 `0/0 包`; 排骨酥 大冷凍 code `fuxing-large-freezer` `3/3 斤`, 麵區 `0/0 斤`; 鴨肉丸 海鮮區 `0/0 包`, Procurement alert 1/3 enabled.
+- Two distinct inventory location codes display `大冷凍`: `fuxing-large-freezer`, `fuxing-lengdongerlou`. SOP says `臥櫃`, which is not a validated exact location label. No active Fuxing supplier row printed by scoped Procurement query. SOP unit `盒` is not proven equivalent to stored `包` for egg dumplings.
+- Data hygiene decision: no automatic remap, seed, unit conversion, quantity adjustment, supplier assignment, minimum update or duplicate item creation. `排骨酥` minimum already matches 3 斤; no-op for that row.
+- Remaining operator confirmations: which exact location denotes 臥櫃; how many 盒 correspond to 1 包 for beef/pork egg dumplings; which suppliers serve which Fuxing items and what conditional market closure dates apply. Only then proceed with auditable DB-backed settings updates plus regression verification.
+
 ## 2026-10-11 — Procurement V2 deployment + Fuxing 1/3 reorder closure (verified 2026-10-10)
 
 - Confirmed PR #233 was squash/merge completed to main `13c1cebff0254fae5dda2295ff16b4bd8679b5f8`; previous #231 settings-tab regression was repaired by PR #232 before production promotion.
