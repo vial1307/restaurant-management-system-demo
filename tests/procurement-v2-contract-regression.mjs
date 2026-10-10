@@ -74,6 +74,16 @@ assert.match(css,/@media\(max-width:991px\)/,"card layout must begin early enoug
 assert.match(css,/\.pv2-product\[hidden\]/);
 assert.equal(html,vpsEntry,"VPS/static entry parity");
 assert.match(html,/procurement-v2.css/);
+assert.match(server,/nameZhTw:row.name_zh_tw/,"Backend supplier API intentionally emits camelCase");
+assert.match(server,/nameVi:row.name_vi/,"Backend supplier API intentionally emits camelCase aliases");
+assert.match(ui,/procurementSupplierName\(s,\{bilingual:true\}\)/,
+ "Modal supplier options use the shared API camelCase renderer");
+assert.match(components,/procurementSupplierName\(x,\{bilingual:true\}\)/,
+ "Supplier filters use the shared API camelCase renderer");
+assert.doesNotMatch(ui,/sup\.name_zh_tw|sup\.name_vi|s\.name_zh_tw|s\.name_vi/,
+ "Vendor names must not read Inventory snake_case fields");
+assert.doesNotMatch(components,/supplier\.name_zh_tw|supplier\.name_vi|x\.name_zh_tw\+' · '/,
+ "Vendor components must not render the empty separator when API is camelCase");
 assert.match(server,/hasPermission\(user,"procurement",mode\)/);
 assert.match(server,/siteAllowed\(user,site\)/);
 assert.match(server,/inventoryActionAllowed\(user,"inventory.view"/);
