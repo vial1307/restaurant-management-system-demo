@@ -2,6 +2,7 @@ import { apiRequest, vpsInventory } from "./vps-api.js";
 import { procurementCopy,procurementRawCopy,procurementTabs,procurementStat,procurementPanel,procurementSettingsModal,procurementSupplierCard,procurementProductCard,procurementFilterBar } from "./procurement-v2-components.js";
 import { ingredientNameSearchMatches,prepareIngredientNameSearchCorpus,prepareIngredientNameSearchNeedle } from "./search-utils.js";
 import { addCalendarDays, planProcurementLine } from "./procurement-planner.js";
+import { evaluateLocationReorderAlert } from "./procurement-threshold.js";
 import { procurementAddClosedDates, procurementCalendarMonth, procurementMonthCells, procurementMoveMonth, validProcurementDate } from "./procurement-calendar-picker.js";
 
 const ui={ language:"vi",site:"",data:null,inventory:null,loading:false,error:"",tab:"list",supplier:"all",category:"all",
@@ -53,7 +54,8 @@ function lines(){
    const rule=ruleFor(item.id),supplier=supplierFor(rule?.supplierId),stock=stockFor(item.id);
    const plan=supplier&&rule?planProcurementLine({orderDate:ui.date,stock,rule,supplier,calendar:ui.data.calendar,incoming:incomingFor(item.id)}):null;
    const key=item.id, selected=ui.selected.has(key), override=ui.overrides.get(key);
-   return {item,rule,supplier,stock,plan,selected,amount:override===undefined ? plan?.orderUnits||0:override};
+   const threshold=evaluateLocationReorderAlert({rule,stockRows:stockRowsFor(item.id)});
+   return {item,rule,supplier,stock,plan,threshold,selected,amount:override===undefined ? plan?.orderUnits||0:override};
  });
 }
 async function refresh(site,render){
@@ -203,6 +205,23 @@ function formRule(lang){
  ${["weekdayDemand","weekendDemand","holidayDemand","safetyStock","packageSize"].map(key=>`<label>${P(key,lang)}<input type="number" name="${key}" min="${key==="packageSize"?"0.001":"0"}" step="0.001" required value="${rule[key]??(key==="packageSize"?1:0)}"></label>`).join("")}
  <label>${P("orderUnit",lang)}<input name="packageUnit" maxlength="32" value="${html(rule.packageUnit||item.unit||"")}"></label></div>
  ${procurementInventoryDetail(item,lang)}
+ <fieldset class="pv2-reorder-settings"><legend>${P("ratioAlertTitle",lang)}</legend>
+ <label class="pv2-toggle"><input type="checkbox" name="reorderAlertEnabled" ${rule.reorderAlertEnabled?"checked":""}>${P("ratioAlertEnabled",lang)}</label>
+ <div class="pv2-form-grid">
+ <label>${P("ratioAlertLocation",lang)}<select name="reorderLocationId">
+  <option value="">${P("ratioAlertChooseLocation",lang)}</option>
+  ${stockRowsFor(item.id).map(stock=>{
+    const loc=(ui.inventory?.locations||[]).find(l=>String(l.id)===String(stock.location_id));
+    const label=(lang==="zh"?loc?.name_zh_tw:loc?.name_vi)||loc?.name_zh_tw||loc?.code||"";
+    return `<option value="${html(stock.location_id)}" ${rule.reorderLocationId===stock.location_id?"selected":""}>${html(label)} · ${num(stock.quantity)} ${html(item.unit||"")}</option>`;
+  }).join("")}
+ </select></label>
+ <label>${P("ratioAlertReference",lang)}<input type="number" min="0.001" max="10000000" step="0.001" name="reorderReferenceQuantity" value="${rule.reorderReferenceQuantity??""}"></label>
+ <label>${P("ratioAlertNumerator",lang)}<input type="number" min="1" max="1000" step="1" name="reorderNumerator" value="${rule.reorderNumerator??1}"></label>
+ <label>${P("ratioAlertDenominator",lang)}<input type="number" min="1" max="1000" step="1" name="reorderDenominator" value="${rule.reorderDenominator??3}"></label></div>
+ <p class="pv2-hint">${P("ratioAlertHint",lang)}</p>
+ ${stockRowsFor(item.id).length?"":`<p class="pv2-error">${P("ratioAlertEmpty",lang)}</p>`}
+ </fieldset>
  <label class="pv2-toggle"><input type="checkbox" name="enabled" ${rule.enabled?"checked":""}>${P("enableSuggestions",lang)}</label>
  <div class="pv2-editor-actions"><button type="button" data-pv2-action="close-editor">${P("cancel",lang)}</button><button class="pv2-primary" type="submit" ${ui.pending?"disabled":""}>${P("saveRule",lang)}</button></div>`});
 }
@@ -234,7 +253,7 @@ export function procurementV2Page(ctx,{render,site,editable}){
  ui.language=lang;
  if(ui.loading&&!ui.data)return `<section class="pv2-shell"><h2>${P("title",lang)}</h2><div class="pv2-panel">${P("loading",lang)}</div></section>`;
  if(ui.error&&!ui.data)return `<section class="pv2-shell"><h2>${P("title",lang)}</h2><div class="pv2-error" role="alert">Database/API: ${html(ui.error)}</div><button data-pv2-action="refresh">${P("refresh",lang)}</button></section>`;
- const all=lines(),active=all.filter(x=>x.rule?.enabled),alerts=active.filter(x=>x.plan?.preArrivalRisk||((x.plan?.shortage||0)>0));
+ const all=lines(),active=all.filter(x=>x.rule?.enabled||x.rule?.reorderAlertEnabled),alerts=active.filter(x=>x.threshold?.triggered||x.plan?.preArrivalRisk||((x.plan?.shortage||0)>0));
  const rows=all.filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
  return `<section class="pv2-shell" data-pv2-shell>
  <header class="pv2-title"><div><h2>${R("title","zh")} <span>${R("title","vi")}</span></h2><p>${P("subtitle",lang)}</p></div><div class="pv2-sync"><small>${ui.lastSyncedAt?P("lastSync",lang)+": "+new Date(ui.lastSyncedAt).toLocaleTimeString("zh-TW",{timeZone:"Asia/Taipei",hour:"2-digit",minute:"2-digit",second:"2-digit"}) :P("syncing",lang)}</small><button type="button" class="pv2-secondary" data-pv2-action="refresh" ${ui.pending||ui.loading?"disabled":""}>${P("sync",lang)}</button></div></header>
@@ -285,7 +304,10 @@ function rememberRuleFields(root){
   ...ui.ruleDraft,supplierId:String(d.get("supplierId")||""),
   weekdayDemand:d.get("weekdayDemand"),weekendDemand:d.get("weekendDemand"),holidayDemand:d.get("holidayDemand"),
   safetyStock:d.get("safetyStock"),packageSize:d.get("packageSize"),
-  packageUnit:String(d.get("packageUnit")||""),enabled:d.has("enabled")
+  packageUnit:String(d.get("packageUnit")||""),enabled:d.has("enabled"),
+  reorderAlertEnabled:d.has("reorderAlertEnabled"),reorderLocationId:String(d.get("reorderLocationId")||""),
+  reorderReferenceQuantity:d.get("reorderReferenceQuantity"),reorderNumerator:d.get("reorderNumerator"),
+  reorderDenominator:d.get("reorderDenominator")
  };
 }
 export function mountProcurementV2(root,{render,route}){
@@ -385,7 +407,12 @@ export function mountProcurementV2(root,{render,route}){
     endpoint="rules";body={itemId:data.get("itemId"),revision:Number(data.get("revision")||0),supplierId:data.get("supplierId"),
       weekdayDemand:Number(data.get("weekdayDemand")),weekendDemand:Number(data.get("weekendDemand")),
       holidayDemand:Number(data.get("holidayDemand")),safetyStock:Number(data.get("safetyStock")),
-      packageSize:Number(data.get("packageSize")),packageUnit:data.get("packageUnit"),enabled:data.has("enabled")};
+      packageSize:Number(data.get("packageSize")),packageUnit:data.get("packageUnit"),enabled:data.has("enabled"),
+      reorderAlertEnabled:data.has("reorderAlertEnabled"),
+      reorderLocationId:data.get("reorderLocationId")||null,
+      reorderReferenceQuantity:data.get("reorderReferenceQuantity")===""?null:Number(data.get("reorderReferenceQuantity")),
+      reorderNumerator:Number(data.get("reorderNumerator")||1),
+      reorderDenominator:Number(data.get("reorderDenominator")||3)};
   }else{
     endpoint="calendar";body={date:data.get("date"),type:data.get("type"),description:data.get("description")};
   }
