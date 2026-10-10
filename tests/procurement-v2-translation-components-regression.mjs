@@ -55,7 +55,7 @@ const item={id:"item-1",name_zh_tw:"鮭魚",name_vi:"Cá hồi",category_code:"f
 const card=procurementProductCard({item,rule:null,supplier:null,stock:6,plan:null,selected:false,amount:0},{language:"vi",editable:true,format:String});
 assert.match(card,/Cá hồi/);assert.match(card,/鮭魚/);assert.match(card,/data-pv2-qty="item-1"/);
 assert.match(card,/6/);assert.match(card,/disabled/);
-const assigned=procurementProductCard({item,rule:{},supplier:chineseOnly,stock:6,plan:null,selected:false,amount:0},{language:"vi",editable:true,format:String});
+const assigned=procurementProductCard({item,rule:{weekdayDemand:0,weekendDemand:0,holidayDemand:0,enabled:false},supplier:chineseOnly,stock:6,plan:null,selected:false,amount:0},{language:"vi",editable:true,format:String});
 assert.match(assigned,/聯興/,"product card must show selected supplier name from API camelCase");
 assert.doesNotMatch(assigned,/undefined/);
 
