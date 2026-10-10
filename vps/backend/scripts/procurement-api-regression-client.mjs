@@ -47,6 +47,28 @@ try {
  const saved=await api(prefix+"/rules",{method:"POST",cookie:manager,body:cfg});
  assert.equal(saved.status,200,JSON.stringify(saved.data));
  assert.equal(saved.data.rule.revision,1);
+ const {rows:stocked}=await db.query(
+  "select s.item_id,s.location_id from public.inventory_stock s join public.inventory_locations l on l.id=s.location_id join public.inventory_items i on i.id=s.item_id left join public.inventory_item_locations il on il.item_id=s.item_id and il.location_id=s.location_id where l.site='fuxing' and l.active=true and coalesce(il.active,true)=true and i.active=true order by s.item_id limit 1"
+ );
+ assert(stocked.length,"Expected at least one configured Inventory stock location in fixture");
+ const available=stocked[0],same=available.item_id===item.id;
+ const alertCfg={...cfg,itemId:available.item_id,revision:same?1:0,
+   reorderAlertEnabled:true,reorderLocationId:available.location_id,
+   reorderReferenceQuantity:30,reorderNumerator:1,reorderDenominator:3};
+ const invalidLocation=await api(prefix+"/rules",{method:"POST",cookie:manager,
+   body:{...alertCfg,reorderLocationId:randomUUID()}});
+ assert.equal(invalidLocation.status,400,"cannot attach another/nonexistent stock location");
+ const ratioRule=await api(prefix+"/rules",{method:"POST",cookie:manager,body:alertCfg});
+ assert.equal(ratioRule.status,200,JSON.stringify(ratioRule.data));
+ assert.equal(ratioRule.data.rule.reorderAlertEnabled,true);
+ assert.equal(ratioRule.data.rule.reorderLocationId,available.location_id);
+ assert.equal(ratioRule.data.rule.reorderReferenceQuantity,30);
+ assert.equal(ratioRule.data.rule.reorderNumerator,1);
+ assert.equal(ratioRule.data.rule.reorderDenominator,3);
+ const again=await api(prefix,{cookie:manager});
+ assert.equal(again.status,200);
+ assert(again.data.rules.some(r=>r.itemId===available.item_id&&r.reorderAlertEnabled&&r.reorderNumerator===1&&r.reorderDenominator===3),
+  "Ratio rule must persist through a clean API reread");
  const staleRule=await api(prefix+"/rules",{method:"POST",cookie:manager,body:{...cfg,revision:0}});
  assert.equal(staleRule.status,409);
  const holiday=await api(prefix+"/calendar",{method:"POST",cookie:manager,body:{date:tomorrow,type:"holiday",description:"Fixture"}});
