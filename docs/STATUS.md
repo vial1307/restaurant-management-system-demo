@@ -1,3 +1,10 @@
+## DONE — Procurement manual form and literal product search Production (2026-10-12)
+
+- Release `a22cfbf` / PostgreSQL schema `036` confirmed by gated Production [workflow 38157246580](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38157246580): preflight, full CI/browser, backup `kitchen_os_20261011T170107Z.dump`, schema migration, DB integrity (0 errors), API health, UI smoke all PASS. PR #241 merged; main Staging `38157179600` PASS.
+- All Procurement items can now be manually selected and given positive quantities. If verified supplier/rule eligibility is missing, action **Lưu phiếu nháp** creates an audited site-scoped PostgreSQL draft, available under History; no vendor contacted, no inventory quantity adjustment. Fully eligible lines still use existing protected real supplier-order API.
+- Literal product-name search on current site active Inventory `name_vi/name_zh_tw` works on list, vendor, group and product settings tabs. No pinyin/zhuyin/abbreviation/diacritic guessing. Search keeps input focus, selection and manual amounts, with counter/empty state. Desktop/Mobile tests PASS.
+- Supplier↔product mapping and supplier actual closure calendars are still NOT verified; no automatic vendor assignment, 盒/包 conversion or submitted orders. `ACTIVE_PR: none` for finished release. NEXT: user to set site-specific supplier rules and dates when verified.
+
 ## IN PROGRESS — Manual Procurement forms and literal search (2026-10-12)
 
 - Branch `feat/procurement-manual-drafts-literal-search-20261012`: enable quantity input and product selection independent of supplier assignments; persist unconfigured selections as audited site-scoped manual draft (migration `036`) while retaining guarded supplier-order flow when all items configured.
