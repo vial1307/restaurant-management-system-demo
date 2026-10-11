@@ -52,16 +52,16 @@ export function procurementSupplierCard({supplier,editable,language}){
     (editable?'<button type="button" data-pv2-action="edit-supplier" data-id="'+safe(supplier.id)+'">'+procurementCopy("edit",language)+'</button>':"")+"</div>";
 }
 export function procurementProductCard(row,{language="vi",editable=false,format}){
-  const {item,rule,supplier,stock,plan,threshold,selected,amount,safetyStockValue}=row;
+  const {item,rule,supplier,stock,plan,threshold,selected,amount,safetyStockValue,searchHidden}=row;
   const safe=procurementEscape, label=(key)=>procurementCopy(key,language);
   const ready=Boolean(rule?.enabled&&supplier&&plan?.canOrder),risk=Boolean(plan?.preArrivalRisk);
   const name=language==="zh"?item.name_zh_tw||item.name_vi:item.name_vi||item.name_zh_tw;
   const alternate=language==="zh"?item.name_vi:item.name_zh_tw;
   const value=(x)=>format(x);
   const badge=(key,type)=>'<span class="pv2-badge pv2-'+type+'">'+label(key)+"</span>";
-  return '<article class="pv2-product" data-pv2-id="'+safe(item.id)+'" data-pv2-category="'+safe(item.category_code)+'" data-pv2-supplier="'+safe(supplier?.id||"unassigned")+'">'+
+  return '<article class="pv2-product" data-pv2-id="'+safe(item.id)+'" data-pv2-category="'+safe(item.category_code)+'" data-pv2-supplier="'+safe(supplier?.id||"unassigned")+'"'+(searchHidden?' hidden style="display:none"':"")+'>''+
     '<div class="pv2-cell pv2-select"><input type="checkbox" data-pv2-select="'+safe(item.id)+'"'+(selected?" checked":"")+
-      (!ready||!editable?" disabled":"")+' aria-label="'+safe(name)+'"/></div>'+
+      (!editable?" disabled":"")+' aria-label="'+safe(name)+'"/></div>'+
     '<div class="pv2-cell pv2-name"><strong>'+safe(name)+'</strong><small>'+safe(alternate)+'</small><small>'+
       safe(item.unit||"")+' · '+safe(item.category_code||"")+"</small>"+
       (threshold?.triggered?'<span class="pv2-badge pv2-danger" role="status">'+label("ratioAlertTriggered")+': '+
@@ -78,7 +78,7 @@ export function procurementProductCard(row,{language="vi",editable=false,format}
       (risk?badge("riskBeforeArrival","danger"):"")+"</div>"+
     '<label class="pv2-cell pv2-quantity"><span class="pv2-mobile-label">'+label("orderQty")+'</span>'+
       '<input type="number" data-pv2-qty="'+safe(item.id)+'" min="0" step="1" value="'+value(amount)+'"'+
-      (!ready||!editable?" disabled":"")+'/>'+
+      (!editable?" disabled":"")+'/>'+
       '<small>'+safe(rule?.packageUnit||item.unit||"")+"</small></label></article>";
 }
 
