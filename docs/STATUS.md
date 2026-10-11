@@ -1,3 +1,10 @@
+## IN PROGRESS — Manual Procurement forms and literal search (2026-10-12)
+
+- Branch `feat/procurement-manual-drafts-literal-search-20261012`: enable quantity input and product selection independent of supplier assignments; persist unconfigured selections as audited site-scoped manual draft (migration `036`) while retaining guarded supplier-order flow when all items configured.
+- Search fixes: DB name-only literal Vietnamese/Chinese matching, typed term preserved across filters/tabs, hide entire products/settings rows with visible count and no-results feedback. Do not infer Chinese transliterations or accentless Vietnamese aliases.
+- Production baseline remains `295b9f6` / schema `035` until checks/deploy PASS. No stock ledger, supplier-product mapping, unit conversion or order dispatch changed.
+- **ACTIVE_PR: pending**. NEXT: exact-head testing, Staging, Production deployment, smoke + DB draft round-trip.
+
 ## DONE — Production Procurement supplier-name UI and live Inventory-derived safety (2026-10-11)
 
 - **Release `295b9f6`, DB schema `035`, Production health PASS** (app/database OK). PR #239 merged; main Staging `38083595035` PASS, full gated deploy + browser + Production UI smoke `38083657473` PASS. Backup `kitchen_os_20261010T203201Z.dump`.

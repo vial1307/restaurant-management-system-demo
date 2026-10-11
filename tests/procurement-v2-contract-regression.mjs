@@ -140,7 +140,8 @@ assert.match(css,/\.pv2-dialog-backdrop/);
 assert.match(css,/@media\(max-width:480px\)/);
 
 assert.match(components,/import \{ TEXT \} from "\.\/i18n\.js"/);
-assert.match(ui,/procurementProductCard\(row/);
+assert.match(ui,/procurementProductCard\(\{\.\.\.row,searchHidden:/,
+ "Every product row must apply literal name search on initial render");
 assert.match(ui,/procurementSupplierCard\(/);
 assert.match(ui,/procurementSettingsModal\(/);
 assert.match(ui,/procurementTabs\(/);
@@ -173,4 +174,24 @@ assert.match(uiAndComponents,/ratioAlertTriggered/);
 assert.match(ui,/data.get\("reorderLocationId"\)/);
 assert.match(css,/\.pv2-reorder-settings/);
 
+const draftMigration=fs.readFileSync("vps/database/migrations/036_procurement_manual_drafts.sql","utf8");
+assert.match(draftMigration,/create table if not exists public.procurement_order_drafts/);
+assert.match(draftMigration,/unique\(site_code,request_key\)/);
+assert.doesNotMatch(draftMigration,/update public.inventory_stock|insert into public.inventory_stock|insert into public.procurement_suppliers/i);
+assert.match(server,/app.post\("\/api\/procurement\/:site\/drafts"/,"Draft API must have a database-backed POST route");
+assert.match(server,/allowed\(request,reply,"edit"\)/,"Draft mutation uses existing Procurement permissions");
+assert.match(server,/DRAFT_ITEM_NOT_IN_SITE/,"Reject draft items outside current branch");
+assert.match(server,/procurement.draft.create/,"Draft creates audit history");
+assert.match(ui,/if\(!configured\)/,"Unassigned items must persist as draft, not masquerade as a submitted supplier order");
+assert.match(ui,/data-pv2-no-matches/,"Search has visible no-results feedback");
+assert.match(ui,/applyLiteralProcurementSearch\(root\)/,"Search input must filter rows without replacing input element");
+assert.match(ui,/row.style.display=match\?"":"none"/,"CSS display must not override hidden attribute");
+assert.match(components,/data-pv2-qty/,"manual input belongs to shared responsive product component");
+assert.ok(ingredientNameSearchMatches(prepareIngredientNameSearchCorpus("鮭魚","Cá hồi"),prepareIngredientNameSearchNeedle("cá")),
+ "Accented Vietnamese literal substring should match");
+assert.ok(!ingredientNameSearchMatches(prepareIngredientNameSearchCorpus("鮭魚","Cá hồi"),prepareIngredientNameSearchNeedle("ca")),
+ "Do not infer accentless Vietnamese query");
+assert.ok(!ingredientNameSearchMatches(prepareIngredientNameSearchCorpus("鮭魚","Cá hồi"),prepareIngredientNameSearchNeedle("gui")),
+ "Do not infer Chinese Pinyin");
+assert.ok(ingredientNameSearchMatches(prepareIngredientNameSearchCorpus("鮭魚","Cá hồi"),prepareIngredientNameSearchNeedle("鮭")));
 console.log("PROCUREMENT_V2_CONTRACT_OK");

@@ -1,3 +1,10 @@
+## 2026-10-12 — Procurement Create Form disabled and search mismatch: remediation in progress
+
+- Source diagnosis: unassigned/inactive Procurement rule caused `disabled` on checkbox and manual number input; selected row and order-submit button excluded items lacking vendor/forecast. Fuxing supplier registry has six verified names, but no verified item links, so this was a real operational blocker.
+- Implementation on feature branch: additive DB `procurement_order_drafts` with site+request_key unique, actor/timestamp, real item/units snapshot, audit; POST site-scoped /drafts with Procurement edit auth, validated positive integral quantities and Inventory site identity. Existing /orders continues to require assigned verified supplier, enabled item rules, valid supplier calendar and idempotency. UI labels manual forms as saved drafts, not submitted orders; draft history read via GET.
+- Literal name search: replace unreliable hidden attribute only with explicit DOM display state and visible counter, filter both product and settings rows without rerendering focused search input; no accent stripping or pinyin. Regression tests added for manual quantity, browser API draft save + history read, no-results and reset on Desktop/Mobile, static/DB contract.
+- Pending PR CI/Staging + deploy. Last certified Production `295b9f6`, schema `035`. No Production data mutation during feature implementation.
+
 ## 2026-10-11 — Supplier selector production repair done (PR #239)
 
 - User screenshot showed Fuxing Procurement product modal dropdown choices as dot separators instead of supplier names. Backend supplier serializer emits `nameZhTw/nameVi`; frontend supplier displays read `name_zh_tw/name_vi` incorrectly. Inventory products legitimately use snake_case, untouched.

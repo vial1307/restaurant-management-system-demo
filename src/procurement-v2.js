@@ -98,7 +98,7 @@ function filterBar(lang){
 function productRows(rows,lang,editable){
  if(!rows.length)return `<div class="pv2-empty">${P("emptyProducts",lang)}</div>`;
  return `<div class="pv2-table-head"><span></span>${["productName","supplier","weekdayHoliday","stock","suggested","orderQty"].map(key=>`<span><strong>${html(R(key,"zh"))}</strong><small>${lang==="zh"?"":html(R(key,"vi"))}</small></span>`).join("")}</div>
- <div class="pv2-product-list">${rows.map(row=>procurementProductCard(row,{language:lang,editable,format:num})).join("")}</div>`;
+ <div class="pv2-product-list">${rows.map(row=>procurementProductCard({...row,searchHidden:!itemMatches(row.item)},{language:lang,editable,format:num})).join("")}</div>`;
 }
 function groupsOf(rows,keyFor){
  const groups=new Map();
@@ -106,7 +106,7 @@ function groupsOf(rows,keyFor){
  return [...groups];
 }
 function listBody(lang,editable){
- let rows=lines().filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category)&&itemMatches(row.item));
+ let rows=lines().filter(row=>(ui.supplier==="all"||(row.supplier?.id||"unassigned")===ui.supplier)&&(ui.category==="all"||row.item.category_code===ui.category));
  if(ui.tab==="supplier"){
   const groups=groupsOf(rows,r=>r.supplier?.id||"unassigned");
   return groups.map(([key,subRows])=>{
@@ -126,8 +126,9 @@ function listBody(lang,editable){
  return procurementPanel({body:productRows(rows,lang,editable),language:lang});
 }
 function historyBody(lang,editable){
- const orders=ui.data?.orders||[];
+ const orders=ui.data?.orders||[],drafts=ui.data?.drafts||[];
  return `<section class="pv2-panel"><header class="pv2-section-head"><h3>${P("history",lang)}</h3></header>
+ ${drafts.length?`<div class="pv2-drafts"><h4>${P("savedDrafts",lang)} (${drafts.length})</h4>${drafts.map(d=>`<div class="pv2-order-row"><div><strong>${html(d.id.slice(0,8))}</strong><small>${P("statusDraft",lang)} · ${html(d.orderDate)}</small></div><div>${(d.lines||[]).map(line=>`<small>${html(lang==="zh"?line.nameZhTw||line.nameVi:line.nameVi||line.nameZhTw)}: ${num(line.quantity)} ${html(line.unit||"")}</small>`).join("")}</div></div>`).join("")}</div>`:""}
  ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.nameZhTw||P("supplier",lang))}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(P(({submitted:"statusSubmitted",confirmed:"statusConfirmed",received:"statusReceived",cancelled:"statusCancelled"})[o.status]||"statusSubmitted",lang),"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">${P("noHistory",lang)}</p>`}
  <p class="pv2-hint">${P("historyHint",lang)}</p></section>`;
 }
@@ -234,22 +235,23 @@ function settingsBody(lang,editable){
  return `<div class="pv2-settings"><section class="pv2-panel"><header class="pv2-section-head"><h3>${P("supplierSettings",lang)}</h3>${editable?`<button type="button" class="pv2-primary" data-pv2-action="new-supplier">${P("addSupplier",lang)}</button>`:""}</header>
  <div class="pv2-supplier-grid">${suppliers().length?suppliers().map(s=>procurementSupplierCard({supplier:s,editable,language:lang})).join(""):`<p class="pv2-empty">${P("noSuppliers",lang)}</p>`}</div></section>
  ${formSupplier(lang)}
- <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("productRules",lang)}</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="${P("searchSettings",lang)}"/><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().filter(item=>itemMatches(item)).map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}"><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.nameZhTw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
+ <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("productRules",lang)}</h3></header><label class="pv2-search pv2-settings-search"><span>⌕</span><input type="search" data-pv2-search value="${html(ui.search)}" placeholder="${P("searchSettings",lang)}"/><span data-pv2-results></span><span data-pv2-no-matches hidden style="display:none">${P("emptyProducts",lang)}</span><button type="button" data-pv2-action="clear-search">×</button></label><div class="pv2-settings-list">${items().map(item=>{const rule=ruleFor(item.id);return `<div class="pv2-rule-line" data-pv2-id="${html(item.id)}" ${!itemMatches(item)?'hidden style="display:none"':''}><div><strong>${html(nameOf(item,lang))}</strong><small>${html(lang==="zh"?item.name_vi:item.name_zh_tw)}</small></div><span>${html(supplierFor(rule?.supplierId)?.nameZhTw||"未指定 / Chưa gán")}</span><span>平 / Lễ: ${rule?num(rule.weekdayDemand)+" / "+num(rule.holidayDemand):"—"}</span>${editable?`<button type="button" data-pv2-action="edit-rule" data-id="${html(item.id)}">設定 / Cài đặt</button>`:""}</div>`;}).join("")}</div></section>
  <section class="pv2-panel"><header class="pv2-section-head"><h3>${P("holidaysAndOpening",lang)}</h3></header>
  <p class="pv2-hint">${P("holidayInstruction",lang)}</p>
  <form data-pv2-form="calendar" class="pv2-calendar-form"><input name="date" type="date" required value="${html(ui.date)}"/><select name="type"><option value="normal">${P("normalDay",lang)}</option><option value="holiday">${P("holidayDay",lang)}</option><option value="closed">${P("closedDay",lang)}</option></select><input name="description" placeholder="${P("notes",lang)}" maxlength="160"/><button class="pv2-primary" type="submit" ${!editable||ui.pending?"disabled":""}>${P("save",lang)}</button></form>
  <div class="pv2-holidays">${(ui.data?.calendar||[]).filter(x=>x.type!=="normal").slice(0,50).map(x=>`<span>${html(x.date)} · ${P(x.type==="holiday"?"holidayLabel":"closedLabel",lang)}</span>`).join("")||"—"}</div></section></div>`;
 }
 function summary(lang,editable,rows){
- const selected=rows.filter(x=>ui.selected.has(x.item.id)&&x.supplier&&x.amount>0);
+ const selected=lines().filter(x=>ui.selected.has(x.item.id)&&x.amount>0);
  const count=selected.length;
  const total=selected.reduce((n,x)=>n+Number(x.amount),0);
- const supplierCount=new Set(selected.map(x=>x.supplier.id)).size;
+ const supplierCount=new Set(selected.filter(x=>x.supplier).map(x=>x.supplier.id)).size;
+ const validForSupplierOrder=selected.length>0&&selected.every(x=>x.rule?.enabled&&x.supplier&&x.plan?.canOrder);
  return `<aside class="pv2-aside"><div class="pv2-panel"><h3>${P("summary",lang)}</h3><div class="pv2-summary-num">${num(count)} <small>${P("itemsUnit",lang)}</small></div><p>${P("supplier",lang)}: <strong>${supplierCount}</strong></p><p>${P("totalPackages",lang)}: <strong>${num(total)}</strong></p>
- <div class="pv2-note">${selected.map(x=>`<div><span>${html(nameOf(x.item,lang))}</span><strong>${num(x.amount)} ${html(x.rule.packageUnit||x.item.unit||"")}</strong></div>`).join("")||P("nothingSelected",lang)}</div>
- <button type="button" class="pv2-primary pv2-wide" data-pv2-action="submit" ${!editable||!count||ui.pending?"disabled":""}>${P(ui.pending?"saving":"createOrder",lang)}</button>
+ <div class="pv2-note">${selected.map(x=>`<div><span>${html(nameOf(x.item,lang))}</span><strong>${num(x.amount)} ${html(x.rule?.packageUnit||x.item.unit||"")}</strong></div>`).join("")||P("nothingSelected",lang)}</div>
+ <button type="button" class="pv2-primary pv2-wide" data-pv2-action="submit" ${!editable||!count||ui.pending?"disabled":""}>${P(ui.pending?"saving":validForSupplierOrder?"createOrder":"saveDraft",lang)}</button>
  <button type="button" class="pv2-secondary pv2-wide" data-pv2-action="copy" ${!count?"disabled":""}>${P("copy",lang)}</button>
- <p class="pv2-hint">${P("externalHint",lang)}</p></div>
+ <p class="pv2-hint">${P(validForSupplierOrder?"externalHint":"draftHint",lang)}</p></div>
  <div class="pv2-panel"><h3>${P("supplierClosed",lang)}</h3>${suppliers().map(s=>`<div class="pv2-supplier-short"><strong>${html(procurementSupplierName(s,{language:"zh"}))}</strong>${s.nameVi?`<small>${html(s.nameVi)}</small>`:""}<span>${html(s.closedDates.slice(0,3).join(", ")||P("fixed",lang))}</span></div>`).join("")||"—"}</div></aside>`;
 }
 export function procurementV2Page(ctx,{render,site,editable}){
@@ -265,12 +267,30 @@ export function procurementV2Page(ctx,{render,site,editable}){
  <div class="pv2-stats">${metric("supplier",suppliers().length)}${metric("definedRules",active.length)}${metric("needRestock",alerts.length)}${metric("ordersCreated",(ui.data?.orders||[]).length)}</div>
  ${tabs(lang)}
  ${ui.notice?`<div class="pv2-notice" role="status">${html(ui.notice)}</div>`:""}${ui.error?`<div class="pv2-error" role="alert">${html(ui.error)}</div>`:""}
- <div class="pv2-content">${ui.tab==="history"?historyBody(lang,editable):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}${listBody(lang,editable)}</div>`}
+ <div class="pv2-content">${ui.tab==="history"?historyBody(lang,editable):ui.tab==="settings"?settingsBody(lang,editable):`<div class="pv2-main">${filterBar(lang)}<p data-pv2-no-matches hidden style="display:none" class="pv2-empty">${P("emptyProducts",lang)}</p>${listBody(lang,editable)}</div>`}
  ${["list","supplier","group"].includes(ui.tab)?summary(lang,editable,rows):""}</div>${ui.tab==="settings"&&ui.editingItem?formRule(lang):""}</section>`;
 }
 async function submitOrders(render){
- const chosen=lines().filter(x=>ui.selected.has(x.item.id)&&x.supplier&&x.rule?.enabled&&x.amount>0);
- if(!chosen.length)return;
+ const chosen=lines().filter(x=>ui.selected.has(x.item.id)&&x.amount>0);
+ if(!chosen.length){ui.notice=N("chooseQuantity");render();return;}
+ const configured=chosen.every(x=>x.rule?.enabled&&x.supplier&&x.plan?.canOrder);
+ if(!configured){
+   ui.pending=true;ui.notice=N("processing");render();
+   const key=ui.requestKeys.get("draft")||identifier();ui.requestKeys.set("draft",key);
+   try{
+     const result=await apiRequest("/api/procurement/"+encodeURIComponent(ui.site)+"/drafts",{
+       method:"POST",body:{requestKey:key,orderDate:ui.date,
+         lines:chosen.map(x=>({itemId:x.item.id,quantity:Number(x.amount)}))}});
+     const id=result?.draft?.id;
+     if(!id)throw new Error("DRAFT_NOT_CONFIRMED");
+     chosen.forEach(x=>{ui.selected.delete(x.item.id);ui.overrides.delete(x.item.id);});
+     ui.requestKeys.delete("draft");
+     await refreshAfterMutation(render);
+     ui.notice=N("draftSaved")+" #"+id.slice(0,8);
+   }catch(error){ui.notice=N("saveFailed")+": "+errorLabel(error);}
+   finally{ui.pending=false;render();}
+   return;
+ }
  const groups=groupsOf(chosen,row=>row.supplier.id);
  ui.pending=true;ui.notice=N("processing");render();
  let success=0;
@@ -314,6 +334,36 @@ function rememberRuleFields(root){
   reorderReferenceQuantity:d.get("reorderReferenceQuantity"),reorderNumerator:d.get("reorderNumerator"),
   reorderDenominator:d.get("reorderDenominator")
  };
+}
+function applyLiteralProcurementSearch(root){
+  // Keep the input/caret, selected items and edited quantities stable while typing.
+  // The same exact Vietnamese/Traditional Chinese name matcher is used after a
+  // tab, site, or supplier/category filter re-render.
+  const liveRows=[...root.querySelectorAll(".pv2-product[data-pv2-id],.pv2-rule-line[data-pv2-id]")];
+  const byId=new Map(items().map(item=>[item.id,item]));
+  let visible=0;
+  for(const row of liveRows){
+    const item=byId.get(row.dataset.pv2Id);
+    const match=Boolean(item&&itemMatches(item));
+    row.hidden=!match;
+    row.style.display=match?"":"none";
+    if(match)visible++;
+  }
+  // Supplier/category sections must not leave empty headings behind.
+  for(const panel of root.querySelectorAll(".pv2-main > .pv2-panel")){
+    const productRows=[...panel.querySelectorAll(".pv2-product[data-pv2-id]")];
+    if(productRows.length){
+      const shown=productRows.some(row=>!row.hidden);
+      panel.hidden=!shown;
+      panel.style.display=shown?"":"none";
+    }
+  }
+  const count=root.querySelector("[data-pv2-results]");
+  if(count)count.textContent=visible+" / "+liveRows.length;
+  for(const empty of root.querySelectorAll("[data-pv2-no-matches]")){
+    empty.hidden=visible!==0;
+    empty.style.display=visible===0?"":"none";
+  }
 }
 export function mountProcurementV2(root,{render,route}){
  root.addEventListener("click",event=>{
@@ -379,14 +429,7 @@ export function mountProcurementV2(root,{render,route}){
    if(el.closest?.('[data-pv2-form="rule"]'))rememberRuleFields(root);
    if(!el.matches?.("[data-pv2-search]"))return;
    ui.search=el.value;
-   const needle=prepareIngredientNameSearchNeedle(ui.search);
-   let visible=0;
-   for(const row of root.querySelectorAll("[data-pv2-id]")){
-     const item=items().find(x=>x.id===row.dataset.pv2Id);
-     const match=item&&ingredientNameSearchMatches(prepareIngredientNameSearchCorpus(item.name_zh_tw,item.name_vi),needle);
-     row.hidden=!match;if(match)visible++;
-   }
-   const counter=root.querySelector("[data-pv2-results]");if(counter)counter.textContent=visible+" / "+root.querySelectorAll("[data-pv2-id]").length;
+   applyLiteralProcurementSearch(root);
  });
  root.addEventListener("change",event=>{
    if(route()!=="procurement")return;
@@ -400,7 +443,13 @@ export function mountProcurementV2(root,{render,route}){
    if(el.dataset.pv2Filter){event.stopImmediatePropagation();ui[el.dataset.pv2Filter]=el.value;render();}
    if(el.dataset.pv2Date!==undefined){event.stopImmediatePropagation();ui.date=el.value;ui.selected.clear();ui.overrides.clear();render();}
    if(el.dataset.pv2Select){event.stopImmediatePropagation();if(el.checked)ui.selected.add(el.dataset.pv2Select);else ui.selected.delete(el.dataset.pv2Select);render();}
-   if(el.dataset.pv2Qty){event.stopImmediatePropagation();ui.overrides.set(el.dataset.pv2Qty,Math.max(0,Math.floor(Number(el.value)||0)));render();}
+   if(el.dataset.pv2Qty){
+     event.stopImmediatePropagation();
+     const amount=Math.max(0,Math.floor(Number(el.value)||0));
+     ui.overrides.set(el.dataset.pv2Qty,amount);
+     if(amount>0)ui.selected.add(el.dataset.pv2Qty);
+     render();
+   }
  });
  root.addEventListener("submit",event=>{
   const form=event.target;if(route()!=="procurement"||!form.dataset.pv2Form)return;
