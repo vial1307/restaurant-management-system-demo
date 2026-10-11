@@ -126,8 +126,9 @@ function listBody(lang,editable){
  return procurementPanel({body:productRows(rows,lang,editable),language:lang});
 }
 function historyBody(lang,editable){
- const orders=ui.data?.orders||[];
+ const orders=ui.data?.orders||[],drafts=ui.data?.drafts||[];
  return `<section class="pv2-panel"><header class="pv2-section-head"><h3>${P("history",lang)}</h3></header>
+ ${drafts.length?`<div class="pv2-drafts"><h4>${P("savedDrafts",lang)} (${drafts.length})</h4>${drafts.map(d=>`<div class="pv2-order-row"><div><strong>${html(d.id.slice(0,8))}</strong><small>${P("statusDraft",lang)} · ${html(d.orderDate)}</small></div><div>${(d.lines||[]).map(line=>`<small>${html(lang==="zh"?line.nameZhTw||line.nameVi:line.nameVi||line.nameZhTw)}: ${num(line.quantity)} ${html(line.unit||"")}</small>`).join("")}</div></div>`).join("")}</div>`:""}
  ${orders.length?orders.map(o=>`<div class="pv2-order-row"><div><strong>${html(o.id.slice(0,8))}</strong><small>${html(supplierFor(o.supplierId)?.nameZhTw||P("supplier",lang))}</small></div><div><small>${P("ordered",lang)}</small><strong>${html(o.orderDate)}</strong></div><div><small>${P("expectedArrival",lang)}</small><strong>${html(o.expectedArrival)}</strong></div>${badge(P(({submitted:"statusSubmitted",confirmed:"statusConfirmed",received:"statusReceived",cancelled:"statusCancelled"})[o.status]||"statusSubmitted",lang),"neutral")}${editable&&o.status==="submitted"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="confirmed">${P("supplierConfirmed",lang)}</button>`:""}${editable&&o.status==="confirmed"?`<button type="button" data-pv2-action="order-status" data-id="${o.id}" data-status="received">${P("received",lang)}</button>`:""}</div>`).join(""):`<p class="pv2-empty">${P("noHistory",lang)}</p>`}
  <p class="pv2-hint">${P("historyHint",lang)}</p></section>`;
 }
@@ -419,7 +420,13 @@ export function mountProcurementV2(root,{render,route}){
    if(el.dataset.pv2Filter){event.stopImmediatePropagation();ui[el.dataset.pv2Filter]=el.value;render();}
    if(el.dataset.pv2Date!==undefined){event.stopImmediatePropagation();ui.date=el.value;ui.selected.clear();ui.overrides.clear();render();}
    if(el.dataset.pv2Select){event.stopImmediatePropagation();if(el.checked)ui.selected.add(el.dataset.pv2Select);else ui.selected.delete(el.dataset.pv2Select);render();}
-   if(el.dataset.pv2Qty){event.stopImmediatePropagation();ui.overrides.set(el.dataset.pv2Qty,Math.max(0,Math.floor(Number(el.value)||0)));render();}
+   if(el.dataset.pv2Qty){
+     event.stopImmediatePropagation();
+     const amount=Math.max(0,Math.floor(Number(el.value)||0));
+     ui.overrides.set(el.dataset.pv2Qty,amount);
+     if(amount>0)ui.selected.add(el.dataset.pv2Qty);
+     render();
+   }
  });
  root.addEventListener("submit",event=>{
   const form=event.target;if(route()!=="procurement"||!form.dataset.pv2Form)return;
