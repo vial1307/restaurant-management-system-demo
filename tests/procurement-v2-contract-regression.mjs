@@ -186,7 +186,7 @@ assert.match(ui,/if\(!configured\)/,"Unassigned items must persist as draft, not
 assert.match(ui,/data-pv2-no-matches/,"Search has visible no-results feedback");
 assert.match(ui,/applyLiteralProcurementSearch\(root\)/,"Search input must filter rows without replacing input element");
 assert.match(ui,/row.style.display=match\?"":"none"/,"CSS display must not override hidden attribute");
-assert.match(ui,/data-pv2-qty/);
+assert.match(components,/data-pv2-qty/,"manual input belongs to shared responsive product component");
 assert.ok(ingredientNameSearchMatches(prepareIngredientNameSearchCorpus("鮭魚","Cá hồi"),prepareIngredientNameSearchNeedle("cá")),
  "Accented Vietnamese literal substring should match");
 assert.ok(!ingredientNameSearchMatches(prepareIngredientNameSearchCorpus("鮭魚","Cá hồi"),prepareIngredientNameSearchNeedle("ca")),
