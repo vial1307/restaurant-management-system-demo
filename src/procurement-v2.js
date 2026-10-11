@@ -335,6 +335,36 @@ function rememberRuleFields(root){
   reorderDenominator:d.get("reorderDenominator")
  };
 }
+function applyLiteralProcurementSearch(root){
+  // Keep the input/caret, selected items and edited quantities stable while typing.
+  // The same exact Vietnamese/Traditional Chinese name matcher is used after a
+  // tab, site, or supplier/category filter re-render.
+  const liveRows=[...root.querySelectorAll(".pv2-product[data-pv2-id],.pv2-rule-line[data-pv2-id]")];
+  const byId=new Map(items().map(item=>[item.id,item]));
+  let visible=0;
+  for(const row of liveRows){
+    const item=byId.get(row.dataset.pv2Id);
+    const match=Boolean(item&&itemMatches(item));
+    row.hidden=!match;
+    row.style.display=match?"":"none";
+    if(match)visible++;
+  }
+  // Supplier/category sections must not leave empty headings behind.
+  for(const panel of root.querySelectorAll(".pv2-main > .pv2-panel")){
+    const productRows=[...panel.querySelectorAll(".pv2-product[data-pv2-id]")];
+    if(productRows.length){
+      const shown=productRows.some(row=>!row.hidden);
+      panel.hidden=!shown;
+      panel.style.display=shown?"":"none";
+    }
+  }
+  const count=root.querySelector("[data-pv2-results]");
+  if(count)count.textContent=visible+" / "+liveRows.length;
+  for(const empty of root.querySelectorAll("[data-pv2-no-matches]")){
+    empty.hidden=visible!==0;
+    empty.style.display=visible===0?"":"none";
+  }
+}
 export function mountProcurementV2(root,{render,route}){
  root.addEventListener("click",event=>{
    const el=event.target.closest("[data-pv2-action]");if(!el||route()!=="procurement")return;
@@ -399,14 +429,7 @@ export function mountProcurementV2(root,{render,route}){
    if(el.closest?.('[data-pv2-form="rule"]'))rememberRuleFields(root);
    if(!el.matches?.("[data-pv2-search]"))return;
    ui.search=el.value;
-   const needle=prepareIngredientNameSearchNeedle(ui.search);
-   let visible=0;
-   for(const row of root.querySelectorAll("[data-pv2-id]")){
-     const item=items().find(x=>x.id===row.dataset.pv2Id);
-     const match=item&&ingredientNameSearchMatches(prepareIngredientNameSearchCorpus(item.name_zh_tw,item.name_vi),needle);
-     row.hidden=!match;if(match)visible++;
-   }
-   const counter=root.querySelector("[data-pv2-results]");if(counter)counter.textContent=visible+" / "+root.querySelectorAll("[data-pv2-id]").length;
+   applyLiteralProcurementSearch(root);
  });
  root.addEventListener("change",event=>{
    if(route()!=="procurement")return;
