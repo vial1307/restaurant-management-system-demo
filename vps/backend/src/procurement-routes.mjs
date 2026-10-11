@@ -167,7 +167,7 @@ export async function registerProcurementRoutes(app) {
     const b=request.body||{},lines=Array.isArray(b.lines)?b.lines:[];
     if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(b.requestKey||"")) ||
        !validDate(b.orderDate)||lines.length<1||lines.length>200||
-       lines.some(line=>!line.itemId||!intRange(line.quantity,1,100000))||
+       lines.some(line=>!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(line.itemId||""))||!intRange(line.quantity,1,100000))||
        new Set(lines.map(line=>String(line.itemId))).size!==lines.length)
       return validationReply(reply,"INVALID_DRAFT_LINES");
     try{
