@@ -62,15 +62,17 @@ function validationReply(reply,error="INVALID_PROCUREMENT_DATA") { return reply.
 export async function registerProcurementRoutes(app) {
   app.get("/api/procurement/:site", async (request,reply) => {
     const ctx=await allowed(request,reply); if (!ctx) return;
-    const [suppliers,rules,calendar,orders] = await Promise.all([
+    const [suppliers,rules,calendar,orders,drafts] = await Promise.all([
       pool.query("select * from public.procurement_suppliers where site_code=$1 order by active desc,name_zh_tw", [ctx.site]),
       pool.query("select * from public.procurement_product_rules where site_code=$1", [ctx.site]),
       pool.query("select service_date,day_type,description from public.procurement_service_calendar where site_code=$1 and service_date between current_date-interval '30 days' and current_date+interval '400 days' order by service_date",[ctx.site]),
       pool.query("select o.id,o.supplier_id,o.order_date,o.expected_arrival,o.status,o.note,o.created_at,coalesce(json_agg(json_build_object('itemId',l.item_id,'packageCount',l.package_count,'packageSize',l.package_size,'baseQuantity',l.base_quantity,'packageUnit',l.package_unit)) filter (where l.item_id is not null),'[]'::json) as lines from public.procurement_supplier_orders o left join public.procurement_supplier_order_lines l on l.order_id=o.id where o.site_code=$1 group by o.id order by o.created_at desc limit 100",[ctx.site]),
+      pool.query("select id,order_date,status,lines,created_at from public.procurement_order_drafts where site_code=$1 order by created_at desc limit 100",[ctx.site]),
     ]);
     return { site:ctx.site, suppliers:suppliers.rows.map(supplierRow), rules:rules.rows.map(ruleRow),
       calendar:calendar.rows.map(row=>({date:dateKey(row.service_date),type:row.day_type,description:row.description})),
-      orders:orders.rows.map(row=>({id:row.id,supplierId:row.supplier_id,orderDate:dateKey(row.order_date),expectedArrival:dateKey(row.expected_arrival),status:row.status,note:row.note,createdAt:row.created_at,lines:row.lines})) };
+      orders:orders.rows.map(row=>({id:row.id,supplierId:row.supplier_id,orderDate:dateKey(row.order_date),expectedArrival:dateKey(row.expected_arrival),status:row.status,note:row.note,createdAt:row.created_at,lines:row.lines})),
+      drafts:drafts.rows.map(row=>({id:row.id,orderDate:dateKey(row.order_date),status:"draft",createdAt:row.created_at,lines:row.lines})) };
   });
 
   app.post("/api/procurement/:site/suppliers", async (request,reply) => {
@@ -156,6 +158,44 @@ export async function registerProcurementRoutes(app) {
       return {date:dateKey(after.service_date),type:after.day_type,description:after.description};
     });
     return {calendar:result};
+  });
+
+  // A saved draft is an operator's internal order form only; it never dispatches
+  // an order, creates a supplier association or adjusts stock.
+  app.post("/api/procurement/:site/drafts",async(request,reply)=>{
+    const ctx=await allowed(request,reply,"edit");if(!ctx)return;
+    const b=request.body||{},lines=Array.isArray(b.lines)?b.lines:[];
+    if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(b.requestKey||"")) ||
+       !validDate(b.orderDate)||lines.length<1||lines.length>200||
+       lines.some(line=>!line.itemId||!intRange(line.quantity,1,100000))||
+       new Set(lines.map(line=>String(line.itemId))).size!==lines.length)
+      return validationReply(reply,"INVALID_DRAFT_LINES");
+    try{
+      const draft=await withTransaction(async client=>{
+        const previous=(await client.query(
+          "select id from public.procurement_order_drafts where site_code=$1 and request_key=$2",
+          [ctx.site,b.requestKey])).rows[0];
+        if(previous)return {id:previous.id,alreadyExists:true};
+        const ids=lines.map(line=>String(line.itemId));
+        const items=(await client.query(
+          "select id,item_key,name_zh_tw,name_vi,unit from public.inventory_items where id=any($1::uuid[]) and active=true",
+          [ids])).rows;
+        const byId=new Map(items.filter(item=>item.item_key.startsWith(ctx.site+":")).map(item=>[item.id,item]));
+        if(byId.size!==ids.length)throw Object.assign(new Error("DRAFT_ITEM_NOT_IN_SITE"),{statusCode:400});
+        const snapshots=lines.map(line=>{
+          const item=byId.get(String(line.itemId));
+          return {itemId:item.id,nameZhTw:item.name_zh_tw,nameVi:item.name_vi,
+            quantity:Number(line.quantity),unit:item.unit};
+        });
+        const row=(await client.query(
+          "insert into public.procurement_order_drafts(site_code,request_key,order_date,lines,actor_user_id,actor_username) values($1,$2,$3,$4::jsonb,$5,$6) returning id",
+          [ctx.site,b.requestKey,b.orderDate,JSON.stringify(snapshots),ctx.user.id,ctx.user.username])).rows[0];
+        await audit(client,ctx,"procurement.draft.create",row.id,null,
+          {orderDate:b.orderDate,lines:snapshots,status:"draft"});
+        return {id:row.id,alreadyExists:false};
+      });
+      return {draft};
+    }catch(error){return reply.code(error.statusCode||500).send({error:error.message||"DRAFT_SAVE_FAILED"});}
   });
 
   app.post("/api/procurement/:site/orders/:id/status",async(request,reply)=>{
