@@ -172,6 +172,50 @@ try{
     }
   }
   await page.setViewportSize(viewport);
+  // Manual purchase form: no supplier assignment required for a PostgreSQL draft.
+  const firstProduct=page.locator(".pv2-product:visible").first();
+  const itemId=await firstProduct.getAttribute("data-pv2-id");
+  assert(itemId,"first Inventory-backed product must exist");
+  const quantityInput=firstProduct.locator("[data-pv2-qty]");
+  assert.equal(await quantityInput.isEnabled(),true,"manual number entry must be available");
+  assert.equal(await firstProduct.locator("[data-pv2-select]").isEnabled(),true,"manual product selection must be available");
+  await quantityInput.fill("3");
+  await quantityInput.press("Tab");
+  assert.equal(await page.locator('[data-pv2-select="'+itemId+'"]').isChecked(),true,
+    "positive quantity automatically selects the product without a supplier");
+  const saveDraft=page.locator('[data-pv2-action="submit"]');
+  assert.equal(await saveDraft.isEnabled(),true,"selected manual quantity must enable Create Form");
+  assert.match(await saveDraft.textContent(),/草稿|nháp/i,"unassigned product must create draft, not supplier order");
+  const draftResponse=page.waitForResponse(response=>response.url().includes("/api/procurement/fuxing/drafts")&&response.request().method()==="POST");
+  await saveDraft.click();
+  const draftSaved=await draftResponse;
+  assert.equal(draftSaved.status(),200,"draft must be persisted by authorized site API");
+  const draftId=(await draftSaved.json())?.draft?.id;
+  assert(draftId,"server must confirm the saved draft ID");
+  await page.locator('[data-pv2-action="tab"][data-tab="history"]').click();
+  await page.getByText(draftId.slice(0,8),{exact:true}).waitFor();
+  assert.match(await page.locator(".pv2-drafts").textContent(),/3/,"history must reflect persisted manual quantity");
+
+  await page.locator('[data-pv2-action="tab"][data-tab="list"]').click();
+  const literalSearch=page.locator(".pv2-filters [data-pv2-search]");
+  await literalSearch.fill("unlikely-exact-db-name-012345");
+  assert.equal(await page.locator(".pv2-product:visible").count(),0,"search must actually hide unmatched product rows");
+  assert.equal(await page.locator(".pv2-filters [data-pv2-results]").textContent(),
+    "0 / "+(await page.locator(".pv2-product").count()),"visible search count must match real filtered rows");
+  assert.equal(await page.locator(".pv2-main [data-pv2-no-matches]").isVisible(),true);
+  assert.equal(await literalSearch.evaluate(el=>document.activeElement===el),true,
+    "search must preserve text focus and cursor");
+  await literalSearch.fill("");
+  assert((await page.locator(".pv2-product:visible").count())>0,"clearing search must show all Inventory products");
+
+  await page.locator('[data-pv2-action="tab"][data-tab="settings"]').click();
+  const settingsSearch=page.locator(".pv2-settings-search [data-pv2-search]");
+  await settingsSearch.fill("unlikely-exact-db-name-012345");
+  assert.equal(await page.locator(".pv2-rule-line:visible").count(),0,"settings search must hide unmatched product entries");
+  await settingsSearch.fill("");
+  assert((await page.locator(".pv2-rule-line:visible").count())>0,"clearing settings search must restore all products");
+
+  await page.locator('[data-pv2-action="tab"][data-tab="list"]').click();
   const horizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
   assert(horizontalOverflow<=4,`Procurement ${viewport.width}px horizontal overflow: ${horizontalOverflow}`);
   assert.deepEqual(errors,[],`Procurement browser errors: ${errors.join(" | ")}`);
