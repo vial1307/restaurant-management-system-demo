@@ -74,7 +74,7 @@ function renderOverview(){
     panel("Ví & tài khoản",balances(),counts+" tài khoản · Có thể có nhiều loại ngoại tệ")+
     panel("Dòng tiền sắp tới",upcoming.length?upcoming.map(p=>row(p.from_currency+" → "+p.to_currency,p.plan_date+" · "+(p.plan_kind==="remittance"?"Gửi tiền":"Đổi tiền"),moneyLabel(p.source_amount,p.from_currency),'Kế hoạch, chưa ghi sổ')).join(""):'<div class="fin-list-empty">Chưa có lịch đổi tiền hoặc gửi tiền.</div>')+
     '</div><div class="fin-stack">'+
-    panel("Thao tác nhanh",'<div class="fin-toolbar">'+button("+ Tài khoản","account")+button("+ Thu nhập","income",true)+button("+ Chi tiêu","expense",true)+button("+ Danh mục","category",true)+'</div>')+
+    panel("Thao tác nhanh",'<div class="fin-toolbar">'+button("+ Tài khoản","account")+button("+ Số dư đầu kỳ","opening",true)+button("+ Thu nhập","income",true)+button("+ Chi tiêu","expense",true)+button("+ Danh mục","category",true)+'</div>')+
     '<div class="fin-advice"><strong>Financial Advisor</strong><p style="margin:7px 0 0">Số dư được tính từ các giao dịch đã xác nhận. Kế hoạch chuyển tiền và đổi ngoại tệ chưa được trừ khỏi tài sản cho đến khi bạn ghi nhận thực tế.</p></div>'+
     '</div></div>';
 }
@@ -166,6 +166,8 @@ function showForm(kind){
    input("amount","Số tiền","text","","1000")+
    input("toTwdRate","Tỷ giá sang TWD (tiền khác TWD)","text","","1 ngoại tệ = ? TWD",false)+
    input("description","Ghi chú","text","","",false);
+ }else if(kind==="opening"){
+  title="Nhập số dư đầu kỳ";fields=selectField("accountId","Tài khoản chưa có giao dịch",allAccounts)+input("amount","Số dư hiện có","text","","1000")+input("description","Ghi chú","text","Số dư ban đầu",false)+note("Chỉ nhập một lần trước khi phát sinh giao dịch. Khoản này không được tính là thu nhập trong tháng.");
  }else if(kind==="transfer"){
   title="Chuyển giữa tài khoản";fields=selectField("accountId","Từ tài khoản",allAccounts)+selectField("targetAccountId","Đến tài khoản (cùng ngoại tệ)",allAccounts)+
    input("amount","Số tiền","text","","1000")+input("description","Ghi chú","text","","",false)+note("Chuyển nội bộ không được tính là chi tiêu.");
@@ -192,12 +194,12 @@ async function submitForm(event){
  const data=Object.fromEntries(new FormData(form));
  const path={
   account:"/accounts",category:"/categories",budget:"/budgets",fxPlan:"/fx-plans",
-  income:"/transactions",expense:"/transactions",transfer:"/transactions",fxPost:"/transactions"
+  income:"/transactions",expense:"/transactions",transfer:"/transactions",fxPost:"/transactions",opening:"/transactions"
  }[kind];
  if(!path)return;
  let body=data;
- if(["income","expense","transfer","fxPost"].includes(kind)){
-   body={...data,kind:kind==="fxPost"?"fx":kind,idempotencyKey:crypto.randomUUID(),occurredAt:new Date().toISOString()};
+ if(["income","expense","transfer","fxPost","opening"].includes(kind)){
+   body={...data,kind:kind==="fxPost"?"fx":kind==="opening"?"adjustment":kind,idempotencyKey:crypto.randomUUID(),occurredAt:new Date().toISOString()};
    if(!data.toTwdRate)delete body.toTwdRate;
  }
  state.busy=true;
