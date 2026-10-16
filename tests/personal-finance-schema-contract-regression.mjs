@@ -30,6 +30,7 @@ const website=read("finance.html");
 const financeOrigin=caddy.split("finance.82.47.180.185.nip.io {")[1];
 assert.ok(financeOrigin,"missing dedicated HTTPS finance virtual host");
 assert.match(financeOrigin,/handle \/api\/finance\/\*/);
+assert.match(financeOrigin,/handle \/ \{\s*root \* \/srv\s*rewrite \* \/finance\.html\s*file_server\s*\}/,"finance root must rewrite to real HTML");
 assert.match(financeOrigin,/@loginApi path \/api\/auth\/login \/api\/auth\/logout \/api\/auth\/me/);
 assert.match(financeOrigin,/handle @loginApi/);
 assert.doesNotMatch(financeOrigin,/handle \/api\/inventory/);
