@@ -475,13 +475,13 @@ async function loadAdvice(){
  if(state.advisorBusy)return;
  const requestId=++state.advisorRequestId;
  state.advisorBusy=true;state.advisorError=null;state.advisor=null;
- if(state.tab==="advisor"||state.tab==="overview")render();
+ if(["advisor","overview","budget"].includes(state.tab))render();
  try{
    const data=await api("/advisor?days="+state.advisorDays+"&bufferTwd="+encodeURIComponent(state.advisorBuffer));
    if(requestId!==state.advisorRequestId)return;
    state.advisor=data;
  }catch(error){if(requestId===state.advisorRequestId)state.advisorError=error;}
- finally{if(requestId===state.advisorRequestId){state.advisorBusy=false;if(state.tab==="advisor"||state.tab==="overview")render();}}
+ finally{if(requestId===state.advisorRequestId){state.advisorBusy=false;if(["advisor","overview","budget"].includes(state.tab))render();}}
 }
 function renderFx(){
   const cs=state.data.currencies||[];
