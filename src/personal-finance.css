@@ -86,3 +86,25 @@
   .fin-advisor-kpis .fin-kpi-value{font-size:17px}
 }
 @media(max-width:350px){.fin-advisor-kpis{grid-template-columns:1fr}}
+
+
+/* Finance OS pay-cycle action center: live, on-page alerts (not background push). */
+.fin-control-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:13px 0}
+.fin-control-summary>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fin-control-summary small{color:var(--soft);font-size:12px}
+.fin-control-summary strong{font-size:20px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fin-control-summary .fin-negative{color:var(--danger)}
+.fin-alert-line{border-left:4px solid #98abbc;background:#f7f9fc;padding:11px 13px;margin:8px 0;border-radius:7px;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
+.fin-alert-line strong{font-size:14px}
+.fin-alert-line span{font-size:12px;color:var(--soft)}
+.fin-alert-line.danger{border-left-color:#ac3349;background:#fff5f6}
+.fin-alert-line.warning{border-left-color:#b27623;background:#fffbf2}
+.fin-alert-line.info{border-left-color:#52809f}
+.fin-guide-steps{font-size:13px;line-height:1.65;margin:12px 0}
+.fin-guide-steps p{margin:7px 0}
+.fin-howto{margin-top:13px;border-top:1px solid var(--edge);padding-top:10px}
+.fin-howto summary{cursor:pointer;font-weight:750;color:var(--navy)}
+.fin-cycle-row{padding:13px 0;border-bottom:1px solid var(--edge);overflow-wrap:anywhere}
+.fin-cycle-row:last-child{border-bottom:0}
+.fin-cycle-row small{display:block;font-size:12px;color:var(--soft);margin-top:5px}
+@media(max-width:700px){.fin-control-summary{grid-template-columns:1fr;gap:9px}.fin-control-summary>div{flex-direction:row;justify-content:space-between;align-items:center;gap:7px}.fin-control-summary strong{font-size:17px}.fin-cycle-row .fin-stat{flex-wrap:wrap;align-items:flex-start}}
