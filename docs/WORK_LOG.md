@@ -1,3 +1,12 @@
+## IN PROGRESS — Private Personal Finance OS independent database foundation (2026-10-16)
+
+- [Draft PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`. **NOT MERGED / NOT PRODUCTION DEPLOYED**.
+- Objective: personal budgeting by month/year, multi-currency TWD/VND/USD/JPY/EUR/CNY and monthly exchange/remittance planning. Separate PostgreSQL `personal_finance` container, credential and volume (`finance_postgres_data`) on existing VPS, no modification of Kitchen OS `kitchen_os` schema/stock.
+- Source foundation: `vps/finance/migrations/001_personal_finance.sql` (14 tables, immutable posted events/entries, categories, accounts, FX quotes/plans, debt/goals, audit); opt-in `vps/docker-compose.finance.yml`; backup/checksum/migration runner `vps/finance/migrate.sh`; spec `docs/spec-deltas/2026-10-16-personal-finance-os.md`; DB regression CI `.github/workflows/personal-finance-db-regression.yml`.
+- CI of database foundation: PostgreSQL 16 migration twice + validation PASSED (run `38869511442`) after correcting a static regex that accidentally matched the separate finance volume.
+- **Missing before DONE:** VPS finance DB provision and real migration, owner-only API and authorization tests, live financial UI (Desktop/Mobile), per-account posting reconciliation, dedicated scheduled backup/restore, full production smoke. Finance data is not yet active. No exchange provider or actual bank transfer exists.
+- Ensure generic Super Admin roles cannot read user's personal finance; identify exactly one `FINANCE_OWNER_USER_ID` via protected VPS environment. Do not post credentials/IDs publicly.
+
 ## 2026-10-12 — Procurement manual quantity + site-scoped draft + literal search: Production DONE
 
 - User reported disabled quantity and Create Form, and wrong search. Root causes: `ready = rule.enabled && supplier && plan.canOrder` was improperly required for manual checkbox/number input; search used DOM `hidden` that could be overridden by CSS display and did not cover all tabs/counters.
