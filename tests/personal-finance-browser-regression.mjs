@@ -220,8 +220,10 @@ try {
     await page.locator('[data-wb-action="add-expense"]').click();
     await page.locator('[data-wb-row="0"][data-wb-prop="label"]').fill("Chi đi chơi");
     await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').fill("2000");
+    const changed=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
+      resp.request().postDataJSON()?.scenario?.rows?.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000"),{timeout:10000});
     await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').press("Tab");
-    await page.waitForFunction(()=>document.querySelector(".fin-wb-metrics")!==null);
+    await changed;
     assert(scenarioPreviews.some(x=>x.rows.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000")));
     await page.locator('[data-wb-action="loan"]').click();
     assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
