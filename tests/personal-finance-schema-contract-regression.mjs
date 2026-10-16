@@ -26,6 +26,11 @@ for(const table of ["cashflow_items","debt_fund_allocations"]){
  assert.ok(planDdl.includes("CREATE TABLE IF NOT EXISTS finance."+table+" ("),"missing finance planning table "+table);
 }
 assert.match(planDdl,/debt_payments_immutable/);
+const goalsDdl=read("vps/finance/migrations/003_finance_goal_funds.sql");
+assert.match(goalsDdl,/CREATE TABLE IF NOT EXISTS finance\.goal_fund_allocations/);
+assert.match(goalsDdl,/FOREIGN KEY\(goal_id,owner_user_id\) REFERENCES finance\.goals/);
+assert.match(goalsDdl,/UNIQUE\(owner_user_id,goal_id,month_date\)/);
+assert.doesNotMatch(goalsDdl,/public\.inventory|public\.app_users|public\.business_state|\bTRUNCATE\b|\bDROP TABLE\b/i);
 assert.match(deploy,/\[0-9\]\[0-9\]\[0-9\]_\*\.sql/);
 assert.doesNotMatch(planDdl,/public\.inventory|public\.app_users|public\.business_state|\bTRUNCATE\b/i);
 assert.match(deploy,/pg_dump/);
