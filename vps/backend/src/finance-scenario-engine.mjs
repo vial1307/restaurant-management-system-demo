@@ -35,7 +35,7 @@ export function validateScenario(input){
  positive(bufferTwd);positive(monthlyExtraIncomeTwd);
  const rows=input.rows??[];
  if(!Array.isArray(rows)||rows.length>120)throw new Error("INVALID_SCENARIO_ROWS");
- const kinds=["income","expense","debt","goal","borrow","repay"];
+ const kinds=["income","income_loss","expense","debt","goal","borrow","repay"];
  const normalized=rows.map((row,index)=>{
    if(!row||typeof row!=="object"||!kinds.includes(row.kind)||!dateOk(row.date))throw new Error("INVALID_SCENARIO_ROW");
    const amountTwd=String(row.amountTwd??""),label=String(row.label??"").trim().slice(0,120);
@@ -217,7 +217,7 @@ function timelineFor({asOf,through,startingBalanceTwd,baselineEvents,settings,ad
    if(balance<minimum){minimum=balance;minimumDate=e.date;}
    if(!firstRisk&&balance<buffer)firstRisk={date:e.date,gapTwd:plain(buffer-balance),label:e.label};
    if(summary){
-     if(e.kind==="income")summary.income+=n;
+     if(e.kind==="income"||e.kind==="income_loss")summary.income+=n;
      else if(e.kind==="borrow")summary.borrowed+=n;
      else if(e.kind==="repay")summary.repayment-=n;
      else if(e.kind==="goal")summary.goals-=n;
@@ -318,6 +318,7 @@ export function simulateScenario({asOf,source,scenario}){
  });
  const warnings=[...source.warnings,...base.warnings];
  if(loans.length)warnings.push("Khoản vay là giả định mới, không phải tiền thật; lãi, phí và ngày hoàn trả phải nhập từ điều khoản thực tế.");
+ if(settings.rows.some(r=>r.kind==="income_loss"))warnings.push("Giảm thu nhập là khoản bù trừ giả định; kiểm tra lịch thu gốc và ngày tiền thực nhận để không khấu trừ hai lần.");
  if((base.earliestRisk||units(base.goalFundingGapTwd)>0n)&&minExtra===null)warnings.push("Tăng thu nhập vào các ngày lương đã chọn vẫn không khắc phục được rủi ro trước đó hoặc không đủ kỳ tích lũy. Điều chỉnh ngày, chi linh hoạt hay hạn mục tiêu.");
  if(settings.rows.some(x=>x.kind==="debt")&&source.events.some(x=>x.source==="debt_fund"))warnings.push("Kiểm tra khoản tất toán và quỹ nợ đã phân bổ để không trừ trùng cùng một nghĩa vụ.");
  return {...base,name:settings.name,minimumAdditionalIncomePerPaydayTwd:minExtra,
