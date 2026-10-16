@@ -37,6 +37,7 @@ const bank=(await post("/accounts",{name:"Ngân hàng Đài",kind:"bank",currenc
 const cash=(await post("/accounts",{name:"Tiền mặt",kind:"cash",currencyCode:"TWD"})).account;
 const vnd=(await post("/accounts",{name:"VN ngân hàng",kind:"bank",currencyCode:"VND"})).account;
 const usd=(await post("/accounts",{name:"Ví USD",kind:"ewallet",currencyCode:"USD"})).account;
+const jpy=(await post("/accounts",{name:"Ví JPY",kind:"cash",currencyCode:"JPY"})).account;
 const salary=(await post("/categories",{name:"Lương",kind:"income"})).category;
 const rent=(await post("/categories",{name:"Nhà ở",kind:"expense"})).category;
 const food=(await post("/categories",{name:"Ăn uống",kind:"expense"})).category;
@@ -61,6 +62,9 @@ assert.equal(Number(snap.data.accounts.find(a=>a.id===bank.id).balance),51000,"p
 assert.equal(Number(snap.data.accounts.find(a=>a.id===vnd.id).balance),0,"plan cannot mint VND");
 await post("/transactions",{idempotencyKey:key(),kind:"fx",accountId:bank.id,targetAccountId:vnd.id,amount:"10000",receivedAmount:"7850000",feeAmount:"100",description:"Đổi thực tế"});
 await post("/transactions",{idempotencyKey:key(),kind:"income",accountId:usd.id,categoryId:salary.id,amount:"10.50",toTwdRate:"30.10"});
+await post("/transactions",{idempotencyKey:key(),kind:"adjustment",accountId:jpy.id,amount:"12500",description:"Opening balance"});
+const repeatedOpening=await request("/finance/transactions",{method:"POST",cookie:owner,body:{idempotencyKey:key(),kind:"adjustment",accountId:jpy.id,amount:"12500"}});
+assert.equal(repeatedOpening.status,409,"opening balances are only accepted on empty accounts");
 const invalidFx=await request("/finance/transactions",{method:"POST",cookie:owner,body:{idempotencyKey:key(),kind:"fx",accountId:bank.id,targetAccountId:cash.id,amount:"10",receivedAmount:"10"}});
 assert.equal(invalidFx.status,400,"FX cannot convert the same currency");
 const invalidExpense=await request("/finance/transactions",{method:"POST",cookie:owner,body:{idempotencyKey:key(),kind:"expense",accountId:usd.id,categoryId:food.id,amount:"1.00"}});
@@ -70,6 +74,7 @@ assert.equal(Number(snap.data.accounts.find(a=>a.id===bank.id).balance),40900);
 assert.equal(Number(snap.data.accounts.find(a=>a.id===cash.id).balance),1000);
 assert.equal(Number(snap.data.accounts.find(a=>a.id===vnd.id).balance),7850000);
 assert.equal(Number(snap.data.accounts.find(a=>a.id===usd.id).balance),10.5);
+assert.equal(Number(snap.data.accounts.find(a=>a.id===jpy.id).balance),12500);
 assert.equal(snap.data.plans.length,1);
 assert.equal(snap.data.currencies.length,6);
 overview=await request("/finance/overview?month="+monthly,{cookie:owner});
@@ -85,8 +90,8 @@ await db.connect();
 try{
   const ledger=await db.query("SELECT count(*)::int as count FROM finance.entries WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   const aud=await db.query("SELECT count(*)::int as count FROM finance.audit_events WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
-  assert.equal(ledger.rows[0].count,8,"one TWD income, one expense, two transfer entries, three FX entries and one USD income");
-  assert.equal(aud.rows[0].count,5);
+  assert.equal(ledger.rows[0].count,9,"eight transactional entries plus one opening balance");
+  assert.equal(aud.rows[0].count,6);
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
   catch(e){blocked=e.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
