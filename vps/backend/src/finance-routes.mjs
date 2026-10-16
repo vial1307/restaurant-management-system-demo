@@ -103,6 +103,18 @@ export async function registerFinanceRoutes(app) {
       return {month,flow:flow.rows,budget:budget.rows,events:events.rows};
     } catch(error){return databaseError(request,reply,error);}
   });
+  app.get("/api/finance/year",async(request,reply)=>{
+    const ctx=await authorized(request,reply);if(!ctx)return;
+    const year=Number(request.query?.year);
+    if(!Number.isInteger(year)||year<2000||year>2100)return fail(reply,"INVALID_YEAR");
+    try{
+      const {rows}=await ctx.pool.query(
+        "WITH months AS (SELECT generate_series(make_date($2::int,1,1),make_date($2::int,12,1),interval '1 month')::date AS first_day) SELECT to_char(m.first_day,'YYYY-MM') AS month, COALESCE((SELECT SUM(b.amount_twd) FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date=m.first_day AND c.kind='expense'),0)::text AS budget_twd, COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND ev.kind='income' AND ev.occurred_at>=(m.first_day AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at<((m.first_day+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS income_twd, COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND ev.kind='expense' AND ev.occurred_at>=(m.first_day AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at<((m.first_day+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS expense_twd FROM months m ORDER BY m.first_day",
+        [ctx.owner,year]
+      );
+      return {year,months:rows};
+    }catch(error){return databaseError(request,reply,error);}
+  });
   app.post("/api/finance/accounts",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const {name,kind,currencyCode}=request.body||{};
