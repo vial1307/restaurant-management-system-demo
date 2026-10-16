@@ -11,6 +11,7 @@ import { readMasterDataSnapshotForUser } from "./master-data-routes.mjs";
 import { registerBusinessStateRoutes } from "./business-state-routes.mjs";
 import { registerProcurementRoutes } from "./procurement-routes.mjs";
 import { registerFinanceRoutes } from "./finance-routes.mjs";
+import { financeConfigured } from "./finance-db.mjs";
 import { hydrateUserAccess } from "./access-control.mjs";
 import { activeSite } from "./site-registry.mjs";
 import { inventoryActionAllowed } from "./inventory-access.mjs";
@@ -58,6 +59,7 @@ app.get("/api/health", async () => {
 });
 
 app.post("/api/auth/login", async (request, reply) => {
+  const financeOrigin = request.hostname === "finance.82.47.180.185.nip.io";
   const username = String(request.body?.username || "").trim().toLowerCase();
   const password = String(request.body?.password || "");
 
@@ -83,12 +85,16 @@ app.post("/api/auth/login", async (request, reply) => {
     return reply.code(401).send({ error: "INVALID_CREDENTIALS" });
   }
 
+  if (financeOrigin && (!financeConfigured() || String(storedUser.id).toLowerCase() !== String(process.env.FINANCE_OWNER_USER_ID).toLowerCase())) {
+    return reply.code(403).send({ error:"FINANCE_OWNER_REQUIRED" });
+  }
+
   const user = await hydrateUserAccess(storedUser);
   if (!user) {
     return reply.code(403).send({ error: "ROLE_NOT_ACTIVE" });
   }
 
-  await createSession(user.id, reply);
+  await createSession(user.id, reply, { financeOrigin });
   return { user: publicUser(user) };
 });
 
