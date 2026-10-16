@@ -86,6 +86,7 @@ async function refresh(){
   state.advisor=null;state.advisorError=null;render();
   void loadAdvice();
   if(state.tab==="workbench"&&workbookState.loaded)void loadWorkbench();
+  if(["budget","report"].includes(state.tab)&&state.year?.year!==Number(state.month.slice(0,4)))void loadYear();
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -275,6 +276,12 @@ function renderAdvisorActionsCompact(advisor){
   '<button type="button" class="fin-text-link" data-go-finance-tab="workbench">Thử phương án →</button>';
 }
 function renderBudget(){
+ if(state.period==="year"){
+  return heading("Kế hoạch tài chính · Theo năm","Đối chiếu tổng ngân sách thực chi và phân bổ quỹ từng tháng từ dữ liệu đã ghi.",periodInput())+
+    '<div class="fin-toolbar fin-page-toolbar"><button class="fin-btn secondary" type="button" data-period="month">← Về kế hoạch tháng</button>'+
+    button("+ Ngân sách","budget")+button("+ Danh mục","category",true)+'</div>'+
+    renderYearBudget()+renderYearCashflow();
+ }
  const s=state.cashflow?.summary||{},planned=Number(s.planned_net_twd)||0;
  const debt=Number(s.planned_debt_fund_twd)||0,goal=Number(s.planned_goal_fund_twd)||0;
  const twd=(state.data?.accounts||[]).filter(x=>x.currency_code==="TWD").reduce((n,a)=>n+Number(a.balance||0),0);
@@ -293,6 +300,7 @@ function renderBudget(){
    '<p class="fin-muted">Đang tải kế hoạch 3 tháng từ Finance Database. Các tháng chưa lập lịch không được tự giả định bằng tháng trước.</p>';
  return heading("Kế hoạch tài chính","Lập lịch thu/chi và nghĩa vụ theo ngày; chỉnh sửa kế hoạch mà không động vào giao dịch thật.",periodInput())+
   '<div class="fin-toolbar fin-page-toolbar">'+
+  '<label class="fin-search-label"><span>⌕</span><input type="search" data-fin-table-filter placeholder="Tìm trong bảng kế hoạch" aria-label="Tìm trong bảng kế hoạch"></label>'+
   '<button type="button" class="fin-btn secondary" data-period="year">Kế hoạch năm</button>'+
   '<button type="button" class="fin-btn secondary" data-go-finance-tab="report">Báo cáo</button>'+
   button("+ Thêm khoản thu","cashIncome")+button("+ Thêm khoản chi","cashExpense",true)+'</div>'+
@@ -351,7 +359,7 @@ function renderReport(){
    esc(moneyLabel(x.actual_twd))+' so với kế hoạch '+esc(moneyLabel(x.budget_twd))+'.</p></div>').join("")||
    '<div class="fin-alert-box info"><strong>Không có danh mục vượt ngân sách đã nhập</strong><p>Kiểm tra danh mục chưa lập ngân sách trước khi đánh giá.</p></div>';
  return heading("Dòng tiền & Báo cáo","Thu chi thực tế, cơ cấu chi phí, chênh lệch ngân sách và lịch sử giao dịch.",periodInput())+
-   '<div class="fin-toolbar fin-page-toolbar"><button class="fin-btn secondary" type="button" data-go-finance-tab="budget">Kế hoạch ↗</button>'+
+   '<div class="fin-toolbar fin-page-toolbar"><label class="fin-search-label"><span>⌕</span><input type="search" data-fin-table-filter placeholder="Tìm giao dịch và danh mục" aria-label="Tìm giao dịch và danh mục"></label><button class="fin-btn secondary" type="button" data-go-finance-tab="budget">Kế hoạch ↗</button>'+
    '<button class="fin-btn secondary" type="button" data-report-export="csv">Xuất CSV</button>'+
    '<button class="fin-btn secondary" type="button" data-report-print="1">In / Lưu PDF</button></div>'+
    '<div class="fin-metrics-4">'+
@@ -803,7 +811,7 @@ function render(){
   tabs.forEach(b=>{const active=b.dataset.tab===state.tab;b.classList.toggle("active",active);b.setAttribute("aria-current",active?"page":"false");});
   if(state.loading){root.innerHTML='<div class="fin-state"><div class="fin-spinner"></div>Đang đọc dữ liệu được bảo vệ...</div>';return;}
   if(state.problem){root.innerHTML='<div class="fin-card"><h2>Không thể mở tài chính</h2><p class="fin-error">'+esc(failure(state.problem))+'</p><p class="fin-note">Nếu bạn vừa đăng nhập sai tài khoản, hãy đăng xuất và đăng nhập bằng tài khoản được cấp quyền.</p></div>';return;}
-  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():state.tab==="advisor"?renderAdvice():state.tab==="workbench"?renderWorkbench():renderLedger();
+  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():state.tab==="advisor"?renderAdvice():state.tab==="workbench"?renderWorkbench():state.tab==="report"?renderReport():renderLedger();
 }
 function selectField(name,label,options,placeholder="Chọn"){
  return '<label>'+esc(label)+'<select name="'+esc(name)+'" required><option value="">'+esc(placeholder)+'</option>'+options.map(o=>'<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>').join("")+'</select></label>';
@@ -1001,8 +1009,31 @@ logoutButton.addEventListener("click",async()=>{
   state.data=null;state.overview=null;state.loading=false;
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
-tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();}));
+tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();if(state.tab==="report"&&(state.year?.year!==Number(state.month.slice(0,4))))void loadYear();if(state.tab==="budget"&&state.yearCashflow?.year!==Number(state.month.slice(0,4)))void loadYear();}));
 root.addEventListener("click",async event=>{
+ if(event.target.closest("[data-report-print]")){
+   window.print();return;
+ }
+ if(event.target.closest("[data-report-export]")){
+   const rows=[["Ngày","Nội dung","Loại","Số tiền","Ngoại tệ"]];
+   for(const e of state.overview?.events||[]){
+     for(const entry of e.entries||[]){
+       rows.push([new Date(e.occurred_at).toLocaleDateString("sv-SE",{timeZone:"Asia/Taipei"}),
+        e.description||"",e.kind,String(entry.amount),entry.currency]);
+     }
+   }
+   const safeCell=value=>{
+     let str=String(value??"");
+     if(/^[=+@\-\t\r]/.test(str))str="'"+str;
+     return '"'+str.replace(/"/g,'""')+'"';
+   };
+   const csv="\ufeff"+rows.map(r=>r.map(safeCell).join(",")).join("\r\n");
+   const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+   const link=document.createElement("a");link.href=url;link.download="finance-report-"+state.month+".csv";
+   document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+   flash("Đã xuất CSV từ các giao dịch đã ghi sổ.");return;
+ }
+
  const wb=event.target.closest("[data-wb-action]");
  if(wb){await wbAction(wb.dataset.wbAction,wb);return;}
  const remove=event.target.closest("[data-wb-remove]");
@@ -1071,6 +1102,14 @@ root.addEventListener("toggle",event=>{
  if(event.target.matches?.("[data-fin-methodology]"))workbookState.methodologyOpen=event.target.open;
 },true);
 root.addEventListener("input",event=>{
+ if(event.target.matches("[data-fin-table-filter]")){
+   const term=event.target.value.trim().toLocaleLowerCase("vi");
+   for(const tr of root.querySelectorAll(".fin-data-table tbody tr")){
+     tr.hidden=!!term&&!tr.textContent.toLocaleLowerCase("vi").includes(term);
+   }
+   return;
+ }
+
  if(state.tab!=="workbench"||!workbookState.book)return;
  const node=event.target.closest("[data-wb-row],[data-wb-field]");
  if(!node)return;
@@ -1120,7 +1159,7 @@ async function loadYear(){
   const year=Number(state.month.slice(0,4));
   const [result,cashflow]=await Promise.all([api("/year?year="+year),api("/cashflow/year?year="+year)]);
   state.year=result;state.yearCashflow=cashflow;
-  if(state.period==="year"&&state.tab==="budget")render();
+  if(state.tab==="report"||state.tab==="budget")render();
  }catch(error){flash(failure(error));}
 }
 (async()=>{
