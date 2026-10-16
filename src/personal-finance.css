@@ -20,7 +20,7 @@
 
 /* Planning grid: readable cash-flow/debt funding controls across Desktop/Mobile. */
 .fin-cashflow-section{gap:15px}
-.fin-plan-kpis{margin:14px 0;grid-template-columns:repeat(3,minmax(0,1fr))}
+.fin-plan-kpis{margin:14px 0;grid-template-columns:repeat(4,minmax(0,1fr))}
 .fin-plan-kpis .fin-kpi-value{font-size:22px}
 .fin-cashflow-totals{border-top:1px solid var(--edge);padding-top:13px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .fin-cashflow-totals>div{display:flex;flex-direction:column;min-width:0;gap:2px}
@@ -29,3 +29,22 @@
 .fin-action-end{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;min-width:0}
 .fin-action-row>div:first-child{min-width:0;overflow-wrap:anywhere}
 @media(max-width:720px){.fin-plan-kpis{grid-template-columns:1fr;gap:8px}.fin-cashflow-totals{grid-template-columns:1fr}.fin-action-row{flex-wrap:wrap}.fin-action-end{margin-left:auto;max-width:100%}}
+
+@media (min-width:721px) and (max-width:1100px){.fin-plan-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Linked goal/debt action groups must wrap inside narrow cards, never force page width. */
+.fin-grid>.fin-stack,.fin-grid>.fin-card,.fin-cashflow-section>.fin-card{min-width:0}
+@media(max-width:720px){
+  .fin-grid{grid-template-columns:minmax(0,1fr)}
+  .fin-row:has(.fin-action-end){flex-wrap:wrap;align-items:flex-start}
+  .fin-row .fin-action-end{flex:1 1 100%;min-width:0;justify-content:flex-start;gap:5px;margin-left:0}
+  .fin-row .fin-action-end .fin-small-action{margin-left:0;white-space:normal;overflow-wrap:anywhere}
+}
+
+/* Annual cashflow rows must wrap the long "Trả nợ thực tế" secondary amount
+   instead of preserving the desktop one-line amount width on mobile. */
+@media(max-width:720px){
+  .fin-row{flex-wrap:wrap}
+  .fin-row .fin-amount{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  .fin-row .fin-amount small{white-space:normal;overflow-wrap:anywhere}
+}

@@ -64,6 +64,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/001_personal_finance.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/002_finance_cashflow_debt_fund.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/002_finance_cashflow_debt_fund.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/003_finance_goal_funds.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/003_finance_goal_funds.sql
       - name: Validate core constraints and kitchen DB isolation
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test <<'SQL'
@@ -72,7 +74,7 @@ jobs:
             IF (SELECT COUNT(*) FROM finance.currencies) <> 6 THEN
               RAISE EXCEPTION 'FINANCE_CURRENCIES_MISSING';
             END IF;
-            IF NOT EXISTS (SELECT 1 FROM finance.schema_migrations WHERE version='002_finance_cashflow_debt_fund') THEN
+            IF NOT EXISTS (SELECT 1 FROM finance.schema_migrations WHERE version='003_finance_goal_funds') THEN
               RAISE EXCEPTION 'FINANCE_MIGRATION_NOT_APPLIED';
             END IF;
           END $$;

@@ -1,3 +1,8 @@
+## 2026-10-17 — IN PROGRESS: synchronize Finance monthly Plan and Goal/Debt projections
+
+- Confirmed gap: monthly/yearly cashflow subtracts debt_fund_allocations but not a goal-linked monthly allocation; goal progress is manual and creating a goal does not affect forecast. Plan UI does not show goal/debt unallocated status or editable linked allocation breakdown. Existing debt allocation is month-scoped in Finance DB 002.
+- Add explicit monthly savings goal allocations in isolated schema 003, join them to all planning projections and render from one API response. Nonfunding is clearly labeled; no implied recurring bills or double count. Verify with new regression and production gates.
+
 ## DONE — Finance monthly cashflow & debt repayment fund (2026-10-17)
 
 - **Production completed:** Finance OS https://finance.82.47.180.185.nip.io/ ; PR [#246](https://github.com/vial1307/restaurant-management-system-demo/pull/246) merged as exact release `b5c074c1abfe05035997acb01c9b76a36dce0cad`.

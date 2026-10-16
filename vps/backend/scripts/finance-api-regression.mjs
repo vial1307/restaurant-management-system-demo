@@ -140,14 +140,47 @@ const noRate=await request("/finance/debt-funds",{method:"PUT",cookie:owner,body
   debtId:debt.id,month:monthly,plannedAmount:"1500000",earmarkedAmount:"500000"
 }});
 assert.equal(noRate.status,400,"Debt fund foreign rate must be explicit");
+// Creating a goal must not fabricate a monthly installment until the owner allocates it.
+const emptyBeforeGoalFunding=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(Number(emptyBeforeGoalFunding.data.summary.planned_goal_fund_twd),0);
+assert.equal(emptyBeforeGoalFunding.data.goalFunds.length,0);
+const allocateGoal=await request("/finance/goal-funds",{method:"PUT",cookie:owner,body:{
+  goalId:goal.id,month:monthly,plannedAmount:"8000",earmarkedAmount:"2500"
+}});
+assert.equal(allocateGoal.status,200,JSON.stringify(allocateGoal.data));
+const changeAllocation=await request("/finance/goal-funds",{method:"PUT",cookie:owner,body:{
+  goalId:goal.id,month:monthly,plannedAmount:"9000",earmarkedAmount:"4000"
+}});
+assert.equal(changeAllocation.status,200,"Editing same goal-month must upsert, not add duplicate planned outflow");
+const denyOther=await request("/finance/goal-funds",{method:"PUT",cookie:stranger,body:{
+  goalId:goal.id,month:monthly,plannedAmount:"1",earmarkedAmount:"1"
+}});
+assert.equal(denyOther.status,403,"Restaurant Super Admin has no access to private goal allocation");
+const invalidGoalFunding=await request("/finance/goal-funds",{method:"PUT",cookie:owner,body:{
+  goalId:goal.id,month:monthly,plannedAmount:"1.55",earmarkedAmount:"0"
+}});
+assert.equal(invalidGoalFunding.status,400,"TWD goal allocation must reject unsupported precision");
+const noSuchGoalFunding=await request("/finance/goal-funds",{method:"PUT",cookie:owner,body:{
+  goalId:crypto.randomUUID(),month:monthly,plannedAmount:"10",earmarkedAmount:"0"
+}});
+assert.equal(noSuchGoalFunding.status,404);
+const otherMonth=monthly.slice(0,4)+"-"+(monthly.slice(5)==="12"?"11":"12");
+const emptyOtherMonth=await request("/finance/cashflow?month="+otherMonth,{cookie:owner});
+assert.equal(emptyOtherMonth.status,200);
+assert.equal(Number(emptyOtherMonth.data.summary.planned_goal_fund_twd),0,"Monthly goal fund must not leak into another month");
+assert.equal(emptyOtherMonth.data.goalFunds.length,0);
 let cashflow=await request("/finance/cashflow?month="+monthly,{cookie:owner});
 assert.equal(cashflow.status,200,JSON.stringify(cashflow.data));
 assert.equal(cashflow.data.items.length,2);
 assert.equal(Number(cashflow.data.summary.planned_income_twd),60000);
 assert.equal(Number(cashflow.data.summary.planned_expense_twd),11000);
 assert.equal(Number(cashflow.data.summary.planned_debt_fund_twd),1950);
-assert.equal(Number(cashflow.data.summary.planned_net_twd),47050);
+assert.equal(Number(cashflow.data.summary.planned_net_twd),38050);
 assert.equal(Number(cashflow.data.summary.earmarked_debt_fund_twd),650);
+assert.equal(Number(cashflow.data.summary.planned_goal_fund_twd),9000);
+assert.equal(Number(cashflow.data.summary.earmarked_goal_fund_twd),4000);
+assert.equal(cashflow.data.goalFunds.length,1);
+assert.equal(cashflow.data.goalFunds[0].goal_name,"Quỹ học phí");
 const beforeActual=await request("/finance/bootstrap",{cookie:owner});
 assert.equal(Number(beforeActual.data.accounts.find(a=>a.id===vnd.id).balance),7850000,
   "Debt fund earmarking MUST NOT alter wallet balances");
@@ -175,6 +208,7 @@ const yearCashflow=await request("/finance/cashflow/year?year="+monthly.slice(0,
 assert.equal(yearCashflow.status,200);
 assert.equal(yearCashflow.data.months.length,12);
 assert.equal(Number(yearCashflow.data.months.find(x=>x.month===monthly).debt_fund_twd),1950);
+assert.equal(Number(yearCashflow.data.months.find(x=>x.month===monthly).goal_fund_twd),9000);
 const deleteItem=await request("/finance/cashflow/items/"+cfExpense.id,{method:"DELETE",cookie:owner,body:{}});
 assert.equal(deleteItem.status,200);
 assert.equal((await request("/finance/cashflow?month="+monthly,{cookie:owner})).data.items.length,1,
@@ -191,7 +225,7 @@ try{
   try{await db.query("UPDATE finance.debt_payments SET principal_paid=0 WHERE id=$1",[payments.rows[0].id]);}
   catch(error){immutable=error.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
   assert.equal(immutable,true,"Actual paid debt cannot be edited or deleted in place");
-  assert.equal(aud.rows[0].count,26,"Original 20 audits plus 2 forecasts, update, reserve, repayment and deletion");
+  assert.equal(aud.rows[0].count,28,"Goal fund save/edit add two owner-scoped audited planning changes");
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
   catch(e){blocked=e.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}

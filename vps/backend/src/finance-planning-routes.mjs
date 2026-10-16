@@ -5,7 +5,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   const startMonth=m=>m+"-01";
   const roundTripQuery=async(ctx,m)=>{
     const date=startMonth(m);
-    const [items,funds,payments,sums]=await Promise.all([
+    const [items,funds,payments,sums,goalFunds]=await Promise.all([
       ctx.pool.query("SELECT id,kind,label,amount_twd::text,due_day,memo,month_date::text FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
       ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,(f.planned_amount*f.fx_rate_to_twd)::text AS planned_twd,(f.earmarked_amount*f.fx_rate_to_twd)::text AS earmarked_twd,d.due_date::text FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
       ctx.pool.query("SELECT p.id,p.debt_id,d.name AS debt_name,d.currency_code,p.payment_date::text,p.principal_paid::text,p.interest_paid::text,p.fee_paid::text,p.base_amount_twd::text,p.event_id FROM finance.debt_payments p JOIN finance.debts d ON d.id=p.debt_id AND d.owner_user_id=p.owner_user_id WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month') ORDER BY p.payment_date DESC,p.created_at DESC LIMIT 100",[ctx.owner,date]),
@@ -15,20 +15,26 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS planned_debt_fund_twd,"+
         "COALESCE((SELECT SUM(earmarked_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS earmarked_debt_fund_twd,"+
+        "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS planned_goal_fund_twd,"+
+        "COALESCE((SELECT SUM(earmarked_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS earmarked_goal_fund_twd,"+
         "COALESCE((SELECT SUM(ABS(e.base_amount_twd)) FROM finance.entries e JOIN finance.events v ON v.id=e.event_id AND v.owner_user_id=e.owner_user_id WHERE v.owner_user_id=$1 AND v.kind='income' AND v.occurred_at>=($2::date AT TIME ZONE 'Asia/Taipei') AND v.occurred_at<(($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS actual_income_twd,"+
         "COALESCE((SELECT SUM(ABS(e.base_amount_twd)) FROM finance.entries e JOIN finance.events v ON v.id=e.event_id AND v.owner_user_id=e.owner_user_id WHERE v.owner_user_id=$1 AND v.kind='expense' AND v.occurred_at>=($2::date AT TIME ZONE 'Asia/Taipei') AND v.occurred_at<(($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS actual_expense_twd,"+
         "COALESCE((SELECT SUM(base_amount_twd) FROM finance.debt_payments WHERE owner_user_id=$1 AND payment_date>=$2::date AND payment_date<($2::date+interval '1 month')),0)::text AS actual_debt_paid_twd",
+        [ctx.owner,date]
+      ),
+      ctx.pool.query(
+        "SELECT f.id,f.goal_id,g.name AS goal_name,g.currency_code,g.status,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,(f.planned_amount*f.fx_rate_to_twd)::text AS planned_twd,(f.earmarked_amount*f.fx_rate_to_twd)::text AS earmarked_twd,g.target_amount::text,g.current_amount::text,g.target_date::text FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY g.name,f.id",
         [ctx.owner,date]
       )
     ]);
     const summary=sums.rows[0];
     // Numeric projection is calculated by PostgreSQL for precision, never as optimistic UI state.
     const {rows:net}=await ctx.pool.query(
-      "SELECT ($1::numeric-$2::numeric-$3::numeric)::text AS planned_net_twd,"+
-      "($4::numeric-$5::numeric-$6::numeric)::text AS actual_net_twd",
-      [summary.planned_income_twd,summary.planned_expense_twd,summary.planned_debt_fund_twd,
+      "SELECT ($1::numeric-$2::numeric-$3::numeric-$4::numeric)::text AS planned_net_twd,"+
+      "($5::numeric-$6::numeric-$7::numeric)::text AS actual_net_twd",
+      [summary.planned_income_twd,summary.planned_expense_twd,summary.planned_debt_fund_twd,summary.planned_goal_fund_twd,
        summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
-    return {month:m,items:items.rows,debtFunds:funds.rows,debtPayments:payments.rows,summary:{...summary,...net[0]}};
+    return {month:m,items:items.rows,debtFunds:funds.rows,goalFunds:goalFunds.rows,debtPayments:payments.rows,summary:{...summary,...net[0]}};
   };
   app.get("/api/finance/cashflow",async(req,reply)=>{
     const ctx=await authorized(req,reply);if(!ctx)return;
@@ -47,6 +53,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='income'),0)::text AS planned_income_twd,"+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS debt_fund_twd,"+
+        "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS goal_fund_twd,"+
         "COALESCE((SELECT SUM(base_amount_twd) FROM finance.debt_payments WHERE owner_user_id=$1 AND payment_date>=m.dt AND payment_date<m.dt+interval '1 month'),0)::text AS debt_paid_twd "+
         "FROM months m ORDER BY m.dt",
         [ctx.owner,year]
@@ -97,6 +104,34 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       });
       if(!saved)return fail(reply,"CASHFLOW_ITEM_NOT_FOUND",404);
       return {deleted:true,id:saved.id};
+    }catch(error){return databaseError(req,reply,error);}
+  });
+  app.put("/api/finance/goal-funds",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{};
+    if(!id(b.goalId)||!monthKey(b.month)||typeof b.plannedAmount!=="string"||typeof b.earmarkedAmount!=="string")
+      return fail(reply,"INVALID_GOAL_FUND");
+    try{
+      const saved=await auditedWrite(ctx,"finance.goal_fund.save","finance_goal_fund",async db=>{
+        const {rows}=await db.query(
+          "SELECT g.currency_code,c.minor_units FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",
+          [b.goalId,ctx.owner]
+        );
+        const goal=rows[0];
+        if(!goal)return null;
+        if(!money(b.plannedAmount,Number(goal.minor_units))||!money(b.earmarkedAmount,Number(goal.minor_units)))
+          return {error:"INVALID_GOAL_FUND"};
+        const rate=goal.currency_code==="TWD"?"1":b.fxRateToTwd;
+        if(!positiveRate(rate))return {error:"GOAL_FUND_RATE_REQUIRED"};
+        const {rows:funds}=await db.query(
+          "INSERT INTO finance.goal_fund_allocations(owner_user_id,goal_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,goal_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() RETURNING id,goal_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
+          [ctx.owner,b.goalId,startMonth(b.month),b.plannedAmount,b.earmarkedAmount,rate]
+        );
+        return funds[0];
+      });
+      if(!saved)return fail(reply,"GOAL_NOT_FOUND",404);
+      if(saved.error)return fail(reply,saved.error);
+      return {fund:saved};
     }catch(error){return databaseError(req,reply,error);}
   });
   app.put("/api/finance/debt-funds",async(req,reply)=>{
