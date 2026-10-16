@@ -212,7 +212,18 @@ try {
 
     // 12-month scenario workbench is a spreadsheet, not a second real ledger.
     await page.locator('.fin-nav [data-tab="workbench"]').click();
-    await page.locator("h1").filter({hasText:"Bảng điều hành tài chính"}).waitFor();
+    await page.locator("h1").filter({hasText:"Mô phỏng & Tư vấn"}).waitFor();
+    assert.match(await page.locator('.fin-nav [data-tab="workbench"]').innerText(),/Mô phỏng.*Tư vấn/,
+      "The navigation must describe the combined simulation and advisory capability");
+    const method=page.locator("[data-fin-methodology]");
+    assert.equal(await method.count(),1,"Financial logic disclosure must be visible on desktop and mobile");
+    assert.equal(await method.getAttribute("open"),null,"Long methodology should default to compact mode");
+    await method.locator("summary").click();
+    assert.equal(await method.locator(".fin-wb-methodology-item").count(),7,
+      "The user can inspect the seven actual calculation assumptions and limits");
+    assert.match(await method.innerText(),/tiền lương.*ngày.*không được coi là giải pháp/s);
+    assert.match(await method.innerText(),/chưa tự chuyển tiền góp sang tháng nhẹ hơn/);
+    assert.match(await method.innerText(),/chưa có cảnh báo nền tự động/);
     await page.locator(".fin-wb-metrics").waitFor();
     assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
     const horizonRequest=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
@@ -220,6 +231,8 @@ try {
     await page.locator('[data-wb-field="months"]').selectOption("3");
     await horizonRequest;
     assert.equal(String(scenarioPreviews.at(-1).months),"3");
+    assert.equal(await method.getAttribute("open"),"",
+      "Methodology expansion must survive a scenario preview refresh");
     await page.locator('[data-wb-action="add-expense"]').click();
     await page.locator('[data-wb-row="0"][data-wb-prop="label"]').fill("Chi đi chơi");
     await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').fill("2000");
