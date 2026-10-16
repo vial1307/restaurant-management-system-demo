@@ -1,3 +1,12 @@
+## IN PROGRESS — Private Personal Finance OS independent database foundation (2026-10-16)
+
+- [Draft PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`. **NOT MERGED / NOT PRODUCTION DEPLOYED**.
+- Objective: personal budgeting by month/year, multi-currency TWD/VND/USD/JPY/EUR/CNY and monthly exchange/remittance planning. Separate PostgreSQL `personal_finance` container, credential and volume (`finance_postgres_data`) on existing VPS, no modification of Kitchen OS `kitchen_os` schema/stock.
+- Source foundation: `vps/finance/migrations/001_personal_finance.sql` (14 tables, immutable posted events/entries, categories, accounts, FX quotes/plans, debt/goals, audit); opt-in `vps/docker-compose.finance.yml`; backup/checksum/migration runner `vps/finance/migrate.sh`; spec `docs/spec-deltas/2026-10-16-personal-finance-os.md`; DB regression CI `.github/workflows/personal-finance-db-regression.yml`.
+- CI of database foundation: PostgreSQL 16 migration twice + validation PASSED (run `38869511442`) after correcting a static regex that accidentally matched the separate finance volume.
+- **Missing before DONE:** VPS finance DB provision and real migration, owner-only API and authorization tests, live financial UI (Desktop/Mobile), per-account posting reconciliation, dedicated scheduled backup/restore, full production smoke. Finance data is not yet active. No exchange provider or actual bank transfer exists.
+- Ensure generic Super Admin roles cannot read user's personal finance; identify exactly one `FINANCE_OWNER_USER_ID` via protected VPS environment. Do not post credentials/IDs publicly.
+
 ## DONE — Procurement manual quantities, DB-persisted draft forms and literal search deployed (2026-10-12)
 
 - **Production verified:** exact runtime `a22cfbf3b61a855e468b0481c981b70477acc550` (short `a22cfbf`), PostgreSQL schema `036`. [PR #241](https://github.com/vial1307/restaurant-management-system-demo/pull/241) squash merged. Main Staging `38157179600` PASS; gated production preflight/full browser regression/deploy/Production UI smoke `38157246580` PASS. Production `GET /api/health` log: `app=ok, database=ok, schema=036, release=a22cfbf, environment=production`. VPS pre-deploy backup `/opt/kitchen-os/backups/kitchen_os_20261011T170107Z.dump`; database integrity errors `0`.
