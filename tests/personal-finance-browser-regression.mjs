@@ -146,5 +146,44 @@ try {
     assert.deepEqual(pageErrors,[],"Page JavaScript errors "+JSON.stringify({viewport,pageErrors}));
     await context.close();
   }
+  // Permission / login / logout must be interactive on its own Finance origin.
+  const authContext=await browser.newContext({viewport:{width:390,height:844}});
+  const authPage=await authContext.newPage();
+  let hasOwnerSession=false;
+  const authErrors=[];
+  authPage.on("pageerror",e=>authErrors.push(e.message));
+  await authPage.route("**/api/finance/**",async route=>{
+    const url=new URL(route.request().url());
+    if(!hasOwnerSession)return route.fulfill({status:401,contentType:"application/json",body:JSON.stringify({error:"AUTH_REQUIRED"})});
+    const data=url.pathname.endsWith("/bootstrap")
+      ? {currencies,accounts:[],categories:[],budgets:[],plans:[],goals:[],debts:[],reportCurrency:"TWD"}
+      : {month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
+    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(data)});
+  });
+  await authPage.route("**/api/auth/login",async route=>{
+    const user=route.request().postDataJSON().username;
+    if(user==="owner")hasOwnerSession=true;
+    await route.fulfill({status:user==="owner"?200:403,contentType:"application/json",body:JSON.stringify(user==="owner"?{ok:true}:{error:"FINANCE_OWNER_REQUIRED"})});
+  });
+  await authPage.route("**/api/auth/logout",async route=>{
+    hasOwnerSession=false;
+    await route.fulfill({status:200,contentType:"application/json",body:'{"ok":true}'});
+  });
+  await authPage.goto(BASE+"/finance.html",{waitUntil:"domcontentloaded"});
+  await authPage.locator("#finance-login-form").waitFor({state:"visible"});
+  await authPage.locator('#finance-login-form [name="username"]').fill("other");
+  await authPage.locator('#finance-login-form [name="password"]').fill("test");
+  await authPage.locator('#finance-login-form button[type="submit"]').click();
+  await authPage.getByText("Tài khoản này chưa được cấp quyền Finance OS.").waitFor();
+  await authPage.locator('#finance-login-form [name="username"]').fill("owner");
+  await authPage.locator('#finance-login-form [name="password"]').fill("test");
+  await authPage.locator('#finance-login-form button[type="submit"]').click();
+  await authPage.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+  await authPage.reload({waitUntil:"domcontentloaded"});
+  await authPage.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+  await authPage.locator("#finance-logout").click();
+  await authPage.locator("#finance-login-form").waitFor({state:"visible"});
+  assert.deepEqual(authErrors,[],"Authenticated Finance browser has no uncaught page errors");
+  await authContext.close();
   console.log("PASS private finance responsive mobile/desktop navigation, DB-confirmed writes, FX planning and error handling");
 }finally{await browser.close();}
