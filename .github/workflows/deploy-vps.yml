@@ -35,8 +35,8 @@ env:
   KITCHEN_TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 concurrency:
-  group: kitchen-os-production
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('kitchen-os-pr-{0}', github.event.pull_request.number) || 'kitchen-os-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   preflight:
