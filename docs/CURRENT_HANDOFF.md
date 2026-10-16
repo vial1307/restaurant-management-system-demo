@@ -2,6 +2,7 @@
 
 - **PR:** [#252](https://github.com/vial1307/restaurant-management-system-demo/pull/252), branch feat/finance-scenario-sheet-20261017; depends on salary-to-bill PR #250. Production remains UNCHANGED until all CI and release gates pass.
 - **Goal:** Salary-to-payment cashflow operating worksheet, 3/6/12-month scenario cells for expenses, extra earnings, goal saving and mandatory paired temporary borrow/repay, exact TWD liquidity and minimum extra income per payday.
+- **2026-10-17 methodology note requested:** Renamed workbook navigation **Mô phỏng & Tư vấn**, added a user-expandable **Phương pháp tính & nguyên tắc tư vấn dòng tiền** section showing seven decision rules and each implemented-vs-future boundary. Added 320/390/1440 browser regression for disclosure, default compact mode and keeping the panel expanded after preview. Code change only in PR #252 until all gates pass.
 - **Persistence:** Isolated Finance PostgreSQL-only migration 004, owner-scoped audited scenario workbooks; mock loans and planned expenses NEVER post actual money.
 - **Sources:** Actual TWD wallets + expected monthly cashflows, net debt fund allocations, goal allocations and external remittances. Warnings for unknown debt due dates, unreconciled expected payments, non-TWD liabilities, incomplete periodic schedules.
 - **Acceptance:** Isolated Finance migration twice, real owner API RBAC/CRUD, 1440/390/320px browser, staging, Super Admin + Kitchen regressions, gated deployment and private owner-data verification.
