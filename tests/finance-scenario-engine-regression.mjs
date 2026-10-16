@@ -11,6 +11,9 @@ const base={startingBalanceTwd:"2000",events:[
 const short=simulateScenario({asOf:from,source:base,scenario:defaults});
 assert.equal(short.earliestRisk.date,"2026-11-05");
 assert.equal(short.earliestRisk.gapTwd,"4000");
+assert.equal(short.bridgeWindow?.minimumPrincipalTwd,"4000");
+assert.equal(short.bridgeWindow?.earliestPrincipalOnlyRepayDate,"2026-11-10");
+assert.equal(short.bridgeWindow?.feeKnown,false,"Do not claim a loan has known interest");
 assert.equal(short.minimumAdditionalIncomePerPaydayTwd,null,
  "Future salary cannot repair a shortfall before the payday");
 assert.equal(short.months.length,3);
