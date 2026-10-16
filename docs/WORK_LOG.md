@@ -1,3 +1,38 @@
+## READY FOR FINAL CI — Standalone Finance domain + automated private DB activation (2026-10-16)
+
+- **ACTIVE_PR: #243**. Intended independent Finance website: **https://finance.82.47.180.185.nip.io/**.
+- Finance Caddy host permits only dedicated HTML/CSS/JS, owner-only finance API, and scoped login/logout; it intentionally returns 404 for all Kitchen inventory/admin/business APIs. The old restaurant `/finance.html` redirects to Finance domain. No Finance API requests remain in Kitchen Super Admin.
+- Finance domain has a separate login form and host-only cookie; finance owner must match protected `FINANCE_OWNER_USER_ID` and login cookie uses `Secure; SameSite=Strict`. Passwords still use existing Kitchen OS identity store; finance **records** remain in separate PostgreSQL 16 DB and volume.
+- Existing production release script installs and calls `vps/finance/provision.sh` **only after** Kitchen release health and restaurant database integrity checks. Provision preflights 1GiB free disk/300MiB MemAvailable, resolves the verified active primary admin `yangchuadmin` account, generates the finance DB password and encryption key in root-only VPS .env, creates dedicated Postgres, migrates and starts finance-aware API.
+- Both pre-migration and daily Finance backups are encrypted. `backup-encrypted.sh` checks SHA-256, performs a restore rehearsal to an independent temporary DB, and establishes root cron with 14-day encrypted retention. Secrets are never committed or printed. Offsite backup/key custody still require operator setup.
+- Added isolated finance login/access regression and static security/activator contracts. Existing private finance DB/UI tests are green on previous head; **current exact-head tests and VPS production activation remain unverified until workflows run**. DO NOT claim live website or DB until actual production checks succeed.
+- Following merge, verify real DNS/TLS, login with the designated owner, authorized Finance API read/write reload, Kitchen API 404 on Finance origin, and Postgres backup/restore. Do not put real financial data into an unverified deployment.
+
+## Verified CI evidence — 2026-10-16
+
+- **PASS** PostgreSQL 16 separate databases + authenticated owner-only finance API: [Finance DB Regression run 38872361161](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872361161). Includes single-owner/forbidden-admin access, TWD/VND/USD/JPY, budgets, FX transactions, fees, history immutability, opening balance and annual reporting.
+- **PASS** mobile 320px, mobile 390px, desktop 1440px responsive Finance UI smoke: [Finance UI Regression run 38872361013](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872361013). Confirms approved API-saves and rejected writes leave the dialog open.
+- **PASS** Kitchen OS isolated PR Staging [run 38872360955](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872360955). This certifies existing Kitchen OS staging on the candidate code; it does **not** mean the separate Finance PostgreSQL is provisioned on VPS.
+- **NOT PRODUCTION**: Finance DB owner UUID/secret, server provisioning, finance-specific backup and restore test, and production data/UI access checks remain outstanding. PR #243 remains draft.
+
+## 2026-10-16 — Finance OS Stage 2: isolated finance API and responsive UI (NOT PRODUCTION)
+
+- Continued draft [PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016` from Stage 1 independent PostgreSQL schema.
+- Added lazy independent finance PG pool, explicit owner UUID session gate, JSON write anti-CSRF header, server-side numeric ledger validation, cross-account ownership check, transaction/audit idempotency, income/expense and transfer/FX atomic bitemporal postings. New one-time opening balance adjustment does not inflate monthly income.
+- Added monthly report and 12-month annual budget vs actual SQL queries, dynamically configured currency options (TWD/VND/USD/JPY/EUR/CNY initial), FX/remittance plans that never debit a balance, no false "live" FX feed.
+- Added standalone responsive `finance.html`, `src/personal-finance.js`, `src/personal-finance.css`; conditional access link in Super Admin, deploy staging/production package support. API save feedback waits for successful VPS write then server readback; failure stays editable in dialog.
+- Added PostgreSQL 16 API roundtrip/owner/privacy regression and browser smoke at 1440px/390px/320px (full CI gate). No production provisioning or data changes. No official rates or real payment APIs.
+- Outstanding: final tests on exact commit, VPS secrets+separate DB setup, backup/restore policy and production smoke. PR remains DRAFT; Kitchen OS production database and stock unchanged.
+
+## IN PROGRESS — Private Personal Finance OS independent database foundation (2026-10-16)
+
+- [Draft PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`. **NOT MERGED / NOT PRODUCTION DEPLOYED**.
+- Objective: personal budgeting by month/year, multi-currency TWD/VND/USD/JPY/EUR/CNY and monthly exchange/remittance planning. Separate PostgreSQL `personal_finance` container, credential and volume (`finance_postgres_data`) on existing VPS, no modification of Kitchen OS `kitchen_os` schema/stock.
+- Source foundation: `vps/finance/migrations/001_personal_finance.sql` (14 tables, immutable posted events/entries, categories, accounts, FX quotes/plans, debt/goals, audit); opt-in `vps/docker-compose.finance.yml`; backup/checksum/migration runner `vps/finance/migrate.sh`; spec `docs/spec-deltas/2026-10-16-personal-finance-os.md`; DB regression CI `.github/workflows/personal-finance-db-regression.yml`.
+- CI of database foundation: PostgreSQL 16 migration twice + validation PASSED (run `38869511442`) after correcting a static regex that accidentally matched the separate finance volume.
+- **Missing before DONE:** VPS finance DB provision and real migration, owner-only API and authorization tests, live financial UI (Desktop/Mobile), per-account posting reconciliation, dedicated scheduled backup/restore, full production smoke. Finance data is not yet active. No exchange provider or actual bank transfer exists.
+- Ensure generic Super Admin roles cannot read user's personal finance; identify exactly one `FINANCE_OWNER_USER_ID` via protected VPS environment. Do not post credentials/IDs publicly.
+
 ## 2026-10-12 — Procurement manual quantity + site-scoped draft + literal search: Production DONE
 
 - User reported disabled quantity and Create Form, and wrong search. Root causes: `ready = rule.enabled && supplier && plan.canOrder` was improperly required for manual checkbox/number input; search used DOM `hidden` that could be overridden by CSS display and did not cover all tabs/counters.

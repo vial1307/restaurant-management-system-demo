@@ -1,0 +1,29 @@
+# Optional finance-only overlay, leaving the production restaurant database untouched.
+services:
+  finance_db:
+    image: postgres:16-alpine
+    container_name: kitchen-finance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: personal_finance
+      POSTGRES_USER: finance_app
+      POSTGRES_PASSWORD: ${FINANCE_POSTGRES_PASSWORD:?Set FINANCE_POSTGRES_PASSWORD in VPS .env}
+    volumes:
+      - finance_postgres_data:/var/lib/postgresql/data
+    networks:
+      - kitchen_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance_app -d personal_finance"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  app:
+    environment:
+      FINANCE_DB_HOST: finance_db
+      FINANCE_DB_PORT: 5432
+      FINANCE_DB_NAME: personal_finance
+      FINANCE_DB_USER: finance_app
+      FINANCE_DB_PASSWORD: ${FINANCE_POSTGRES_PASSWORD:?Set FINANCE_POSTGRES_PASSWORD in VPS .env}
+      FINANCE_OWNER_USER_ID: ${FINANCE_OWNER_USER_ID:?Set owner UUID in VPS .env}
+volumes:
+  finance_postgres_data:

@@ -1,0 +1,41 @@
+name: Private Finance UI Regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "finance.html"
+      - "src/personal-finance.js"
+      - "src/personal-finance.css"
+      - "tests/personal-finance-browser-regression.mjs"
+      - ".github/workflows/finance-ui-regression.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  finance-responsive-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    env:
+      TEST_WEB_BASE: http://127.0.0.1:3000
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser test runner
+        run: npm ci --prefix tests
+      - name: Start isolated static frontend
+        run: |
+          node tests/web-server.mjs >/tmp/finance-web.log 2>&1 &
+          for attempt in $(seq 1 25); do
+            if curl -fsS http://127.0.0.1:3000/finance.html >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/finance-web.log
+          exit 1
+      - name: Test Finance OS at Desktop, 390px and 320px
+        run: node tests/personal-finance-browser-regression.mjs

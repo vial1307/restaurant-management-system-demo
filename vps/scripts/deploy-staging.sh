@@ -160,7 +160,7 @@ echo "[staging 8/10] Building candidate API and frontend..."
 APP_RELEASE="${TARGET:0:7}-staging" docker compose --env-file .env build app
 rm -rf "${WEB_NEXT}"
 mkdir -p "${WEB_NEXT}"
-for entry in index.html .admindev.html admin.html vps-entry.html manifest.webmanifest sw.js src; do
+for entry in index.html .admindev.html finance.html admin.html vps-entry.html manifest.webmanifest sw.js src; do
   [[ -e "${REPO_LIVE}/${entry}" ]] && cp -a "${REPO_LIVE}/${entry}" "${WEB_NEXT}/"
 done
 printf '%s\n' "${TARGET:0:7}-staging" > "${WEB_NEXT}/RELEASE"

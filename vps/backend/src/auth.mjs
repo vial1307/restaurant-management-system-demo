@@ -14,7 +14,7 @@ function tokenHash(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-export async function createSession(userId, reply) {
+export async function createSession(userId, reply, { financeOrigin=false } = {}) {
   const token = crypto.randomBytes(32).toString("base64url");
   const hash = tokenHash(token);
   await pool.query(
@@ -26,8 +26,8 @@ export async function createSession(userId, reply) {
   reply.setCookie(SESSION_COOKIE, token, {
     path: "/",
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.COOKIE_SECURE === "true",
+    sameSite: financeOrigin ? "strict" : "lax",
+    secure: financeOrigin || process.env.COOKIE_SECURE === "true",
     maxAge: SESSION_DAYS * 24 * 60 * 60,
   });
 }
