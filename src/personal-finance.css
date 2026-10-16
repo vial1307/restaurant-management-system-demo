@@ -188,3 +188,162 @@
  .fin-wb-methodology-list{grid-template-columns:minmax(0,1fr);gap:8px;padding:0 14px 12px}
  .fin-wb-methodology-foot{margin:0 14px 14px}
 }
+
+
+/* Finance OS v2 visual system: matches planning and reports reference UI.
+   The very same DOM is used on desktop and mobile; no content fixtures. */
+:root{--navy:#17375a;--canvas:#f4f7fe;--edge:#e2e9f3;--soft:#697b92;--green:#139c70}
+body.finance-app{font-family:Inter,system-ui,-apple-system,"Noto Sans",Arial,sans-serif;background:#f4f7fe;color:#152e4f;font-size:14px}
+.fin-layout{max-width:1720px;grid-template-columns:212px minmax(0,1fr);margin:0 auto}
+.fin-header{min-height:66px;padding:10px 20px;background:#fff;border-bottom:1px solid #e0e8f0}
+.fin-brand{letter-spacing:.035em;font-size:19px}.fin-header small{font-size:11px}
+.fin-back{background:#e9f0ff;color:#2868e9}
+.fin-nav{position:relative;background:linear-gradient(180deg,#fbfdff,#f8fbff);border-right:1px solid #e3eaf4;padding:22px 11px;gap:5px}
+.fin-nav button{border-radius:9px;font-size:12px;font-weight:650;padding:11px 10px;color:#334966;gap:8px;align-items:center}
+.fin-nav button span{font-size:17px;min-width:23px}
+.fin-nav button.active{background:#e2edff;color:#1d63e3}
+.fin-nav button:hover:not(.active){background:#edf3fb;color:#1b57ba}
+.fin-content{max-width:1540px;padding:24px 21px 55px}
+.fin-title-row{margin-bottom:13px}.fin-title-row h1{font-size:24px;letter-spacing:-.025em;font-weight:820;color:#122848}
+.fin-card{border-radius:12px;border-color:#e1e9f3;box-shadow:0 3px 14px #172e4b08;padding:17px}
+.fin-card h2{font-size:15px;font-weight:800;margin-bottom:4px}
+.fin-page-toolbar{margin-bottom:13px;justify-content:flex-end;align-items:center}
+.fin-page-toolbar .fin-btn{padding:9px 12px;border-radius:8px;font-size:12px}
+.fin-search-label{margin-right:auto;display:flex;align-items:center;gap:7px;padding:7px 11px;background:#fff;border:1px solid #dfe6f1;border-radius:9px;min-width:min(300px,100%);color:#6b7c95}
+.fin-search-label input{border:0;outline:none!important;box-shadow:none;background:transparent;min-width:0;width:100%;font-size:12px;color:#17304b}
+.fin-metrics-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:14px}
+.fin-metric{min-height:100px;border:1px solid #dbe8fe;border-radius:11px;background:linear-gradient(120deg,#f8fbff,#edf4ff);padding:17px 18px;display:flex;justify-content:space-between;gap:10px;align-items:flex-start;overflow:hidden}
+.fin-metric>div{display:flex;flex-direction:column;min-width:0;gap:4px}
+.fin-metric span:not(.fin-metric-orb){font-size:12px;font-weight:700;color:#31475f}
+.fin-metric strong{font-size:21px;line-height:1.27;letter-spacing:-.02em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.fin-metric small{display:block;color:#627b94;font-size:10px;line-height:1.5}
+.fin-metric-green{border-color:#c9ece0;background:linear-gradient(120deg,#f7fffa,#e4faef)}
+.fin-metric-orange{border-color:#f5ded4;background:linear-gradient(120deg,#fffdfa,#fff0e9)}
+.fin-metric-purple{border-color:#dcd8fb;background:linear-gradient(120deg,#fcfbff,#f0edff)}
+.fin-metric-green strong{color:#00875e}.fin-metric-orange strong{color:#e25135}.fin-metric-purple strong{color:#245ed4}
+.fin-metric-orb{display:grid;place-items:center;flex:0 0 51px;height:51px;border-radius:50%;background:#dceaff;color:#3375e9;font-size:27px;font-weight:900}
+.fin-metric-green .fin-metric-orb{background:#d3f5e6;color:#10af7a}
+.fin-metric-orange .fin-metric-orb{background:#ffe8db;color:#e26644}
+.fin-metric-purple .fin-metric-orb{background:#e7e1ff;color:#7654e9}
+.fin-dash-layout{display:grid;grid-template-columns:minmax(0,2.38fr) minmax(245px,.82fr);gap:14px;align-items:start}
+.fin-dash-main{display:flex;flex-direction:column;gap:14px;min-width:0}
+.fin-dash-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.fin-dash-bottom{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(200px,.85fr);gap:14px}
+.fin-dash-layout>.fin-dash-main>.fin-card{min-width:0}
+.fin-data-table{border-collapse:collapse;width:100%;min-width:720px;text-align:left;font-size:11px;font-variant-numeric:tabular-nums}
+.fin-data-table thead tr{background:#f2f6fc}
+.fin-data-table th{font-size:10px;font-weight:800;color:#1a3555;white-space:nowrap;padding:9px 10px;border-bottom:1px solid #dde6f1}
+.fin-data-table td{border-bottom:1px solid #e9eef5;padding:9px 10px;color:#344b66;vertical-align:middle}
+.fin-data-table td strong{font-size:11px}
+.fin-data-table tbody tr:nth-child(even){background:#fcfdff}
+.fin-data-table tbody tr:hover{background:#f3f7ff}
+.fin-data-table th:not(:last-child),.fin-data-table td:not(:last-child){border-right:1px solid #edf1f6}
+.fin-data-table .fin-right{text-align:right;white-space:nowrap}
+.fin-data-table .fin-index{color:#6b7c94;width:30px}
+.fin-data-table .fin-plan-memo{max-width:160px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;font-size:10px;color:#748398}
+.fin-plan-table{min-width:990px}
+.fin-table-scroll{max-width:100%;overflow:auto;border:1px solid #e4ebf2;border-radius:9px;margin-top:12px;overscroll-behavior-x:contain}
+.fin-table-empty{text-align:center;padding:28px!important;color:#7a879b!important}
+.fin-plan-kind{display:inline-block;padding:3px 7px;border-radius:8px;font-size:10px;font-weight:800;white-space:nowrap;background:#e1edff;color:#2664db}
+.fin-plan-kind.income{background:#dbf7e7;color:#128b5d}
+.fin-plan-kind.expense{background:#ffeaec;color:#d45666}
+.fin-plan-kind.debt{background:#f0e5ff;color:#8753c3}
+.fin-plan-kind.goal{background:#fff0df;color:#d67832}
+.fin-number-out{color:#e04f5c;font-weight:750}
+.fin-number-in{color:#079969;font-weight:750}
+.fin-approx{color:#a07828;white-space:nowrap;font-size:9px}
+.fin-priority{font-size:10px;display:inline-flex;border-radius:7px;padding:3px 7px;background:#ffedeb;color:#bf4c3d;font-weight:720;white-space:nowrap}
+.fin-priority.optional{background:#e1f8ec;color:#20855d}
+.fin-txt-soft{color:#9b7e57;font-size:10px}
+.fin-inline-actions{display:flex;justify-content:flex-end;gap:3px}
+.fin-icon-button{border:1px solid #e0e9f3;border-radius:7px;background:#f6f9ff;padding:3px 8px;color:#2465bf;font-size:14px;min-width:28px}
+.fin-icon-button:hover{background:#dfeafe}
+.fin-table-footer{display:flex;align-items:center;flex-wrap:wrap;gap:9px;justify-content:flex-end;margin-top:11px}
+.fin-table-footer small{color:#74849a;font-size:10px;margin-right:auto;flex:1 1 280px}
+.fin-table-add{background:#e8f1ff;color:#2469df;border:1px solid #d7e5fb;border-radius:7px;font-size:11px;font-weight:700;padding:7px 10px}
+.fin-chart-legend{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:13px;margin:4px 0 10px}
+.fin-chart-legend span{font-size:10px;display:flex;gap:5px;align-items:center;color:#4a6484}
+.fin-chart-legend span:before{content:"";background:#3379f0;border-radius:50%;width:8px;height:8px}
+.fin-chart-legend .green:before{background:#28bd89}
+.fin-chart-legend .coral:before{background:#f17678}
+.fin-chart-legend .orange:before{background:#e7ac53}
+.fin-graph-svg{display:block;width:100%;height:auto;min-height:195px;overflow:visible}
+.fin-graph-axis{fill:#8392a5;font:10px system-ui,Arial}
+.fin-graph-alert{fill:#cb4560;font:bold 11px system-ui,Arial}
+.fin-alert-box{border-radius:10px;padding:11px 12px;border:1px solid #f1e4d2;background:#fff9ee;margin-top:10px}
+.fin-alert-box strong{font-size:12px;color:#986022}
+.fin-alert-box p{font-size:11px;color:#776e65;line-height:1.5;margin:4px 0 0}
+.fin-alert-box.danger{border-color:#f2c9cb;background:#fff3f4}
+.fin-alert-box.danger strong{color:#c33f52}
+.fin-alert-box.info{border-color:#c9ddf5;background:#f2f7ff}
+.fin-alert-box.info strong{color:#2d71bd}
+.fin-text-link{border:0;background:transparent;font-size:11px;font-weight:750;color:#1e66ce;padding:12px 1px 1px;text-align:left}
+.fin-goal-small{padding:11px 0;border-bottom:1px solid #e9eef4}
+.fin-goal-small small{color:#7a8a9e;font-size:11px}
+.fin-goal-small strong{font-size:12px}
+.fin-action-tip{display:flex;gap:11px;align-items:flex-start;margin:13px 0}
+.fin-action-count{width:25px;height:25px;flex:0 0 25px;display:grid;place-items:center;border-radius:50%;background:#e6f0ff;color:#2669d5;font-weight:850;font-size:12px}
+.fin-action-tip p{margin:0;min-width:0}.fin-action-tip strong{font-size:11px;display:block;line-height:1.5}
+.fin-action-tip small{font-size:10px;line-height:1.65;color:#708096;display:block;margin-top:3px}
+.fin-budget-inline{margin:9px 0}
+.fin-budget-inline strong,.fin-budget-inline small{font-size:11px}
+.fin-three-month{min-width:560px}
+.fin-report-charts{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.fin-report-detail{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,.85fr);gap:14px;margin-bottom:14px}
+.fin-ratio{display:flex;gap:9px;align-items:center;min-width:75px}
+.fin-ratio span{min-width:35px;font-size:10px}
+.fin-ratio .fin-progress{flex:1;height:6px}
+.fin-donut-wrap{display:flex;align-items:center;justify-content:center;gap:20px;min-height:245px}
+.fin-donut{width:min(172px,48%);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;flex-shrink:0}
+.fin-donut>div{display:flex;align-items:center;justify-content:center;flex-direction:column;width:61%;aspect-ratio:1;border-radius:50%;background:#fff;text-align:center}
+.fin-donut strong{font-size:16px;line-height:1.2}.fin-donut small{font-size:10px;color:#718098;margin-top:4px}
+.fin-donut-legend{flex:1;min-width:135px}
+.fin-donut-legend>div{display:flex;align-items:center;gap:6px;font-size:10px;margin:10px 0;color:#4c5f7a}
+.fin-donut-legend>div>span:nth-child(2){flex:1;min-width:0}
+.fin-donut-legend strong{font-size:10px}.fin-donut-legend small{color:#788a9d;font-size:9px;text-align:right;min-width:32px}
+.fin-donut-dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+@media(max-width:1320px){
+ .fin-dash-layout{grid-template-columns:minmax(0,1.8fr) minmax(235px,.95fr)}
+ .fin-dash-bottom{grid-template-columns:minmax(0,1fr)}
+ .fin-donut-wrap{flex-wrap:wrap}
+ .fin-donut-legend{flex-basis:100%}
+}
+@media(max-width:1040px){
+ .fin-metrics-4{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .fin-report-charts,.fin-report-detail{grid-template-columns:minmax(0,1fr)}
+ .fin-dash-layout{grid-template-columns:minmax(0,1fr)}
+ .fin-dash-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:840px){
+ .fin-layout{display:block}
+ .fin-nav{position:fixed;bottom:0;left:0;right:0;top:auto;background:#fff;z-index:8;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;padding:6px 8px max(6px,env(safe-area-inset-bottom));border-top:1px solid #dce5f1;gap:6px;max-width:100vw;justify-content:flex-start}
+ .fin-nav button{flex:0 0 86px;min-width:86px;max-width:100px;display:flex;flex-direction:column;padding:6px 5px;text-align:center;gap:1px;font-size:10px;scroll-snap-align:start;white-space:normal;line-height:1.22;min-height:53px}
+ .fin-nav button span{font-size:18px;min-width:0}
+ .fin-content{max-width:100%;padding:20px 12px 105px}
+ .fin-header{padding:9px 13px}
+}
+@media(max-width:570px){
+ .fin-title-row h1{font-size:21px}
+ .fin-metrics-4{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .fin-metric{padding:12px 10px;min-height:114px}
+ .fin-metric strong{font-size:16px}
+ .fin-metric small{font-size:10px}
+ .fin-metric-orb{width:29px;height:29px;flex-basis:29px;font-size:17px}
+ .fin-dash-side{grid-template-columns:minmax(0,1fr)}
+ .fin-report-charts,.fin-report-detail{gap:10px}
+ .fin-page-toolbar .fin-search-label{min-width:100%;width:100%}
+ .fin-page-toolbar{justify-content:flex-start;gap:7px}
+ .fin-donut-wrap{gap:14px}
+ .fin-donut{width:152px}
+ .fin-graph-svg{min-height:150px}
+}
+@media(max-width:355px){.fin-metrics-4{grid-template-columns:minmax(0,1fr)}}
+@media print{
+ body.finance-app{background:#fff!important}
+ .fin-header,.fin-nav,.fin-page-toolbar,.fin-table-footer,.fin-logout,.fin-text-link{display:none!important}
+ .fin-layout,.fin-dash-layout,.fin-report-charts,.fin-report-detail{display:block!important}
+ .fin-content{max-width:100%!important;padding:0!important}
+ .fin-card{box-shadow:none;break-inside:avoid;margin-bottom:14px}
+ .fin-table-scroll{overflow:visible}.fin-data-table{min-width:0;font-size:9px}
+ .fin-metrics-4{grid-template-columns:repeat(4,1fr)}
+}
