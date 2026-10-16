@@ -347,3 +347,12 @@ body.finance-app{font-family:Inter,system-ui,-apple-system,"Noto Sans",Arial,san
  .fin-table-scroll{overflow:visible}.fin-data-table{min-width:0;font-size:9px}
  .fin-metrics-4{grid-template-columns:repeat(4,1fr)}
 }
+
+.fin-action-options{display:flex;flex-direction:column;gap:11px;margin:8px 0}
+.fin-action-option{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;background:#f8fbff;border:1px solid #e1ebf7;border-radius:10px}
+.fin-action-option>div{flex:1;min-width:0}
+.fin-action-option strong{font-size:12px;display:block}
+.fin-action-option small{font-size:11px;line-height:1.6;color:var(--soft);display:block;margin-top:4px}
+.fin-action-option .fin-btn{font-size:11px;padding:9px;flex:0 0 auto}
+.fin-scenario-goal-schedule{margin-top:14px}.fin-scenario-goal-schedule>strong{font-size:12px}
+@media(max-width:600px){.fin-action-option{flex-wrap:wrap;gap:9px}.fin-action-option>.fin-btn{margin-left:auto}.fin-wb-tablewrap{max-width:100%}}
