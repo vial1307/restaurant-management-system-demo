@@ -192,7 +192,7 @@ function renderGoals(){
    '</div><button class="fin-btn secondary fin-small-action" type="button" data-goal-update="'+esc(g.id)+'">Cập nhật</button></div>';
  }).join(""):'<div class="fin-list-empty">Chưa có mục tiêu. Nhấn “Thêm mục tiêu” để bắt đầu.</div>';
  const debtRows=debts.length?debts.map(d=>'<div class="fin-row fin-action-row"><div><strong>'+esc(d.name)+'</strong><small>'+(d.due_date?'Đến hạn '+esc(d.due_date):'Chưa có ngày đến hạn')+'</small></div><div class="fin-action-end"><strong>'+esc(moneyLabel(d.outstanding_amount,d.currency_code))+'</strong><small>Dư nợ gốc</small><button type="button" class="fin-btn secondary fin-small-action" data-pay-debt="'+esc(d.id)+'">Trả nợ</button><button type="button" class="fin-btn secondary fin-small-action" data-fund-debt="'+esc(d.id)+'">Quỹ nợ</button></div></div>').join(""):'<div class="fin-list-empty">Chưa có khoản nợ nào được nhập.</div>';
- return heading("Mục tiêu & khoản nợ","Theo dõi kế hoạch riêng, không tự trừ tiền trong tài khoản")+
+ return heading("Mục tiêu & khoản nợ","Theo dõi kế hoạch riêng, không tự trừ tiền trong tài khoản",periodInput())+
   '<div class="fin-grid"><div class="fin-stack">'+panel("Mục tiêu tiết kiệm",goalRows)+
   panel("Tạo mục tiêu",button("+ Thêm mục tiêu","goal")+note("Số tiền tích lũy là tiến độ nhập thủ công; không được cộng vào số dư thực tế."))+
   '</div><div class="fin-stack">'+panel("Danh sách khoản nợ",debtRows)+
