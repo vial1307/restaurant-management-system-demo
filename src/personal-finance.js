@@ -837,6 +837,10 @@ async function loadWorkbookListAfterSave(){
 }
 
 function render(){
+  if(state.tab==="workbench"){
+    const disclosure=root.querySelector("[data-fin-methodology]");
+    if(disclosure)workbookState.methodologyOpen=disclosure.open;
+  }
   const showLogin=!state.loading&&state.problem?.status===401;
   loginView.hidden=!showLogin;
   layout.hidden=showLogin;
