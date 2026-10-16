@@ -14,7 +14,7 @@
   # Always revalidate application shells so every device sees the newest
   # release from the same URL. Static assets may be kept locally, but must be
   # revalidated by Caddy before reuse.
-  @freshShell path / /index.html /.admindev.html /manifest.webmanifest /sw.js /RELEASE
+  @freshShell path / /index.html /.admindev.html /finance.html /manifest.webmanifest /sw.js /RELEASE
   header @freshShell Cache-Control "no-store, no-cache, must-revalidate"
 
   @appAssets path /src/*
