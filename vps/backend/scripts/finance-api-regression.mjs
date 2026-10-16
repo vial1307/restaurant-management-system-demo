@@ -302,7 +302,8 @@ savedBooks=await request("/finance/workbench",{cookie:owner});
 assert(!savedBooks.data.scenarios.some(x=>x.id===scenarioId));
 const afterSimulation=await request("/finance/bootstrap",{cookie:owner});
 assert.equal(Number(afterSimulation.data.accounts.find(x=>x.id===bank.id).balance),40900);
-assert.equal(Number(afterSimulation.data.debts.find(x=>x.id===debt.id).outstanding_amount),12000000,
+assert.equal(Number(afterSimulation.data.debts.find(x=>x.id===debt.id).outstanding_amount),
+  Number(afterConcurrency.data.debts.find(x=>x.id===debt.id).outstanding_amount),
   "Scenario borrowing and repayment cannot change existing actual debt principal");
 
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
