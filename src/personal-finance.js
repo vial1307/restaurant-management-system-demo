@@ -434,6 +434,18 @@ function renderWorkbench(){
    '<button class="fin-btn" type="button" data-wb-action="preview"'+(b.busy?' disabled':'')+'>Tính lại</button></div>';
  const warnings=p?.warnings?.length?'<details open class="fin-wb-warnings"><summary>Cảnh báo & dữ liệu chưa chắc chắn ('+p.warnings.length+')</summary>'+
    p.warnings.map(w=>'<p>'+esc(w)+'</p>').join("")+'</details>':'';
+ const bridge=p?.bridgeWindow?
+   '<p>Thiếu thanh khoản từ <strong>'+esc(p.bridgeWindow.neededBy)+'</strong>. Để kiểm tra phương án tạm bù đến kỳ thu '+esc(p.bridgeWindow.earliestPrincipalOnlyRepayDate)+
+   ', cần ít nhất <strong>'+esc(workbenchMoney(p.bridgeWindow.minimumPrincipalTwd))+
+   '</strong> tiền bắc cầu theo các lịch đã khai báo, chưa tính lãi/phí.</p>'+
+   '<p class="fin-note">Đây là phép thử hoàn gốc không có chi phí vay, KHÔNG phải đề xuất một bên cho vay hay cam kết có thể trả. Nhập lãi/phí và ngày hoàn trả trong cặp dòng vay–hoàn trả để kiểm tra thực tế.</p>':
+   (p?.earliestRisk?'<p>Hiện chưa tìm được ngày thu nhập đủ an toàn để hoàn gốc tạm vay trong kỳ dự báo. Không nên coi vay mới là cách xử lý đã khả thi.</p>':
+   '<p>Chưa có khoảng thiếu dự trữ được phát hiện từ những khoản đã khai báo.</p>');
+ const recommended=p?.debtRanking?.length&&Number(p.safeExtraDebtTwd)>0?
+   '<p>Số tiền trả nợ thêm có thể cân nhắc ngay: <strong>'+esc(workbenchMoney(p.safeExtraDebtTwd))+
+   '</strong>, nếu mọi nghĩa vụ đã được khai báo đầy đủ. Nếu ưu tiên tiết kiệm lãi, rà soát khoản <strong>'+
+   esc(p.debtRanking[0].name)+'</strong> trước, vì lãi suất được nhập cao nhất trong các khoản nợ TWD.</p>':
+   '<p>Chưa xác định được phần tiền dư an toàn để tăng trả nợ trước kỳ lương tiếp theo. Không dùng nguyên số dư cuối tháng để tất toán.</p>';
  const payments=p?.loans?.length?p.loans.map(x=>'<div class="fin-row"><div><strong>'+esc(x.label)+'</strong>'+
    '<small>Vay '+esc(x.borrowDate)+' → Hoàn '+esc(x.repayDate)+'</small></div>'+
    '<div class="fin-amount">Nhận '+esc(workbenchMoney(x.borrowedTwd))+
@@ -450,6 +462,8 @@ function renderWorkbench(){
    panel("Thông số đầu vào",settings)+
    panel("Sức chịu đựng dòng tiền",stats+risk+
     (p?.firstPayday?'<p class="fin-note">Kỳ thu tăng thêm gần nhất: '+esc(p.firstPayday)+'</p>':'<p class="fin-note">Không tìm thấy kỳ thu tăng thêm trong giai đoạn dự báo.</p>'))+
+   panel("Xoay vòng tiền & lịch hoàn vay sơ bộ",bridge)+
+   panel("Phân bổ tiền dư để giảm nợ",recommended)+
    panel("Bảng tháng (giống spreadsheet)",summary)+
    panel("Dòng điều chỉnh / kịch bản",items+add+
     '<p class="fin-note">Dòng vay và hoàn trả phải đi theo một cặp, nhập đầy đủ số tiền nhận và tổng tiền trả gồm lãi/phí. Khoản vay chỉ là giả định; không tự ghi nhận là thu nhập.</p>')+
