@@ -96,7 +96,8 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
   entries.sort((a,b)=>a.date.localeCompare(b.date)||
     (a.kind==="income"?-1:b.kind==="income"?1:0)||
     a.label.localeCompare(b.label)||a.sourceId.localeCompare(b.sourceId));
-  let balance=opening,minimum=opening,minimumDate=asOf,earliestRisk=null;
+  let balance=opening,minimum=opening,minimumDate=asOf;
+  let earliestRisk=opening<buffer?{date:asOf,balanceTwd:twdText(opening),gapTwd:twdText(buffer-opening),source:"opening",label:"Dự trữ đầu kỳ"}:null;
   const totals={income:0n,expense:0n,debt:0n,goal:0n,remittance:0n};
   for(const event of entries){
     const amt=twdUnits(event.amountTwd);
@@ -106,7 +107,6 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     if(balance<minimum){minimum=balance;minimumDate=event.date;}
     if(!earliestRisk&&balance<buffer)earliestRisk={date:event.date,balanceTwd:twdText(balance),gapTwd:twdText(buffer-balance),source:event.source,label:event.label};
   }
-  if(!earliestRisk && opening<buffer)earliestRisk={date:asOf,balanceTwd:twdText(opening),gapTwd:twdText(buffer-opening),source:"opening",label:"Dự trữ đầu kỳ"};
   const recommendations=[];
   if(earliestRisk){
     recommendations.push({kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt vào "+earliestRisk.date,
