@@ -141,17 +141,21 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         if(![b.principalPaid,b.interestPaid,b.feePaid].every(v=>money(v,minor)))return {error:"INVALID_DEBT_PAYMENT_AMOUNT"};
         const {rows:checks}=await db.query(
           "SELECT ($1::numeric+$2::numeric+$3::numeric)::text AS total,"+
-          "($4::numeric-COALESCE((SELECT SUM(principal_paid) FROM finance.debt_payments WHERE owner_user_id=$5 AND debt_id=$6),0))::text AS outstanding",
+          "($1::numeric+$2::numeric+$3::numeric>0) AS is_positive,"+
+          "($1::numeric<=$4::numeric-COALESCE((SELECT SUM(principal_paid) FROM finance.debt_payments WHERE owner_user_id=$5 AND debt_id=$6),0)) AS principal_allowed",
           [b.principalPaid,b.interestPaid,b.feePaid,debt.principal_original,ctx.owner,debt.id]
         );
-        const {total,outstanding}=checks[0];
-        if(Number(total)<=0)return {error:"INVALID_DEBT_PAYMENT_AMOUNT"};
-        if(Number(b.principalPaid)>Number(outstanding))return {error:"DEBT_PRINCIPAL_EXCEEDS_OUTSTANDING"};
+        const {total,is_positive,principal_allowed}=checks[0];
+        if(!is_positive)return {error:"INVALID_DEBT_PAYMENT_AMOUNT"};
+        if(!principal_allowed)return {error:"DEBT_PRINCIPAL_EXCEEDS_OUTSTANDING"};
         const rate=source.currency_code==="TWD"?"1":b.fxRateToTwd;
         if(!positiveRate(rate))return {error:"DEBT_PAYMENT_RATE_REQUIRED"};
-        const {rows:balance}=await db.query("SELECT COALESCE(SUM(amount),0)::text AS amount FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2",[ctx.owner,source.id]);
-        // Explicit available-funds guard prevents incorrectly reporting a funded repayment.
-        if(Number(balance[0].amount)<Number(total))return {error:"DEBT_PAYMENT_INSUFFICIENT_FUNDS"};
+        const {rows:balance}=await db.query(
+          "SELECT COALESCE(SUM(amount),0)>=$3::numeric AS sufficient FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2",
+          [ctx.owner,source.id,total]
+        );
+        // Compare NUMERIC inside PostgreSQL, not floating-point JS currency values.
+        if(!balance[0].sufficient)return {error:"DEBT_PAYMENT_INSUFFICIENT_FUNDS"};
         const eventId=await createEvent(db,ctx.owner,"remittance","Trả nợ · "+trim(b.memo,160),b.paymentDate+"T12:00:00+08:00",b.idempotencyKey);
         if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
         await entry(db,ctx.owner,eventId,source,"-"+total,null,rate);
