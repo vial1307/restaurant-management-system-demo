@@ -276,7 +276,7 @@ export function simulateScenario({asOf,source,scenario}){
  const loans=settings.rows.filter(r=>r.kind==="borrow").map(r=>{
    const pay=settings.rows.find(t=>t.kind==="repay"&&t.linkId===r.linkId);
    return {label:r.label,borrowDate:r.date,repayDate:pay.date,borrowedTwd:r.amountTwd,
-     repayTwd:pay.amountTwd,financingCostTwd:plain(units(pay.amountTwd)-units(r.amountTwd))};
+     repayTwd:pay.amountTwd,daysToRepay:Math.round((Date.parse(pay.date+'T00:00:00Z')-Date.parse(r.date+'T00:00:00Z'))/86400000),financingCostTwd:plain(units(pay.amountTwd)-units(r.amountTwd))};
  });
  const warnings=[...source.warnings,...base.warnings];
  if(loans.length)warnings.push("Khoản vay là giả định mới, không phải tiền thật; lãi, phí và ngày hoàn trả phải nhập từ điều khoản thực tế.");
