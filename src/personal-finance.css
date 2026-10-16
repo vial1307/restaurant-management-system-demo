@@ -361,3 +361,12 @@ body.finance-app{font-family:Inter,system-ui,-apple-system,"Noto Sans",Arial,san
 .fin-plan-range>span{font-size:10px;color:#6d819b;margin-right:4px}
 .fin-plan-range button{font-size:10px;background:#f3f7fd;color:#587291;border:1px solid #e1eafa;border-radius:7px;padding:4px 8px}
 .fin-plan-range button.selected{color:#fff;background:#2168e3;border-color:#2168e3}
+
+.fin-fund-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0 8px}
+.fin-fund-summary>div{display:flex;flex-direction:column;border-radius:9px;background:#f2f6fd;border:1px solid #e2ebf7;padding:10px;gap:3px}
+.fin-fund-summary span{font-size:11px;color:#72849c}
+.fin-fund-summary strong{font-size:16px;color:#2569d5}
+.fin-fund-line{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid #e8eef5}
+.fin-fund-line>div{min-width:0}.fin-fund-line strong{font-size:12px;display:block}.fin-fund-line small{font-size:11px;color:#697e97;display:block;margin-top:3px}
+.fin-fund-line .fin-btn{font-size:11px;padding:8px 10px}
+@media(max-width:600px){.fin-fund-line{flex-wrap:wrap;align-items:flex-start}.fin-fund-line .fin-btn{margin-left:auto}}
