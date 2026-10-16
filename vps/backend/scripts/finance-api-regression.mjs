@@ -22,10 +22,10 @@ async function login(name){
  assert.equal(r.status,200,"Login failed: "+name);return r.cookie;
 }
 const financeHostname="finance.82.47.180.185.nip.io";
-const otherOriginLogin=await request("/auth/login",{method:"POST",body:{username:"yangchuadmin",password:"KitchenTest!123"},headers:{Host:financeHostname}});
+const otherOriginLogin=await request("/auth/login",{method:"POST",body:{username:"yangchuadmin",password:"KitchenTest!123"},headers:{"x-forwarded-host":financeHostname}});
 assert.equal(otherOriginLogin.status,403,"Finance domain must reject all non-owner kitchen users");
 const secureOriginLogin=await fetch(BASE+"/api/auth/login",{
- method:"POST",headers:{"Content-Type":"application/json",Host:financeHostname},
+ method:"POST",headers:{"Content-Type":"application/json","x-forwarded-host":financeHostname},
  body:JSON.stringify({username:"managerfx",password:"KitchenTest!123"})
 });
 assert.equal(secureOriginLogin.status,200);
