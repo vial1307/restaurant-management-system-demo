@@ -172,7 +172,7 @@ function subscribeSiteRegistryRealtime() {
 function nav() {
   return `<aside class="sa-sidebar"><div class="sa-owner"><span class="sa-owner-badge">SUPER</span><strong>${esc(state.me?.displayName||state.me?.username||"")}</strong><small>${esc(state.me?.username||"")}</small></div>
   <nav>${SECTIONS.map((id)=>`<button type="button" data-section="${id}" class="sa-nav-item ${state.section===id?"active":""}"><span>${esc(LABELS[id])}</span></button>`).join("")}</nav>
-  <div class="sa-sidebar-foot"><a href="./">← Kitchen OS</a></div></aside>`;
+  <div class="sa-sidebar-foot"><a href="./finance.html" title="Finance OS · chỉ tài khoản chủ sở hữu được cấp quyền xem dữ liệu">↗ Finance OS · Cá nhân</a><a href="./">← Kitchen OS</a></div></aside>`;
 }
 function topbar() {
   return `<header class="sa-topbar"><div><button class="sa-menu-button" type="button" data-toggle-nav>☰</button><h1>${esc(LABELS[state.section])}</h1><p>Super Admin · Database Control Plane</p></div><div class="sa-top-actions"><button class="sa-btn" type="button" data-refresh>↻ Làm mới</button></div></header>`;
