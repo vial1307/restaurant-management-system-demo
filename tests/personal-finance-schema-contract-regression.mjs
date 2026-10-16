@@ -20,7 +20,7 @@ assert.match(overlay,/finance_db:/);
 assert.match(overlay,/finance_postgres_data:/);
 assert.match(overlay,/FINANCE_OWNER_USER_ID/);
 assert.match(overlay,/FINANCE_POSTGRES_PASSWORD/);
-assert.doesNotMatch(overlay,/postgres_data:\/var\/lib\/postgresql\/data/);
+assert.doesNotMatch(overlay,/^\s*-\s*postgres_data:\/var\/lib\/postgresql\/data\s*$/m);
 assert.match(deploy,/pg_dump/);
 assert.match(deploy,/ON_ERROR_STOP=1/);
 assert.match(spec,/separate PostgreSQL database/);
