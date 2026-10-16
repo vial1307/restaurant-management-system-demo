@@ -59,3 +59,11 @@ When actual funds are converted, post `events(kind=fx)` and multiple `entries` i
 - **Stage 3**: forecasts, reminders, CSV/PDF exports, rate-provider integration and end-to-end deployment checks.
 
 Until stages 2/3 pass, the mobile concept is a design only; no UI button should falsely claim a server save.
+## Stage 2 implementation in PR #243 (not yet production)
+- New owner-only API module `vps/backend/src/finance-routes.mjs`, isolated pool `finance-db.mjs`, and registered routes in `server.mjs`.
+- Finance access: `GET /api/finance/access` (for conditional Super Admin navigation), `/bootstrap`, `/overview?month=YYYY-MM`, `/year?year=YYYY`; all require an authenticated session, configured finance DB and exact `FINANCE_OWNER_USER_ID`.
+- Writes: `POST /accounts`, `POST /categories`, `PUT /budgets`, `POST /fx-plans`, `POST /transactions` for income, expense, own-account same-currency transfer, actual FX and one-time opening balance. All use `X-Finance-Write: 1`, JSON, server validation and owner-scoped IDs. Ledger money is PostgreSQL numeric and computed in SQL; display-only rounding in browser.
+- **Actual bank remittance to external beneficiaries is NOT implemented.** `fx-plans` with `plan_kind=remittance` is just an unposted plan. Own-account FX posting applies only to two owned accounts and is never a real bank transfer. Never describe a new plan as an executed transfer.
+- Standalone `finance.html` and `src/personal-finance.js/.css` are data-driven, responsive and use API-confirmed saves. Super Admin link is only visible after the owner-only `/access` endpoint approves it. Direct entry also requires authorized API reads.
+- Production deployer and staging release packager include `finance.html`. The finance database compose overlay is NOT automatically enabled, and the default restaurant Docker runtime remains unchanged.
+- Tests: `vps/backend/scripts/finance-api-regression.mjs` is run with two independent PostgreSQL 16 test DBs, owner/non-owner sessions, ledger/FX/rate/fee/budget/annual/one-time-opening assertions; `tests/personal-finance-browser-regression.mjs` exercises responsive mobile/desktop UI and server-error state via isolated API mocks. No bank integration, rate provider, recurring backup or full live deployment yet.
