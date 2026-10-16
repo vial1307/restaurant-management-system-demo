@@ -63,5 +63,8 @@ jobs:
       - name: Assert negative amounts and currencies are rejected
         run: |
           set -e
-          psql -d personal_finance_test -v ON_ERROR_STOP=1 -c "INSERT INTO finance.currencies VALUES ('INVALID','No','N',2)" >/dev/null 2>&1 && exit 1 || true
+          if psql -d personal_finance_test -v ON_ERROR_STOP=1 -c "INSERT INTO finance.currencies VALUES ('INVALID','No','N',2)" >/dev/null 2>&1; then
+            echo "FAIL invalid ISO currency accepted" >&2
+            exit 1
+          fi
           echo 'PASS invalid ISO currency code cannot be inserted'
