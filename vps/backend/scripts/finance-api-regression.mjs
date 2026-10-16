@@ -291,9 +291,9 @@ assert.equal(created.status,201,JSON.stringify(created.data));
 const scenarioId=created.data.scenario.id;
 let savedBooks=await request("/finance/workbench",{cookie:owner});
 assert(savedBooks.data.scenarios.some(x=>x.id===scenarioId));
-const updated=await request("/finance/workbench/scenarios/"+scenarioId,{method:"PUT",cookie:owner,
+const scenarioUpdated=await request("/finance/workbench/scenarios/"+scenarioId,{method:"PUT",cookie:owner,
  body:{scenario:{...simulated,name:"Updated plan",monthlyExtraIncomeTwd:"2000"}}});
-assert.equal(updated.status,200);
+assert.equal(scenarioUpdated.status,200);
 savedBooks=await request("/finance/workbench",{cookie:owner});
 assert.equal(savedBooks.data.scenarios.find(x=>x.id===scenarioId)?.settings?.monthlyExtraIncomeTwd,"2000");
 assert.equal((await request("/finance/workbench/scenarios/"+scenarioId,{method:"DELETE",cookie:stranger,body:{}})).status,403);
