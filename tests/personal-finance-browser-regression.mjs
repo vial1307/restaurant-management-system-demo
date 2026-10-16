@@ -293,7 +293,13 @@ try {
           active:a?{tag:a.tagName,cls:String(a.className),outline:getComputedStyle(a).outline,
             rect:{left:a.getBoundingClientRect().left,right:a.getBoundingClientRect().right}}:null};
         if(a instanceof HTMLElement)a.blur();
-        return {...before,afterBlur:{bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth}};
+        return {...before,afterBlur:{bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth},
+          overflowingContent:[...document.querySelectorAll("*")]
+            .filter(el=>el.scrollWidth>el.clientWidth+1 && el.clientWidth>0)
+            .map(el=>({tag:el.tagName,cls:String(el.className).slice(0,100),client:el.clientWidth,scroll:el.scrollWidth,
+             rect:{l:Math.round(el.getBoundingClientRect().left),r:Math.round(el.getBoundingClientRect().right)},
+             text:(el.innerText||"").slice(0,42)})).slice(0,30)};
+
       });
       console.error("FINANCE_LAYOUT_OVERFLOW_OFFENDERS",JSON.stringify({viewport,size,overflowing,metrics}));
     }
