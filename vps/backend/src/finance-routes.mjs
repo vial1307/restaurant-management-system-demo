@@ -67,6 +67,11 @@ async function audit(client,owner,action,entityId,metadata={}) {
   );
 }
 export async function registerFinanceRoutes(app) {
+  app.get("/api/finance/access",async(request,reply)=>{
+    const ctx=await authorized(request,reply);if(!ctx)return;
+    try { await ctx.pool.query("SELECT 1 FROM finance.schema_migrations LIMIT 1");return {allowed:true}; }
+    catch(error){return databaseError(request,reply,error);}
+  });
   app.get("/api/finance/bootstrap",async(request,reply)=>{
     const ctx=await authorized(request,reply);if(!ctx)return;
     try {
