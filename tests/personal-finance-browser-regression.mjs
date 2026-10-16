@@ -16,13 +16,15 @@ try {
     const pageErrors=[];
     let accounts=structuredClone(initialAccounts);
     let plans=[];
+    let goals=[];
+    let debts=[];
     page.on("pageerror",error=>pageErrors.push(error.message));
     await page.route("**/api/finance/**",async route=>{
       const url=new URL(route.request().url()),pathname=url.pathname;
       const method=route.request().method();
       let data={},status=200;
       if(method==="GET"&&pathname.endsWith("/bootstrap")){
-        data={currencies,accounts,categories:[],budgets:[],plans,reportCurrency:"TWD"};
+        data={currencies,accounts,categories:[],budgets:[],plans,goals,debts,reportCurrency:"TWD"};
       }else if(method==="GET"&&pathname.endsWith("/overview")){
         data={month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
       }else if(method==="GET"&&pathname.endsWith("/year")){
@@ -40,6 +42,25 @@ try {
           plan_date:b.planDate,plan_kind:b.planKind,from_currency:b.fromCurrency,to_currency:b.toCurrency,
           source_amount:b.sourceAmount,expected_rate:b.expectedRate,expected_fee:b.expectedFee,status:"planned",memo:b.memo};
         plans.push(p);data={plan:p};status=201;
+      }else if(method==="POST"&&pathname.endsWith("/goals")){
+        const b=route.request().postDataJSON();
+        const g={id:"00000000-0000-4000-8000-000000000011",name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,current_amount:"0",status:"active",target_date:b.targetDate||null};
+        goals.push(g);data={goal:g};status=201;
+      }else if(method==="PUT"&&pathname.includes("/goals/")){
+        const b=route.request().postDataJSON();
+        const goal=goals.find(g=>pathname.endsWith(g.id));
+        assert.ok(goal,"Must update existing goal");
+        goal.current_amount=b.currentAmount;goal.status=b.status;
+        data={goal:{id:goal.id,current_amount:b.currentAmount,status:b.status}};
+      }else if(method==="POST"&&pathname.endsWith("/debts")){
+        const b=route.request().postDataJSON();
+        const d={id:"00000000-0000-4000-8000-000000000012",name:b.name,currency_code:b.currencyCode,principal_original:b.principalOriginal,outstanding_amount:b.principalOriginal,annual_interest_rate:"0.05",due_date:b.dueDate||null};
+        debts.push(d);data={debt:d};status=201;
+      }else if(method==="POST"&&pathname.includes("/fx-plans/")&&pathname.endsWith("/cancel")){
+        const id=pathname.split("/")[4];
+        const plan=plans.find(p=>p.id===id);
+        assert.ok(plan && plan.status==="planned","Expected planned FX");
+        plan.status="cancelled";data={plan:{id,status:"cancelled"}};
       }else if(method==="POST"&&pathname.endsWith("/transactions")){
         data={error:"FINANCE_DATABASE_UNAVAILABLE"};status=503;
       }else{data={error:"NOT_FOUND"};status=404;}
@@ -78,6 +99,39 @@ try {
     assert.equal(await page.locator("#finance-dialog").evaluate(el=>el.open),true,"Failed server write must leave form open");
     assert.equal(accounts[0].balance,"0");
     await page.locator("#finance-dialog-close").click();
+    // Persisted plan must not create any account movement; cancel survives F5.
+    page.on("dialog",async d=>{await d.accept();});
+    await page.locator('[data-cancel-plan]').click();
+    assert.equal(plans[0].status,"cancelled");
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator('h1').filter({hasText:"Tổng quan tài chính"}).waitFor();
+    await page.locator('.fin-nav [data-tab="fx"]').click();
+    assert(await page.getByText("Đã cancelled").count()===1,"Reload preserves canceled FX plan");
+    assert.equal(accounts[0].balance,"0");
+    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await page.locator('[data-open="goal"]').click();
+    await page.locator('#finance-dialog [name="name"]').fill("Học phí");
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("TWD");
+    await page.locator('#finance-dialog [name="targetAmount"]').fill("50000");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Học phí").first().waitFor();
+    await page.locator('[data-goal-update]').click();
+    await page.locator('#finance-dialog [name="currentAmount"]').fill("15000");
+    await page.locator('#finance-dialog [name="status"]').selectOption("active");
+    await page.locator("#finance-submit").click();
+    await page.getByText("15.000").first().waitFor();
+    await page.locator('[data-open="debt"]').click();
+    await page.locator('#finance-dialog [name="name"]').fill("Thẻ tín dụng");
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
+    await page.locator('#finance-dialog [name="principalOriginal"]').fill("12000000");
+    await page.locator('#finance-dialog [name="annualInterestPercent"]').fill("5");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Thẻ tín dụng").first().waitFor();
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator('.fin-nav [data-tab="goals"]').click();
+    assert(await page.getByText("15.000").count()>0,"Saved goal survives F5");
+    assert(await page.getByText("Thẻ tín dụng").count()>0,"Saved debt survives F5");
+    assert.equal(accounts[0].balance,"0","Debt and goal planning do not move wallet funds");
     await page.locator('.fin-nav [data-tab="budget"]').click();
     await page.locator('[data-period="year"]').click();
     await page.locator('h2').filter({hasText:"Tổng hợp năm"}).waitFor();
