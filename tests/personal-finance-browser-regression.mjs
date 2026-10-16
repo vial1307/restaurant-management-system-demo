@@ -215,8 +215,11 @@ try {
     await page.locator("h1").filter({hasText:"Bảng điều hành tài chính"}).waitFor();
     await page.locator(".fin-wb-metrics").waitFor();
     assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
+    const horizonRequest=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
+      String(resp.request().postDataJSON()?.scenario?.months)==="3",{timeout:10000});
     await page.locator('[data-wb-field="months"]').selectOption("3");
-    assert.equal(scenarioPreviews.at(-1).months,"3");
+    await horizonRequest;
+    assert.equal(String(scenarioPreviews.at(-1).months),"3");
     await page.locator('[data-wb-action="add-expense"]').click();
     await page.locator('[data-wb-row="0"][data-wb-prop="label"]').fill("Chi đi chơi");
     await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').fill("2000");
