@@ -5,12 +5,13 @@ import pg from "pg";
 const BASE=process.env.TEST_API_BASE||"http://127.0.0.1:8080";
 const monthly=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit"}).format(new Date()).slice(0,7);
 const date=monthly+"-25";
-async function request(path,{method="GET",body,cookie,write=true}={}){
+async function request(path,{method="GET",body,cookie,write=true,headers={}}={}){
   const response=await fetch(BASE+"/api"+path,{
     method,headers:{
       ...(body?{"content-type":"application/json"}:{}),
       ...(cookie?{cookie}:{}),
-      ...(write&&method!=="GET" ? {"x-finance-write":"1"}:{})
+      ...(write&&method!=="GET" ? {"x-finance-write":"1"}:{}),
+      ...headers
     },body:body?JSON.stringify(body):undefined
   });
   let data={};try{data=await response.json();}catch{}
@@ -20,6 +21,16 @@ async function login(name){
  const r=await request("/auth/login",{method:"POST",body:{username:name,password:"KitchenTest!123"}});
  assert.equal(r.status,200,"Login failed: "+name);return r.cookie;
 }
+const financeHostname="finance.82.47.180.185.nip.io";
+const otherOriginLogin=await request("/auth/login",{method:"POST",body:{username:"yangchuadmin",password:"KitchenTest!123"},headers:{Host:financeHostname}});
+assert.equal(otherOriginLogin.status,403,"Finance domain must reject all non-owner kitchen users");
+const secureOriginLogin=await fetch(BASE+"/api/auth/login",{
+ method:"POST",headers:{"Content-Type":"application/json",Host:financeHostname},
+ body:JSON.stringify({username:"managerfx",password:"KitchenTest!123"})
+});
+assert.equal(secureOriginLogin.status,200);
+assert.match(secureOriginLogin.headers.get("set-cookie")||"",/Secure/,"finance session must be secure");
+assert.match(secureOriginLogin.headers.get("set-cookie")||"",/SameSite=Strict/i,"finance cookie must be strict");
 const owner=await login("managerfx");
 const stranger=await login("yangchuadmin");
 assert.equal((await request("/finance/bootstrap")).status,401,"anonymous finance read must fail");
