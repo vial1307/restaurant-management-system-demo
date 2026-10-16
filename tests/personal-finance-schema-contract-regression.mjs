@@ -24,4 +24,30 @@ assert.doesNotMatch(overlay,/^\s*-\s*postgres_data:\/var\/lib\/postgresql\/data\
 assert.match(deploy,/pg_dump/);
 assert.match(deploy,/ON_ERROR_STOP=1/);
 assert.match(spec,/separate PostgreSQL database/);
-console.log("PASS personal finance isolated DB static contract");
+
+const caddy=read("vps/Caddyfile");
+const website=read("finance.html");
+const financeOrigin=caddy.split("finance.82.47.180.185.nip.io {")[1];
+assert.ok(financeOrigin,"missing dedicated HTTPS finance virtual host");
+assert.match(financeOrigin,/handle \/api\/finance\/\*/);
+assert.match(financeOrigin,/handle \/api\/auth\/login/);
+assert.doesNotMatch(financeOrigin,/handle \/api\/inventory/);
+assert.doesNotMatch(financeOrigin,/handle \/api\/admin/);
+assert.match(financeOrigin,/respond "Not Found" 404/);
+assert.match(financeOrigin,/Content-Security-Policy/);
+assert.match(website,/id="finance-login-form"/);
+const provision=read("vps/finance/provision.sh");
+const backup=read("vps/finance/backup-encrypted.sh");
+const deployScript=read("vps/scripts/deploy-api.sh");
+assert.match(provision,/FINANCE_OWNER_USER_ID/);
+assert.match(provision,/FINANCE_RESOURCE_PREFLIGHT_FAILED/);
+assert.match(provision,/docker compose.*finance_db/);
+assert.match(provision,/backup-encrypted\.sh/);
+assert.match(backup,/openssl enc -aes-256-cbc/);
+assert.match(backup,/finance_restore_rehearsal/);
+assert.match(deployScript,/vps\/finance\/provision\.sh/);
+assert.ok(deployScript.indexOf('echo "[11/12] Verifying production database integrity..."')<
+  deployScript.indexOf('bash "$REPO_DIR/vps/finance/provision.sh"'),
+  "finance provisioning must occur only after restaurant production health and DB integrity checks");
+
+console.log("PASS personal finance isolated DB, HTTPS origin, provisioning and backup contracts");
