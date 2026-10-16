@@ -185,6 +185,12 @@ try{
   const ledger=await db.query("SELECT count(*)::int as count FROM finance.entries WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   const aud=await db.query("SELECT count(*)::int as count FROM finance.audit_events WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   assert.equal(ledger.rows[0].count,10,"Original nine entries and one immutable debt payment entry");
+  const payments=await db.query("SELECT id FROM finance.debt_payments WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
+  assert.equal(payments.rows.length,1);
+  let immutable=false;
+  try{await db.query("UPDATE finance.debt_payments SET principal_paid=0 WHERE id=$1",[payments.rows[0].id]);}
+  catch(error){immutable=error.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
+  assert.equal(immutable,true,"Actual paid debt cannot be edited or deleted in place");
   assert.equal(aud.rows[0].count,26,"Original 20 audits plus 2 forecasts, update, reserve, repayment and deletion");
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
