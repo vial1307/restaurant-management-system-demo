@@ -21,6 +21,13 @@ assert.match(overlay,/finance_postgres_data:/);
 assert.match(overlay,/FINANCE_OWNER_USER_ID/);
 assert.match(overlay,/FINANCE_POSTGRES_PASSWORD/);
 assert.doesNotMatch(overlay,/^\s*-\s*postgres_data:\/var\/lib\/postgresql\/data\s*$/m);
+const planDdl=read("vps/finance/migrations/002_finance_cashflow_debt_fund.sql");
+for(const table of ["cashflow_items","debt_fund_allocations"]){
+ assert.ok(planDdl.includes("CREATE TABLE IF NOT EXISTS finance."+table+" ("),"missing finance planning table "+table);
+}
+assert.match(planDdl,/debt_payments_immutable/);
+assert.match(deploy,/\[0-9\]\[0-9\]\[0-9\]_\*\.sql/);
+assert.doesNotMatch(planDdl,/public\.inventory|public\.app_users|public\.business_state|\bTRUNCATE\b/i);
 assert.match(deploy,/pg_dump/);
 assert.match(deploy,/ON_ERROR_STOP=1/);
 assert.match(spec,/separate PostgreSQL database/);
