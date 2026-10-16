@@ -129,7 +129,7 @@ try{
   const ledger=await db.query("SELECT count(*)::int as count FROM finance.entries WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   const aud=await db.query("SELECT count(*)::int as count FROM finance.audit_events WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   assert.equal(ledger.rows[0].count,9,"eight transactional entries plus one opening balance");
-  assert.equal(aud.rows[0].count,6);
+  assert.equal(aud.rows[0].count,20,"All 14 configuration writes and six ledger events must be audited");
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
   catch(e){blocked=e.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
