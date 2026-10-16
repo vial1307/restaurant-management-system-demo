@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { requireUser } from "./auth.mjs";
 import { financeConfigured, getFinancePool, financeTransaction } from "./finance-db.mjs";
+import { registerFinancePlanningRoutes } from "./finance-planning-routes.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO=/^[A-Z]{3}$/;
@@ -330,4 +331,5 @@ export async function registerFinanceRoutes(app) {
       return reply.code(201).send({event:result});
     }catch(error){return databaseError(request,reply,error);}
   });
+  registerFinancePlanningRoutes(app,{authorized,fail,databaseError,id,money,positive,positiveRate,monthKey,isDate,trim,auditedWrite,financeTransaction,account,createEvent,entry,audit});
 }
