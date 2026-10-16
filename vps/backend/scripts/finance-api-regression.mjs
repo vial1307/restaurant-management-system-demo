@@ -83,7 +83,7 @@ await db.connect();
 try{
   const ledger=await db.query("SELECT count(*)::int as count FROM finance.entries WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   const aud=await db.query("SELECT count(*)::int as count FROM finance.audit_events WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
-  assert.equal(ledger.rows[0].count,7,"income + expense + 2 transfers + 3 FX entries + USD income = 8? check ledger");
+  assert.equal(ledger.rows[0].count,8,"one TWD income, one expense, two transfer entries, three FX entries and one USD income");
   assert.equal(aud.rows[0].count,5);
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
