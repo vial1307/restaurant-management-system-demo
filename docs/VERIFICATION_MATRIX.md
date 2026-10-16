@@ -28,6 +28,7 @@ Status vocabulary used by Super Admin:
 | Cross-browser/full-device | full-device regression | COVERED | runtime/UI changes before merge |
 | Production release/schema | deploy workflow health check | COVERED | runtime deploy |
 | Data integrity | `DATA_INTEGRITY_OK` | COVERED | runtime deploy |
+| Finance planning & debt-fund actual repayment | migration 002, finance API regression + browser `tests/personal-finance-browser-regression.mjs` | REQUIRED | planned/posted cash flow, monthly/year projections, debt reserve vs actual wallet payment, duplicate, unauthorized access, F5 and mobile overflow |
 | Personal Finance OS owner-scoped planning and ledger | `vps/backend/scripts/finance-api-regression.mjs`, `tests/personal-finance-browser-regression.mjs` | COVERED | owner-only goal/debt/FX plan mutations, retry/F5, simultaneous opposite transfer, or Finance UI changes |
 | Production UI smoke | deploy workflow production smoke | COVERED | runtime deploy |
 | Module production audit | Inventory/workforce production workflows where available | COVERED where defined | touched audited module |
