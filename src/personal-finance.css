@@ -17,3 +17,15 @@
 .fin-small-action{margin-left:10px;flex-shrink:0;min-height:42px}
 .fin-row .fin-small-action{font-size:12px;padding:9px 11px}
 @media(max-width:600px){.fin-row:has(> .fin-small-action){flex-wrap:wrap}.fin-row .fin-small-action{margin-left:auto}.fin-nav button{font-size:9px;min-width:0}.fin-nav{padding-inline:3px;gap:0}}
+
+/* Planning grid: readable cash-flow/debt funding controls across Desktop/Mobile. */
+.fin-cashflow-section{gap:15px}
+.fin-plan-kpis{margin:14px 0;grid-template-columns:repeat(3,minmax(0,1fr))}
+.fin-plan-kpis .fin-kpi-value{font-size:22px}
+.fin-cashflow-totals{border-top:1px solid var(--edge);padding-top:13px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fin-cashflow-totals>div{display:flex;flex-direction:column;min-width:0;gap:2px}
+.fin-cashflow-totals strong{font-size:21px;overflow-wrap:anywhere;color:var(--green)}
+.fin-cashflow-totals .fin-negative{color:var(--danger)}
+.fin-action-end{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;min-width:0}
+.fin-action-row>div:first-child{min-width:0;overflow-wrap:anywhere}
+@media(max-width:720px){.fin-plan-kpis{grid-template-columns:1fr;gap:8px}.fin-cashflow-totals{grid-template-columns:1fr}.fin-action-row{flex-wrap:wrap}.fin-action-end{margin-left:auto;max-width:100%}}
