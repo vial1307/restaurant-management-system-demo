@@ -60,11 +60,18 @@ async function entry(client,owner,eventId,accountRecord,amount,categoryId=null,t
     [eventId,owner,accountRecord.id,accountRecord.currency_code,amount,categoryId,toTwdRate]
   );
 }
-async function audit(client,owner,action,entityId,metadata={}) {
+async function audit(client,owner,action,entityId,metadata={},entityType="finance_event") {
   await client.query(
-    "INSERT INTO finance.audit_events(owner_user_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$1,$2,'finance_event',$3,$4::jsonb)",
-    [owner,action,entityId,JSON.stringify(metadata)]
+    "INSERT INTO finance.audit_events(owner_user_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$1,$2,$3,$4,$5::jsonb)",
+    [owner,action,entityType,entityId,JSON.stringify(metadata)]
   );
+}
+async function auditedWrite(ctx,action,entityType,writer) {
+  return financeTransaction(async client=>{
+    const saved=await writer(client);
+    if(saved?.id)await audit(client,ctx.owner,action,saved.id,{},entityType);
+    return saved;
+  });
 }
 export async function registerFinanceRoutes(app) {
   app.get("/api/finance/access",async(request,reply)=>{
@@ -127,9 +134,12 @@ export async function registerFinanceRoutes(app) {
     const {name,kind,currencyCode}=request.body||{};
     if(!trim(name)||!["cash","bank","ewallet","other"].includes(kind)||!ISO.test(String(currencyCode||"")))return fail(reply,"INVALID_ACCOUNT");
     try{
-      const {rows}=await ctx.pool.query("INSERT INTO finance.accounts(owner_user_id,name,kind,currency_code) SELECT $1,$2,$3,code FROM finance.currencies WHERE code=$4 AND enabled=true RETURNING id,name,kind,currency_code",[ctx.owner,trim(name,120),kind,currencyCode]);
-      if(!rows[0])return fail(reply,"UNSUPPORTED_CURRENCY");
-      return reply.code(201).send({account:rows[0]});
+      const saved=await auditedWrite(ctx,"finance.account.create","finance_account",async db=>{
+        const {rows}=await db.query("INSERT INTO finance.accounts(owner_user_id,name,kind,currency_code) SELECT $1,$2,$3,code FROM finance.currencies WHERE code=$4 AND enabled=true RETURNING id,name,kind,currency_code",[ctx.owner,trim(name,120),kind,currencyCode]);
+        return rows[0];
+      });
+      if(!saved)return fail(reply,"UNSUPPORTED_CURRENCY");
+      return reply.code(201).send({account:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/categories",async(request,reply)=>{
@@ -137,8 +147,11 @@ export async function registerFinanceRoutes(app) {
     const {name,kind}=request.body||{};
     if(!trim(name)||!["income","expense"].includes(kind))return fail(reply,"INVALID_CATEGORY");
     try{
-      const {rows}=await ctx.pool.query("INSERT INTO finance.categories(owner_user_id,name,kind) VALUES($1,$2,$3) RETURNING id,name,kind",[ctx.owner,trim(name,100),kind]);
-      return reply.code(201).send({category:rows[0]});
+      const saved=await auditedWrite(ctx,"finance.category.create","finance_category",async db=>{
+        const {rows}=await db.query("INSERT INTO finance.categories(owner_user_id,name,kind) VALUES($1,$2,$3) RETURNING id,name,kind",[ctx.owner,trim(name,100),kind]);
+        return rows[0];
+      });
+      return reply.code(201).send({category:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
   app.put("/api/finance/budgets",async(request,reply)=>{
@@ -146,12 +159,15 @@ export async function registerFinanceRoutes(app) {
     const {categoryId,month,amountTwd}=request.body||{};
     if(!id(categoryId)||!monthKey(month)||!money(amountTwd,0))return fail(reply,"INVALID_BUDGET");
     try{
-      const {rows}=await ctx.pool.query(
+      const saved=await auditedWrite(ctx,"finance.budget.save","finance_budget",async db=>{
+        const {rows}=await db.query(
         "INSERT INTO finance.monthly_budgets(owner_user_id,category_id,month_date,amount_twd) SELECT $1,c.id,$3::date,$4::numeric FROM finance.categories c WHERE c.id=$2 AND c.owner_user_id=$1 AND c.kind='expense' ON CONFLICT(owner_user_id,category_id,month_date) DO UPDATE SET amount_twd=EXCLUDED.amount_twd,updated_at=now() RETURNING id,month_date::text,amount_twd::text",
         [ctx.owner,categoryId,month+"-01",amountTwd]
       );
-      if(!rows[0])return fail(reply,"CATEGORY_NOT_FOUND",404);
-      return {budget:rows[0]};
+        return rows[0];
+      });
+      if(!saved)return fail(reply,"CATEGORY_NOT_FOUND",404);
+      return {budget:saved};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/fx-plans",async(request,reply)=>{
@@ -162,11 +178,14 @@ export async function registerFinanceRoutes(app) {
       const from=await ctx.pool.query("SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[b.fromCurrency]);
       const target=await ctx.pool.query("SELECT code FROM finance.currencies WHERE code=$1 AND enabled=true",[b.toCurrency]);
       if(!from.rows[0]||!target.rows[0]||!positive(b.sourceAmount,Number(from.rows[0].minor_units))||!money(b.expectedFee||"0",Number(from.rows[0].minor_units)))return fail(reply,"INVALID_FX_AMOUNT");
-      const {rows}=await ctx.pool.query(
+      const saved=await auditedWrite(ctx,"finance.fx_plan.create","finance_fx_plan",async db=>{
+        const {rows}=await db.query(
         "INSERT INTO finance.fx_plans(owner_user_id,plan_date,plan_kind,from_currency,to_currency,source_amount,expected_rate,expected_fee,memo) VALUES($1,$2,$3,$4,$5,$6::numeric,NULLIF($7,'')::numeric,$8::numeric,$9) RETURNING id,plan_date::text,plan_kind,from_currency,to_currency,source_amount::text,expected_rate::text,expected_fee::text,status",
         [ctx.owner,when,b.planKind,b.fromCurrency,b.toCurrency,b.sourceAmount,b.expectedRate||"",b.expectedFee||"0",trim(b.memo,250)]
       );
-      return reply.code(201).send({plan:rows[0]});
+        return rows[0];
+      });
+      return reply.code(201).send({plan:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
 
@@ -178,11 +197,14 @@ export async function registerFinanceRoutes(app) {
     try{
       const c=await currency(ctx.pool,b.currencyCode);
       if(!c||!positive(b.targetAmount,Number(c.minor_units)))return fail(reply,"INVALID_GOAL_AMOUNT");
-      const {rows}=await ctx.pool.query(
+      const saved=await auditedWrite(ctx,"finance.goal.create","finance_goal",async db=>{
+        const {rows}=await db.query(
         "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date) VALUES($1,$2,$3,$4::numeric,$5::date) RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status",
         [ctx.owner,trim(b.name,160),b.currencyCode,b.targetAmount,b.targetDate||null]
       );
-      return reply.code(201).send({goal:rows[0]});
+        return rows[0];
+      });
+      return reply.code(201).send({goal:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
   app.put("/api/finance/goals/:goalId",async(request,reply)=>{
@@ -197,11 +219,14 @@ export async function registerFinanceRoutes(app) {
       );
       if(!goal.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
       if(!money(b.currentAmount,Number(goal.rows[0].minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
-      const {rows}=await ctx.pool.query(
+      const saved=await auditedWrite(ctx,"finance.goal.update","finance_goal",async db=>{
+        const {rows}=await db.query(
         "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,current_amount::text,status",
         [goalId,ctx.owner,b.currentAmount,b.status]
       );
-      return {goal:rows[0]};
+        return rows[0];
+      });
+      return {goal:saved};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/debts",async(request,reply)=>{
@@ -215,11 +240,14 @@ export async function registerFinanceRoutes(app) {
     try {
       const c=await currency(ctx.pool,b.currencyCode);
       if(!c||!positive(b.principalOriginal,Number(c.minor_units)))return fail(reply,"INVALID_DEBT_AMOUNT");
-      const {rows}=await ctx.pool.query(
+      const saved=await auditedWrite(ctx,"finance.debt.create","finance_debt",async db=>{
+        const {rows}=await db.query(
         "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
         [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,b.annualInterestPercent||"0",b.dueDate||null]
       );
-      return reply.code(201).send({debt:rows[0]});
+        return rows[0];
+      });
+      return reply.code(201).send({debt:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/fx-plans/:planId/cancel",async(request,reply)=>{
@@ -227,12 +255,15 @@ export async function registerFinanceRoutes(app) {
     const planId=request.params?.planId;
     if(!id(planId))return fail(reply,"INVALID_PLAN_ID");
     try{
-      const {rows}=await ctx.pool.query(
+      const saved=await auditedWrite(ctx,"finance.fx_plan.cancel","finance_fx_plan",async db=>{
+        const {rows}=await db.query(
         "UPDATE finance.fx_plans SET status='cancelled' WHERE id=$1 AND owner_user_id=$2 AND status='planned' RETURNING id,status",
         [planId,ctx.owner]
       );
-      if(!rows[0])return fail(reply,"PLAN_NOT_FOUND_OR_NOT_PLANNED",404);
-      return {plan:rows[0]};
+        return rows[0];
+      });
+      if(!saved)return fail(reply,"PLAN_NOT_FOUND_OR_NOT_PLANNED",404);
+      return {plan:saved};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/transactions",async(request,reply)=>{
