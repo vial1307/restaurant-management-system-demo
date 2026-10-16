@@ -1,3 +1,4 @@
+import {buildCycleAlerts} from "./finance-paycycle-alerts.mjs";
 // Pure Finance OS forward cash planner. Amounts use signed BigInt micro-TWD,
 // so any threshold comparison is exact (never IEEE754 currency math).
 const MICRO=1000000n;
@@ -121,7 +122,9 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     detail:"Với dữ liệu đã nhập, số dư TWD dự kiến không xuống dưới mức dự trữ. Kiểm tra lại lịch và chi phí chưa nhập trước khi quyết định."});
   recommendations.push({kind:"reconcile",title:"Đối chiếu lịch trước khi xoay vòng",
     detail:"Khoản dự kiến có thể đã thu/chi nhưng chưa liên kết với chứng từ. Không vay thêm, chuyển ví hoặc hoãn thanh toán chỉ dựa trên dự báo này."});
+  const cyclePlan=buildCycleAlerts({asOf,through,startingBalanceTwd:twdText(opening),bufferTwd:twdText(buffer),entries});
   return {
+    ...cyclePlan,
     asOf,through,days,bufferTwd:twdText(buffer),startingBalanceTwd:twdText(opening),
     projectedEndingTwd:twdText(balance),minimumBalanceTwd:twdText(minimum),minimumDate,
     earliestRisk,totals:Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,twdText(v)])),
