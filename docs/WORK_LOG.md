@@ -1,3 +1,9 @@
+## 2026-10-17 — Finance OS forward-looking liquidity adviser (IN PROGRESS)
+
+- Scope private Finance read-only advice derived from posted TWD wallet balances and monthly income, expense, debt/goal allocations plus TWD external remittance plans. No additions to Kitchen DB, no ledger writes, no speculative FX conversion.
+- 30/60/90-day chronological forecast, selectable TWD reserve buffer, dated shortfalls and safe actions to reconsider allocation timing and discretionary spending. Dates without an explicit due day clearly identified as estimates; paid/posted income not counted twice.
+- Tests before release: same-day ordering, actual debt repayment deducted from planned outstanding allocation, no future cash inferred from foreign wallets, missing schedules/warnings, 401/403 owner-only API and Desktop/Mobile browser no horizontal overflow. CI/production pending.
+
 ## 2026-10-17 — IN PROGRESS: synchronize Finance monthly Plan and Goal/Debt projections
 
 - Confirmed gap: monthly/yearly cashflow subtracts debt_fund_allocations but not a goal-linked monthly allocation; goal progress is manual and creating a goal does not affect forecast. Plan UI does not show goal/debt unallocated status or editable linked allocation breakdown. Existing debt allocation is month-scoped in Finance DB 002.
