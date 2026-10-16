@@ -261,7 +261,7 @@ try {
     await page.locator('[data-wb-action="preview"]').click();
     await changed;
     assert(scenarioPreviews.some(x=>x.rows.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000")));
-    await page.locator('[data-wb-action="loan"]').click();
+    await page.locator('.fin-wb-add [data-wb-action="loan"]').click();
     assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
       "Borrowing must create a pair of borrow and dated repayment, never just free cash");
     await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').fill("4000");
