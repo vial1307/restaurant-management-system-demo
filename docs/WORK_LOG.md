@@ -1,3 +1,11 @@
+## 2026-10-16 — Finance OS Super Admin standards audit (IN PROGRESS)
+
+- Opened PR #245 from main `afed444`; scoped Finance only, no restaurant inventory/master/role changes.
+- Identified opposite-direction row lock deadlock risk, transaction duplicate retry after ambiguous save/read failure, missing goals/debt planning UI+API, missing FX-plan cancellation and missing audit on non-ledger Finance writes.
+- Added owner-scoped APIs and UI; manual goal/debt fields do not change account balances or issue bank transfers; FX plans remain unposted.
+- Finance planning/configuration mutations now write an audit record within the same PostgreSQL transaction. Added regression checks for owner denial, F5 persistence, stable idempotency key and concurrent transfers.
+- Release decision pending exact-head CI/Staging/production validation.
+
 ## FIXED — Finance OS blank white screen on website root (2026-10-16)
 
 - **Public URL fixed and verified:** https://finance.82.47.180.185.nip.io/ now serves complete Finance OS login HTML rather than empty HTTP 200 (zero bytes). Direct `/finance.html` also works.

@@ -54,6 +54,23 @@ const rent=(await post("/categories",{name:"Nhà ở",kind:"expense"})).category
 const food=(await post("/categories",{name:"Ăn uống",kind:"expense"})).category;
 const budget=await request("/finance/budgets",{method:"PUT",cookie:owner,body:{categoryId:rent.id,month:monthly,amountTwd:"6000"}});
 assert.equal(budget.status,200,JSON.stringify(budget.data));
+const goal=(await post("/goals",{name:"Quỹ học phí",currencyCode:"TWD",targetAmount:"50000",targetDate:monthly+"-27"})).goal;
+assert.equal(goal.current_amount,"0.000000");
+const progress=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:owner,body:{currentAmount:"5000",status:"active"}});
+assert.equal(progress.status,200,JSON.stringify(progress.data));
+assert.equal(Number(progress.data.goal.current_amount),5000);
+const invalidGoal=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:owner,body:{currentAmount:"5000.50",status:"active"}});
+assert.equal(invalidGoal.status,400,"TWD manual goal progress cannot silently round");
+const unauthorizedGoal=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:stranger,body:{currentAmount:"10",status:"achieved"}});
+assert.equal(unauthorizedGoal.status,403,"Super Admin may not edit private goals");
+const debt=(await post("/debts",{name:"Thẻ tín dụng",currencyCode:"VND",principalOriginal:"12000000",annualInterestPercent:"12.5",dueDate:monthly+"-26"})).debt;
+assert.equal(Number(debt.annual_interest_rate),0.125);
+let planning=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(planning.data.goals.length,1);
+assert.equal(Number(planning.data.goals[0].current_amount),5000);
+assert.equal(planning.data.debts.length,1);
+assert.equal(Number(planning.data.debts[0].outstanding_amount),12000000);
+assert.equal(Number(planning.data.accounts.find(a=>a.id===bank.id).balance),0,"Goals and debts must not mint posted money");
 const key=()=>crypto.randomUUID();
 const incomeKey=key();
 await post("/transactions",{idempotencyKey:incomeKey,kind:"income",accountId:bank.id,categoryId:salary.id,amount:"58000",description:"Lương tháng"});
@@ -87,6 +104,16 @@ assert.equal(Number(snap.data.accounts.find(a=>a.id===vnd.id).balance),7850000);
 assert.equal(Number(snap.data.accounts.find(a=>a.id===usd.id).balance),10.5);
 assert.equal(Number(snap.data.accounts.find(a=>a.id===jpy.id).balance),12500);
 assert.equal(snap.data.plans.length,1);
+const cancelledPlan=await request("/finance/fx-plans/"+fxPlan.plan.id+"/cancel",{method:"POST",cookie:owner,body:{}});
+assert.equal(cancelledPlan.status,200);
+assert.equal(cancelledPlan.data.plan.status,"cancelled");
+const cancelAgain=await request("/finance/fx-plans/"+fxPlan.plan.id+"/cancel",{method:"POST",cookie:owner,body:{}});
+assert.equal(cancelAgain.status,404,"Plan cancellation must not run twice");
+const unauthorizedCancel=await request("/finance/fx-plans/"+fxPlan.plan.id+"/cancel",{method:"POST",cookie:stranger,body:{}});
+assert.equal(unauthorizedCancel.status,403);
+const reloaded=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(reloaded.data.plans.find(x=>x.id===fxPlan.plan.id).status,"cancelled","Cancellation must persist after API reload");
+assert.equal(Number(reloaded.data.accounts.find(a=>a.id===bank.id).balance),40900,"Plan cancellation does not move money");
 assert.equal(snap.data.currencies.length,6);
 overview=await request("/finance/overview?month="+monthly,{cookie:owner});
 assert.equal(Number(overview.data.flow.find(x=>x.kind==="expense").total_twd),6000,"FX fees and wallet transfers must not become consumption expense");
@@ -102,10 +129,20 @@ try{
   const ledger=await db.query("SELECT count(*)::int as count FROM finance.entries WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   const aud=await db.query("SELECT count(*)::int as count FROM finance.audit_events WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   assert.equal(ledger.rows[0].count,9,"eight transactional entries plus one opening balance");
-  assert.equal(aud.rows[0].count,6);
+  assert.equal(aud.rows[0].count,20,"All 14 configuration writes and six ledger events must be audited");
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
   catch(e){blocked=e.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
   assert.equal(blocked,true,"posted event must be immutable");
 }finally{await db.end();}
-console.log("PASS authenticated owner-only private finance DB, idempotency, balances, FX, budgets and annual summaries");
+// Concurrent opposite-direction transfers must finish without lock-order deadlocks.
+const opposite=await Promise.all([
+  request("/finance/transactions",{method:"POST",cookie:owner,body:{idempotencyKey:key(),kind:"transfer",accountId:bank.id,targetAccountId:cash.id,amount:"1"}}),
+  request("/finance/transactions",{method:"POST",cookie:owner,body:{idempotencyKey:key(),kind:"transfer",accountId:cash.id,targetAccountId:bank.id,amount:"1"}})
+]);
+assert.deepEqual(opposite.map(x=>x.status),[201,201],"Opposite direction transfers should not deadlock");
+const afterConcurrency=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(afterConcurrency.data.accounts.find(a=>a.id===bank.id).balance),40900);
+assert.equal(Number(afterConcurrency.data.accounts.find(a=>a.id===cash.id).balance),1000);
+console.log("PASS authenticated finance goals, debts, cancellation, cross-owner RBAC, idempotency and deadlock-safe ledger");
+

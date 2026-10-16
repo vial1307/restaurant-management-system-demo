@@ -1,3 +1,12 @@
+## ACTIVE — Finance OS reliability and unfinished planning modules (2026-10-16)
+
+ACTIVE_PR: #245
+- PR: https://github.com/vial1307/restaurant-management-system-demo/pull/245. Branch: `fix/finance-superadmin-contract-audit-20261016`, based on main `afed444`. Baseline Finance production: https://finance.82.47.180.185.nip.io/ (root white-screen fix already verified).
+- Goal: meet `docs/ENGINEERING_CONTRACT.md` and `docs/VERIFICATION_MATRIX.md` without touching restaurant inventory/business tables.
+- Implementing: fixed ordered account locks, per-form idempotency and save-read failure semantics, owner-only goals/debts, manual goal progress, FX-plan cancellation, atomic `finance.audit_events`, five-tab responsive UI.
+- Tests: finance DB API RBAC and audited writes, transfer concurrency, mobile/desktop forms, persistence after F5, Super Admin isolation, Kitchen regression/Staging. Owner login remains explicitly allowlisted Kitchen identity. No official live FX feed or bank transfer.
+- **STATUS: CI / PRODUCTION NOT YET VERIFIED FOR PR #245**. Do not claim live new features before exact-head gates, merge, deploy and production smoke.
+
 ## FIXED — Finance OS blank white screen on website root (2026-10-16)
 
 - **Public URL fixed and verified:** https://finance.82.47.180.185.nip.io/ now serves complete Finance OS login HTML rather than empty HTTP 200 (zero bytes). Direct `/finance.html` also works.
