@@ -278,6 +278,40 @@ function showForm(kind,selectedId=null){
    input("annualInterestPercent","Lãi suất theo năm (%)","text","0")+
    input("dueDate","Ngày đến hạn (không bắt buộc)","date","","",false)+
    note("Khoản nợ chỉ dùng để lập kế hoạch; chưa thực hiện ghi nhận trả nợ và không thay đổi số dư tài khoản.");
+
+ }else if(["cashIncome","cashExpense","cashEdit"].includes(kind)){
+  const existing=kind==="cashEdit"?(state.cashflow?.items||[]).find(x=>x.id===selectedId):null;
+  if(kind==="cashEdit"&&!existing)return;
+  if(existing)form.dataset.cashflowId=existing.id;
+  title=existing?"Sửa dòng tiền dự kiến":kind==="cashIncome"?"Thêm thu nhập dự kiến":"Thêm chi tiêu dự kiến";
+  fields=selectField("kind","Loại dự kiến",[{value:"income",label:"Thu nhập"},{value:"expense",label:"Chi tiêu"}])+
+   input("label","Tên khoản thu/chi","text",existing?.label||"","Lương / tiền thuê nhà")+
+   input("amountTwd","Số tiền TWD","text",existing?.amount_twd||"","10000")+
+   input("dueDay","Ngày trong tháng (tùy chọn)","number",existing?.due_day||"","1–31",false)+
+   input("memo","Ghi chú","text",existing?.memo||"","",false)+
+   note("Đây là dự kiến, chưa ghi giao dịch tiền thật. Tránh nhập một khoản trùng lặp nhiều lần.");
+ }else if(kind==="debtFund"){
+  const debt=(state.data.debts||[]).find(d=>d.id===selectedId);if(!debt)return;
+  form.dataset.debtId=debt.id;
+  const existing=(state.cashflow?.debtFunds||[]).find(f=>f.debt_id===debt.id);
+  title="Quỹ trả nợ · "+debt.name;
+  fields=input("plannedAmount","Dự kiến dành ("+debt.currency_code+")","text",existing?.planned_amount||"0")+
+   input("earmarkedAmount","Đánh dấu đã dành ("+debt.currency_code+")","text",existing?.earmarked_amount||"0")+
+   (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+debt.currency_code+" = ? TWD","text",existing?.fx_rate_to_twd||"","Bắt buộc"))+
+   note("Đánh dấu đã dành không chuyển tiền giữa các ví, không thanh toán khoản nợ, không trừ số dư.");
+ }else if(kind==="debtPayment"){
+  const debt=(state.data.debts||[]).find(d=>d.id===selectedId);if(!debt)return;
+  form.dataset.debtId=debt.id;
+  title="Ghi nhận trả nợ thực tế · "+debt.name;
+  const sameAccounts=accounts.filter(a=>a.currency_code===debt.currency_code);
+  fields=selectField("accountId","Ví thanh toán ("+debt.currency_code+")",choices(sameAccounts))+
+   input("paymentDate","Ngày đã trả","date",date)+
+   input("principalPaid","Tiền gốc đã trả","text","","0")+
+   input("interestPaid","Tiền lãi","text","0")+
+   input("feePaid","Phí trả nợ","text","0")+
+   (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá thực tế: 1 "+debt.currency_code+" = ? TWD","text","","Bắt buộc"))+
+   input("memo","Ghi chú","text","","",false)+
+   note("LƯU Ý: Chỉ lưu khi đã thực trả. Tổng gốc + lãi + phí bị trừ khỏi ví đã chọn và khoản gốc làm giảm dư nợ. Không tự chuyển tiền qua ngân hàng.");
  }else if(kind==="income"||kind==="expense"){
   title=kind==="income"?"Ghi nhận thu nhập":"Ghi nhận chi tiêu";
   fields=selectField("accountId","Tài khoản",allAccounts)+selectField("categoryId","Danh mục",categoryChoices(kind))+
@@ -301,9 +335,12 @@ function showForm(kind,selectedId=null){
  dialog.dataset.formKind=kind;
  form.dataset.idempotencyKey=crypto.randomUUID();
  if(kind!=="goalProgress")delete form.dataset.goalId;
+ if(kind!=="cashEdit")delete form.dataset.cashflowId;
+ if(!["debtFund","debtPayment"].includes(kind))delete form.dataset.debtId;
  document.querySelector("#finance-dialog-title").textContent=title;
  fieldRoot.innerHTML=fields;form.reset();
  if(kind==="goalProgress")fieldRoot.querySelector('[name="status"]').value=state.data.goals.find(g=>g.id===selectedId)?.status||"active";
+ if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="kind"]').value=kind==="cashIncome"?"income":kind==="cashExpense"?"expense":(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.kind||"expense";
  // Restore prepopulated values after reset; reset defaults are retained by browser.
  dialog.showModal();
  fieldRoot.querySelector("input,select")?.focus();
@@ -316,10 +353,15 @@ async function submitForm(event){
  const path={
   account:"/accounts",category:"/categories",budget:"/budgets",fxPlan:"/fx-plans",
   goal:"/goals",debt:"/debts",goalProgress:"/goals/"+form.dataset.goalId,
+  cashIncome:"/cashflow/items",cashExpense:"/cashflow/items",cashEdit:"/cashflow/items/"+form.dataset.cashflowId,
+  debtFund:"/debt-funds",debtPayment:"/debt-payments",
   income:"/transactions",expense:"/transactions",transfer:"/transactions",fxPost:"/transactions",opening:"/transactions"
  }[kind];
  if(!path)return;
  let body=data;
+ if(["cashIncome","cashExpense","cashEdit"].includes(kind))body={...data,month:state.month};
+ if(kind==="debtFund")body={...data,month:state.month,debtId:form.dataset.debtId};
+ if(kind==="debtPayment")body={...data,debtId:form.dataset.debtId,idempotencyKey:form.dataset.idempotencyKey};
  if(["income","expense","transfer","fxPost","opening"].includes(kind)){
    body={...data,kind:kind==="fxPost"?"fx":kind==="opening"?"adjustment":kind,idempotencyKey:form.dataset.idempotencyKey,occurredAt:new Date().toISOString()};
    if(!data.toTwdRate)delete body.toTwdRate;
@@ -328,7 +370,7 @@ async function submitForm(event){
  const submit=document.querySelector("#finance-submit");submit.disabled=true;submit.textContent="Đang lưu...";
  let saved=false;
  try{
-   await api(path,body,["budget","goalProgress"].includes(kind)?"PUT":"POST");
+   await api(path,body,["budget","goalProgress","cashEdit","debtFund"].includes(kind)?"PUT":"POST");
    saved=true;
    dialog.close();
    try{
@@ -383,6 +425,23 @@ root.addEventListener("click",async event=>{
    finally{state.busy=false;cancelButton.disabled=false;}
    return;
  }
+ const cashEdit=event.target.closest("[data-edit-cashflow]");
+ if(cashEdit){showForm("cashEdit",cashEdit.dataset.editCashflow);return;}
+ const fund=event.target.closest("[data-fund-debt]");
+ if(fund){showForm("debtFund",fund.dataset.fundDebt);return;}
+ const payment=event.target.closest("[data-pay-debt]");
+ if(payment){showForm("debtPayment",payment.dataset.payDebt);return;}
+ const del=event.target.closest("[data-delete-cashflow]");
+ if(del){
+   if(state.busy||!window.confirm("Xóa khoản dự kiến? Không ảnh hưởng giao dịch đã ghi sổ."))return;
+   state.busy=true;del.disabled=true;
+   try{
+     await api("/cashflow/items/"+encodeURIComponent(del.dataset.deleteCashflow),{},"DELETE");
+     await refresh();flash("Đã xóa khoản dự kiến và tải lại từ Database.");
+   }catch(error){flash(failure(error));}
+   finally{state.busy=false;del.disabled=false;}
+   return;
+ }
  const period=event.target.closest("[data-period]");if(period){
    state.period=period.dataset.period;render();
    if(state.period==="year")loadYear();
@@ -397,8 +456,9 @@ root.addEventListener("change",async event=>{
 async function loadYear(){
  try{
   const year=Number(state.month.slice(0,4));
-  const result=await api("/year?year="+year);
-  state.year=result;if(state.period==="year"&&state.tab==="budget")render();
+  const [result,cashflow]=await Promise.all([api("/year?year="+year),api("/cashflow/year?year="+year)]);
+  state.year=result;state.yearCashflow=cashflow;
+  if(state.period==="year"&&state.tab==="budget")render();
  }catch(error){flash(failure(error));}
 }
 (async()=>{
