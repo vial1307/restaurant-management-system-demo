@@ -69,11 +69,13 @@ export function validateScenario(input){
 }
 export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[],goalFunds=[],debtPayments=[],fxPlans=[],debts=[]}){
  const events=[],warnings=[];
+ let pastDueCount=0;
  const startingBalance=accounts.filter(a=>a.currency_code==="TWD").reduce((sum,a)=>sum+units(a.balance),0n);
  const foreign=accounts.filter(a=>a.currency_code!=="TWD");
  if(foreign.length)warnings.push("Ví ngoại tệ chưa quy đổi sang thanh khoản TWD; chỉ đánh giá tiền TWD thực có.");
  const include=(event)=>{
-   if(event.date<asOf||event.date>through)return;
+   if(event.date<asOf){pastDueCount++;return;}
+   if(event.date>through)return;
    if(units(event.amountTwd)===0n)return;
    events.push(event);
  };
@@ -114,6 +116,7 @@ export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[]
    include({date:p.plan_date,kind:"expense",label:"Chuyển ra ngoài (TWD)",
      amountTwd:plain(-(units(p.source_amount)+units(p.expected_fee||"0"))),source:"remittance",estimatedDate:false});
  }
+ if(pastDueCount)warnings.push("Có "+pastDueCount+" dòng dự kiến đã qua ngày và chưa được đối soát với giao dịch thực tế. Kiểm tra trạng thái thu/trả để tránh bỏ sót nợ quá hạn.");
  if(debts.some(d=>d.currency_code!=="TWD"))warnings.push("Công nợ ngoại tệ chưa quy đổi, không dùng dư nợ VND/USD để tính tổng nợ TWD.");
  if(debts.some(d=>!debtFunds.some(f=>f.debt_id===d.id)))warnings.push("Có công nợ chưa lập lịch trả góp theo từng tháng; dự báo có thể thiếu nghĩa vụ.");
  return {startingBalanceTwd:plain(startingBalance),events,warnings:[...new Set(warnings)],
@@ -191,9 +194,10 @@ function timelineFor({asOf,through,startingBalanceTwd,baselineEvents,settings,ad
  const months=[];
  let carry=units(startingBalanceTwd);
  for(const s of monthly.values()){
+   const opening=carry;
    if(s.minimum===null)s.end=carry;
    else carry=s.end;
-   const min=s.minimum===null?s.end:s.minimum;
+   const min=s.minimum===null?s.end:(s.minimum<opening?s.minimum:opening);
    months.push({month:s.month,incomeTwd:plain(s.income),costTwd:plain(s.essential),
     goalTwd:plain(s.goals),borrowedTwd:plain(s.borrowed),repaymentTwd:plain(s.repayment),
     endingTwd:plain(s.end),minimumTwd:plain(min),
