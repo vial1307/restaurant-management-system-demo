@@ -83,6 +83,14 @@ visudo -cf /etc/sudoers.d/kitchen-os-staging-deploy >/dev/null
 echo "[2b/12] Installing private AgentMemory runtime..."
 bash "${REPO_DIR}/vps/scripts/install-agentmemory.sh"
 
+echo "[2c/12] Installing allowlisted private Finance OS activator..."
+install -o root -g root -m 0755 "$REPO_DIR/vps/finance/provision.sh" /usr/local/sbin/kitchen-finance-activate
+cat > /etc/sudoers.d/kitchen-finance-activate <<'EOF'
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/kitchen-finance-activate *
+EOF
+chmod 0440 /etc/sudoers.d/kitchen-finance-activate
+visudo -cf /etc/sudoers.d/kitchen-finance-activate >/dev/null
+
 echo "[3/12] Installing filtered host metrics snapshot..."
 bash "${REPO_DIR}/vps/scripts/install-host-metrics-timer.sh"
 
