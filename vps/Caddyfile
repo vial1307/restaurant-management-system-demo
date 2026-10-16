@@ -42,6 +42,8 @@
 }
 
 :80 {
+  @financeHttp host finance.82.47.180.185.nip.io
+  redir @financeHttp https://finance.82.47.180.185.nip.io{uri} 308
   import kitchen_site
 }
 
