@@ -1,14 +1,5 @@
 name: Finance Production Browser Diagnosis
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "tests/finance-production-browser-diagnostic.mjs"
-      - ".github/workflows/finance-production-browser-diagnostic.yml"
-      - "finance.html"
-      - "src/personal-finance.js"
-      - "src/personal-finance.css"
-      - "vps/Caddyfile"
   workflow_dispatch:
 permissions:
   contents: read
