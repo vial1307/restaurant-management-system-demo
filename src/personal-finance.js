@@ -377,9 +377,47 @@ function workbenchRow(row,index){
    '<td><input data-wb-row="'+index+'" data-wb-prop="amountTwd" aria-label="Số tiền dòng '+(index+1)+'" inputmode="numeric" value="'+esc(row.amountTwd)+'"></td>'+
    '<td><button type="button" class="fin-btn secondary fin-wb-remove" data-wb-remove="'+index+'" aria-label="Xóa dòng '+(index+1)+'">×</button></td></tr>';
 }
+
+function renderWorkbenchMethodology(){
+ const blocks=[
+  ["01","Dòng tiền thực và giả định",
+    "Bắt đầu từ số dư ví TWD đã ghi sổ trong Finance Database. Cộng các khoản thu có ngày nhận; trừ chi phí, quỹ nợ, quỹ mục tiêu và tiền chuyển ra ngoài theo ngày dự kiến. Dòng mô phỏng được cộng/trừ riêng, không biến thành tiền thật.",
+    "Đang tính trong bản mô phỏng"],
+  ["02","Thanh khoản trước tổng thu nhập",
+    "Tìm số dư thấp nhất và ngày đầu tiên xuống dưới ngưỡng dự trữ. Nếu khoản chi đến hạn trước ngày nhận lương, tăng lương vào ngày sau đó không được coi là giải pháp cho khoản thiếu trước đó.",
+    "Đang tính trong bản mô phỏng"],
+  ["03","Ưu tiên bảo vệ cuộc sống và nợ bắt buộc",
+    "Về nguyên tắc: chi phí thiết yếu → nghĩa vụ đúng hạn → quỹ dự trữ → trả nợ thêm → mục tiêu tùy chọn. Hiện tại công cụ kiểm tra lịch và cảnh báo; chưa tự xác định hay tự dời khoản nợ bắt buộc khi thiếu thông tin kỳ hạn.",
+    "Quy tắc tư vấn; chưa tự tối ưu"],
+  ["04","Tiền dư và chiến lược trả nợ",
+    "Chỉ xem xét trả nợ thêm bằng phần dư vượt dự trữ trước kỳ thu tiếp theo, không lấy toàn bộ số dư cuối tháng. Nếu đủ dữ liệu lãi suất, gợi ý xem xét khoản nợ TWD có lãi suất cao trước; chưa tính bảng trả góp và lãi/phí phát sinh thực tế.",
+    "Giới hạn thận trọng; cần đối chiếu"],
+  ["05","Xoay vòng thiếu hụt và vay ngắn hạn",
+    "So sánh ngày cần tiền với ngày có tiền về. Một khoản vay thử phải có đúng dòng nhận tiền và dòng hoàn trả, bao gồm chi phí vay. Mốc hoàn gốc do công cụ đề xuất chỉ là phép thử không tính phí, không phải cam kết vay hay bảo đảm trả được.",
+    "Mô phỏng có điều kiện"],
+  ["06","Mục tiêu và độ trễ",
+    "Số tiền còn cần tích lũy được chia theo các kỳ thu nhập giả định trước hạn mục tiêu. Nếu tháng cao điểm không đủ tiền, bạn phải điều chỉnh lịch phân bổ; hệ thống chưa tự chuyển tiền góp sang tháng nhẹ hơn.",
+    "Chia kỳ đều; chưa tối ưu tháng cao điểm"],
+  ["07","Khi có biến động",
+    "Sửa khoản thu, chi, ngày nhận lương, tiền vay hoặc ngày mục tiêu rồi chọn Tính lại để đánh giá toàn bộ lịch mới. Chỉ khi dữ liệu nguồn Finance được tải lại mới phản ánh thay đổi ở những phần khác; chưa có cảnh báo nền tự động hay đồng bộ sự kiện tức thời.",
+    "Tính lại theo yêu cầu; chưa tự theo dõi nền"]
+ ];
+ return '<details class="fin-wb-methodology" data-fin-methodology open>'+
+   '<summary><span><strong>Phương pháp tính & nguyên tắc tư vấn dòng tiền</strong>'+
+   '<small>7 quy tắc · Giải thích rõ phần đã tính và phần chưa tự động</small></span><span class="fin-wb-methodology-chevron" aria-hidden="true">⌄</span></summary>'+
+   '<div class="fin-wb-equation"><strong>Số dư theo ngày = số dư TWD đã ghi sổ + thu dự kiến − chi/nghĩa vụ dự kiến − phân bổ mục tiêu.</strong>'+
+   '<small>Mỗi khoản được tính theo ngày phát sinh; dự báo không phải số tiền đã thực nhận hoặc đã trả.</small></div>'+
+   '<div class="fin-wb-methodology-list">'+blocks.map(([n,title,description,status])=>
+      '<section class="fin-wb-methodology-item"><span class="fin-wb-methodology-index">'+n+'</span>'+
+      '<div><strong>'+esc(title)+'</strong><p>'+esc(description)+'</p>'+
+      '<small class="fin-wb-methodology-status">'+esc(status)+'</small></div></section>').join("")+'</div>'+
+   '<p class="fin-wb-methodology-foot">Dữ liệu còn thiếu (lịch trả góp định kỳ, đối soát tiền đã thanh toán, tỷ giá TWD của nợ ngoại tệ, tiền lãi/phí) khiến kết quả chỉ mang tính điều kiện. Không tự vay, đảo nợ, hoãn thanh toán hay ghi giao dịch.</p>'+
+   '</details>';
+}
+
 function renderWorkbench(){
  const b=workbookState,book=b.book||newWorkbook();
- const head=heading("Bảng điều hành tài chính","Bảng tính kịch bản 3–12 tháng, gắn dữ liệu Finance PostgreSQL; chỉ mô phỏng, không chuyển tiền.");
+ const head=heading("Mô phỏng & Tư vấn","Thử các biến động thu nhập, khoản nợ, kế hoạch chi và mục tiêu theo lịch dòng tiền. Mỗi đề xuất đều có điều kiện và giới hạn rõ ràng.");
  if(b.loading)return head+'<div class="fin-state">Đang tải kịch bản đã lưu từ Database...</div>';
  if(b.error&&!b.book)return head+panel("Không đọc được kịch bản",'<p class="fin-error">'+esc(failure(b.error))+'</p>');
  const choices='<select id="fin-wb-saved" aria-label="Chọn kịch bản đã lưu"><option value="">Kịch bản chưa lưu</option>'+
@@ -458,6 +496,7 @@ function renderWorkbench(){
    '<td class="'+(Number(x.balanceTwd)<0?'fin-negative':'')+'">'+esc(workbenchMoney(x.balanceTwd))+'</td></tr>').join("")+
    '</tbody></table></div>':'';
  return head+
+   renderWorkbenchMethodology()+
    panel("Kịch bản lưu trong Database",controls,'Mỗi kịch bản độc lập; thay đổi bản mô phỏng không làm thay đổi giao dịch hay dư nợ thật.')+
    panel("Thông số đầu vào",settings)+
    '<p class="fin-wb-stale" data-wb-unsynced hidden>Đang sửa bảng: số liệu bên dưới chưa tính lại. Rời vùng chỉnh sửa hoặc bấm “Tính lại”.</p>'+
