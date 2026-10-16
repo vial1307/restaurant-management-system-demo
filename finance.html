@@ -12,15 +12,16 @@
   <header class="fin-header">
     <span class="fin-back" aria-hidden="true">◈</span>
     <div><span class="fin-brand">FINANCE OS</span><small>Kế hoạch tài chính cá nhân</small></div>
-    <span class="fin-private" aria-label="Dữ liệu riêng tư">Riêng tư</span><button type="button" class="fin-logout" id="finance-logout" hidden>Đăng xuất</button>
+    <span class="fin-private" aria-label="Dữ liệu riêng tư">🔒 Riêng tư</span><button type="button" class="fin-logout" id="finance-logout" hidden>Đăng xuất</button>
   </header>
   <section class="fin-login-wrap" id="finance-login" hidden><form class="fin-login-card" id="finance-login-form"><span class="fin-login-icon">◈</span><h1>Finance OS</h1><p class="fin-sub">Đăng nhập tài khoản được cấp quyền quản lý tài chính riêng</p><label>Tài khoản<input type="text" name="username" autocomplete="username" maxlength="120" required></label><label>Mật khẩu<input type="password" name="password" autocomplete="current-password" required></label><p id="finance-login-error" class="fin-error" role="alert" hidden></p><button class="fin-btn" type="submit">Đăng nhập bảo mật</button><p class="fin-note">Tài khoản phải được xác nhận là chủ sở hữu Finance OS. Dữ liệu không chia sẻ với nhân viên nhà hàng.</p></form></section>
   <div class="fin-layout" id="finance-layout">
     <nav class="fin-nav" aria-label="Điều hướng tài chính">
       <button type="button" data-tab="overview" class="active"><span>◫</span> Tổng quan</button>
       <button type="button" data-tab="workbench"><span>▤</span> Mô phỏng &amp; Tư vấn</button>
-      <button type="button" data-tab="budget"><span>▦</span> Kế hoạch</button>
-      <button type="button" data-tab="advisor"><span>◷</span> Tư vấn dòng tiền</button>
+      <button type="button" data-tab="budget"><span>▦</span> Kế hoạch tài chính</button>
+      <button type="button" data-tab="report"><span>▥</span> Dòng tiền &amp; Báo cáo</button>
+      <button type="button" data-tab="advisor"><span>◷</span> Lịch &amp; cảnh báo</button>
       <button type="button" data-tab="fx"><span>⇄</span> Ngoại tệ</button>
       <button type="button" data-tab="ledger"><span>≡</span> Giao dịch</button>
       <button type="button" data-tab="goals"><span>◎</span> Mục tiêu & Nợ</button>
