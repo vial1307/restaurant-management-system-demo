@@ -460,6 +460,7 @@ function renderWorkbench(){
  return head+
    panel("Kịch bản lưu trong Database",controls,'Mỗi kịch bản độc lập; thay đổi bản mô phỏng không làm thay đổi giao dịch hay dư nợ thật.')+
    panel("Thông số đầu vào",settings)+
+   '<p class="fin-wb-stale" data-wb-unsynced hidden>Đang sửa bảng: số liệu bên dưới chưa tính lại. Rời vùng chỉnh sửa hoặc bấm “Tính lại”.</p>'+
    panel("Sức chịu đựng dòng tiền",stats+risk+
     (p?.firstPayday?'<p class="fin-note">Kỳ thu tăng thêm gần nhất: '+esc(p.firstPayday)+'</p>':'<p class="fin-note">Không tìm thấy kỳ thu tăng thêm trong giai đoạn dự báo.</p>'))+
    panel("Xoay vòng tiền & lịch hoàn vay sơ bộ",bridge)+
@@ -847,6 +848,22 @@ root.addEventListener("click",async event=>{
    state.period=period.dataset.period;render();
    if(state.period==="year")loadYear();
  }
+});
+root.addEventListener("input",event=>{
+ if(state.tab!=="workbench"||!workbookState.book)return;
+ const node=event.target.closest("[data-wb-row],[data-wb-field]");
+ if(!node)return;
+ if(node.hasAttribute("data-wb-row")){
+   const row=workbookState.book.rows[Number(node.dataset.wbRow)];
+   if(row&&node.dataset.wbProp)row[node.dataset.wbProp]=node.value;
+ }else if(node.dataset.wbField?.startsWith("goal.")){
+   if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:""};
+   workbookState.book.goal[node.dataset.wbField.slice(5)]=node.value;
+ }else if(node.dataset.wbField){
+   workBookSet(node.dataset.wbField,node.value);
+ }
+ const stale=root.querySelector("[data-wb-unsynced]");
+ if(stale)stale.hidden=false;
 });
 root.addEventListener("change",async event=>{
  if(event.target.id==="fin-wb-saved"){
