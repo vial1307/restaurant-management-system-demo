@@ -1,0 +1,263 @@
+// Scenario-only deterministic Finance OS simulation. Never mutates real ledger or debts.
+// All values are TWD micro-units to preserve numeric accuracy across FX snapshots.
+const MICRO=1000000n;
+export function units(input){
+  const s=String(input??"0");
+  if(!/^-?(?:0|[1-9]\d{0,16})(?:\.\d{1,6})?$/.test(s))throw new Error("INVALID_SCENARIO_AMOUNT");
+  const negative=s.startsWith("-"),[a,b=""]=(negative?s.slice(1):s).split(".");
+  const value=BigInt(a)*MICRO+BigInt((b+"000000").slice(0,6));
+  return negative?-value:value;
+}
+export const plain=value=>{
+  const n=value<0n?-value:value;
+  return (value<0n?"-":"")+String(n/MICRO)+(n%MICRO?"."+String(n%MICRO).padStart(6,"0").replace(/0+$/,""):"");
+};
+export const addDays=(date,count)=>new Date(Date.parse(date+"T00:00:00Z")+count*86400000).toISOString().slice(0,10);
+export const dateOk=x=>typeof x==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+"T00:00:00Z"))&&addDays(x,0)===x;
+const monthShift=(date,months)=>new Date(Date.UTC(Number(date.slice(0,4)),Number(date.slice(5,7))-1+months,1)).toISOString().slice(0,7);
+export const monthEnd=month=>addDays(monthShift(month+"-01",1)+"-01",-1);
+const dateFor=(month,day)=>{
+  const max=Number(monthEnd(month).slice(-2));
+  const actual=Math.min(Number(day)||max,max);
+  return {date:month+"-"+String(actual).padStart(2,"0"),estimatedDate:!day||Number(day)>max};
+};
+const positive=(x,allowZero=true)=>{
+  const n=units(x);
+  if(n<0n||(!allowZero&&n===0n))throw new Error("INVALID_SCENARIO_AMOUNT");
+  return n;
+};
+export function validateScenario(input){
+ if(!input||typeof input!=="object"||Array.isArray(input))throw new Error("INVALID_SCENARIO");
+ const name=String(input.name||"Kịch bản của tôi").trim().slice(0,90);
+ const months=Number(input.months??12), salaryDay=Number(input.salaryDay??10);
+ if(!name||![3,6,12].includes(months)||!Number.isInteger(salaryDay)||salaryDay<1||salaryDay>31)throw new Error("INVALID_SCENARIO");
+ const bufferTwd=String(input.bufferTwd??"0"),monthlyExtraIncomeTwd=String(input.monthlyExtraIncomeTwd??"0");
+ positive(bufferTwd);positive(monthlyExtraIncomeTwd);
+ const rows=input.rows??[];
+ if(!Array.isArray(rows)||rows.length>120)throw new Error("INVALID_SCENARIO_ROWS");
+ const kinds=["income","expense","debt","goal","borrow","repay"];
+ const normalized=rows.map((row,index)=>{
+   if(!row||typeof row!=="object"||!kinds.includes(row.kind)||!dateOk(row.date))throw new Error("INVALID_SCENARIO_ROW");
+   const amountTwd=String(row.amountTwd??""),label=String(row.label??"").trim().slice(0,120);
+   positive(amountTwd,false);
+   if(!label)throw new Error("INVALID_SCENARIO_ROW");
+   const linkId=String(row.linkId||"").trim().slice(0,60);
+   if(["borrow","repay"].includes(row.kind)&&!linkId)throw new Error("LOAN_REPAYMENT_PAIR_REQUIRED");
+   return {key:String(row.key||"row-"+index).slice(0,60),kind:row.kind,date:row.date,
+     amountTwd,label,linkId};
+ });
+ const links=new Map();
+ for(const row of normalized.filter(r=>["borrow","repay"].includes(r.kind))){
+   const current=links.get(row.linkId)||[];
+   current.push(row);links.set(row.linkId,current);
+ }
+ for(const pair of links.values()){
+   if(pair.length!==2||!pair.some(x=>x.kind==="borrow")||!pair.some(x=>x.kind==="repay"))throw new Error("LOAN_REPAYMENT_PAIR_REQUIRED");
+   const borrowed=pair.find(x=>x.kind==="borrow"),returned=pair.find(x=>x.kind==="repay");
+   if(borrowed.date>returned.date||units(returned.amountTwd)<units(borrowed.amountTwd))throw new Error("INVALID_LOAN_REPAYMENT");
+ }
+ let goal=null;
+ if(input.goal?.label||input.goal?.totalTwd||input.goal?.targetDate){
+   const g=input.goal;
+   const label=String(g.label||"Mục tiêu").trim().slice(0,100);
+   const totalTwd=String(g.totalTwd??"0");
+   if(!dateOk(g.targetDate)||!label)throw new Error("INVALID_SCENARIO_GOAL");
+   positive(totalTwd);
+   goal={label,totalTwd,targetDate:g.targetDate};
+ }
+ return {name,months,salaryDay,bufferTwd,monthlyExtraIncomeTwd,rows:normalized,goal};
+}
+export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[],goalFunds=[],debtPayments=[],fxPlans=[],debts=[]}){
+ const events=[],warnings=[];
+ const startingBalance=accounts.filter(a=>a.currency_code==="TWD").reduce((sum,a)=>sum+units(a.balance),0n);
+ const foreign=accounts.filter(a=>a.currency_code!=="TWD");
+ if(foreign.length)warnings.push("Ví ngoại tệ chưa quy đổi sang thanh khoản TWD; chỉ đánh giá tiền TWD thực có.");
+ const include=(event)=>{
+   if(event.date<asOf||event.date>through)return;
+   if(units(event.amountTwd)===0n)return;
+   events.push(event);
+ };
+ for(const row of cashItems){
+   const month=String(row.month_date).slice(0,7);
+   const d=dateFor(month,row.due_day);
+   if(d.estimatedDate)warnings.push("Có khoản thu/chi thiếu ngày chính xác, tạm xếp cuối tháng.");
+   include({date:d.date,kind:row.kind,label:row.label,amountTwd:plain(units(row.amount_twd)*(row.kind==="income"?1n:-1n)),
+    source:"cashflow",estimatedDate:d.estimatedDate});
+ }
+ const posted=new Map();
+ for(const p of debtPayments){
+   const k=p.debt_id+"|"+String(p.payment_date).slice(0,7);
+   posted.set(k,(posted.get(k)||0n)+units(p.base_amount_twd??"0"));
+ }
+ for(const row of debtFunds){
+   const month=String(row.month_date).slice(0,7);
+   const debtDate=dateOk(row.due_date)&&row.due_date.slice(0,7)===month?row.due_date:null;
+   const when=debtDate?{date:debtDate,estimatedDate:false}:dateFor(month,null);
+   if(when.estimatedDate)warnings.push("Một số quỹ trả nợ chưa có ngày đến hạn đúng tháng; mốc cuối tháng chỉ là ước tính.");
+   const due=units(row.planned_twd)-(posted.get(row.debt_id+"|"+month)||0n);
+   include({date:when.date,kind:"debt",label:"Quỹ nợ: "+row.debt_name,
+     amountTwd:plain(due>0n?-due:0n),source:"debt_fund",estimatedDate:when.estimatedDate});
+ }
+ for(const row of goalFunds){
+   const month=String(row.month_date).slice(0,7);
+   const d=dateOk(row.target_date)&&row.target_date.slice(0,7)===month?
+     {date:row.target_date,estimatedDate:false}:dateFor(month,null);
+   include({date:d.date,kind:"goal",label:"Quỹ mục tiêu: "+row.goal_name,
+     amountTwd:plain(-units(row.planned_twd)),source:"goal_fund",estimatedDate:d.estimatedDate});
+ }
+ for(const p of fxPlans){
+   if(p.status!=="planned"||p.plan_kind!=="remittance")continue;
+   if(p.from_currency!=="TWD"){
+     warnings.push("Có kế hoạch chuyển ngoại tệ ngoài TWD; chưa thể tính thanh khoản nếu thiếu tỷ giá đã xác nhận.");
+     continue;
+   }
+   include({date:p.plan_date,kind:"expense",label:"Chuyển ra ngoài (TWD)",
+     amountTwd:plain(-(units(p.source_amount)+units(p.expected_fee||"0"))),source:"remittance",estimatedDate:false});
+ }
+ if(debts.some(d=>d.currency_code!=="TWD"))warnings.push("Công nợ ngoại tệ chưa quy đổi, không dùng dư nợ VND/USD để tính tổng nợ TWD.");
+ if(debts.some(d=>!debtFunds.some(f=>f.debt_id===d.id)))warnings.push("Có công nợ chưa lập lịch trả góp theo từng tháng; dự báo có thể thiếu nghĩa vụ.");
+ return {startingBalanceTwd:plain(startingBalance),events,warnings:[...new Set(warnings)],
+   debtTwdPrincipal:plain(debts.filter(d=>d.currency_code==="TWD").reduce((s,d)=>s+units(d.outstanding_amount??"0"),0n)),
+   debtRanking:debts.filter(d=>d.currency_code==="TWD"&&units(d.outstanding_amount??"0")>0n)
+     .map(d=>({name:d.name,amountTwd:d.outstanding_amount,rate:String(d.annual_interest_rate??"0")}))
+     .sort((a,b)=>Number(b.rate)-Number(a.rate))};
+}
+const actualDelta=(kind,amount)=>["income","borrow"].includes(kind)?amount:-amount;
+function timelineFor({asOf,through,startingBalanceTwd,baselineEvents,settings,addition=0n}){
+ const events=baselineEvents.map(e=>({...e,delta:units(e.amountTwd),source:e.source||"database"}));
+ const add=(e)=>{if(e.date>=asOf&&e.date<=through)events.push(e);};
+ for(const row of settings.rows){
+   add({...row,delta:actualDelta(row.kind,units(row.amountTwd)),source:"scenario"});
+ }
+ const paydayDates=[];
+ for(let i=0;i<settings.months;i++){
+   const month=monthShift(asOf,i),d=dateFor(month,settings.salaryDay);
+   if(d.date>=asOf&&d.date<=through){
+     paydayDates.push(d.date);
+     const sum=units(settings.monthlyExtraIncomeTwd)+addition;
+     if(sum>0n)add({date:d.date,kind:"income",label:"Thu nhập tăng thêm giả định",delta:sum,source:"assumption"});
+   }
+ }
+ const warnings=[];
+ if(settings.goal&&units(settings.goal.totalTwd)>0n){
+   const allPaydays=[];
+   for(let i=0;i<24;i++){
+     const month=monthShift(asOf,i),d=dateFor(month,settings.salaryDay).date;
+     if(d>=asOf&&d<=settings.goal.targetDate)allPaydays.push(d);
+   }
+   if(!allPaydays.length)warnings.push("Không có kỳ lương nào trước hạn mục tiêu. Cần đổi ngày hoặc chuẩn bị nguồn tiền trước.");
+   else{
+     const total=units(settings.goal.totalTwd),number=BigInt(allPaydays.length);
+     const installment=(total+number-1n)/number;
+     let remaining=total;
+     for(const d of allPaydays){
+       const current=remaining<installment?remaining:installment;
+       remaining-=current;
+       add({date:d,kind:"goal",label:"Để dành: "+settings.goal.label,
+         delta:-current,source:"scenario_goal"});
+     }
+   }
+ }
+ events.sort((a,b)=>a.date.localeCompare(b.date)||
+   (a.delta>0n&&b.delta<=0n?-1:a.delta<=0n&&b.delta>0n?1:0)||a.label.localeCompare(b.label));
+ let balance=units(startingBalanceTwd),minimum=balance,minimumDate=asOf,firstRisk=null;
+ const buffer=units(settings.bufferTwd);
+ if(balance<buffer)firstRisk={date:asOf,gapTwd:plain(buffer-balance),label:"Dự trữ hiện có"};
+ const timeline=[];
+ const monthly=new Map();
+ const monthCount=settings.months;
+ for(let i=0;i<monthCount;i++){
+   const month=monthShift(asOf,i);
+   monthly.set(month,{month,income:0n,essential:0n,goals:0n,borrowed:0n,repayment:0n,end:balance,minimum:null});
+ }
+ for(const e of events){
+   const n=e.delta;
+   const month=e.date.slice(0,7),summary=monthly.get(month);
+   balance+=n;
+   if(balance<minimum){minimum=balance;minimumDate=e.date;}
+   if(!firstRisk&&balance<buffer)firstRisk={date:e.date,gapTwd:plain(buffer-balance),label:e.label};
+   if(summary){
+     if(e.kind==="income")summary.income+=n;
+     else if(e.kind==="borrow")summary.borrowed+=n;
+     else if(e.kind==="repay")summary.repayment-=n;
+     else if(e.kind==="goal")summary.goals-=n;
+     else summary.essential-=n;
+     summary.end=balance;
+     if(summary.minimum===null||balance<summary.minimum)summary.minimum=balance;
+   }
+   timeline.push({date:e.date,label:e.label,kind:e.kind,source:e.source,
+     estimatedDate:!!e.estimatedDate,amountTwd:plain(n),balanceTwd:plain(balance)});
+ }
+ const months=[];
+ let monthStart=units(startingBalanceTwd);
+ for(const s of monthly.values()){
+   const mEnd=monthEnd(s.month);
+   const inMonth=timeline.filter(e=>e.date.slice(0,7)===s.month);
+   const last=inMonth.at(-1);
+   if(last)monthStart=units(last.balanceTwd);
+   const min=s.minimum===null?s.end:s.minimum;
+   months.push({month:s.month,incomeTwd:plain(s.income),costTwd:plain(s.essential),
+    goalTwd:plain(s.goals),borrowedTwd:plain(s.borrowed),repaymentTwd:plain(s.repayment),
+    endingTwd:plain(s.end),minimumTwd:plain(min),
+    surplusTwd:plain(min>buffer?min-buffer:0n)});
+ }
+ // A safe immediate extra repayment is limited by the lowest balance BEFORE the
+ // next payday, not by a positive end-of-month total that arrives too late.
+ const firstPayday=paydayDates.find(d=>d>=asOf);
+ let safety=units(startingBalanceTwd);
+ for(const e of timeline.filter(x=>!firstPayday||x.date<firstPayday)){
+   const v=units(e.balanceTwd);
+   if(v<safety)safety=v;
+ }
+ return {asOf,through,startingBalanceTwd,bufferTwd:settings.bufferTwd,
+   endingTwd:plain(balance),minimumTwd:plain(minimum),minimumDate,
+   earliestRisk:firstRisk,months,timeline,warnings,
+   firstPayday:firstPayday||null,
+   safeExtraDebtTwd:plain(safety>buffer?safety-buffer:0n)};
+}
+export function simulateScenario({asOf,source,scenario}){
+ if(!dateOk(asOf)||!source||!Array.isArray(source.events))throw new Error("INVALID_SCENARIO");
+ const settings=validateScenario(scenario);
+ const through=addDays(monthShift(asOf,settings.months)+"-01",-1);
+ for(const row of settings.rows){
+   if(row.date<asOf||row.date>through)throw new Error("SCENARIO_DATE_OUTSIDE_WINDOW");
+ }
+ if(settings.goal&&settings.goal.targetDate<asOf)throw new Error("INVALID_SCENARIO_GOAL");
+ const base=timelineFor({asOf,through,startingBalanceTwd:source.startingBalanceTwd,
+   baselineEvents:source.events,settings});
+ let minExtra=null;
+ // Even an arbitrarily large paycheck cannot repair a shortfall before it is received.
+ // This is explicitly distinguished from a sustainable monthly income gap.
+ if(!base.earliestRisk)minExtra="0";
+ else{
+   let high=100000000n*MICRO;
+   const feasible=timelineFor({asOf,through,startingBalanceTwd:source.startingBalanceTwd,
+     baselineEvents:source.events,settings,addition:high});
+   if(!feasible.earliestRisk){
+     let low=0n;
+     while(low<high){
+       const mid=(low+high)/2n;
+       const probe=timelineFor({asOf,through,startingBalanceTwd:source.startingBalanceTwd,
+         baselineEvents:source.events,settings,addition:mid});
+       if(probe.earliestRisk)low=mid+1n;
+       else high=mid;
+     }
+     // Round up to whole TWD for a practical salary target.
+     const whole=(low+MICRO-1n)/MICRO;
+     minExtra=String(whole);
+   }
+ }
+ const loans=settings.rows.filter(r=>r.kind==="borrow").map(r=>{
+   const pay=settings.rows.find(t=>t.kind==="repay"&&t.linkId===r.linkId);
+   return {label:r.label,borrowDate:r.date,repayDate:pay.date,borrowedTwd:r.amountTwd,
+     repayTwd:pay.amountTwd,financingCostTwd:plain(units(pay.amountTwd)-units(r.amountTwd))};
+ });
+ const warnings=[...source.warnings,...base.warnings];
+ if(loans.length)warnings.push("Khoản vay là giả định mới, không phải tiền thật; lãi, phí và ngày hoàn trả phải nhập từ điều khoản thực tế.");
+ if(base.earliestRisk&&minExtra===null)warnings.push("Tăng lương ở ngày được chọn vẫn không khắc phục được thiếu tiền trước kỳ lương. Cần xem lịch chi, thời điểm tiền về hoặc nguồn tiền hợp pháp có chi phí rõ ràng.");
+ if(settings.rows.some(x=>x.kind==="debt")&&source.events.some(x=>x.source==="debt_fund"))warnings.push("Kiểm tra khoản tất toán và quỹ nợ đã phân bổ để không trừ trùng cùng một nghĩa vụ.");
+ return {...base,name:settings.name,minimumAdditionalIncomePerPaydayTwd:minExtra,
+   goal:settings.goal,loans,sourceDebtTwdPrincipal:source.debtTwdPrincipal,
+   debtRanking:source.debtRanking,warnings:[...new Set(warnings)].slice(0,18),
+   methodology:"Mô phỏng thanh khoản; không phải dự báo xác suất, giao dịch thực tế hay lời đề nghị vay."};
+}
