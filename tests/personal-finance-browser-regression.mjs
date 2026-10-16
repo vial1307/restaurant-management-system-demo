@@ -229,7 +229,7 @@ try {
     await page.getByText("Lương dự kiến").waitFor();
     assert.equal(cashItems.length,2,"Forecast data persists over refresh");
     assert.equal(Number(cashItems[0].amount_twd),12000,"Edited amount persists after F5");
-    page.once("dialog",d=>d.accept());
+    // The existing global dialog handler accepts confirmations for this test.
     await page.locator('[data-delete-cashflow]').first().click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-delete-cashflow]").length===1);
     assert.equal(cashItems.length,1,"Deleting a forecast item persists");
