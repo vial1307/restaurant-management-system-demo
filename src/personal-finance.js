@@ -11,7 +11,7 @@ const fieldRoot=document.querySelector("#finance-fields");
 const form=document.querySelector("#finance-form");
 const tabs=[...document.querySelectorAll(".fin-nav [data-tab]")];
 const nowMonth=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit"}).format(new Date()).slice(0,7);
-const state={tab:"overview",month:nowMonth,period:"month",data:null,overview:null,year:null,loading:true,problem:null,busy:false};
+const state={tab:"overview",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false};
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=(v,dec=0)=>Number(v||0).toLocaleString("vi-VN",{minimumFractionDigits:0,maximumFractionDigits:Math.max(0,Math.min(6,dec))});
 const moneyLabel=(v,c="TWD")=>(c==="TWD"?"NT$":c+" ")+num(v,c==="USD"||c==="EUR"||c==="CNY"?2:0);
@@ -52,12 +52,22 @@ function failure(error){
     INVALID_DEBT:"Kiểm tra số nợ, lãi suất năm (0–100%) và ngày đến hạn.",
     INVALID_DEBT_AMOUNT:"Số nợ không hợp lệ với ngoại tệ.",
     PLAN_NOT_FOUND_OR_NOT_PLANNED:"Kế hoạch không còn ở trạng thái có thể hủy.",
+    INVALID_CASHFLOW_ITEM:"Dòng thu/chi dự kiến cần có tên, tháng và số TWD hợp lệ.",
+    CASHFLOW_ITEM_NOT_FOUND:"Dòng kế hoạch không tồn tại hoặc không thuộc tài khoản.",
+    INVALID_DEBT_FUND:"Số tiền quỹ nợ không hợp lệ với ngoại tệ.",
+    DEBT_FUND_RATE_REQUIRED:"Nhập tỷ giá giả định TWD cho mỗi đơn vị ngoại tệ của khoản nợ.",
+    INVALID_DEBT_PAYMENT:"Kiểm tra ví nguồn, ngày trả và các khoản gốc/lãi/phí.",
+    INVALID_DEBT_PAYMENT_AMOUNT:"Số tiền trả nợ phải dương và đúng số thập phân ngoại tệ.",
+    DEBT_CURRENCY_MISMATCH:"Ví trả nợ phải dùng cùng ngoại tệ với khoản nợ. Hãy đổi tiền trước nếu cần.",
+    DEBT_PRINCIPAL_EXCEEDS_OUTSTANDING:"Khoản gốc trả vượt số dư nợ hiện tại.",
+    DEBT_PAYMENT_RATE_REQUIRED:"Nhập tỷ giá TWD thực tế để đối chiếu lần trả nợ bằng ngoại tệ.",
+    DEBT_PAYMENT_INSUFFICIENT_FUNDS:"Ví không đủ số dư đã ghi sổ để thanh toán.",
   };
   return errors[error?.message]||("Không lưu được: "+(error?.message||"Lỗi hệ thống"));
 }
 async function refresh(){
-  const [data,overview]=await Promise.all([api("/bootstrap"),api("/overview?month="+encodeURIComponent(state.month))]);
-  state.data=data;state.overview=overview;state.problem=null;state.loading=false;render();
+  const [data,overview,cashflow]=await Promise.all([api("/bootstrap"),api("/overview?month="+encodeURIComponent(state.month)),api("/cashflow?month="+encodeURIComponent(state.month))]);
+  state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;render();
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -92,6 +102,30 @@ function renderOverview(){
     '<div class="fin-advice"><strong>Financial Advisor</strong><p style="margin:7px 0 0">Số dư được tính từ các giao dịch đã xác nhận. Kế hoạch chuyển tiền và đổi ngoại tệ chưa được trừ khỏi tài sản cho đến khi bạn ghi nhận thực tế.</p></div>'+
     '</div></div>';
 }
+
+function renderCashflow(){
+ const cf=state.cashflow||{},items=cf.items||[],funds=cf.debtFunds||[],summary=cf.summary||{};
+ const plannedNet=Number(summary.planned_net_twd||0);
+ const actualNet=Number(summary.actual_net_twd||0);
+ const cards='<div class="fin-kpis fin-plan-kpis">'+
+  '<section class="fin-card"><div class="fin-muted">Thu dự kiến</div><div class="fin-kpi-value">'+esc(moneyLabel(summary.planned_income_twd||0))+'</div></section>'+
+  '<section class="fin-card"><div class="fin-muted">Chi dự kiến</div><div class="fin-kpi-value">'+esc(moneyLabel(summary.planned_expense_twd||0))+'</div></section>'+
+  '<section class="fin-card"><div class="fin-muted">Dành cho quỹ nợ</div><div class="fin-kpi-value">'+esc(moneyLabel(summary.planned_debt_fund_twd||0))+'</div></section></div>';
+ const plannedRows=items.length?items.map(x=>
+  '<div class="fin-row fin-action-row"><div><strong>'+esc(x.label)+'</strong><small>'+esc(x.kind==="income"?"Thu dự kiến":"Chi dự kiến")+
+  (x.due_day?' · Ngày '+esc(x.due_day):'')+(x.memo?' · '+esc(x.memo):'')+'</small></div>'+
+  '<div class="fin-action-end"><strong>'+esc(moneyLabel(x.amount_twd))+'</strong><button type="button" class="fin-btn secondary fin-small-action" data-edit-cashflow="'+esc(x.id)+'">Sửa</button>'+
+  '<button type="button" class="fin-btn secondary fin-small-action" data-delete-cashflow="'+esc(x.id)+'">Xóa</button></div></div>').join(""):'<div class="fin-list-empty">Chưa có khoản thu/chi dự kiến. Thêm kế hoạch theo tháng để tính dòng tiền.</div>';
+ const fundText=funds.length?'<p class="fin-muted">Đã đánh dấu dành dụm cho nợ: '+esc(moneyLabel(summary.earmarked_debt_fund_twd||0))+' (tạm tính theo tỷ giá tự nhập).</p>':"";
+ return '<div class="fin-stack fin-cashflow-section">'+
+  panel("Dự báo dòng tiền · "+monthText(state.month),cards+
+   '<div class="fin-cashflow-totals"><div><span>Còn lại theo kế hoạch</span><strong class="'+(plannedNet<0?"fin-negative":"")+'">'+esc(moneyLabel(plannedNet))+'</strong></div>'+
+   '<div><span>Thu thực tế − chi thực tế − nợ đã trả</span><strong class="'+(actualNet<0?"fin-negative":"")+'">'+esc(moneyLabel(actualNet))+'</strong></div></div>'+
+   note("Dòng tiền theo TWD. Quỹ nợ dự kiến chỉ là khoản phân bổ; chưa trừ ví. Số tiền trả nợ thực tế mới được trừ ví và dư nợ." )+fundText)+
+  panel("Lịch thu/chi dự kiến",'<div class="fin-toolbar">'+button("+ Thu dự kiến","cashIncome")+button("+ Chi dự kiến","cashExpense",true)+'</div>'+plannedRows,
+    "Bạn có thể sửa, xóa các khoản trong tháng. Chỉ ghi dữ liệu kế hoạch, không tự tạo giao dịch.")+
+ '</div>';
+}
 function renderBudget(){
   const rows=(state.overview.budget||[]).filter(c=>c.kind==="expense");
   const body=rows.length?rows.map(c=>{
@@ -104,12 +138,24 @@ function renderBudget(){
   return heading("Kế hoạch tháng / năm","Ngân sách kế hoạch so với chi tiêu đã ghi nhận",periodInput())+
    '<div class="fin-toolbar" style="margin-bottom:16px"><button type="button" class="fin-btn '+(state.period==="month"?"":"secondary")+'" data-period="month">Theo tháng</button><button type="button" class="fin-btn '+(state.period==="year"?"":"secondary")+'" data-period="year">Theo năm</button></div>'+
    (state.period==="year"?renderYearBudget():panel("Ngân sách "+monthText(state.month),body,"Mỗi khoản dựa vào danh mục và tháng trong Database"))+
+   (state.period==="month"?'<div style="margin-top:16px">'+renderCashflow()+'</div>':renderYearCashflow())+
    '<div style="margin-top:16px">'+panel("Điều chỉnh kế hoạch",'<div class="fin-toolbar">'+button("+ Ngân sách","budget")+button("+ Danh mục","category",true)+'</div>'+note("Giao dịch chuyển tiền giữa ví và đổi ngoại tệ không được tự tính là chi tiêu."))+'</div>';
 }
 function renderYearBudget(){
   if(!state.year||state.year.year!==Number(state.month.slice(0,4)))return panel("Kế hoạch năm",'<div class="fin-list-empty">Đang tải kế hoạch năm...</div>');
   const lines=state.year.months||[];
   return panel("Tổng hợp năm "+state.year.year,lines.map(m=>row("Tháng "+m.month.slice(5,7),"Ngân sách "+moneyLabel(m.budget_twd),"Chi "+moneyLabel(m.expense_twd),"Thu "+moneyLabel(m.income_twd))).join("")||'<div class="fin-list-empty">Chưa có số liệu năm.</div>',"Tổng ngân sách, thu nhập và chi phí theo tháng; không bao gồm chuyển khoản nội bộ.");
+}
+
+function renderYearCashflow(){
+ const y=state.yearCashflow,year=Number(state.month.slice(0,4));
+ if(!y||y.year!==year)return panel("Dự báo dòng tiền năm",'<div class="fin-list-empty">Đang tải kế hoạch dòng tiền năm...</div>');
+ return '<div style="margin-top:16px">'+panel("Dòng tiền dự kiến năm "+year,(y.months||[]).map(m=>{
+  const net=Number(m.planned_income_twd)-Number(m.planned_expense_twd)-Number(m.debt_fund_twd);
+  return row("Tháng "+m.month.slice(5,7),
+    "Thu "+moneyLabel(m.planned_income_twd)+" · Chi "+moneyLabel(m.planned_expense_twd)+" · Quỹ nợ "+moneyLabel(m.debt_fund_twd),
+    moneyLabel(net),"Trả nợ thực tế "+moneyLabel(m.debt_paid_twd));
+ }).join(""),"Tổng dự kiến không mặc nhiên trở thành thu/chi thực tế.")+'</div>';
 }
 function renderFx(){
   const cs=state.data.currencies||[];
@@ -145,12 +191,24 @@ function renderGoals(){
    '<small>'+esc(moneyLabel(g.current_amount,g.currency_code))+' / '+esc(moneyLabel(g.target_amount,g.currency_code))+(g.target_date?' · '+esc(g.target_date):'')+'</small>'+
    '</div><button class="fin-btn secondary fin-small-action" type="button" data-goal-update="'+esc(g.id)+'">Cập nhật</button></div>';
  }).join(""):'<div class="fin-list-empty">Chưa có mục tiêu. Nhấn “Thêm mục tiêu” để bắt đầu.</div>';
- const debtRows=debts.length?debts.map(d=>row(d.name,d.due_date?'Đến hạn '+d.due_date:'Chưa có ngày đến hạn',moneyLabel(d.outstanding_amount,d.currency_code),'Dư nợ gốc theo sổ')).join(""):'<div class="fin-list-empty">Chưa có khoản nợ nào được nhập.</div>';
+ const debtRows=debts.length?debts.map(d=>'<div class="fin-row fin-action-row"><div><strong>'+esc(d.name)+'</strong><small>'+(d.due_date?'Đến hạn '+esc(d.due_date):'Chưa có ngày đến hạn')+'</small></div><div class="fin-action-end"><strong>'+esc(moneyLabel(d.outstanding_amount,d.currency_code))+'</strong><small>Dư nợ gốc</small><button type="button" class="fin-btn secondary fin-small-action" data-pay-debt="'+esc(d.id)+'">Trả nợ</button><button type="button" class="fin-btn secondary fin-small-action" data-fund-debt="'+esc(d.id)+'">Quỹ nợ</button></div></div>').join(""):'<div class="fin-list-empty">Chưa có khoản nợ nào được nhập.</div>';
  return heading("Mục tiêu & khoản nợ","Theo dõi kế hoạch riêng, không tự trừ tiền trong tài khoản")+
   '<div class="fin-grid"><div class="fin-stack">'+panel("Mục tiêu tiết kiệm",goalRows)+
   panel("Tạo mục tiêu",button("+ Thêm mục tiêu","goal")+note("Số tiền tích lũy là tiến độ nhập thủ công; không được cộng vào số dư thực tế."))+
   '</div><div class="fin-stack">'+panel("Danh sách khoản nợ",debtRows)+
-  panel("Theo dõi nghĩa vụ",button("+ Thêm khoản nợ","debt")+note("Phần này theo dõi nghĩa vụ; không tự tạo giao dịch trả nợ hoặc chuyển khoản. Các khoản trả nợ sẽ cần chức năng đối soát riêng."))+
+  panel("Theo dõi nghĩa vụ",button("+ Thêm khoản nợ","debt")+note("Quỹ nợ chỉ là số tiền dự kiến hoặc đánh dấu dành dụm, không phải tài khoản ngân hàng. Trả nợ thực tế phải chọn ví, ghi gốc/lãi/phí và được xác nhận trong Database."))+
+  '</div></div>'+
+  '<div class="fin-grid"><div class="fin-stack">'+
+  panel("Quỹ trả nợ · "+monthText(state.month),(state.cashflow?.debtFunds||[]).length?(state.cashflow.debtFunds.map(f=>row(f.debt_name,
+   "Dự kiến "+moneyLabel(f.planned_amount,f.currency_code)+" · Tỷ giá TWD "+safeRate(f.fx_rate_to_twd),
+   moneyLabel(f.earmarked_amount,f.currency_code),"Đánh dấu đã dành, chưa chuyển ví")).join("")):
+   '<div class="fin-list-empty">Chưa phân bổ quỹ nợ tháng này.</div>')+
+  '</div><div class="fin-stack">'+
+  panel("Các khoản trả nợ đã ghi sổ",(state.cashflow?.debtPayments||[]).length?
+   state.cashflow.debtPayments.map(p=>row(p.debt_name,p.payment_date,
+   moneyLabel(Number(p.principal_paid)+Number(p.interest_paid)+Number(p.fee_paid),p.currency_code),
+   "Gốc "+moneyLabel(p.principal_paid,p.currency_code)+" · Lãi/phí "+moneyLabel(Number(p.interest_paid)+Number(p.fee_paid),p.currency_code))).join(""):
+   '<div class="fin-list-empty">Chưa có khoản trả nợ thực tế trong tháng.</div>')+
   '</div></div>';
 }
 function render(){
