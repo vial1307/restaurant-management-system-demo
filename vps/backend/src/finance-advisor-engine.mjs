@@ -94,7 +94,7 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
   if(pastDueCount)warnings.push({code:"PAST_DUE_UNRECONCILED",message:"Có "+pastDueCount+" lịch dự kiến đã qua ngày; chưa có liên kết chứng từ để xác nhận đã thanh toán. Kiểm tra và cập nhật lịch gốc."});
   if(estimatedDateCount)warnings.push({code:"ESTIMATED_DATES",message:"Có "+estimatedDateCount+" khoản được tạm xếp cuối tháng hoặc ngày cuối của tháng vì chưa có ngày thanh toán chính xác."});
   entries.sort((a,b)=>a.date.localeCompare(b.date)||
-    (a.kind==="income"?-1:b.kind==="income"?1:0)||
+    (a.kind==="income"&&b.kind!=="income"?-1:b.kind==="income"&&a.kind!=="income"?1:0)||
     a.label.localeCompare(b.label)||a.sourceId.localeCompare(b.sourceId));
   let balance=opening,minimum=opening,minimumDate=asOf;
   let earliestRisk=opening<buffer?{date:asOf,balanceTwd:twdText(opening),gapTwd:twdText(buffer-opening),source:"opening",label:"Dự trữ đầu kỳ"}:null;
@@ -125,6 +125,7 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     asOf,through,days,bufferTwd:twdText(buffer),startingBalanceTwd:twdText(opening),
     projectedEndingTwd:twdText(balance),minimumBalanceTwd:twdText(minimum),minimumDate,
     earliestRisk,totals:Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,twdText(v)])),
+    totalOutflowTwd:twdText(totals.expense+totals.debt+totals.goal+totals.remittance),
     entries,warnings,recommendations,foreignWallets,excludedFxPlans,
     metadata:{currency:"TWD",timeZone:"Asia/Taipei",countedWallets:wallets.length-foreignWallets.length,source:"finance_postgresql",readOnly:true}
   };
