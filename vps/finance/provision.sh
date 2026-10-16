@@ -6,6 +6,13 @@ DIR=/opt/kitchen-os
 cd "$DIR"
 test "$(id -u)" -eq 0 || { echo FINANCE_ACTIVATE_NEEDS_ROOT; exit 77; }
 test -f "$DIR/.env" && test -f "$DIR/repo/vps/docker-compose.finance.yml" || { echo FINANCE_MISSING_FILES; exit 67; }
+# Refuse optional database provisioning when the shared VPS is under resource pressure.
+free_kb="$(df -Pk "$DIR" | awk 'NR==2 {print $4}')"
+mem_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+if (( free_kb < 1048576 || mem_kb < 307200 )); then
+ echo FINANCE_RESOURCE_PREFLIGHT_FAILED
+ exit 75
+fi
 db_name="$(sed -n 's/^POSTGRES_DB=//p' "$DIR/.env" | tail -n 1)"
 db_user="$(sed -n 's/^POSTGRES_USER=//p' "$DIR/.env" | tail -n 1)"
 test -n "$db_name" && test -n "$db_user" || { echo KITCHEN_DB_UNCONFIGURED; exit 69; }
