@@ -1,3 +1,14 @@
+## ACTIVE — Personal Finance OS · one-link handoff (2026-10-16)
+
+ACTIVE_PR: #243
+
+- **Một liên kết theo dõi và tiếp tục công việc:** https://vial1307.github.io/restaurant-management-system-demo/handoff.html
+- **Source authority:** Draft PR [#243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`, development only. Main + this CURRENT_HANDOFF remain the canonical production authority.
+- **Implemented in PR:** independent personal-finance PostgreSQL 16 schema; owner-only API; monthly/yearly budget and cash-flow summaries; TWD/VND/USD/JPY/EUR/CNY accounts; FX and remittance plans; manual actual FX between owned accounts; responsive mobile/desktop `finance.html`. Finance CI, UI browser CI and PR staging passed on previous verified attempts. Check exact-head CI for latest changes.
+- **NOT A LIVE FINANCE APP YET.** `https://82.47.180.185.nip.io/finance.html` is the planned final app address; do not claim availability while Finance DB is unprovisioned and PR unmerged. Need dedicated finance DB setup, authorized owner account, secure env credentials, scheduled finance backup + restore rehearsal, production deploy/verification.
+- **Next implementation:** production-safe owner provisioning and backup, exact-head release tests, then deployment with separate finance DB. Do not activate by reusing Kitchen OS stock/business tables or pretending planned conversions are completed payments.
+- This ACTIVE_PR marker intentionally lets the already published GitHub Pages Live Handoff page fetch the correct in-progress workstream in new conversations without losing earlier restaurant release history.
+
 ## DONE — Procurement manual quantities, DB-persisted draft forms and literal search deployed (2026-10-12)
 
 - **Production verified:** exact runtime `a22cfbf3b61a855e468b0481c981b70477acc550` (short `a22cfbf`), PostgreSQL schema `036`. [PR #241](https://github.com/vial1307/restaurant-management-system-demo/pull/241) squash merged. Main Staging `38157179600` PASS; gated production preflight/full browser regression/deploy/Production UI smoke `38157246580` PASS. Production `GET /api/health` log: `app=ok, database=ok, schema=036, release=a22cfbf, environment=production`. VPS pre-deploy backup `/opt/kitchen-os/backups/kitchen_os_20261011T170107Z.dump`; database integrity errors `0`.
