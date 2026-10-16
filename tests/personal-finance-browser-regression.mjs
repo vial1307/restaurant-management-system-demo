@@ -82,7 +82,7 @@ try {
         plan.status="cancelled";data={plan:{id,status:"cancelled"}};
       }else if(method==="POST"&&pathname.endsWith("/cashflow/items")){
         const b=route.request().postDataJSON();
-        const i={id:"00000000-0000-4000-8000-000000000021",kind:b.kind,label:b.label,month_date:b.month+"-01",
+        const i={id:"00000000-0000-4000-8000-"+String(cashItems.length+21).padStart(12,"0"),kind:b.kind,label:b.label,month_date:b.month+"-01",
           amount_twd:b.amountTwd,due_day:b.dueDay||null,memo:b.memo||""};
         cashItems.push(i);data={item:i};status=201;
       }else if(method==="PUT"&&pathname.includes("/cashflow/items/")){
