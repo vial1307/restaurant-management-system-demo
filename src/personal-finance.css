@@ -370,3 +370,8 @@ body.finance-app{font-family:Inter,system-ui,-apple-system,"Noto Sans",Arial,san
 .fin-fund-line>div{min-width:0}.fin-fund-line strong{font-size:12px;display:block}.fin-fund-line small{font-size:11px;color:#697e97;display:block;margin-top:3px}
 .fin-fund-line .fin-btn{font-size:11px;padding:8px 10px}
 @media(max-width:600px){.fin-fund-line{flex-wrap:wrap;align-items:flex-start}.fin-fund-line .fin-btn{margin-left:auto}}
+
+/* Sticky header and mobile bottom tabs must never cover form buttons when scrolled into view. */
+html{scroll-padding-top:92px;scroll-padding-bottom:130px}
+.fin-content button,.fin-content input,.fin-content select{scroll-margin-top:95px;scroll-margin-bottom:130px}
+@media(max-width:840px){.fin-content{padding-bottom:165px!important}html{scroll-padding-top:85px;scroll-padding-bottom:125px}}
