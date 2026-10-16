@@ -32,10 +32,10 @@ try{
   const directInfo={status:direct.status(),headers:direct.headers(),bodyBytes:(await direct.body()).length,title:await page.title(),loginVisible:directLogin,visibleText:(await page.locator("body").innerText()).slice(0,750)};
   const result={viewport,rootResponse,dom,directInfo,network,errors};
   console.log("FINANCE_BROWSER_DIAGNOSTIC "+JSON.stringify(result));
-  const loginVisible=await page.locator("#finance-login-form").isVisible();
-  const errorVisible=await page.locator("#finance-content .fin-error").isVisible();
-  if(navigation.status()!==200 || !loginVisible || errors.length){
-    issues.push({viewport,status:navigation.status(),loginVisible,errorVisible,errors});
+  const unexpectedErrors=errors.filter(e=>!e.includes("the server responded with a status of 401"));
+  const rootHasLogin=dom.loginView?.display!=="none" && dom.loginView?.display!=null && dom.visibleText.includes("Đăng nhập");
+  if(navigation.status()!==200 || rootResponse.bodySize<100 || !rootHasLogin || !directLogin || unexpectedErrors.length){
+    issues.push({viewport,status:navigation.status(),rootBodySize:rootResponse.bodySize,rootHasLogin,directLogin,unexpectedErrors});
   }
   await page.close();
  }
