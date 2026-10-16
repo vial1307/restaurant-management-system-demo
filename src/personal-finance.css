@@ -159,3 +159,5 @@
  .fin-nav button span{font-size:18px!important}
 }
 @media(max-width:360px){.fin-wb-metrics{grid-template-columns:1fr}}
+
+.fin-wb-stale{padding:10px 12px;margin:12px 0;border-left:3px solid #9b6726;background:#fff8e8;color:#745527;font-size:12px;border-radius:6px}
