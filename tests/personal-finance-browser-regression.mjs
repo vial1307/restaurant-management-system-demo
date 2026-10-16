@@ -285,7 +285,17 @@ try {
           .map(el=>({tag:el.tagName,cls:String(el.className).slice(0,120),text:(el.innerText||"").slice(0,65),rect:({left:Math.round(el.getBoundingClientRect().left),right:Math.round(el.getBoundingClientRect().right),width:Math.round(el.getBoundingClientRect().width)})}))
           .slice(0,25)
       );
-      console.error("FINANCE_LAYOUT_OVERFLOW_OFFENDERS",JSON.stringify({viewport,size,overflowing}));
+      const metrics=await page.evaluate(()=>{
+        const a=document.activeElement;
+        const before={bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth,
+          bodyClient:document.body.clientWidth,htmlClient:document.documentElement.clientWidth,
+          viewport:window.visualViewport?.width,
+          active:a?{tag:a.tagName,cls:String(a.className),outline:getComputedStyle(a).outline,
+            rect:{left:a.getBoundingClientRect().left,right:a.getBoundingClientRect().right}}:null};
+        if(a instanceof HTMLElement)a.blur();
+        return {...before,afterBlur:{bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth}};
+      });
+      console.error("FINANCE_LAYOUT_OVERFLOW_OFFENDERS",JSON.stringify({viewport,size,overflowing,metrics}));
     }
     assert(size.doc<=size.view+1,"Finance mobile horizontal overflow "+JSON.stringify({viewport,size}));
     assert.deepEqual(pageErrors,[],"Page JavaScript errors "+JSON.stringify({viewport,pageErrors}));
