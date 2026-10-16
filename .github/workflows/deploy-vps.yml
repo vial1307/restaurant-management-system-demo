@@ -463,5 +463,10 @@ jobs:
           test "$FIN_STATUS" = "401" || { echo "FINANCE_AUTH_FAILURE status=$FIN_STATUS"; exit 1; }
           KITCHEN_STATUS="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' "$URL/api/inventory/central")"
           test "$KITCHEN_STATUS" = "404" || { echo "FINANCE_API_BOUNDARY_FAILURE status=$KITCHEN_STATUS"; exit 1; }
+          ROOT_PAGE="$(curl --max-time 12 -fsS "$URL/")"
+          [[ "$ROOT_PAGE" == *'id="finance-login-form"'* ]] || { echo FINANCE_ROOT_HTML_EMPTY; exit 1; }
           echo FINANCE_HTTPS_SEPARATE_SITE_AND_OWNER_AUTH_PASS
+
+      - name: Verify actual desktop and mobile browser renders Finance login
+        run: node tests/finance-production-browser-diagnostic.mjs
 

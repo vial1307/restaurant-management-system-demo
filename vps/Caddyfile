@@ -87,8 +87,12 @@ finance.82.47.180.185.nip.io {
   handle /api/finance/* {
     reverse_proxy app:8080
   }
+  # Always serve a real HTML document at the hostname root.
+  # An internal rewrite avoids the empty 200 response caused by the old redir block.
   handle / {
-    redir /finance.html 302
+    root * /srv
+    rewrite * /finance.html
+    file_server
   }
   handle /finance.html {
     root * /srv

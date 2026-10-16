@@ -1,0 +1,22 @@
+name: Finance Production Browser Diagnosis
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  anonymous-production-login:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --ipc=host
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci --prefix tests
+      - name: Diagnose real anonymous browser on production
+        run: node tests/finance-production-browser-diagnostic.mjs
