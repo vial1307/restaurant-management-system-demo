@@ -189,12 +189,10 @@ function timelineFor({asOf,through,startingBalanceTwd,baselineEvents,settings,ad
      estimatedDate:!!e.estimatedDate,amountTwd:plain(n),balanceTwd:plain(balance)});
  }
  const months=[];
- let monthStart=units(startingBalanceTwd);
+ let carry=units(startingBalanceTwd);
  for(const s of monthly.values()){
-   const mEnd=monthEnd(s.month);
-   const inMonth=timeline.filter(e=>e.date.slice(0,7)===s.month);
-   const last=inMonth.at(-1);
-   if(last)monthStart=units(last.balanceTwd);
+   if(s.minimum===null)s.end=carry;
+   else carry=s.end;
    const min=s.minimum===null?s.end:s.minimum;
    months.push({month:s.month,incomeTwd:plain(s.income),costTwd:plain(s.essential),
     goalTwd:plain(s.goals),borrowedTwd:plain(s.borrowed),repaymentTwd:plain(s.repayment),
