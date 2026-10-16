@@ -20,6 +20,7 @@ try {
     let debts=[];
     let cashItems=[];
     let debtFunds=[];
+    let goalFunds=[];
     let debtPayments=[];
     const attemptedTransactionKeys=[];
     page.on("pageerror",error=>pageErrors.push(error.message));
@@ -36,16 +37,21 @@ try {
         const exp=cashItems.filter(i=>i.kind==="expense").reduce((sum,i)=>sum+Number(i.amount_twd),0);
         const reserve=debtFunds.reduce((sum,i)=>sum+Number(i.planned_twd),0);
         const earmarked=debtFunds.reduce((sum,i)=>sum+Number(i.earmarked_twd),0);
+        const currentMonth=url.searchParams.get("month");
+        const visibleGoalFunds=goalFunds.filter(f=>f.month===currentMonth);
+        const goalsReserved=visibleGoalFunds.reduce((sum,i)=>sum+Number(i.planned_twd),0);
+        const goalsEarmarked=visibleGoalFunds.reduce((sum,i)=>sum+Number(i.earmarked_twd),0);
         const paid=debtPayments.reduce((sum,i)=>sum+Number(i.base_amount_twd),0);
-        data={month:url.searchParams.get("month"),items:cashItems,debtFunds,debtPayments,summary:{
+        data={month:currentMonth,items:cashItems,debtFunds,goalFunds:visibleGoalFunds,debtPayments,summary:{
           planned_income_twd:String(inc),planned_expense_twd:String(exp),planned_debt_fund_twd:String(reserve),
-          earmarked_debt_fund_twd:String(earmarked),planned_net_twd:String(inc-exp-reserve),
+          earmarked_debt_fund_twd:String(earmarked),planned_goal_fund_twd:String(goalsReserved),earmarked_goal_fund_twd:String(goalsEarmarked),planned_net_twd:String(inc-exp-reserve-goalsReserved),
           actual_income_twd:"0",actual_expense_twd:"0",actual_debt_paid_twd:String(paid),actual_net_twd:String(-paid)
         }};
       }else if(method==="GET"&&pathname.endsWith("/cashflow/year")){
         const year=Number(url.searchParams.get("year"));
         data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),
-         planned_income_twd:"0",planned_expense_twd:"0",debt_fund_twd:"0",debt_paid_twd:"0"}))};
+         planned_income_twd:"0",planned_expense_twd:"0",debt_fund_twd:"0",
+         goal_fund_twd:String(goalFunds.filter(f=>f.month===year+"-"+String(i+1).padStart(2,"0")).reduce((a,f)=>a+Number(f.planned_twd),0)),debt_paid_twd:"0"}))};
       }else if(method==="GET"&&pathname.endsWith("/year")){
         const year=Number(url.searchParams.get("year"));
         data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),budget_twd:"0",income_twd:"0",expense_twd:"0"}))};
@@ -92,6 +98,17 @@ try {
         data={item};
       }else if(method==="DELETE"&&pathname.includes("/cashflow/items/")){
         cashItems=cashItems.filter(i=>!pathname.endsWith(i.id));data={deleted:true};
+      }else if(method==="PUT"&&pathname.endsWith("/goal-funds")){
+        const b=route.request().postDataJSON();
+        assert.equal(route.request().headers()["x-finance-write"],"1");
+        const goal=goals.find(g=>g.id===b.goalId);assert.ok(goal,"Goal ID must refer to real owned goal");
+        const rate=goal.currency_code==="TWD"?1:Number(b.fxRateToTwd);
+        const fund={id:"00000000-0000-4000-8000-000000000024",goal_id:goal.id,goal_name:goal.name,
+          currency_code:goal.currency_code,month:b.month,planned_amount:b.plannedAmount,
+          earmarked_amount:b.earmarkedAmount,planned_twd:String(Number(b.plannedAmount)*rate),
+          earmarked_twd:String(Number(b.earmarkedAmount)*rate),fx_rate_to_twd:String(rate)};
+        goalFunds=goalFunds.filter(f=>!(f.goal_id===goal.id&&f.month===b.month)).concat(fund);
+        data={fund};
       }else if(method==="PUT"&&pathname.endsWith("/debt-funds")){
         const b=route.request().postDataJSON();
         const debt=debts.find(d=>d.id===b.debtId);assert.ok(debt);
@@ -190,6 +207,30 @@ try {
     assert(await page.getByText("15.000").count()>0,"Saved goal survives F5");
     assert(await page.getByText("Thẻ tín dụng").count()>0,"Saved debt survives F5");
     assert.equal(accounts[0].balance,"0","Debt and goal planning do not move wallet funds");
+    // Goal created without allocation is visible as unallocated, not silently counted as spending.
+    await page.getByText("Chưa phân bổ quỹ tháng này").first().waitFor();
+    await page.locator('[data-goal-fund]').first().click();
+    await page.locator('#finance-dialog [name="plannedAmount"]').fill("8000");
+    await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("2500");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Phân bổ tháng: NT$8.000").waitFor();
+    assert.equal(accounts[0].balance,"0","Goal allocation must not debit wallet");
+    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await page.getByText("Quỹ mục tiêu dự kiến").waitFor();
+    await page.getByText("Quỹ mục tiêu dự kiến").locator("..").getByText("NT$8.000").waitFor();
+    // The allocation button on Planning edits the same row, never creates a second copy.
+    await page.locator('[data-goal-fund]').first().click();
+    await page.locator('#finance-dialog [name="plannedAmount"]').fill("9000");
+    await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("4000");
+    await page.locator("#finance-submit").click();
+    assert.equal(goalFunds.length,1,"Goal allocation upsert must not double-count one goal/month");
+    await page.getByText("Quỹ mục tiêu dự kiến").locator("..").getByText("NT$9.000").waitFor();
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await page.getByText("Phân bổ tháng: NT$9.000").waitFor();
+    assert.equal(Number(goals[0].current_amount),15000,"Manual savings progress remains independent of monthly allocation");
+    assert.equal(accounts[0].balance,"0","Goal funding never moves wallet balance");
+
     await page.locator('[data-fund-debt]').click();
     await page.locator('#finance-dialog [name="plannedAmount"]').fill("1500000");
     await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("500000");
