@@ -1,3 +1,4 @@
+import {buildCycleAlerts} from "../vps/backend/src/finance-paycycle-alerts.mjs";
 import assert from "node:assert/strict";
 import {calculateFinanceAdvice,twdUnits,twdText,addDays} from "../vps/backend/src/finance-advisor-engine.mjs";
 
@@ -70,4 +71,30 @@ const sameDay=calculateFinanceAdvice({...input,wallets:[{name:"TWD",currency_cod
 assert.deepEqual(sameDay.entries.map(e=>e.kind),["income","expense"]);
 assert.equal(sameDay.projectedEndingTwd,"100");
 assert.throws(()=>calculateFinanceAdvice({...input,days:365}),/INVALID_ADVISOR_RANGE/);
+// Salary on the 10th must not cover expenses due on the 5th.
+const cycleResult=buildCycleAlerts({
+ asOf:"2026-10-17",through:"2026-11-15",startingBalanceTwd:"10000",bufferTwd:"2000",
+ entries:[
+  {date:"2026-10-20",kind:"expense",label:"Living costs",amountTwd:"-8000"},
+  {date:"2026-11-05",kind:"expense",label:"Rent due before salary",amountTwd:"-6000"},
+  {date:"2026-11-10",kind:"income",label:"Salary",amountTwd:"30000"},
+  {date:"2026-11-13",kind:"debt",label:"Debt payment",amountTwd:"-5000"}
+ ]
+});
+assert.equal(cycleResult.cycles.length,2,"A salary creates a new planning interval");
+assert.equal(cycleResult.cycles[0].endDate,"2026-11-09");
+assert.equal(cycleResult.cycles[0].reserveGapTwd,"6000","Pre-payday obligations must show the necessary liquidity bridge");
+assert.equal(cycleResult.cycles[1].incomeTwd,"30000");
+assert.equal(cycleResult.cycles[1].reserveGapTwd,"0","Past shortage must not taint the next funded cycle");
+assert(cycleResult.alerts.some(x=>x.code==="LIQUIDITY_GAP"));
+const nearDue=buildCycleAlerts({
+ asOf:"2026-11-03",through:"2026-11-20",startingBalanceTwd:"7000",bufferTwd:"0",
+ entries:[{date:"2026-11-05",kind:"debt",label:"Payment",amountTwd:"-3000"},
+  {date:"2026-11-10",kind:"income",label:"Salary",amountTwd:"10000"}]
+});
+assert.equal(nearDue.alerts.find(x=>x.code==="DUE_SOON")?.date,"2026-11-05");
+assert.equal(nearDue.alerts.find(x=>x.code==="INCOME_SOON")?.date,"2026-11-10");
+assert.equal(plan.cycles.length>=1,true);
+assert(Array.isArray(plan.alerts));
+
 console.log("PASS forecast micro-TWD precision, 30-day rolling dates, overdue reconciliation, FX isolation, actual debt paid and risk recommendation");
