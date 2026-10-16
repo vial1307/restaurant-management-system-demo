@@ -221,7 +221,7 @@ try {
     await method.locator("summary").click();
     assert.equal(await method.locator(".fin-wb-methodology-item").count(),7,
       "The user can inspect the seven actual calculation assumptions and limits");
-    assert.match(await method.innerText(),/tiền lương.*ngày.*không được coi là giải pháp/s);
+    assert.match(await method.innerText(),/trước ngày nhận lương.*không được coi là giải pháp/s);
     assert.match(await method.innerText(),/chưa tự chuyển tiền góp sang tháng nhẹ hơn/);
     assert.match(await method.innerText(),/chưa có cảnh báo nền tự động/);
     await page.locator(".fin-wb-metrics").waitFor();
