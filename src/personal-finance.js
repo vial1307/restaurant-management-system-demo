@@ -1,5 +1,10 @@
 // Private Finance OS: all user data comes from authenticated VPS APIs, never fixtures/localStorage.
 const root=document.querySelector("#finance-content");
+const loginView=document.querySelector("#finance-login");
+const layout=document.querySelector("#finance-layout");
+const logoutButton=document.querySelector("#finance-logout");
+const loginForm=document.querySelector("#finance-login-form");
+const loginError=document.querySelector("#finance-login-error");
 const dialog=document.querySelector("#finance-dialog");
 const toast=document.querySelector("#finance-toast");
 const fieldRoot=document.querySelector("#finance-fields");
@@ -27,7 +32,7 @@ async function api(path,body,method="GET"){
   return data;
 }
 function failure(error){
-  if(error?.status===401)return "Bạn cần đăng nhập Kitchen OS trước khi sử dụng Finance OS.";
+  if(error?.status===401)return "Vui lòng đăng nhập tài khoản được cấp quyền.";
   if(error?.status===403)return "Tài khoản hiện tại không được cấp quyền xem tài chính cá nhân.";
   if(error?.status===503)return "Finance Database chưa được kích hoạt hoặc đang không thể kết nối. Dữ liệu nhà hàng không bị ảnh hưởng.";
   const errors={
@@ -123,9 +128,14 @@ function renderLedger(){
   }).join(""):'<div class="fin-list-empty">Chưa có giao dịch trong tháng.</div>')+'</div>';
 }
 function render(){
+  const showLogin=!state.loading&&state.problem?.status===401;
+  loginView.hidden=!showLogin;
+  layout.hidden=showLogin;
+  logoutButton.hidden=showLogin || state.loading;
+  if(showLogin)return;
   tabs.forEach(b=>{const active=b.dataset.tab===state.tab;b.classList.toggle("active",active);b.setAttribute("aria-current",active?"page":"false");});
   if(state.loading){root.innerHTML='<div class="fin-state"><div class="fin-spinner"></div>Đang đọc dữ liệu được bảo vệ...</div>';return;}
-  if(state.problem){root.innerHTML='<div class="fin-card"><h2>Không thể mở tài chính</h2><p class="fin-error">'+esc(failure(state.problem))+'</p><a class="fin-link" href="./.admindev.html">Trở lại Super Admin</a></div>';return;}
+  if(state.problem){root.innerHTML='<div class="fin-card"><h2>Không thể mở tài chính</h2><p class="fin-error">'+esc(failure(state.problem))+'</p><p class="fin-note">Nếu bạn vừa đăng nhập sai tài khoản, hãy đăng xuất và đăng nhập bằng tài khoản được cấp quyền.</p></div>';return;}
   root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():renderLedger();
 }
 function selectField(name,label,options,placeholder="Chọn"){
@@ -217,6 +227,22 @@ async function submitForm(event){
 document.querySelector("#finance-dialog-close").addEventListener("click",()=>dialog.close());
 document.querySelector("#finance-dialog-cancel").addEventListener("click",()=>dialog.close());
 form.addEventListener("submit",submitForm);
+loginForm.addEventListener("submit",async(event)=>{
+  event.preventDefault();
+  const fields=new FormData(loginForm);const button=loginForm.querySelector('button[type="submit"]');
+  loginError.hidden=true;button.disabled=true;
+  try{
+    const response=await fetch("/api/auth/login",{method:"POST",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:fields.get("username"),password:fields.get("password")})});
+    if(!response.ok){loginError.textContent="Tài khoản hoặc mật khẩu không đúng.";loginError.hidden=false;return;}
+    loginForm.reset();state.loading=true;state.problem=null;render();await refresh();
+  }catch(error){state.problem=error;state.loading=false;render();loginError.textContent=failure(error);loginError.hidden=false;}
+  finally{button.disabled=false;}
+});
+logoutButton.addEventListener("click",async()=>{
+  await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:"{}"}).catch(()=>{});
+  state.data=null;state.overview=null;state.loading=false;
+  const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
+});
 tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();}));
 root.addEventListener("click",event=>{
  const act=event.target.closest("[data-open]");if(act){showForm(act.dataset.open);return;}
