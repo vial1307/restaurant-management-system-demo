@@ -1,3 +1,12 @@
+## FIXED — Finance OS blank white screen on website root (2026-10-16)
+
+- **Public URL fixed and verified:** https://finance.82.47.180.185.nip.io/ now serves complete Finance OS login HTML rather than empty HTTP 200 (zero bytes). Direct `/finance.html` also works.
+- **Root cause:** Caddy `handle / { redir /finance.html 302 }` produced an empty response for the Finance hostname. Replaced with explicit `root * /srv`, `rewrite * /finance.html` and `file_server`.
+- **PR #244 merged** (squash commit `88831b1c69e346464546623337f9150a43b7e3da`). Staging, PostgreSQL, Caddy validation and restaurant-wide regressions all passed.
+- **Production evidence:** [GitHub Actions run 38904666472](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38904666472), production deploy and desktop/mobile Chromium smoke PASSED. Real anonymous Chromium confirmed on 1440px and 390px: HTTP 200 with ~3 KB HTML, visible login form, CSS and JavaScript 200 and expected anonymous Finance API 401. Final marker `FINANCE_PUBLIC_LOGIN_RENDER_PASS`.
+- Finance personal PostgreSQL remains activated and isolated; this change only fixes Finance domain root routing and enhances production smoke. No restaurant database or financial ledger data altered.
+- Authenticated customer finance save/read after login still requires separate private account acceptance check, not covered by anonymous login smoke.
+
 ## 2026-10-16 — DONE: Finance OS independent HTTPS site and PostgreSQL database on existing VPS
 
 - Merge PR #243 as `510aaac`; production release followed by workflow shell fix `a495474`. End-to-end gated production and Finance isolated HTTPS smoke **PASS**: https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38880962591.
