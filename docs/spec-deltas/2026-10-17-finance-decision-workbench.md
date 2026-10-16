@@ -29,3 +29,16 @@ A real date-ordered financial decision model that answers: when does salary arri
 - Release only with exact-head finance schema/API/regression, 320px/390px/1440px UI, Kitchen staging/full regression, postdeploy health, encrypted backup restore and private owner data acceptance.
 
 Production must not be claimed for PR #252 until verified.
+## Mô phỏng & Tư vấn: transparent cashflow decision philosophy (user-facing)
+
+The page includes a collapsible, seven-rule explanation titled **Phương pháp tính & nguyên tắc tư vấn dòng tiền**. It must remain accessible on 320/390/1440 widths and distinguish implemented math from unimplemented optimizations:
+
+1. **Source of truth:** owner-scoped posted TWD wallets only. Forecasted inflows/outflows/debt funds/goal funds/remittances are assumptions, not posted real money. Never double-count posted debt payments.
+2. **Liquidity by date:** balance after each dated event; minimum balance and earliest date that breaks the user-selected reserve threshold. A paycheck credited later cannot pay a bill due earlier.
+3. **Liquidity and obligations before optimization:** basic living expenses and legally due payments precede optional debt acceleration and goals. This is a decision *priority* but not an automatic bill classifier or due-date mutator.
+4. **Debt acceleration:** caution on any 'safe extra debt' estimate, derived from a forecast trough before the next payday only and *not* safe if recurring bills or FX obligations are absent. The highest entered annual rate is a comparison hint, not a full amortization calculation.
+5. **Borrowing bridge:** only paired positive borrow and scheduled repayment, with explicit repayment total including lender costs. A principal-only bridge window is informative and cannot be treated as proof of repayment affordability.
+6. **Goal sinking fund:** target amount is spread equally over the recognized future hypothetical paydays before target date. There is currently **no adaptive allocator** to reduce contributions in peak-cost months.
+7. **Change propagation:** update worksheet cells then re-run preview, comparing new dated risk. Changes to underlying Finance planning/debts outside the worksheet require a fresh data read. No true real-time cross-tab invalidation and no push/email monitoring yet.
+
+Documentation is explanatory UI only; adding this note does not activate an optimizer, notifications, automatic loan, debt refinancing, or persistent recurring bills. Never imply production release prior to exact-head CI and gated deployment.
