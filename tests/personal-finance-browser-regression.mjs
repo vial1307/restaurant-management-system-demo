@@ -42,6 +42,13 @@ try {
           totals:{income:"1000",expense:"1500",debt:"0",goal:"0",remittance:"0"},totalOutflowTwd:"1500",
           entries:[{date:"2026-10-20",kind:"income",label:"Lương",amountTwd:"1000",projectedBalanceTwd:"2000",source:"cashflow",estimatedDate:false},
             {date:"2026-10-22",kind:"expense",label:"Chi phí",amountTwd:"-1500",projectedBalanceTwd:"500",source:"cashflow",estimatedDate:false}],
+          cycles:[{startDate:"2026-10-17",endDate:"2026-10-19",nextIncomeDate:"2026-10-20",incomeTwd:"0",
+            obligationsTwd:"0",goalAllocationsTwd:"0",minimumBalanceTwd:"1000",reserveGapTwd:"500",
+            endingBalanceTwd:"1000"},{startDate:"2026-10-20",endDate:"2026-11-15",nextIncomeDate:null,
+            incomeTwd:"1000",obligationsTwd:"1500",goalAllocationsTwd:"0",minimumBalanceTwd:"-500",
+            reserveGapTwd:"500",endingBalanceTwd:"-500"}],
+          alerts:[{code:"LIQUIDITY_GAP",severity:"danger",date:"2026-10-22",
+            title:"Thiếu mức dự trữ trước kỳ thu tiếp theo",message:"Cần bù 500 TWD vào ngày 2026-10-22."}],
           warnings:[{code:"ESTIMATED_DATES",message:"Kiểm tra ngày thanh toán dự kiến."}],
           recommendations:[{kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt",detail:"Kiểm tra dòng tiền theo ngày, không tự chuyển tiền."}],
           foreignWallets:[{name:"Ví VND",currency:"VND",balance:"100000"}],metadata:{currency:"TWD",countedWallets:1,readOnly:true}};
@@ -154,6 +161,10 @@ try {
     await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor({timeout:12000});
     assert((await page.locator(".fin-kpi-value").allTextContents()).every(t=>t.includes("0")),
       "No invented money values can appear before actual postings");
+    await page.locator(".fin-control-summary").waitFor();
+    assert((await page.locator(".fin-alert-line.danger").first().textContent()).includes("2026-10-22"),
+      "Overview must show a readable day-specific liquidity alert from the advisor API");
+    assert.equal(await page.locator('.fin-howto summary').count(),1,"Getting-started guide is available on all viewports");
     // A dedicated advisory tab must read protected API and permit 30/60/90d controls.
     await page.locator('.fin-nav [data-tab="advisor"]').click();
     await page.locator("h1").filter({hasText:"Tư vấn dòng tiền"}).waitFor();
