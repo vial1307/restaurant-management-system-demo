@@ -1256,3 +1256,13 @@ The active development baseline is `restaurant-management-system-demo` until a d
 The older `restaurant-management-system` repository contains important historical/core implementation context but must not be mistaken for the latest production baseline.
 
 Future engineering work should update this master specification whenever behavior changes, so a new engineer or AI agent can reconstruct the intended system without relying on conversation history.
+
+---
+
+## Optional isolated Personal Finance OS (2026-10-16, not production enabled)
+
+Personal Finance OS is a separate **private** domain hosted on the existing VPS but **not** a part of the restaurant's inventory, payroll, site-scoped operations, or business-state database. Source of truth is a separate PostgreSQL database and dedicated persistent volume. The Kitchen OS auth session may identify an authorized owner, but `system.super_admin` and normal restaurant account roles alone do not authorize personal-finance data access.
+
+Owner access must be explicitly allowed by `FINANCE_OWNER_USER_ID` and enforced server-side on every finance API call. Missing owner configuration or missing database is a fail-closed condition. No sensitive finance information may be included in general admin snapshots, public handoff, generic audit reporting, or restaurant database exports.
+
+Initial schema, finance ledger invariants, multi-currency plans and staged release acceptance criteria are defined in `docs/spec-deltas/2026-10-16-personal-finance-os.md`. Implementation is staged, and production must not be marked DONE until finance API, permission tests, mobile/desktop responsive UI, dedicated backups and VPS smoke tests succeed.
