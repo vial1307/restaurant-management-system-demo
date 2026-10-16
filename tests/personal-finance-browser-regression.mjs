@@ -278,6 +278,15 @@ try {
     await page.locator('[data-period="year"]').click();
     await page.locator('h2').filter({hasText:"Tổng hợp năm"}).waitFor();
     const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,view:innerWidth}));
+    if(size.doc>size.view+1){
+      const overflowing=await page.evaluate(()=>
+        [...document.body.querySelectorAll("*")]
+          .filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.right>innerWidth+1||r.left< -1);})
+          .map(el=>({tag:el.tagName,cls:String(el.className).slice(0,120),text:(el.innerText||"").slice(0,65),rect:({left:Math.round(el.getBoundingClientRect().left),right:Math.round(el.getBoundingClientRect().right),width:Math.round(el.getBoundingClientRect().width)})}))
+          .slice(0,25)
+      );
+      console.error("FINANCE_LAYOUT_OVERFLOW_OFFENDERS",JSON.stringify({viewport,size,overflowing}));
+    }
     assert(size.doc<=size.view+1,"Finance mobile horizontal overflow "+JSON.stringify({viewport,size}));
     assert.deepEqual(pageErrors,[],"Page JavaScript errors "+JSON.stringify({viewport,pageErrors}));
     await context.close();
