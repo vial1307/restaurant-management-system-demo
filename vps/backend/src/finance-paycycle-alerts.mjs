@@ -26,14 +26,14 @@ export function buildCycleAlerts({asOf,through,startingBalanceTwd,bufferTwd,entr
   let current=opening,pos=0;
   for(let i=0;i<starts.length;i++){
     const start=starts[i],boundary=boundaries[i],before=current;
-    let received=0n,obligations=0n,goals=0n,minimum=current,minimumDate=start,count=0;
+    let received=0n,obligations=0n,goals=0n,minimum=i===0?current:null,minimumDate=start,count=0;
     while(pos<events.length&&events[pos].date<boundary){
       const item=events[pos++];
       if(item.kind==="income")received+=item.delta;
       else if(item.kind==="goal")goals-=item.delta;
       else obligations-=item.delta;
       current+=item.delta;count++;
-      if(current<minimum){minimum=current;minimumDate=item.date;}
+      if(minimum===null||current<minimum){minimum=current;minimumDate=item.date;}
     }
     const gap=minimum<buffer?buffer-minimum:0n;
     cycles.push({
