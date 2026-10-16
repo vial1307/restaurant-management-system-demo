@@ -1,3 +1,12 @@
+## 2026-10-16 — Finance OS Stage 2: isolated finance API and responsive UI (NOT PRODUCTION)
+
+- Continued draft [PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016` from Stage 1 independent PostgreSQL schema.
+- Added lazy independent finance PG pool, explicit owner UUID session gate, JSON write anti-CSRF header, server-side numeric ledger validation, cross-account ownership check, transaction/audit idempotency, income/expense and transfer/FX atomic bitemporal postings. New one-time opening balance adjustment does not inflate monthly income.
+- Added monthly report and 12-month annual budget vs actual SQL queries, dynamically configured currency options (TWD/VND/USD/JPY/EUR/CNY initial), FX/remittance plans that never debit a balance, no false "live" FX feed.
+- Added standalone responsive `finance.html`, `src/personal-finance.js`, `src/personal-finance.css`; conditional access link in Super Admin, deploy staging/production package support. API save feedback waits for successful VPS write then server readback; failure stays editable in dialog.
+- Added PostgreSQL 16 API roundtrip/owner/privacy regression and browser smoke at 1440px/390px/320px (full CI gate). No production provisioning or data changes. No official rates or real payment APIs.
+- Outstanding: final tests on exact commit, VPS secrets+separate DB setup, backup/restore policy and production smoke. PR remains DRAFT; Kitchen OS production database and stock unchanged.
+
 ## IN PROGRESS — Private Personal Finance OS independent database foundation (2026-10-16)
 
 - [Draft PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`. **NOT MERGED / NOT PRODUCTION DEPLOYED**.
