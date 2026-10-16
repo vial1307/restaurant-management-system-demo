@@ -171,6 +171,7 @@ try {
     await page.locator('[data-go-finance-tab="budget"]').click();
     await page.locator("h1").filter({hasText:"Kế hoạch tháng / năm"}).waitFor();
     assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
+    await page.locator('.fin-nav [data-tab="overview"]').click();
 
     await page.locator('[data-open="account"]').click();
     await page.locator('#finance-dialog [name="name"]').fill("Ví VN thêm");
