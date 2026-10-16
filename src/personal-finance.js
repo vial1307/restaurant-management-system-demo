@@ -473,6 +473,19 @@ function renderWorkbench(){
    panel("Sổ dòng tiền theo ngày",events,'Khoản thực tế lấy từ Database; các dòng kịch bản chỉ phục vụ tính toán, chưa ghi sổ.')+
    (b.error?'<p class="fin-error">'+esc(failure(b.error))+'</p>':'');
 }
+let workbookRecalcTimer=0;
+function scheduleWorkbookRecalculation(){
+  workbookState.preview=null;
+  clearTimeout(workbookRecalcTimer);
+  workbookRecalcTimer=setTimeout(()=>{
+    if(state.tab!=="workbench")return;
+    // Never replace spreadsheet inputs while keyboard focus is editing a cell.
+    // Re-run automatically once focus has left the editable area.
+    const editing=document.activeElement?.closest?.(".fin-wb-editor,.fin-wb-settings");
+    if(editing){scheduleWorkbookRecalculation();return;}
+    void previewWorkbook();
+  },600);
+}
 function wbDate(step=0){
  const day=workbookState.book?.asOf||workbookState.asOf||new Date().toISOString().slice(0,10);
  return new Date(Date.parse(day+"T00:00:00Z")+step*86400000).toISOString().slice(0,10);
@@ -493,6 +506,7 @@ async function loadWorkbench(){
  }catch(error){workbookState.loading=false;workbookState.error=error;if(state.tab==="workbench")render();}
 }
 async function previewWorkbook(){
+ clearTimeout(workbookRecalcTimer);
  if(!workbookState.book)return;
  const seq=++workbookState.request;
  workbookState.busy=true;workbookState.error=null;workbookState.preview=null;
@@ -517,6 +531,7 @@ function wbAdd(kind){
  workbookState.preview=null;render();
 }
 async function wbAction(action,element){
+ clearTimeout(workbookRecalcTimer);
  const b=workbookState.book;
  if(action==="new"){workbookState.id=null;workbookState.book=newWorkbook();workbookState.preview=null;render();await previewWorkbook();return;}
  if(action==="clone"){workbookState.id=null;workbookState.book=structuredClone(b);workbookState.book.name+=" (bản sao)";render();return;}
@@ -847,13 +862,15 @@ root.addEventListener("change",async event=>{
      if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:""};
      workbookState.book.goal[prop.slice(5)]=value;
    }else workBookSet(prop,value);
-   await previewWorkbook();return;
+   if(prop==="months")await previewWorkbook();
+   else scheduleWorkbookRecalculation();
+   return;
  }
  const wbRow=event.target.closest("[data-wb-row]");
  if(wbRow&&workbookState.book){
    const index=Number(wbRow.dataset.wbRow),prop=wbRow.dataset.wbProp;
    if(workbookState.book.rows[index])workbookState.book.rows[index][prop]=wbRow.value;
-   await previewWorkbook();return;
+   scheduleWorkbookRecalculation();return;
  }
  if(event.target.id!=="fin-month")return;
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value))return;
