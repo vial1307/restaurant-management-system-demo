@@ -161,3 +161,30 @@
 @media(max-width:360px){.fin-wb-metrics{grid-template-columns:1fr}}
 
 .fin-wb-stale{padding:10px 12px;margin:12px 0;border-left:3px solid #9b6726;background:#fff8e8;color:#745527;font-size:12px;border-radius:6px}
+
+
+/* Transparent cashflow methodology, first-class section of Mô phỏng & Tư vấn. */
+.fin-wb-methodology{margin:0 0 16px;background:#fff;border:1px solid var(--edge);border-radius:15px;box-shadow:0 5px 20px #18395109;overflow:hidden}
+.fin-wb-methodology>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 19px;list-style:none;cursor:pointer}
+.fin-wb-methodology>summary::-webkit-details-marker{display:none}
+.fin-wb-methodology>summary strong{display:block;font-size:14px;line-height:1.45}
+.fin-wb-methodology>summary small{display:block;color:var(--soft);font-size:12px;margin-top:4px}
+.fin-wb-methodology-chevron{font-size:22px;line-height:1;color:var(--soft);transition:transform .18s ease}
+.fin-wb-methodology[open] .fin-wb-methodology-chevron{transform:rotate(180deg)}
+.fin-wb-equation{margin:0 19px 13px;border:1px solid #d8e7f3;border-radius:10px;background:#f1f7fc;padding:12px 14px;font-size:13px}
+.fin-wb-equation strong,.fin-wb-equation small{display:block}
+.fin-wb-equation small{font-size:12px;color:var(--soft);margin-top:5px;line-height:1.5}
+.fin-wb-methodology-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:0 19px 14px}
+.fin-wb-methodology-item{display:flex;align-items:flex-start;gap:11px;padding:12px;border-radius:10px;border:1px solid var(--edge);min-width:0;background:#fcfdff}
+.fin-wb-methodology-index{flex:0 0 auto;font-size:11px;line-height:25px;font-weight:800;text-align:center;width:25px;height:25px;border-radius:8px;color:#205a86;background:#e6f1fc}
+.fin-wb-methodology-item>div{min-width:0;overflow-wrap:anywhere}
+.fin-wb-methodology-item strong{font-size:13px}
+.fin-wb-methodology-item p{font-size:12px;color:var(--soft);margin:5px 0 7px;line-height:1.65}
+.fin-wb-methodology-status{display:inline-block;font-size:11px;color:#3b627c;font-weight:750;border-radius:6px;background:#edf4f8;padding:4px 7px}
+.fin-wb-methodology-foot{margin:0 19px 17px;padding-top:10px;border-top:1px solid var(--edge);color:var(--soft);font-size:12px}
+@media(max-width:680px){
+ .fin-wb-methodology>summary{padding:13px 14px}
+ .fin-wb-equation{margin:0 14px 12px}
+ .fin-wb-methodology-list{grid-template-columns:minmax(0,1fr);gap:8px;padding:0 14px 12px}
+ .fin-wb-methodology-foot{margin:0 14px 14px}
+}
