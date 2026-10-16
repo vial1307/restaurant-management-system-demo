@@ -1,3 +1,10 @@
+## ACTIVE — Finance Planning ↔ Goals/Debts cashflow synchronization (2026-10-17)
+
+- Branch `fix/finance-goals-debts-cashflow-sync-20261017`; baseline main `6ac78c659757d81ce9f7d4c4a891849cbc8deaae`; prior production `b5c074c` (Finance schema 002).
+- User reports Kế hoạch and Mục tiêu & Nợ are not synchronized in cashflow. Implement goal monthly fund allocations and account for them alongside existing debt allocations in one PostgreSQL projection; display unallocated goals/debts, no invented monthly payment schedule.
+- New migration 003, owner-only API, UI shared monthly state, F5 and permission tests. Do not modify Kitchen DB or production Finance data until green exact-head CI/release.
+- Status: IN PROGRESS / NOT YET PRODUCTION VERIFIED.
+
 ## DONE — Finance monthly cashflow & debt repayment fund (2026-10-17)
 
 - **Production completed:** Finance OS https://finance.82.47.180.185.nip.io/ ; PR [#246](https://github.com/vial1307/restaurant-management-system-demo/pull/246) merged as exact release `b5c074c1abfe05035997acb01c9b76a36dce0cad`.
