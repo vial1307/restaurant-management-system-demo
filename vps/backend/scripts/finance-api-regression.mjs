@@ -123,13 +123,69 @@ assert.equal(year.status,200);
 assert.equal(year.data.months.length,12);
 assert.equal(Number(year.data.months.find(m=>m.month===monthly).budget_twd),6000);
 assert.equal(Number(year.data.months.find(m=>m.month===monthly).expense_twd),6000);
+// Planned monthly cashflow is separate from actual ledger and can be edited/deleted safely.
+const cfIncome=(await post("/cashflow/items",{month:monthly,kind:"income",label:"Lương dự kiến",amountTwd:"60000",dueDay:"10"})).item;
+const cfExpense=(await post("/cashflow/items",{month:monthly,kind:"expense",label:"Chi phí sinh hoạt",amountTwd:"11000",dueDay:"5"})).item;
+const badPlan=await request("/finance/cashflow/items",{method:"POST",cookie:owner,body:{month:monthly,kind:"expense",label:"bad",amountTwd:"-100"}});
+assert.equal(badPlan.status,400);
+const updated=await request("/finance/cashflow/items/"+cfExpense.id,{method:"PUT",cookie:owner,body:{kind:"expense",label:"Chi phí sinh hoạt",amountTwd:"11000",dueDay:"6"}});
+assert.equal(updated.status,200);
+const foreignAttempt=await request("/finance/cashflow/items/"+cfIncome.id,{method:"PUT",cookie:stranger,body:{kind:"income",label:"tampered",amountTwd:"1"}});
+assert.equal(foreignAttempt.status,403);
+const reserve=await request("/finance/debt-funds",{method:"PUT",cookie:owner,body:{
+  debtId:debt.id,month:monthly,plannedAmount:"1500000",earmarkedAmount:"500000",fxRateToTwd:"0.0013"
+}});
+assert.equal(reserve.status,200,JSON.stringify(reserve.data));
+const noRate=await request("/finance/debt-funds",{method:"PUT",cookie:owner,body:{
+  debtId:debt.id,month:monthly,plannedAmount:"1500000",earmarkedAmount:"500000"
+}});
+assert.equal(noRate.status,400,"Debt fund foreign rate must be explicit");
+let cashflow=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(cashflow.status,200,JSON.stringify(cashflow.data));
+assert.equal(cashflow.data.items.length,2);
+assert.equal(Number(cashflow.data.summary.planned_income_twd),60000);
+assert.equal(Number(cashflow.data.summary.planned_expense_twd),11000);
+assert.equal(Number(cashflow.data.summary.planned_debt_fund_twd),1950);
+assert.equal(Number(cashflow.data.summary.planned_net_twd),47050);
+assert.equal(Number(cashflow.data.summary.earmarked_debt_fund_twd),650);
+const beforeActual=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(beforeActual.data.accounts.find(a=>a.id===vnd.id).balance),7850000,
+  "Debt fund earmarking MUST NOT alter wallet balances");
+const paymentKey=key();
+const paymentBody={idempotencyKey:paymentKey,debtId:debt.id,accountId:vnd.id,paymentDate:date,
+  principalPaid:"1000000",interestPaid:"0",feePaid:"0",fxRateToTwd:"0.0013",memo:"Thanh toán theo sao kê"};
+const payment=(await post("/debt-payments",paymentBody)).payment;
+assert.equal(Number(payment.base_amount_twd),1300);
+const repeatPayment=await request("/finance/debt-payments",{method:"POST",cookie:owner,body:paymentBody});
+assert.equal(repeatPayment.status,409,"Debt payment idempotency must reject retries");
+const invalidLarge=await request("/finance/debt-payments",{method:"POST",cookie:owner,body:{...paymentBody,idempotencyKey:key(),principalPaid:"99999999"}});
+assert.equal(invalidLarge.status,400,"Cannot repay more principal than outstanding");
+const invalidOtherOwner=await request("/finance/debt-payments",{method:"POST",cookie:stranger,body:{...paymentBody,idempotencyKey:key()}});
+assert.equal(invalidOtherOwner.status,403,"Restaurant Super Admin cannot repay private debts");
+const afterActual=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(afterActual.data.accounts.find(a=>a.id===vnd.id).balance),6850000);
+assert.equal(Number(afterActual.data.debts.find(d=>d.id===debt.id).outstanding_amount),11000000);
+cashflow=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(Number(cashflow.data.summary.actual_debt_paid_twd),1300);
+assert.equal(Number(cashflow.data.summary.actual_net_twd),51016.05);
+assert.equal(cashflow.data.debtPayments.length,1);
+assert.equal(Number(cashflow.data.debtFunds[0].earmarked_amount),500000,
+ "Manual reserve must remain separate from posted repayment");
+const yearCashflow=await request("/finance/cashflow/year?year="+monthly.slice(0,4),{cookie:owner});
+assert.equal(yearCashflow.status,200);
+assert.equal(yearCashflow.data.months.length,12);
+assert.equal(Number(yearCashflow.data.months.find(x=>x.month===monthly).debt_fund_twd),1950);
+const deleteItem=await request("/finance/cashflow/items/"+cfExpense.id,{method:"DELETE",cookie:owner,body:{}});
+assert.equal(deleteItem.status,200);
+assert.equal((await request("/finance/cashflow?month="+monthly,{cookie:owner})).data.items.length,1,
+ "Deleting a forecast item must persist without touching actual ledger");
 const db=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
 await db.connect();
 try{
   const ledger=await db.query("SELECT count(*)::int as count FROM finance.entries WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
   const aud=await db.query("SELECT count(*)::int as count FROM finance.audit_events WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);
-  assert.equal(ledger.rows[0].count,9,"eight transactional entries plus one opening balance");
-  assert.equal(aud.rows[0].count,20,"All 14 configuration writes and six ledger events must be audited");
+  assert.equal(ledger.rows[0].count,10,"Original nine entries and one immutable debt payment entry");
+  assert.equal(aud.rows[0].count,27,"Original 20 audits plus cashflow create/edit/delete, reserve edits and debt payment");
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
   catch(e){blocked=e.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
@@ -144,5 +200,5 @@ assert.deepEqual(opposite.map(x=>x.status),[201,201],"Opposite direction transfe
 const afterConcurrency=await request("/finance/bootstrap",{cookie:owner});
 assert.equal(Number(afterConcurrency.data.accounts.find(a=>a.id===bank.id).balance),40900);
 assert.equal(Number(afterConcurrency.data.accounts.find(a=>a.id===cash.id).balance),1000);
-console.log("PASS authenticated finance goals, debts, cancellation, cross-owner RBAC, idempotency and deadlock-safe ledger");
+console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
