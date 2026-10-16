@@ -359,7 +359,7 @@ function renderGoals(){
 
 // Finance scenario workbench: visually spreadsheet-like, financially isolated from ledger.
 // Saved workbooks are persisted via authenticated, audited Finance PostgreSQL only.
-const workbookState={loaded:false,loading:false,book:null,saved:[],id:null,preview:null,error:null,busy:false,request:0};
+const workbookState={loaded:false,loading:false,book:null,saved:[],id:null,preview:null,error:null,busy:false,request:0,methodologyOpen:false};
 const newWorkbook=()=>({name:"Kịch bản mới",months:12,salaryDay:10,bufferTwd:"0",
   monthlyExtraIncomeTwd:"0",rows:[],goal:null});
 const wbKinds={income:"Thu thêm",expense:"Chi phát sinh",debt:"Trả nợ thêm",goal:"Để dành",borrow:"Vay tạm",repay:"Hoàn trả vay"};
@@ -402,7 +402,7 @@ function renderWorkbenchMethodology(){
     "Sửa khoản thu, chi, ngày nhận lương, tiền vay hoặc ngày mục tiêu rồi chọn Tính lại để đánh giá toàn bộ lịch mới. Chỉ khi dữ liệu nguồn Finance được tải lại mới phản ánh thay đổi ở những phần khác; chưa có cảnh báo nền tự động hay đồng bộ sự kiện tức thời.",
     "Tính lại theo yêu cầu; chưa tự theo dõi nền"]
  ];
- return '<details class="fin-wb-methodology" data-fin-methodology open>'+
+ return '<details class="fin-wb-methodology" data-fin-methodology'+(workbookState.methodologyOpen?' open':'')+'>'+
    '<summary><span><strong>Phương pháp tính & nguyên tắc tư vấn dòng tiền</strong>'+
    '<small>7 quy tắc · Giải thích rõ phần đã tính và phần chưa tự động</small></span><span class="fin-wb-methodology-chevron" aria-hidden="true">⌄</span></summary>'+
    '<div class="fin-wb-equation"><strong>Số dư theo ngày = số dư TWD đã ghi sổ + thu dự kiến − chi/nghĩa vụ dự kiến − phân bổ mục tiêu.</strong>'+
@@ -888,6 +888,9 @@ root.addEventListener("click",async event=>{
    if(state.period==="year")loadYear();
  }
 });
+root.addEventListener("toggle",event=>{
+ if(event.target.matches?.("[data-fin-methodology]"))workbookState.methodologyOpen=event.target.open;
+},true);
 root.addEventListener("input",event=>{
  if(state.tab!=="workbench"||!workbookState.book)return;
  const node=event.target.closest("[data-wb-row],[data-wb-field]");
