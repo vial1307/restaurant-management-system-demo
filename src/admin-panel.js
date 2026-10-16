@@ -43,7 +43,7 @@ let siteRegistryRefreshTimer = 0;
 let siteRegistryRenderTimer = 0;
 
 const state = {
-  me:null, loading:true, error:"", success:"", section:"overview",
+  me:null, loading:true, error:"", success:"", section:"overview", financeReady:false,
   overview:null, systemMetrics:null, developmentStatus:null, users:[], accessModel:{roles:[],modules:[],capabilities:[]}, sites:[], settings:[], content:null,
   serverActions:{capabilities:null,running:false,result:null},
   data:{ name:"inventory-products",q:"",site:"",status:"",page:1,pageSize:25,sort:"",direction:"desc",result:null,loading:false },
@@ -172,7 +172,7 @@ function subscribeSiteRegistryRealtime() {
 function nav() {
   return `<aside class="sa-sidebar"><div class="sa-owner"><span class="sa-owner-badge">SUPER</span><strong>${esc(state.me?.displayName||state.me?.username||"")}</strong><small>${esc(state.me?.username||"")}</small></div>
   <nav>${SECTIONS.map((id)=>`<button type="button" data-section="${id}" class="sa-nav-item ${state.section===id?"active":""}"><span>${esc(LABELS[id])}</span></button>`).join("")}</nav>
-  <div class="sa-sidebar-foot"><a href="./finance.html" title="Finance OS · chỉ tài khoản chủ sở hữu được cấp quyền xem dữ liệu">↗ Finance OS · Cá nhân</a><a href="./">← Kitchen OS</a></div></aside>`;
+  <div class="sa-sidebar-foot">${state.financeReady?`<a href="./finance.html" title="Tài chính cá nhân chỉ dành cho chủ tài khoản">↗ Finance OS · Cá nhân</a>`:""}<a href="./">← Kitchen OS</a></div></aside>`;
 }
 function topbar() {
   return `<header class="sa-topbar"><div><button class="sa-menu-button" type="button" data-toggle-nav>☰</button><h1>${esc(LABELS[state.section])}</h1><p>Super Admin · Database Control Plane</p></div><div class="sa-top-actions"><button class="sa-btn" type="button" data-refresh>↻ Làm mới</button></div></header>`;
@@ -748,6 +748,10 @@ async function boot() {
   try { await loadCore(); if(state.section==="data")await loadDataset(); if(state.section==="logs")await loadAudit(); }
   catch(error){state.error=errorText(error);} render();
   subscribeSiteRegistryRealtime();
+  // Only the explicitly authorized owner sees the separate Finance OS entry.
+  void fetch("/api/finance/access",{credentials:"same-origin",cache:"no-store"})
+    .then(response=>{if(response.ok){state.financeReady=true;render();}})
+    .catch(()=>{});
 }
 window.addEventListener("hashchange",()=>{const section=currentSection();if(section!==state.section)void switchSection(section);});
 void boot();
