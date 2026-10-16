@@ -646,7 +646,7 @@ function renderWorkbench(){
    workbookField("goal.totalTwd",goal.totalTwd,"number","Cần tích lũy thêm (NT$)")+
    workbookField("goal.targetDate",goal.targetDate,"date","Hạn cần đạt")+
    '<label class="fin-wb-field"><span>Cách phân bổ</span><select data-wb-field="goal.mode">'+
-   '<option value="adaptive"'+((goal.mode||"adaptive")==="adaptive"?' selected':'')+'>Linh hoạt · ưu tiên giữ dự trữ</option>'+
+   '<option value="adaptive"'+((goal.mode||"even")==="adaptive"?' selected':'')+'>Linh hoạt · ưu tiên giữ dự trữ</option>'+
    '<option value="even"'+(goal.mode==="even"?' selected':'')+'>Chia đều theo các kỳ thu</option></select></label></div>'+
    '<p class="fin-note">Linh hoạt phân bổ quỹ ở những kỳ còn đủ tiền sau nghĩa vụ; nếu không thể đạt mục tiêu trong dự trữ, hệ thống báo khoản thiếu. Đây vẫn là khoản giả định, không chuyển tiền thật.</p>'+
    (p?.goalSchedule?.length?'<div class="fin-scenario-goal-schedule"><strong>Phân bổ theo kỳ</strong><div class="fin-table-scroll"><table class="fin-data-table"><thead><tr><th>Ngày dự kiến</th><th>Số tiền dành</th></tr></thead><tbody>'+
@@ -1151,7 +1151,7 @@ root.addEventListener("input",event=>{
    const row=workbookState.book.rows[Number(node.dataset.wbRow)];
    if(row&&node.dataset.wbProp)row[node.dataset.wbProp]=node.value;
  }else if(node.dataset.wbField?.startsWith("goal.")){
-   if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:""};
+   if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:"",mode:"adaptive"};
    workbookState.book.goal[node.dataset.wbField.slice(5)]=node.value;
  }else if(node.dataset.wbField){
    workBookSet(node.dataset.wbField,node.value);
@@ -1170,7 +1170,7 @@ root.addEventListener("change",async event=>{
  if(wbInput&&workbookState.book){
    const prop=wbInput.dataset.wbField,value=wbInput.value;
    if(prop.startsWith("goal.")){
-     if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:""};
+     if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:"",mode:"adaptive"};
      workbookState.book.goal[prop.slice(5)]=value;
    }else workBookSet(prop,value);
    if(prop==="months")await previewWorkbook();
