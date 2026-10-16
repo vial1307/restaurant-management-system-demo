@@ -280,16 +280,16 @@ export async function registerFinanceRoutes(app) {
         // transfers/FX conversions move funds in opposite directions.
         const requestedAccountIds=(["transfer","fx"].includes(kind) && id(b.targetAccountId))
           ? [b.accountId,b.targetAccountId] : [b.accountId];
-        for (const accountId of [...new Set(requestedAccountIds)].sort()) {
+        for (const accountId of [...new Set(requestedAccountIds.map(value=>String(value).toLowerCase()))].sort()) {
           const record=await account(client,ctx.owner,accountId);
           if(record)lockedAccounts.set(accountId,record);
         }
-        const primary=lockedAccounts.get(b.accountId);
+        const primary=lockedAccounts.get(String(b.accountId).toLowerCase());
         if(!primary) return {error:"SOURCE_ACCOUNT_NOT_FOUND",status:404};
         let secondary=null,categoryId=null,toTwdRate=null;
         if(["transfer","fx"].includes(kind)){
           if(!id(b.targetAccountId)||b.targetAccountId===b.accountId)return {error:"INVALID_TARGET_ACCOUNT"};
-          secondary=lockedAccounts.get(b.targetAccountId);
+          secondary=lockedAccounts.get(String(b.targetAccountId).toLowerCase());
           if(!secondary)return {error:"TARGET_ACCOUNT_NOT_FOUND",status:404};
           if(kind==="transfer"&&primary.currency_code!==secondary.currency_code)return {error:"USE_FX_FOR_CROSS_CURRENCY"};
           if(kind==="fx"&&primary.currency_code===secondary.currency_code)return {error:"FX_CURRENCIES_MUST_DIFFER"};
