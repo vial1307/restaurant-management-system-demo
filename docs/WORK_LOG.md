@@ -1,3 +1,12 @@
+## 2026-10-16 — DONE: Finance OS independent HTTPS site and PostgreSQL database on existing VPS
+
+- Merge PR #243 as `510aaac`; production release followed by workflow shell fix `a495474`. End-to-end gated production and Finance isolated HTTPS smoke **PASS**: https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38880962591.
+- Verified production finance PostgreSQL container `kitchen-finance-db` on separate persistent volume, schema 001, encrypted pre-migration/rolling backups and restore rehearsal (`FINANCE_ENCRYPTED_BACKUP_AND_RESTORE_PASS`; `FINANCE_DB_AND_APP_ACTIVATED`). Kitchen DB not repurposed.
+- Verified https://finance.82.47.180.185.nip.io/finance.html loads on production; anonymous finance API returns 401 and inventory API blocked on Finance origin with 404. Responsive frontend 320/390/1440 browser checks PASS; Finance owner-only API ledger regressions PASS in isolated CI.
+- Scope: independent Finance UI and database, monthly/year budget/actual, six currencies, posted own-wallet FX and planned remittances; **not** live FX market quotes or actual bank transfer. Owner account currently still uses Kitchen OS identity store and `yangchuadmin` mapping (owner-only) — recommend dedicated unshared login for sensitive personal records. Authorized production user actual read/write/refresh not tested with personal login; future acceptance step.
+- Private data operational notes: backup encryption key and scheduled backups stay on VPS; offsite encrypted backup and disaster restore setup remains recommended.
+- Main CURRENT_HANDOFF.md is canonical. User-facing one-link handoff remains published on GitHub Pages.
+
 ## READY FOR FINAL CI — Standalone Finance domain + automated private DB activation (2026-10-16)
 
 - **ACTIVE_PR: #243**. Intended independent Finance website: **https://finance.82.47.180.185.nip.io/**.
