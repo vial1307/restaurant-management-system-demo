@@ -308,7 +308,7 @@ logoutButton.addEventListener("click",async()=>{
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
 tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();}));
-root.addEventListener("click",event=>{
+root.addEventListener("click",async event=>{
  const act=event.target.closest("[data-open]");if(act){showForm(act.dataset.open);return;}
  const goalButton=event.target.closest("[data-goal-update]");
  if(goalButton){showForm("goalProgress",goalButton.dataset.goalUpdate);return;}
