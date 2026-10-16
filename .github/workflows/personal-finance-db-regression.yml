@@ -62,6 +62,8 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/001_personal_finance.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/001_personal_finance.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/002_finance_cashflow_debt_fund.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/002_finance_cashflow_debt_fund.sql
       - name: Validate core constraints and kitchen DB isolation
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test <<'SQL'
@@ -70,7 +72,7 @@ jobs:
             IF (SELECT COUNT(*) FROM finance.currencies) <> 6 THEN
               RAISE EXCEPTION 'FINANCE_CURRENCIES_MISSING';
             END IF;
-            IF NOT EXISTS (SELECT 1 FROM finance.schema_migrations WHERE version='001_personal_finance') THEN
+            IF NOT EXISTS (SELECT 1 FROM finance.schema_migrations WHERE version='002_finance_cashflow_debt_fund') THEN
               RAISE EXCEPTION 'FINANCE_MIGRATION_NOT_APPLIED';
             END IF;
           END $$;
@@ -90,6 +92,7 @@ jobs:
         run: |
           node --check vps/backend/src/finance-db.mjs
           node --check vps/backend/src/finance-routes.mjs
+          node --check vps/backend/src/finance-planning-routes.mjs
           node --check vps/backend/scripts/finance-api-regression.mjs
           node --check src/personal-finance.js
           node vps/backend/src/server.mjs > /tmp/finance-api-test.log 2>&1 &

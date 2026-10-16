@@ -18,6 +18,9 @@ try {
     let plans=[];
     let goals=[];
     let debts=[];
+    let cashItems=[];
+    let debtFunds=[];
+    let debtPayments=[];
     const attemptedTransactionKeys=[];
     page.on("pageerror",error=>pageErrors.push(error.message));
     await page.route("**/api/finance/**",async route=>{
@@ -28,6 +31,21 @@ try {
         data={currencies,accounts,categories:[],budgets:[],plans,goals,debts,reportCurrency:"TWD"};
       }else if(method==="GET"&&pathname.endsWith("/overview")){
         data={month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
+      }else if(method==="GET"&&pathname.endsWith("/cashflow")){
+        const inc=cashItems.filter(i=>i.kind==="income").reduce((sum,i)=>sum+Number(i.amount_twd),0);
+        const exp=cashItems.filter(i=>i.kind==="expense").reduce((sum,i)=>sum+Number(i.amount_twd),0);
+        const reserve=debtFunds.reduce((sum,i)=>sum+Number(i.planned_twd),0);
+        const earmarked=debtFunds.reduce((sum,i)=>sum+Number(i.earmarked_twd),0);
+        const paid=debtPayments.reduce((sum,i)=>sum+Number(i.base_amount_twd),0);
+        data={month:url.searchParams.get("month"),items:cashItems,debtFunds,debtPayments,summary:{
+          planned_income_twd:String(inc),planned_expense_twd:String(exp),planned_debt_fund_twd:String(reserve),
+          earmarked_debt_fund_twd:String(earmarked),planned_net_twd:String(inc-exp-reserve),
+          actual_income_twd:"0",actual_expense_twd:"0",actual_debt_paid_twd:String(paid),actual_net_twd:String(-paid)
+        }};
+      }else if(method==="GET"&&pathname.endsWith("/cashflow/year")){
+        const year=Number(url.searchParams.get("year"));
+        data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),
+         planned_income_twd:"0",planned_expense_twd:"0",debt_fund_twd:"0",debt_paid_twd:"0"}))};
       }else if(method==="GET"&&pathname.endsWith("/year")){
         const year=Number(url.searchParams.get("year"));
         data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),budget_twd:"0",income_twd:"0",expense_twd:"0"}))};
@@ -62,6 +80,40 @@ try {
         const plan=plans.find(p=>p.id===id);
         assert.ok(plan && plan.status==="planned","Expected planned FX");
         plan.status="cancelled";data={plan:{id,status:"cancelled"}};
+      }else if(method==="POST"&&pathname.endsWith("/cashflow/items")){
+        const b=route.request().postDataJSON();
+        const i={id:"00000000-0000-4000-8000-"+String(cashItems.length+21).padStart(12,"0"),kind:b.kind,label:b.label,month_date:b.month+"-01",
+          amount_twd:b.amountTwd,due_day:b.dueDay||null,memo:b.memo||""};
+        cashItems.push(i);data={item:i};status=201;
+      }else if(method==="PUT"&&pathname.includes("/cashflow/items/")){
+        const b=route.request().postDataJSON();
+        const item=cashItems.find(i=>pathname.endsWith(i.id));assert.ok(item);
+        Object.assign(item,{kind:b.kind,label:b.label,amount_twd:b.amountTwd,due_day:b.dueDay||null,memo:b.memo||""});
+        data={item};
+      }else if(method==="DELETE"&&pathname.includes("/cashflow/items/")){
+        cashItems=cashItems.filter(i=>!pathname.endsWith(i.id));data={deleted:true};
+      }else if(method==="PUT"&&pathname.endsWith("/debt-funds")){
+        const b=route.request().postDataJSON();
+        const debt=debts.find(d=>d.id===b.debtId);assert.ok(debt);
+        const rate=debt.currency_code==="TWD"?1:Number(b.fxRateToTwd);
+        const fund={id:"00000000-0000-4000-8000-000000000022",debt_id:b.debtId,debt_name:debt.name,
+          currency_code:debt.currency_code,planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,
+          planned_twd:String(Number(b.plannedAmount)*rate),earmarked_twd:String(Number(b.earmarkedAmount)*rate),
+          fx_rate_to_twd:String(rate)};
+        debtFunds=debtFunds.filter(f=>f.debt_id!==b.debtId).concat(fund);
+        data={fund};
+      }else if(method==="POST"&&pathname.endsWith("/debt-payments")){
+        const b=route.request().postDataJSON();
+        const debt=debts.find(d=>d.id===b.debtId);assert.ok(debt);
+        const wallet=accounts.find(a=>a.id===b.accountId);
+        const total=Number(b.principalPaid)+Number(b.interestPaid)+Number(b.feePaid);
+        assert(wallet && Number(wallet.balance)>=total,"Test payment requires actual wallet funds");
+        wallet.balance=String(Number(wallet.balance)-total);
+        debt.outstanding_amount=String(Number(debt.outstanding_amount)-Number(b.principalPaid));
+        const payment={id:"00000000-0000-4000-8000-000000000023",debt_id:debt.id,debt_name:debt.name,
+          currency_code:debt.currency_code,payment_date:b.paymentDate,principal_paid:b.principalPaid,
+          interest_paid:b.interestPaid,fee_paid:b.feePaid,base_amount_twd:String(total*Number(b.fxRateToTwd||1))};
+        debtPayments.push(payment);data={payment};status=201;
       }else if(method==="POST"&&pathname.endsWith("/transactions")){
         attemptedTransactionKeys.push(route.request().postDataJSON().idempotencyKey);
         data={error:"FINANCE_DATABASE_UNAVAILABLE"};status=503;
@@ -138,6 +190,49 @@ try {
     assert(await page.getByText("15.000").count()>0,"Saved goal survives F5");
     assert(await page.getByText("Thẻ tín dụng").count()>0,"Saved debt survives F5");
     assert.equal(accounts[0].balance,"0","Debt and goal planning do not move wallet funds");
+    await page.locator('[data-fund-debt]').click();
+    await page.locator('#finance-dialog [name="plannedAmount"]').fill("1500000");
+    await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("500000");
+    await page.locator('#finance-dialog [name="fxRateToTwd"]').fill("0.0013");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Đánh dấu đã dành, chưa chuyển ví").waitFor();
+    assert.equal(accounts[1].balance,"0","Debt reserve must not alter a wallet");
+    // A real wallet balance can only come from an actual posted ledger event.
+    // Inject server-owned test fixture balance, then verify posting decrements it.
+    accounts[1].balance="2000000";
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await page.locator('[data-pay-debt]').click();
+    await page.locator('#finance-dialog [name="accountId"]').selectOption(initialAccounts[1].id);
+    await page.locator('#finance-dialog [name="principalPaid"]').fill("1000000");
+    await page.locator('#finance-dialog [name="fxRateToTwd"]').fill("0.0013");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Các khoản trả nợ đã ghi sổ").waitFor();
+    assert.equal(accounts[1].balance,"1000000","Posted payment must debit wallet exactly once");
+    assert.equal(debts[0].outstanding_amount,"11000000","Posted principal reduces debt");
+    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await page.locator('[data-open="cashIncome"]').click();
+    await page.locator('#finance-dialog [name="label"]').fill("Lương dự kiến");
+    await page.locator('#finance-dialog [name="amountTwd"]').fill("60000");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Lương dự kiến").waitFor();
+    await page.locator('[data-open="cashExpense"]').click();
+    await page.locator('#finance-dialog [name="label"]').fill("Sinh hoạt");
+    await page.locator('#finance-dialog [name="amountTwd"]').fill("10000");
+    await page.locator("#finance-submit").click();
+    await page.getByText("Sinh hoạt").waitFor();
+    await page.locator('[data-edit-cashflow]').first().click();
+    await page.locator('#finance-dialog [name="amountTwd"]').fill("12000");
+    await page.locator("#finance-submit").click();
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await page.getByText("Lương dự kiến").waitFor();
+    assert.equal(cashItems.length,2,"Forecast data persists over refresh");
+    assert.equal(Number(cashItems[0].amount_twd),12000,"Edited amount persists after F5");
+    // The existing global dialog handler accepts confirmations for this test.
+    await page.locator('[data-delete-cashflow]').first().click();
+    await page.waitForFunction(()=>document.querySelectorAll("[data-delete-cashflow]").length===1);
+    assert.equal(cashItems.length,1,"Deleting a forecast item persists");
     await page.locator('.fin-nav [data-tab="budget"]').click();
     await page.locator('[data-period="year"]').click();
     await page.locator('h2').filter({hasText:"Tổng hợp năm"}).waitFor();
