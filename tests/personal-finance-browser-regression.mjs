@@ -24,6 +24,9 @@ try {
     let debtPayments=[];
     const attemptedTransactionKeys=[];
     const advisorCalls=[];
+    let scenarioBooks=[];
+    const scenarioPreviews=[];
+
     page.on("pageerror",error=>pageErrors.push(error.message));
     await page.route("**/api/finance/**",async route=>{
       const url=new URL(route.request().url()),pathname=url.pathname;
@@ -52,6 +55,29 @@ try {
           warnings:[{code:"ESTIMATED_DATES",message:"Kiểm tra ngày thanh toán dự kiến."}],
           recommendations:[{kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt",detail:"Kiểm tra dòng tiền theo ngày, không tự chuyển tiền."}],
           foreignWallets:[{name:"Ví VND",currency:"VND",balance:"100000"}],metadata:{currency:"TWD",countedWallets:1,readOnly:true}};
+      }else if(method==="GET"&&pathname.endsWith("/workbench")){
+        data={asOf:"2026-10-17",scenarios:scenarioBooks,source:"finance_postgresql"};
+      }else if(method==="POST"&&pathname.endsWith("/workbench/preview")){
+        const settings=route.request().postDataJSON().scenario;
+        scenarioPreviews.push(settings);
+        data={projection:{
+          name:settings.name,asOf:"2026-10-17",through:"2027-01-16",
+          startingBalanceTwd:"0",bufferTwd:settings.bufferTwd,minimumTwd:"0",endingTwd:"0",
+          safeExtraDebtTwd:"0",minimumAdditionalIncomePerPaydayTwd:"0",earliestRisk:null,
+          firstPayday:"2026-11-10",warnings:[],loans:[],timeline:[],
+          months:[{month:"2026-10",incomeTwd:"0",costTwd:"0",goalTwd:"0",borrowedTwd:"0",
+            repaymentTwd:"0",endingTwd:"0",minimumTwd:"0",surplusTwd:"0"}]
+        }};
+      }else if(method==="POST"&&pathname.endsWith("/workbench/scenarios")){
+        const settings=route.request().postDataJSON().scenario;
+        const b={id:"00000000-0000-4000-8000-000000000099",name:settings.name,settings};
+        scenarioBooks=[b];data={scenario:b};status=201;
+      }else if(method==="PUT"&&pathname.includes("/workbench/scenarios/")){
+        const settings=route.request().postDataJSON().scenario;
+        const b={id:scenarioBooks[0].id,name:settings.name,settings};
+        scenarioBooks=[b];data={scenario:b};
+      }else if(method==="DELETE"&&pathname.includes("/workbench/scenarios/")){
+        scenarioBooks=[];data={deleted:true};
       }else if(method==="GET"&&pathname.endsWith("/cashflow")){
         const inc=cashItems.filter(i=>i.kind==="income").reduce((sum,i)=>sum+Number(i.amount_twd),0);
         const exp=cashItems.filter(i=>i.kind==="expense").reduce((sum,i)=>sum+Number(i.amount_twd),0);
@@ -184,6 +210,38 @@ try {
     assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
     await page.locator('.fin-nav [data-tab="overview"]').click();
 
+    // 12-month scenario workbench is a spreadsheet, not a second real ledger.
+    await page.locator('.fin-nav [data-tab="workbench"]').click();
+    await page.locator("h1").filter({hasText:"Bảng điều hành tài chính"}).waitFor();
+    await page.locator(".fin-wb-metrics").waitFor();
+    assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
+    await page.locator('[data-wb-field="months"]').selectOption("3");
+    assert.equal(scenarioPreviews.at(-1).months,"3");
+    await page.locator('[data-wb-action="add-expense"]').click();
+    await page.locator('[data-wb-row="0"][data-wb-prop="label"]').fill("Chi đi chơi");
+    await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').fill("2000");
+    await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').press("Tab");
+    await page.waitForFunction(()=>document.querySelector(".fin-wb-metrics")!==null);
+    assert(scenarioPreviews.some(x=>x.rows.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000")));
+    await page.locator('[data-wb-action="loan"]').click();
+    assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
+      "Borrowing must create a pair of borrow and dated repayment, never just free cash");
+    await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').fill("4000");
+    await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').press("Tab");
+    await page.locator('[data-wb-row="2"][data-wb-prop="amountTwd"]').fill("4200");
+    await page.locator('[data-wb-row="2"][data-wb-prop="amountTwd"]').press("Tab");
+    await page.locator('[data-wb-action="save"]').click();
+    await page.locator("#fin-wb-saved").waitFor();
+    assert.equal(scenarioBooks.length,1);
+    assert.equal(scenarioBooks[0].settings.rows[1].linkId,scenarioBooks[0].settings.rows[2].linkId);
+    assert.equal(accounts[0].balance,"0","Scenario borrowing must never post cash");
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+    await page.locator('.fin-nav [data-tab="workbench"]').click();
+    await page.locator(".fin-wb-editor tbody tr").first().waitFor();
+    assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
+      "Saved scenario must survive F5 through Finance DB readback");
+    await page.locator('.fin-nav [data-tab="overview"]').click();
     await page.locator('[data-open="account"]').click();
     await page.locator('#finance-dialog [name="name"]').fill("Ví VN thêm");
     await page.locator('#finance-dialog [name="kind"]').selectOption("bank");
