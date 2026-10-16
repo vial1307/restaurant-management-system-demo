@@ -203,7 +203,7 @@ function renderAdvice(){
  const totals='<div class="fin-cashflow-totals fin-advice-summary">'+
    '<div><span>Thu dự kiến</span><strong>'+esc(moneyLabel(data.totals.income))+'</strong></div>'+
    '<div><span>Chi dự kiến + quỹ nợ/mục tiêu + chuyển ra ngoài</span><strong>'+
-   esc(moneyLabel((Number(data.totals.expense)||0)+(Number(data.totals.debt)||0)+(Number(data.totals.goal)||0)+(Number(data.totals.remittance)||0)))+'</strong></div></div>';
+   esc(moneyLabel(data.totalOutflowTwd))+'</strong></div></div>';
  const guidance=(data.recommendations||[]).map((rec,i)=>
    '<div class="fin-advisor-suggestion"><strong>'+esc(String(i+1)+". "+rec.title)+'</strong><p>'+esc(rec.detail)+'</p></div>').join("");
  const warnings=(data.warnings||[]).map(w=>'<div class="fin-advisor-warning"><strong>'+esc(w.code.replace(/_/g," "))+'</strong><p>'+esc(w.message)+'</p></div>').join("");
