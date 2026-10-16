@@ -191,76 +191,16 @@ export async function registerFinanceRoutes(app) {
     if(!id(goalId)||!["active","achieved","archived"].includes(b.status)
       ||typeof b.currentAmount!=="string")return fail(reply,"INVALID_GOAL_UPDATE");
     try{
+      const goal=await ctx.pool.query(
+        "SELECT c.minor_units FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",
+        [goalId,ctx.owner]
+      );
+      if(!goal.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
+      if(!money(b.currentAmount,Number(goal.rows[0].minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
       const {rows}=await ctx.pool.query(
-        "UPDATE finance.goals g SET current_amount=$3::numeric,status=$4,updated_at=now() FROM finance.currencies c WHERE g.id=$1 AND g.owner_user_id=$2 AND c.code=g.currency_code AND c.enabled=true AND $3 ~ '^(?:0|[1-9][0-9]{0,15})(?:[.][0-9]{1,6})?
-    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
-    const b=request.body||{},kind=b.kind,key=b.idempotencyKey;
-    if(!id(key)||!["income","expense","transfer","fx","adjustment"].includes(kind))return fail(reply,"INVALID_FINANCE_TRANSACTION");
-    const occurredAt=b.occurredAt||new Date().toISOString();
-    if(typeof occurredAt!=="string"||Number.isNaN(Date.parse(occurredAt))||!/[zZ]|[+-]\d\d:\d\d$/.test(occurredAt))return fail(reply,"INVALID_FINANCE_TIMESTAMP");
-    const description=trim(b.description,250);
-    try {
-      const result=await financeTransaction(async(client)=>{
-        const lockedAccounts=new Map();
-        // Lock all owned wallets in the same order to avoid deadlocks when simultaneous
-        // transfers/FX conversions move funds in opposite directions.
-        const requestedAccountIds=(["transfer","fx"].includes(kind) && id(b.targetAccountId))
-          ? [b.accountId,b.targetAccountId] : [b.accountId];
-        for (const accountId of [...new Set(requestedAccountIds.map(value=>String(value).toLowerCase()))].sort()) {
-          const record=await account(client,ctx.owner,accountId);
-          if(record)lockedAccounts.set(accountId,record);
-        }
-        const primary=lockedAccounts.get(String(b.accountId).toLowerCase());
-        if(!primary) return {error:"SOURCE_ACCOUNT_NOT_FOUND",status:404};
-        let secondary=null,categoryId=null,toTwdRate=null;
-        if(["transfer","fx"].includes(kind)){
-          if(!id(b.targetAccountId)||b.targetAccountId===b.accountId)return {error:"INVALID_TARGET_ACCOUNT"};
-          secondary=lockedAccounts.get(String(b.targetAccountId).toLowerCase());
-          if(!secondary)return {error:"TARGET_ACCOUNT_NOT_FOUND",status:404};
-          if(kind==="transfer"&&primary.currency_code!==secondary.currency_code)return {error:"USE_FX_FOR_CROSS_CURRENCY"};
-          if(kind==="fx"&&primary.currency_code===secondary.currency_code)return {error:"FX_CURRENCIES_MUST_DIFFER"};
-        }
-        if(!positive(b.amount,Number(primary.minor_units)))return {error:"INVALID_AMOUNT"};
-        if(kind==="adjustment"){
-          const prior=await client.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,primary.id]);
-          if(prior.rows[0])return {error:"ACCOUNT_ALREADY_HAS_LEDGER",status:409};
-        }
-        if(kind==="fx"){
-          if(!positive(b.receivedAmount,Number(secondary.minor_units)) || !money(b.feeAmount||"0",Number(primary.minor_units)))return {error:"INVALID_EXCHANGE_AMOUNT"};
-        }else if(kind==="income"||kind==="expense"){
-          if(!id(b.categoryId))return {error:"CATEGORY_REQUIRED"};
-          const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3",[b.categoryId,ctx.owner,kind]);
-          if(!check.rows[0])return {error:"CATEGORY_NOT_FOUND"};
-          categoryId=b.categoryId;
-          // Never report converted non-TWD spending without an explicitly supplied actual/manual FX snapshot.
-          toTwdRate=primary.currency_code==="TWD"?"1":b.toTwdRate;
-          if(!positiveRate(toTwdRate))return {error:"TWD_RATE_REQUIRED"};
-        }
-        const eventId=await createEvent(client,ctx.owner,kind,description,occurredAt,key);
-        if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
-        const debit=kind==="expense"||kind==="transfer"||kind==="fx";
-        await entry(client,ctx.owner,eventId,primary,(debit?"-":"")+b.amount,categoryId,toTwdRate);
-        if(kind==="transfer")await entry(client,ctx.owner,eventId,secondary,b.amount);
-        if(kind==="fx"){
-          await entry(client,ctx.owner,eventId,secondary,b.receivedAmount);
-          if(b.feeAmount && Number(b.feeAmount)>0)await entry(client,ctx.owner,eventId,primary,"-"+b.feeAmount);
-          await client.query(
-            "INSERT INTO finance.fx_exchanges(event_id,owner_user_id,from_currency,to_currency,source_amount,received_amount,effective_rate,fee_amount,fee_currency,rate_source) VALUES($1,$2,$3,$4,$5::numeric,$6::numeric,$6::numeric/$5::numeric,$7::numeric,$3,'manual')",
-            [eventId,ctx.owner,primary.currency_code,secondary.currency_code,b.amount,b.receivedAmount,b.feeAmount||"0"]
-          );
-        }
-        await audit(client,ctx.owner,"finance."+kind,eventId,{kind});
-        return {id:eventId,kind};
-      });
-      if(result.error)return fail(reply,result.error,result.status||400);
-      return reply.code(201).send({event:result});
-    }catch(error){return databaseError(request,reply,error);}
-  });
-}
- AND ROUND($3::numeric,c.minor_units)=$3::numeric RETURNING g.id,g.current_amount::text,g.status",
+        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,current_amount::text,status",
         [goalId,ctx.owner,b.currentAmount,b.status]
       );
-      if(!rows[0])return fail(reply,"INVALID_GOAL_OR_OWNER",404);
       return {goal:rows[0]};
     }catch(error){return databaseError(request,reply,error);}
   });
