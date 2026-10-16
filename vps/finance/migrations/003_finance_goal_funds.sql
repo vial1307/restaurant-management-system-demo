@@ -1,6 +1,10 @@
 -- Finance-only v003: owner-scoped goal allocations, separate from debt reserves and posted ledger.
 -- Plans/earmarks never move cash or change the manually tracked goal.current_amount.
 BEGIN;
+-- Existing goals.id PK does not certify the composite (id, owner) FK. Add
+-- a non-destructive unique index before creating the owned allocation rows.
+CREATE UNIQUE INDEX IF NOT EXISTS finance_goals_id_owner_uniq_idx
+  ON finance.goals(id,owner_user_id);
 CREATE TABLE IF NOT EXISTS finance.goal_fund_allocations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_user_id uuid NOT NULL,
