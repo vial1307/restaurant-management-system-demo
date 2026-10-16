@@ -1,3 +1,13 @@
+## READY FOR FINAL CI — Standalone Finance domain + automated private DB activation (2026-10-16)
+
+- **ACTIVE_PR: #243**. Intended independent Finance website: **https://finance.82.47.180.185.nip.io/**.
+- Finance Caddy host permits only dedicated HTML/CSS/JS, owner-only finance API, and scoped login/logout; it intentionally returns 404 for all Kitchen inventory/admin/business APIs. The old restaurant `/finance.html` redirects to Finance domain. No Finance API requests remain in Kitchen Super Admin.
+- Finance domain has a separate login form and host-only cookie; finance owner must match protected `FINANCE_OWNER_USER_ID` and login cookie uses `Secure; SameSite=Strict`. Passwords still use existing Kitchen OS identity store; finance **records** remain in separate PostgreSQL 16 DB and volume.
+- Existing production release script installs and calls `vps/finance/provision.sh` **only after** Kitchen release health and restaurant database integrity checks. Provision preflights 1GiB free disk/300MiB MemAvailable, resolves the verified active primary admin `yangchuadmin` account, generates the finance DB password and encryption key in root-only VPS .env, creates dedicated Postgres, migrates and starts finance-aware API.
+- Both pre-migration and daily Finance backups are encrypted. `backup-encrypted.sh` checks SHA-256, performs a restore rehearsal to an independent temporary DB, and establishes root cron with 14-day encrypted retention. Secrets are never committed or printed. Offsite backup/key custody still require operator setup.
+- Added isolated finance login/access regression and static security/activator contracts. Existing private finance DB/UI tests are green on previous head; **current exact-head tests and VPS production activation remain unverified until workflows run**. DO NOT claim live website or DB until actual production checks succeed.
+- Following merge, verify real DNS/TLS, login with the designated owner, authorized Finance API read/write reload, Kitchen API 404 on Finance origin, and Postgres backup/restore. Do not put real financial data into an unverified deployment.
+
 ## Verified CI evidence — 2026-10-16
 
 - **PASS** PostgreSQL 16 separate databases + authenticated owner-only finance API: [Finance DB Regression run 38872361161](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872361161). Includes single-owner/forbidden-admin access, TWD/VND/USD/JPY, budgets, FX transactions, fees, history immutability, opening balance and annual reporting.
