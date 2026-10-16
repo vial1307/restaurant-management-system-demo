@@ -193,6 +193,12 @@ for attempt in $(seq 1 30); do
     echo "Release: ${APP_RELEASE}"
     docker compose --env-file .env ps
 
+    # Finance is an independent database/volume and a separate finance-only domain.
+    # Run only AFTER the existing Kitchen OS health and integrity gates succeeded.
+    # Its failure never mutates restaurant inventory; leave a red deployment gate.
+    echo "[finance] Activating independent personal finance database and verifying restore..."
+    bash "$REPO_DIR/vps/finance/provision.sh"
+
     # First-time Marketing bootstrap is queued asynchronously so a private-repo
     # access issue can never roll back an otherwise healthy Kitchen OS release.
     MARKETING_BOOTSTRAP_SENTINEL="${APP_DIR}/admin-actions/.marketing-bootstrap-requested"
