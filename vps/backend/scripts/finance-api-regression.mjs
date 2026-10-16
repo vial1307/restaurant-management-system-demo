@@ -24,6 +24,8 @@ const owner=await login("managerfx");
 const stranger=await login("yangchuadmin");
 assert.equal((await request("/finance/bootstrap")).status,401,"anonymous finance read must fail");
 assert.equal((await request("/finance/bootstrap",{cookie:stranger})).status,403,"restaurant super admin must not inherit private finance owner rights");
+assert.equal((await request("/finance/access",{cookie:stranger})).status,403);
+assert.equal((await request("/finance/access",{cookie:owner})).status,200);
 assert.equal((await request("/finance/bootstrap",{cookie:owner})).status,200);
 assert.equal((await request("/finance/accounts",{method:"POST",cookie:owner,body:{name:"must fail",kind:"bank",currencyCode:"TWD"},write:false})).status,403,"write header must be required");
 async function post(path,body){
