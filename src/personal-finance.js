@@ -13,7 +13,8 @@ const moneyLabel=(v,c="TWD")=>(c==="TWD"?"NT$":c+" ")+num(v,c==="USD"||c==="EUR"
 const monthText=m=>"Tháng "+Number(m.slice(5,7))+"/"+m.slice(0,4);
 const safeRate=v=>v==null||v===""?"Chưa nhập":num(v,6);
 const accountName=a=>a.name+" · "+a.currency_code;
-function flash(message){toast.textContent=message;toast.hidden=false;toast.dataset.visible="1";} 
+let toastTimer=0;
+function flash(message){toast.textContent=message;toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true;},5500);} 
 function note(message){return '<p class="fin-note">'+esc(message)+'</p>';}
 async function api(path,body,method="GET"){
   const write=method!=="GET";
