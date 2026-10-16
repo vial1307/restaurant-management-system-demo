@@ -447,7 +447,7 @@ function renderWorkbench(){
    esc(p.debtRanking[0].name)+'</strong> trước, vì lãi suất được nhập cao nhất trong các khoản nợ TWD.</p>':
    '<p>Chưa xác định được phần tiền dư an toàn để tăng trả nợ trước kỳ lương tiếp theo. Không dùng nguyên số dư cuối tháng để tất toán.</p>';
  const payments=p?.loans?.length?p.loans.map(x=>'<div class="fin-row"><div><strong>'+esc(x.label)+'</strong>'+
-   '<small>Vay '+esc(x.borrowDate)+' → Hoàn '+esc(x.repayDate)+'</small></div>'+
+   '<small>Vay '+esc(x.borrowDate)+' → Hoàn '+esc(x.repayDate)+' · '+esc(x.daysToRepay)+' ngày</small></div>'+
    '<div class="fin-amount">Nhận '+esc(workbenchMoney(x.borrowedTwd))+
    '<small>Trả '+esc(workbenchMoney(x.repayTwd))+' · Chi phí '+esc(workbenchMoney(x.financingCostTwd))+'</small></div></div>').join("")+
    '<p class="fin-note">Phải có kế hoạch trả nợ mới đúng ngày, đúng số tiền. Không khuyến nghị vay để đảo nợ nếu tổng chi phí và lịch thanh toán không khả thi.</p>':'<p class="fin-muted">Chưa mô phỏng khoản vay ngắn hạn.</p>';
