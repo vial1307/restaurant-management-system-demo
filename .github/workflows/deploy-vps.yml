@@ -449,3 +449,18 @@ jobs:
           PRODUCTION_BASE: https://82.47.180.185.nip.io
           EXPECTED_RELEASE: ${{ env.KITCHEN_TARGET_SHA }}
         run: node tests/production-ui-smoke.mjs
+      - name: Verify standalone Finance HTTPS and API isolation
+        run: |
+          set -euo pipefail
+          URL=https://finance.82.47.180.185.nip.io
+          for attempt in $(seq 1 15); do
+            if curl --max-time 12 -fsS "$URL/finance.html" | grep -q 'Finance OS'; then break; fi
+            if [[ "$attempt" -eq 15 ]]; then echo FINANCE_HTTPS_UNAVAILABLE; exit 1; fi
+            sleep 4
+          done
+          FIN_STATUS="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' "$URL/api/finance/access")"
+          test "$FIN_STATUS" = "401" || { echo "FINANCE_AUTH_FAILURE status=$FIN_STATUS"; exit 1; }
+          KITCHEN_STATUS="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' "$URL/api/inventory/central")"
+          test "$KITCHEN_STATUS" = "404" || { echo "FINANCE_API_BOUNDARY_FAILURE status=$KITCHEN_STATUS"; exit 1; }
+          echo FINANCE_HTTPS_SEPARATE_SITE_AND_OWNER_AUTH_PASS
+
