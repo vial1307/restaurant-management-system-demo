@@ -11,7 +11,7 @@ const fieldRoot=document.querySelector("#finance-fields");
 const form=document.querySelector("#finance-form");
 const tabs=[...document.querySelectorAll(".fin-nav [data-tab]")];
 const nowMonth=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit"}).format(new Date()).slice(0,7);
-const state={tab:"overview",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false};
+const state={tab:"overview",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0};
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=(v,dec=0)=>Number(v||0).toLocaleString("vi-VN",{minimumFractionDigits:0,maximumFractionDigits:Math.max(0,Math.min(6,dec))});
 const moneyLabel=(v,c="TWD")=>(c==="TWD"?"NT$":c+" ")+num(v,c==="USD"||c==="EUR"||c==="CNY"?2:0);
@@ -62,6 +62,8 @@ function failure(error){
     DEBT_PRINCIPAL_EXCEEDS_OUTSTANDING:"Khoản gốc trả vượt số dư nợ hiện tại.",
     DEBT_PAYMENT_RATE_REQUIRED:"Nhập tỷ giá TWD thực tế để đối chiếu lần trả nợ bằng ngoại tệ.",
     DEBT_PAYMENT_INSUFFICIENT_FUNDS:"Ví không đủ số dư đã ghi sổ để thanh toán.",
+    INVALID_ADVISOR_RANGE:"Thời gian dự báo phải là 30, 60 hoặc 90 ngày.",
+    INVALID_ADVISOR_BUFFER:"Mức dự trữ TWD nhập không hợp lệ.",
     INVALID_GOAL_FUND:"Số tiền quỹ mục tiêu không hợp lệ với ngoại tệ.",
     GOAL_FUND_RATE_REQUIRED:"Nhập tỷ giá TWD giả định cho mục tiêu bằng ngoại tệ.",
     GOAL_NOT_FOUND:"Mục tiêu đã bị xóa hoặc bạn không có quyền truy cập.",
@@ -70,7 +72,9 @@ function failure(error){
 }
 async function refresh(){
   const [data,overview,cashflow]=await Promise.all([api("/bootstrap"),api("/overview?month="+encodeURIComponent(state.month)),api("/cashflow?month="+encodeURIComponent(state.month))]);
-  state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;render();
+  state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;
+  state.advisor=null;state.advisorError=null;render();
+  if(state.tab==="advisor")void loadAdvice();
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -176,6 +180,73 @@ function renderYearCashflow(){
     moneyLabel(net),"Trả nợ thực tế "+moneyLabel(m.debt_paid_twd));
  }).join(""),"Tổng dự kiến không mặc nhiên trở thành thu/chi thực tế.")+'</div>';
 }
+
+function renderAdvice(){
+ const data=state.advisor,problem=state.advisorError;
+ const header=heading("Tư vấn dòng tiền","Dự báo số dư và sắp xếp lịch thu/chi dựa trên dữ liệu Finance PostgreSQL")+
+   '<div class="fin-advisor-controls"><label>Khoảng dự báo<select id="fin-advice-days" aria-label="Số ngày dự báo">'+
+   [30,60,90].map(n=>'<option value="'+n+'"'+(n===state.advisorDays?" selected":"")+'>'+n+' ngày</option>').join("")+
+   '</select></label><label>Mức dự trữ TWD<input id="fin-advice-buffer" type="number" min="0" step="1" max="99999999999" value="'+esc(state.advisorBuffer)+'"></label>'+
+   '<button class="fin-btn" type="button" data-advice-refresh'+(state.advisorBusy?' disabled':'')+'>Phân tích dòng tiền</button></div>';
+ if(state.advisorBusy)return header+'<div class="fin-state"><div class="fin-spinner"></div>Đang tính theo dữ liệu đã ghi sổ và lịch thu/chi...</div>';
+ if(problem)return header+panel("Chưa thể tính lịch",'<p class="fin-error">'+esc(failure(problem))+'</p><p class="fin-note">Không sử dụng dự báo cũ nếu Database không phản hồi.</p>');
+ if(!data)return header+panel("Chọn khoảng dự báo",'<p class="fin-list-empty">Chọn 30/60/90 ngày để xem lịch dòng tiền, rủi ro và các phương án cân đối.</p>');
+ const shortfall=data.earliestRisk;
+ const stats='<div class="fin-kpis fin-advisor-kpis">'+
+   '<section class="fin-card"><div class="fin-muted">Số dư TWD hiện có</div><div class="fin-kpi-value">'+esc(moneyLabel(data.startingBalanceTwd))+'</div></section>'+
+   '<section class="fin-card"><div class="fin-muted">Dự kiến cuối kỳ</div><div class="fin-kpi-value">'+esc(moneyLabel(data.projectedEndingTwd))+'</div></section>'+
+   '<section class="fin-card"><div class="fin-muted">Số dư thấp nhất</div><div class="fin-kpi-value">'+esc(moneyLabel(data.minimumBalanceTwd))+'</div><small>'+esc(data.minimumDate||"")+'</small></section>'+
+   '<section class="fin-card"><div class="fin-muted">Mức dự trữ</div><div class="fin-kpi-value">'+esc(moneyLabel(data.bufferTwd))+'</div></section></div>';
+ const risk=shortfall?
+   '<div class="fin-advice-risk"><strong>Thiếu hụt dự kiến: '+esc(shortfall.date)+'</strong><p>Khoảng thiếu '+esc(moneyLabel(shortfall.gapTwd))+' so với mức dự trữ. Nguyên nhân gần nhất: '+esc(shortfall.label)+'.</p></div>':
+   '<p class="fin-advice-ok">Chưa phát hiện ngày số dư TWD xuống dưới mức dự trữ trong các lịch đã nhập.</p>';
+ const totals='<div class="fin-cashflow-totals fin-advice-summary">'+
+   '<div><span>Thu dự kiến</span><strong>'+esc(moneyLabel(data.totals.income))+'</strong></div>'+
+   '<div><span>Chi dự kiến + quỹ nợ/mục tiêu + chuyển ra ngoài</span><strong>'+
+   esc(moneyLabel((Number(data.totals.expense)||0)+(Number(data.totals.debt)||0)+(Number(data.totals.goal)||0)+(Number(data.totals.remittance)||0)))+'</strong></div></div>';
+ const guidance=(data.recommendations||[]).map((rec,i)=>
+   '<div class="fin-advisor-suggestion"><strong>'+esc(String(i+1)+". "+rec.title)+'</strong><p>'+esc(rec.detail)+'</p></div>').join("");
+ const warnings=(data.warnings||[]).map(w=>'<div class="fin-advisor-warning"><strong>'+esc(w.code.replace(/_/g," "))+'</strong><p>'+esc(w.message)+'</p></div>').join("");
+ const icons={income:"+",expense:"−",debt:"−",goal:"−",remittance:"−"};
+ const timeline=(data.entries||[]).map(item=>{
+   const inc=item.kind==="income";
+   return '<div class="fin-advice-event"><div class="fin-advice-event-date">'+esc(item.date)+'</div>'+
+    '<div class="fin-advice-event-info"><strong>'+esc(item.label)+'</strong><small>'+
+     esc(({income:"Thu",expense:"Chi",goal:"Quỹ mục tiêu",debt:"Quỹ trả nợ",remittance:"Chuyển tiền ra ngoài"})[item.kind]||item.kind)+
+     (item.estimatedDate?' · Ngày tạm tính':'')+'</small></div>'+
+    '<div class="fin-advice-event-money '+(inc?'positive':'negative')+'">'+esc(icons[item.kind]||"")+
+      esc(moneyLabel(item.amountTwd).replace("-",""))+
+      '<small>Còn '+esc(moneyLabel(item.projectedBalanceTwd))+'</small></div></div>';
+ }).join("")||'<div class="fin-list-empty">Chưa có khoản thu/chi nào được lên lịch trong giai đoạn này. Xem lại Kế hoạch để thêm dữ liệu.</div>';
+ return header+
+   panel("Thanh khoản "+esc(data.asOf)+" → "+esc(data.through),
+      stats+risk+totals+
+      note("Bắt đầu từ số dư ví TWD đã ghi sổ; thu nhập đã nhận không được cộng thêm lần nữa. Các khoản dự kiến chỉ là lịch tham khảo, chưa tự thanh toán."))+
+   '<div class="fin-grid"><div class="fin-stack">'+
+     panel("Gợi ý xoay vòng và giữ dự trữ",guidance||'<p class="fin-list-empty">Chưa có gợi ý.</p>')+
+     panel("Cập nhật lịch",'<div class="fin-toolbar"><button class="fin-btn secondary" type="button" data-go-finance-tab="budget">Sửa lịch thu/chi</button>'+
+       '<button class="fin-btn secondary" type="button" data-go-finance-tab="goals">Quỹ mục tiêu & nợ</button>'+
+       '<button class="fin-btn secondary" type="button" data-go-finance-tab="fx">Lịch chuyển tiền</button></div>')+
+   '</div><div class="fin-stack">'+
+     panel("Dữ liệu cần kiểm tra",warnings||'<p class="fin-list-empty">Không có cảnh báo thiếu dữ liệu hiện tại.</p>')+
+     (data.foreignWallets?.length?panel("Ví ngoại tệ chưa quy đổi",data.foreignWallets.map(x=>row(x.name,x.currency,moneyLabel(x.balance,x.currency))).join(""),
+       "Không dùng tỷ giá ước đoán để cộng vào thanh khoản TWD."):'' )+
+   '</div></div>'+
+   panel("Lịch dòng tiền và số dư sau mỗi khoản",'<div class="fin-advice-timeline">'+timeline+'</div>',
+     "Thu dự kiến ghi nhận trước chi dự kiến cùng ngày. Lịch chưa có ngày chính xác được tạm xếp cuối tháng.");
+}
+async function loadAdvice(){
+ if(state.advisorBusy)return;
+ const requestId=++state.advisorRequestId;
+ state.advisorBusy=true;state.advisorError=null;state.advisor=null;
+ if(state.tab==="advisor")render();
+ try{
+   const data=await api("/advisor?days="+state.advisorDays+"&bufferTwd="+encodeURIComponent(state.advisorBuffer));
+   if(requestId!==state.advisorRequestId)return;
+   state.advisor=data;
+ }catch(error){if(requestId===state.advisorRequestId)state.advisorError=error;}
+ finally{if(requestId===state.advisorRequestId){state.advisorBusy=false;if(state.tab==="advisor")render();}}
+}
 function renderFx(){
   const cs=state.data.currencies||[];
   const currencyCards=cs.map(c=>'<span class="fin-currency">'+esc(c.code)+' · '+esc(c.name_vi)+'</span>').join(" ");
@@ -245,7 +316,7 @@ function render(){
   tabs.forEach(b=>{const active=b.dataset.tab===state.tab;b.classList.toggle("active",active);b.setAttribute("aria-current",active?"page":"false");});
   if(state.loading){root.innerHTML='<div class="fin-state"><div class="fin-spinner"></div>Đang đọc dữ liệu được bảo vệ...</div>';return;}
   if(state.problem){root.innerHTML='<div class="fin-card"><h2>Không thể mở tài chính</h2><p class="fin-error">'+esc(failure(state.problem))+'</p><p class="fin-note">Nếu bạn vừa đăng nhập sai tài khoản, hãy đăng xuất và đăng nhập bằng tài khoản được cấp quyền.</p></div>';return;}
-  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():renderLedger();
+  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():state.tab==="advisor"?renderAdvice():renderLedger();
 }
 function selectField(name,label,options,placeholder="Chọn"){
  return '<label>'+esc(label)+'<select name="'+esc(name)+'" required><option value="">'+esc(placeholder)+'</option>'+options.map(o=>'<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>').join("")+'</select></label>';
@@ -443,8 +514,19 @@ logoutButton.addEventListener("click",async()=>{
   state.data=null;state.overview=null;state.loading=false;
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
-tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();}));
+tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor")void loadAdvice();}));
 root.addEventListener("click",async event=>{
+ const go=event.target.closest("[data-go-finance-tab]");
+ if(go){state.tab=go.dataset.goFinanceTab;render();return;}
+ const adviceButton=event.target.closest("[data-advice-refresh]");
+ if(adviceButton){
+   const days=Number(root.querySelector("#fin-advice-days")?.value);
+   const buffer=String(root.querySelector("#fin-advice-buffer")?.value??"");
+   if(![30,60,90].includes(days)||!/^(?:0|[1-9]\d{0,10})(?:\.\d{1,2})?$/.test(buffer)){
+     flash("Chọn số ngày hợp lệ và mức dự trữ TWD không âm.");return;
+   }
+   state.advisorDays=days;state.advisorBuffer=buffer;await loadAdvice();return;
+ }
  const act=event.target.closest("[data-open]");if(act){showForm(act.dataset.open);return;}
  const goalFundButton=event.target.closest("[data-goal-fund]");
  if(goalFundButton){showForm("goalFund",goalFundButton.dataset.goalFund);return;}
