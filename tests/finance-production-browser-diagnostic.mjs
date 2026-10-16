@@ -13,6 +13,7 @@ try{
   page.on("requestfailed",r=>errors.push("REQUESTFAILED "+new URL(r.url()).pathname+" "+r.failure()?.errorText));
   page.on("response",response=>network.push(response.status()+" "+new URL(response.url()).pathname+" "+response.headers()["content-type"]));
   const navigation=await page.goto(origin,{waitUntil:"domcontentloaded",timeout:25000});
+  const rootResponse={status:navigation.status(),headers:navigation.headers(),bodySize:(await navigation.body()).length,bodyPreview:(await navigation.text()).slice(0,120)};
   await page.waitForTimeout(2500);
   const dom=await page.evaluate(()=>({
    title:document.title, url:location.href,
@@ -24,7 +25,12 @@ try{
    css: [...document.styleSheets].map(s=>s.href),
    screenWidth:document.documentElement.scrollWidth
   }));
-  const result={viewport,status:navigation.status(),dom,network,errors};
+  const htmlUrl=new URL("/finance.html",origin).toString();
+  const direct=await page.goto(htmlUrl,{waitUntil:"domcontentloaded",timeout:25000});
+  await page.waitForTimeout(1400);
+  const directLogin=await page.locator("#finance-login-form").isVisible();
+  const directInfo={status:direct.status(),headers:direct.headers(),bodyBytes:(await direct.body()).length,title:await page.title(),loginVisible:directLogin,visibleText:(await page.locator("body").innerText()).slice(0,750)};
+  const result={viewport,rootResponse,dom,directInfo,network,errors};
   console.log("FINANCE_BROWSER_DIAGNOSTIC "+JSON.stringify(result));
   const loginVisible=await page.locator("#finance-login-form").isVisible();
   const errorVisible=await page.locator("#finance-content .fin-error").isVisible();
