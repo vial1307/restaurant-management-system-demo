@@ -60,7 +60,7 @@ const progress=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:owne
 assert.equal(progress.status,200,JSON.stringify(progress.data));
 assert.equal(Number(progress.data.goal.current_amount),5000);
 const invalidGoal=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:owner,body:{currentAmount:"5000.50",status:"active"}});
-assert.equal(invalidGoal.status,404,"TWD manual goal progress cannot silently round");
+assert.equal(invalidGoal.status,400,"TWD manual goal progress cannot silently round");
 const unauthorizedGoal=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:stranger,body:{currentAmount:"10",status:"achieved"}});
 assert.equal(unauthorizedGoal.status,403,"Super Admin may not edit private goals");
 const debt=(await post("/debts",{name:"Thẻ tín dụng",currencyCode:"VND",principalOriginal:"12000000",annualInterestPercent:"12.5",dueDate:monthly+"-26"})).debt;
