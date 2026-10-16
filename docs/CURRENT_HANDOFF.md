@@ -1,3 +1,10 @@
+## ACTIVE — Private Finance rolling cashflow advisor (2026-10-17)
+
+- Branch `feat/finance-rolling-cashflow-advisor-20261017` from main `a5e66f3d`, PR pending. Prior goal/debt planning PR #248 is merged and passed exact-head CI. Runtime version pending production verification.
+- User asks for date-based adviser using all planned inflows/outflows, goals/debts and fund rotation. Implement owner-only advisory API and responsive UI driven by the same private Finance PostgreSQL source of truth, without a new data store or automatic money movements.
+- Monthly planned cashflow, debt/goal allocations, TWD outbound remittances and current TWD wallet ledger balances are inputs. Non-TWD balances are **not** silently converted. Warning on unknown/estimated dates or unreconciled expenses. Detect first liquidity gap against selectable buffer, provide practical next actions.
+- STATUS: IN PROGRESS / NOT DEPLOYED. Release gate exact-head DB/API, browser, cross-device regressions and VPS production integrity.
+
 ## ACTIVE — Finance Planning ↔ Goals/Debts cashflow synchronization (2026-10-17)
 
 - Branch `fix/finance-goals-debts-cashflow-sync-20261017`; baseline main `6ac78c659757d81ce9f7d4c4a891849cbc8deaae`; prior production `b5c074c` (Finance schema 002).

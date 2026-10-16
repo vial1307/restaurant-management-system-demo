@@ -213,6 +213,26 @@ const deleteItem=await request("/finance/cashflow/items/"+cfExpense.id,{method:"
 assert.equal(deleteItem.status,200);
 assert.equal((await request("/finance/cashflow?month="+monthly,{cookie:owner})).data.items.length,1,
  "Deleting a forecast item must persist without touching actual ledger");
+// Read-only liquidity advisor derives current TWD wallets from the same ledger used in bootstrap.
+const advisor=await request("/finance/advisor?days=30&bufferTwd=2000",{cookie:owner});
+assert.equal(advisor.status,200,JSON.stringify(advisor.data));
+assert.equal(advisor.data.metadata.currency,"TWD");
+assert.equal(advisor.data.metadata.readOnly,true);
+assert.equal(advisor.data.metadata.countedWallets,2);
+assert.equal(Number(advisor.data.startingBalanceTwd),41900,
+  "Advisor must start at actually posted TWD bank + TWD cash only");
+assert.equal(advisor.data.foreignWallets.length,3,"Do not use guessed exchange rates to credit foreign wallets");
+assert(Array.isArray(advisor.data.entries));
+assert(Array.isArray(advisor.data.recommendations));
+assert(advisor.data.warnings.some(x=>x.code==="FOREIGN_WALLETS_EXCLUDED"));
+assert.equal((await request("/finance/advisor?days=31",{cookie:owner})).status,400);
+assert.equal((await request("/finance/advisor?days=30&bufferTwd=-1",{cookie:owner})).status,400);
+assert.equal((await request("/finance/advisor")).status,401,"Anonymous may not read private schedule");
+assert.equal((await request("/finance/advisor?days=90",{cookie:stranger})).status,403,
+  "Restaurant Super Admin has no access to private forecasts");
+const afterAdvisor=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(afterAdvisor.data.accounts.find(x=>x.id===bank.id).balance),40900,
+  "Read-only advisor must not change actual ledger balances");
 const db=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
 await db.connect();
 try{

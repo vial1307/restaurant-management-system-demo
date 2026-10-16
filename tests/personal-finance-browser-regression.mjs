@@ -23,6 +23,7 @@ try {
     let goalFunds=[];
     let debtPayments=[];
     const attemptedTransactionKeys=[];
+    const advisorCalls=[];
     page.on("pageerror",error=>pageErrors.push(error.message));
     await page.route("**/api/finance/**",async route=>{
       const url=new URL(route.request().url()),pathname=url.pathname;
@@ -32,6 +33,18 @@ try {
         data={currencies,accounts,categories:[],budgets:[],plans,goals,debts,reportCurrency:"TWD"};
       }else if(method==="GET"&&pathname.endsWith("/overview")){
         data={month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
+      }else if(method==="GET"&&pathname.endsWith("/advisor")){
+        const days=url.searchParams.get("days"),buffer=url.searchParams.get("bufferTwd");
+        advisorCalls.push({days,buffer});
+        data={asOf:"2026-10-17",through:days==="90"?"2027-01-14":"2026-11-15",days:Number(days),bufferTwd:buffer,
+          startingBalanceTwd:"1000",projectedEndingTwd:"-500",minimumBalanceTwd:"-500",minimumDate:"2026-10-22",
+          earliestRisk:{date:"2026-10-22",balanceTwd:"-500",gapTwd:"500",label:"Chi phí",source:"cashflow"},
+          totals:{income:"1000",expense:"1500",debt:"0",goal:"0",remittance:"0"},totalOutflowTwd:"1500",
+          entries:[{date:"2026-10-20",kind:"income",label:"Lương",amountTwd:"1000",projectedBalanceTwd:"2000",source:"cashflow",estimatedDate:false},
+            {date:"2026-10-22",kind:"expense",label:"Chi phí",amountTwd:"-1500",projectedBalanceTwd:"500",source:"cashflow",estimatedDate:false}],
+          warnings:[{code:"ESTIMATED_DATES",message:"Kiểm tra ngày thanh toán dự kiến."}],
+          recommendations:[{kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt",detail:"Kiểm tra dòng tiền theo ngày, không tự chuyển tiền."}],
+          foreignWallets:[{name:"Ví VND",currency:"VND",balance:"100000"}],metadata:{currency:"TWD",countedWallets:1,readOnly:true}};
       }else if(method==="GET"&&pathname.endsWith("/cashflow")){
         const inc=cashItems.filter(i=>i.kind==="income").reduce((sum,i)=>sum+Number(i.amount_twd),0);
         const exp=cashItems.filter(i=>i.kind==="expense").reduce((sum,i)=>sum+Number(i.amount_twd),0);
@@ -141,6 +154,25 @@ try {
     await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor({timeout:12000});
     assert((await page.locator(".fin-kpi-value").allTextContents()).every(t=>t.includes("0")),
       "No invented money values can appear before actual postings");
+    // A dedicated advisory tab must read protected API and permit 30/60/90d controls.
+    await page.locator('.fin-nav [data-tab="advisor"]').click();
+    await page.locator("h1").filter({hasText:"Tư vấn dòng tiền"}).waitFor();
+    await page.getByText("Ưu tiên xử lý thiếu hụt").waitFor();
+    assert.equal(advisorCalls.length,1);
+    assert.equal(advisorCalls[0].days,"30");
+    assert.equal(advisorCalls[0].buffer,"0");
+    await page.locator("#fin-advice-days").selectOption("90");
+    await page.locator("#fin-advice-buffer").fill("3000");
+    await page.locator('[data-advice-refresh]').click();
+    await page.waitForFunction(()=>document.querySelector("#fin-advice-days")?.value==="90"
+      &&!!document.querySelector(".fin-advice-event"));
+    assert.equal(advisorCalls.at(-1).days,"90");
+    assert.equal(advisorCalls.at(-1).buffer,"3000");
+    await page.locator('[data-go-finance-tab="budget"]').click();
+    await page.locator("h1").filter({hasText:"Kế hoạch tháng / năm"}).waitFor();
+    assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
+    await page.locator('.fin-nav [data-tab="overview"]').click();
+
     await page.locator('[data-open="account"]').click();
     await page.locator('#finance-dialog [name="name"]').fill("Ví VN thêm");
     await page.locator('#finance-dialog [name="kind"]').selectOption("bank");
