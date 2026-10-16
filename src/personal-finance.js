@@ -74,7 +74,7 @@ async function refresh(){
   const [data,overview,cashflow]=await Promise.all([api("/bootstrap"),api("/overview?month="+encodeURIComponent(state.month)),api("/cashflow?month="+encodeURIComponent(state.month))]);
   state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;
   state.advisor=null;state.advisorError=null;render();
-  if(state.tab==="advisor")void loadAdvice();
+  void loadAdvice();
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -91,6 +91,29 @@ function balances(){
   const list=state.data.accounts||[];
   return list.length?list.map(a=>row(a.name,a.kind+" · "+a.currency_code,moneyLabel(a.balance,a.currency_code))).join(""):'<div class="fin-list-empty">Chưa có tài khoản. Hãy thêm ví tiền mặt hoặc tài khoản ngân hàng để bắt đầu.</div>';
 }
+function renderFinanceControlCenter(){
+ const plan=state.advisor;
+ const steps='<div class="fin-guide-steps">'+
+   '<p><strong>1. Số tiền thật:</strong> Tổng quan → Tài khoản → Số dư đầu kỳ, rồi ghi nhận thu/chi khi đã phát sinh.</p>'+
+   '<p><strong>2. Lịch tiền:</strong> Kế hoạch → Thu dự kiến (lương) và Chi dự kiến (tiền nhà, sinh hoạt); nhập đúng ngày 1–31 cho từng tháng.</p>'+
+   '<p><strong>3. Nghĩa vụ:</strong> Mục tiêu & Nợ → khai báo dư nợ, hạn trả, phân bổ quỹ từng tháng; ghi trả nợ khi đã chuyển thật.</p>'+
+   '<p><strong>4. Kiểm tra:</strong> Tư vấn dòng tiền → mức dự trữ → xem ngày thiếu tiền và thứ tự khoản cần xử lý.</p></div>';
+ const shortcuts='<div class="fin-toolbar"><button type="button" class="fin-btn" data-go-finance-tab="budget">Nhập ngày lương & khoản chi</button>'+
+   '<button type="button" class="fin-btn secondary" data-go-finance-tab="goals">Khai báo công nợ</button>'+
+   '<button type="button" class="fin-btn secondary" data-go-finance-tab="advisor">Xem lịch xoay vòng</button></div>';
+ if(!plan)return panel("Điều phối thu nhập → thanh toán",'<p class="fin-muted">Đang đối chiếu lịch với dữ liệu Finance Database...</p>'+steps+shortcuts,
+   "Cần nhập các khoản theo từng tháng; hệ thống không tự đoán ngày nhận lương.");
+ const cycle=plan.cycles?.[0],alerts=(plan.alerts||[]).filter(x=>x.severity!=="info");
+ const first=cycle?'<div class="fin-control-summary"><div><small>Đến ngày</small><strong>'+esc(cycle.endDate)+'</strong></div>'+
+   '<div><small>Nghĩa vụ & chi dự kiến</small><strong>'+esc(moneyLabel(cycle.obligationsTwd))+'</strong></div>'+
+   '<div><small>Dự trữ có thể thiếu</small><strong class="'+(Number(cycle.reserveGapTwd)>0?'fin-negative':'')+'">'+esc(moneyLabel(cycle.reserveGapTwd))+'</strong></div></div>'+
+   '<p class="fin-note">Chu kỳ hiện tại tính tới trước lần thu dự kiến kế tiếp. Ngày này không phải ngày trả lương thật nếu lịch thu chưa được khai báo.</p>':'';
+ const notices=alerts.length?alerts.slice(0,4).map(x=>'<div class="fin-alert-line '+esc(x.severity)+'"><strong>'+esc(x.title)+'</strong><span>'+esc(x.message)+'</span></div>').join(""):
+   '<p class="fin-muted">Chưa có cảnh báo từ các lịch đã nhập; không đồng nghĩa mọi khoản phải trả đã được khai báo.</p>';
+ return panel("Điều phối thu nhập → thanh toán",first+'<div class="fin-divider"></div>'+notices+shortcuts+
+   '<details class="fin-howto"><summary>Hướng dẫn nhập dữ liệu lần đầu</summary>'+steps+'</details>',
+   "Cảnh báo hiển thị khi bạn mở website; chưa phải thông báo đẩy khi đóng trình duyệt.");
+}
 function renderOverview(){
   const flow=Object.fromEntries((state.overview.flow||[]).map(x=>[x.kind,x.total_twd]));
   const twd=state.data.accounts.filter(a=>a.currency_code==="TWD").reduce((s,a)=>s+Number(a.balance||0),0);
@@ -101,6 +124,7 @@ function renderOverview(){
     '<section class="fin-card fin-highlight"><div class="fin-muted">Số dư TWD đã ghi sổ</div><div class="fin-kpi-value">'+moneyLabel(twd)+'</div><div class="fin-muted">Không cộng chung ngoại tệ khi thiếu tỷ giá</div></section>'+
     '<section class="fin-card"><div class="fin-muted">Thu nhập đã ghi</div><div class="fin-kpi-value">'+moneyLabel(flow.income||0)+'</div></section>'+
     '<section class="fin-card"><div class="fin-muted">Chi tiêu đã ghi</div><div class="fin-kpi-value">'+moneyLabel(flow.expense||0)+'</div></section></div>'+
+    renderFinanceControlCenter()+
     '<div class="fin-grid"><div class="fin-stack">'+
     panel("Ví & tài khoản",balances(),counts+" tài khoản · Có thể có nhiều loại ngoại tệ")+
     panel("Dòng tiền sắp tới",upcoming.length?upcoming.map(p=>row(p.from_currency+" → "+p.to_currency,p.plan_date+" · "+(p.plan_kind==="remittance"?"Gửi tiền":"Đổi tiền"),moneyLabel(p.source_amount,p.from_currency),'Kế hoạch, chưa ghi sổ')).join(""):'<div class="fin-list-empty">Chưa có lịch đổi tiền hoặc gửi tiền.</div>')+
@@ -204,6 +228,17 @@ function renderAdvice(){
    '<div><span>Thu dự kiến</span><strong>'+esc(moneyLabel(data.totals.income))+'</strong></div>'+
    '<div><span>Chi dự kiến + quỹ nợ/mục tiêu + chuyển ra ngoài</span><strong>'+
    esc(moneyLabel(data.totalOutflowTwd))+'</strong></div></div>';
+ const cycles=(data.cycles||[]).map((cycle,i)=>'<div class="fin-cycle-row"><div class="fin-stat"><strong>'+
+   esc('Kỳ '+String(i+1)+' · '+cycle.startDate+' → '+cycle.endDate)+'</strong><span class="fin-tag '+
+   (Number(cycle.reserveGapTwd)>0?'warn':'neutral')+'">'+(Number(cycle.reserveGapTwd)>0?'Có nguy cơ hụt tiền':'Theo lịch đã nhập')+'</span></div>'+
+   '<small>Thu dự kiến: '+esc(moneyLabel(cycle.incomeTwd))+' · Chi & nghĩa vụ: '+esc(moneyLabel(cycle.obligationsTwd))+
+   ' · Quỹ mục tiêu: '+esc(moneyLabel(cycle.goalAllocationsTwd))+'</small>'+
+   '<small>Số dư thấp nhất: '+esc(moneyLabel(cycle.minimumBalanceTwd))+
+   ' · Chênh lệch dưới dự trữ: '+esc(moneyLabel(cycle.reserveGapTwd))+'</small>'+
+   (cycle.nextIncomeDate?'<small>Kỳ thu tiếp theo: '+esc(cycle.nextIncomeDate)+'</small>':'<small>Chưa có kỳ thu nhập tiếp theo trong giai đoạn dự báo</small>')+
+   '</div>').join("");
+ const alerts=(data.alerts||[]).map(x=>'<div class="fin-alert-line '+esc(x.severity)+'"><strong>'+esc(x.title)+'</strong>'+
+   '<span>'+esc(x.message)+'</span></div>').join("");
  const guidance=(data.recommendations||[]).map((rec,i)=>
    '<div class="fin-advisor-suggestion"><strong>'+esc(String(i+1)+". "+rec.title)+'</strong><p>'+esc(rec.detail)+'</p></div>').join("");
  const warnings=(data.warnings||[]).map(w=>'<div class="fin-advisor-warning"><strong>'+esc(w.code.replace(/_/g," "))+'</strong><p>'+esc(w.message)+'</p></div>').join("");
@@ -222,6 +257,10 @@ function renderAdvice(){
    panel("Thanh khoản "+esc(data.asOf)+" → "+esc(data.through),
       stats+risk+totals+
       note("Bắt đầu từ số dư ví TWD đã ghi sổ; thu nhập đã nhận không được cộng thêm lần nữa. Các khoản dự kiến chỉ là lịch tham khảo, chưa tự thanh toán."))+
+   panel("Kỳ thu nhập → nghĩa vụ đến hạn",cycles||'<p class="fin-list-empty">Chưa có kỳ thu nhập rõ ngày.</p>',
+     "Chi tiêu chưa ghi ngày và khoản trả nợ chưa phân bổ có thể làm sai dự báo; phần chênh lệch không phải số tiền được khuyến nghị tiêu.")+
+   panel("Cảnh báo cần kiểm tra",alerts||'<p class="fin-muted">Chưa có cảnh báo trong lịch đã khai báo.</p>',
+     "Cảnh báo này chỉ hiển thị trong Finance OS khi bạn đang sử dụng website.")+
    '<div class="fin-grid"><div class="fin-stack">'+
      panel("Gợi ý xoay vòng và giữ dự trữ",guidance||'<p class="fin-list-empty">Chưa có gợi ý.</p>')+
      panel("Cập nhật lịch",'<div class="fin-toolbar"><button class="fin-btn secondary" type="button" data-go-finance-tab="budget">Sửa lịch thu/chi</button>'+
@@ -239,13 +278,13 @@ async function loadAdvice(){
  if(state.advisorBusy)return;
  const requestId=++state.advisorRequestId;
  state.advisorBusy=true;state.advisorError=null;state.advisor=null;
- if(state.tab==="advisor")render();
+ if(state.tab==="advisor"||state.tab==="overview")render();
  try{
    const data=await api("/advisor?days="+state.advisorDays+"&bufferTwd="+encodeURIComponent(state.advisorBuffer));
    if(requestId!==state.advisorRequestId)return;
    state.advisor=data;
  }catch(error){if(requestId===state.advisorRequestId)state.advisorError=error;}
- finally{if(requestId===state.advisorRequestId){state.advisorBusy=false;if(state.tab==="advisor")render();}}
+ finally{if(requestId===state.advisorRequestId){state.advisorBusy=false;if(state.tab==="advisor"||state.tab==="overview")render();}}
 }
 function renderFx(){
   const cs=state.data.currencies||[];
@@ -383,9 +422,9 @@ function showForm(kind,selectedId=null){
   fields=selectField("kind","Loại dự kiến",[{value:"income",label:"Thu nhập"},{value:"expense",label:"Chi tiêu"}])+
    input("label","Tên khoản thu/chi","text",existing?.label||"","Lương / tiền thuê nhà")+
    input("amountTwd","Số tiền TWD","text",existing?.amount_twd||"","10000")+
-   input("dueDay","Ngày trong tháng (tùy chọn)","number",existing?.due_day||"","1–31",false)+
+   input("dueDay","Ngày nhận / ngày phải trả (1–31)","number",existing?.due_day||"","1–31",false)+
    input("memo","Ghi chú","text",existing?.memo||"","",false)+
-   note("Đây là dự kiến, chưa ghi giao dịch tiền thật. Tránh nhập một khoản trùng lặp nhiều lần.");
+   note("Nhập đúng ngày nhận lương hoặc ngày chi trả. Bỏ trống ngày sẽ bị tạm xếp cuối tháng và cảnh báo có thể trễ. Đây chỉ là dự kiến, chưa ghi tiền thật; cần lập cho từng tháng.");
  }else if(kind==="goalFund"){
   const goal=(state.data.goals||[]).find(g=>g.id===selectedId);if(!goal)return;
   form.dataset.goalId=goal.id;
