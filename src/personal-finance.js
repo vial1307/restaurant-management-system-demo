@@ -553,10 +553,10 @@ logoutButton.addEventListener("click",async()=>{
   state.data=null;state.overview=null;state.loading=false;
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
-tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor")void loadAdvice();}));
+tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();}));
 root.addEventListener("click",async event=>{
  const go=event.target.closest("[data-go-finance-tab]");
- if(go){state.tab=go.dataset.goFinanceTab;render();return;}
+ if(go){state.tab=go.dataset.goFinanceTab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();return;}
  const adviceButton=event.target.closest("[data-advice-refresh]");
  if(adviceButton){
    const days=Number(root.querySelector("#fin-advice-days")?.value);
