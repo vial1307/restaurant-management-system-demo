@@ -18,6 +18,7 @@ try {
     let plans=[];
     let goals=[];
     let debts=[];
+    const attemptedTransactionKeys=[];
     page.on("pageerror",error=>pageErrors.push(error.message));
     await page.route("**/api/finance/**",async route=>{
       const url=new URL(route.request().url()),pathname=url.pathname;
@@ -62,6 +63,7 @@ try {
         assert.ok(plan && plan.status==="planned","Expected planned FX");
         plan.status="cancelled";data={plan:{id,status:"cancelled"}};
       }else if(method==="POST"&&pathname.endsWith("/transactions")){
+        attemptedTransactionKeys.push(route.request().postDataJSON().idempotencyKey);
         data={error:"FINANCE_DATABASE_UNAVAILABLE"};status=503;
       }else{data={error:"NOT_FOUND"};status=404;}
       await route.fulfill({status,contentType:"application/json",body:JSON.stringify(data)});
@@ -97,6 +99,10 @@ try {
     await page.locator("#finance-submit").click();
     await page.waitForFunction(()=>!document.querySelector("#finance-toast").hidden);
     assert.equal(await page.locator("#finance-dialog").evaluate(el=>el.open),true,"Failed server write must leave form open");
+    await page.locator("#finance-submit").click();
+    await page.waitForFunction(()=>document.querySelector("#finance-submit")?.disabled===false);
+    assert.equal(attemptedTransactionKeys.length,2,"Retry must reach API twice");
+    assert.equal(attemptedTransactionKeys[0],attemptedTransactionKeys[1],"Retry must reuse the idempotency key, never mint a second posting");
     assert.equal(accounts[0].balance,"0");
     await page.locator("#finance-dialog-close").click();
     // Persisted plan must not create any account movement; cancel survives F5.
