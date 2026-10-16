@@ -63,7 +63,8 @@ export function validateScenario(input){
    const totalTwd=String(g.totalTwd??"0");
    if(!dateOk(g.targetDate)||!label)throw new Error("INVALID_SCENARIO_GOAL");
    positive(totalTwd);
-   goal={label,totalTwd,targetDate:g.targetDate};
+   const mode=String(g.mode||"even");if(!["even","adaptive"].includes(mode))throw new Error("INVALID_SCENARIO_GOAL");
+   goal={label,totalTwd,targetDate:g.targetDate,mode};
  }
  return {name,months,salaryDay,bufferTwd,monthlyExtraIncomeTwd,rows:normalized,goal};
 }
@@ -142,24 +143,60 @@ function timelineFor({asOf,through,startingBalanceTwd,baselineEvents,settings,ad
    }
  }
  const warnings=[];
+ let goalFundingGap=0n,goalSchedule=[];
  if(settings.goal&&units(settings.goal.totalTwd)>0n){
    const allPaydays=[];
-   for(let i=0;i<24;i++){
+   for(let i=0;i<settings.months;i++){
      const month=monthShift(asOf,i),d=dateFor(month,settings.salaryDay).date;
-     if(d>=asOf&&d<=settings.goal.targetDate)allPaydays.push(d);
+     if(d>=asOf&&d<=through&&d<=settings.goal.targetDate)allPaydays.push(d);
    }
-   if(!allPaydays.length)warnings.push("Không có kỳ lương nào trước hạn mục tiêu. Cần đổi ngày hoặc chuẩn bị nguồn tiền trước.");
-   else{
-     const total=units(settings.goal.totalTwd),number=BigInt(allPaydays.length);
-     const installment=(total+number-1n)/number;
+   const total=units(settings.goal.totalTwd);
+   if(!allPaydays.length){
+     goalFundingGap=total;
+     warnings.push("Không có kỳ thu nhập giả định nào trước hạn mục tiêu. Cần đổi ngày hoặc nguồn tiền.");
+   }else if(settings.goal.mode==="adaptive"){
+     // Working backwards means expensive months are funded only up to the
+     // cash surplus actually available after all subsequent known obligations.
+     let remaining=total;
+     const buffer=units(settings.bufferTwd);
+     for(const d of [...allPaydays].reverse()){
+       const ordered=[...events].sort((a,b)=>a.date.localeCompare(b.date)||
+         (a.delta>0n&&b.delta<=0n?-1:a.delta<=0n&&b.delta>0n?1:0));
+       let balance=units(startingBalanceTwd),lowest=null;
+       // Day-end after positive income and negative obligations; includes all
+       // previously allocated goal payments on later dates.
+       for(let i=0;i<ordered.length;){
+         const day=ordered[i].date;
+         while(i<ordered.length&&ordered[i].date===day){balance+=ordered[i].delta;i++;}
+         if(day>=d&&(lowest===null||balance<lowest))lowest=balance;
+       }
+       if(lowest===null)lowest=balance;
+       const available=lowest>buffer?lowest-buffer:0n;
+       const contribution=remaining<available?remaining:available;
+       if(contribution>0n){
+         add({date:d,kind:"goal",label:"Để dành linh hoạt: "+settings.goal.label,
+           delta:-contribution,source:"scenario_goal"});
+         goalSchedule.push({date:d,amountTwd:plain(contribution)});
+         remaining-=contribution;
+       }
+       if(remaining===0n)break;
+     }
+     goalFundingGap=remaining;
+     goalSchedule.sort((a,b)=>a.date.localeCompare(b.date));
+     if(remaining>0n)warnings.push("Chưa thể phân bổ đủ "+plain(remaining)+" TWD mục tiêu mà vẫn giữ mức dự trữ theo lịch đã nhập.");
+   }else{
+     const installment=(total+BigInt(allPaydays.length)-1n)/BigInt(allPaydays.length);
      let remaining=total;
      for(const d of allPaydays){
-       const current=remaining<installment?remaining:installment;
-       remaining-=current;
+       const contribution=remaining<installment?remaining:installment;
+       remaining-=contribution;
        add({date:d,kind:"goal",label:"Để dành: "+settings.goal.label,
-         delta:-current,source:"scenario_goal"});
+         delta:-contribution,source:"scenario_goal"});
+       goalSchedule.push({date:d,amountTwd:plain(contribution)});
      }
+     goalFundingGap=remaining;
    }
+   if(settings.goal.targetDate>through)warnings.push("Ngày cần đạt mục tiêu nằm sau kỳ mô phỏng; chưa thể chứng minh toàn bộ quỹ đạt đủ trước hạn.");
  }
  events.sort((a,b)=>a.date.localeCompare(b.date)||
    (a.delta>0n&&b.delta<=0n?-1:a.delta<=0n&&b.delta>0n?1:0)||a.label.localeCompare(b.label));
@@ -215,6 +252,7 @@ function timelineFor({asOf,through,startingBalanceTwd,baselineEvents,settings,ad
    endingTwd:plain(balance),minimumTwd:plain(minimum),minimumDate,
    earliestRisk:firstRisk,months,timeline,warnings,
    firstPayday:firstPayday||null,
+   goalFundingGapTwd:plain(goalFundingGap),goalSchedule,
    safeExtraDebtTwd:plain(safety>buffer?safety-buffer:0n)};
 }
 export function simulateScenario({asOf,source,scenario}){
@@ -230,18 +268,18 @@ export function simulateScenario({asOf,source,scenario}){
  let minExtra=null;
  // Even an arbitrarily large paycheck cannot repair a shortfall before it is received.
  // This is explicitly distinguished from a sustainable monthly income gap.
- if(!base.earliestRisk)minExtra="0";
+ if(!base.earliestRisk&&units(base.goalFundingGapTwd)===0n)minExtra="0";
  else{
    let high=100000000n*MICRO;
    const feasible=timelineFor({asOf,through,startingBalanceTwd:source.startingBalanceTwd,
      baselineEvents:source.events,settings,addition:high});
-   if(!feasible.earliestRisk){
+   if(!feasible.earliestRisk&&units(feasible.goalFundingGapTwd)===0n){
      let low=0n;
      while(low<high){
        const mid=(low+high)/2n;
        const probe=timelineFor({asOf,through,startingBalanceTwd:source.startingBalanceTwd,
          baselineEvents:source.events,settings,addition:mid});
-       if(probe.earliestRisk)low=mid+1n;
+       if(probe.earliestRisk||units(probe.goalFundingGapTwd)>0n)low=mid+1n;
        else high=mid;
      }
      // Round up to whole TWD for a practical salary target.
@@ -280,7 +318,7 @@ export function simulateScenario({asOf,source,scenario}){
  });
  const warnings=[...source.warnings,...base.warnings];
  if(loans.length)warnings.push("Khoản vay là giả định mới, không phải tiền thật; lãi, phí và ngày hoàn trả phải nhập từ điều khoản thực tế.");
- if(base.earliestRisk&&minExtra===null)warnings.push("Tăng lương ở ngày được chọn vẫn không khắc phục được thiếu tiền trước kỳ lương. Cần xem lịch chi, thời điểm tiền về hoặc nguồn tiền hợp pháp có chi phí rõ ràng.");
+ if((base.earliestRisk||units(base.goalFundingGapTwd)>0n)&&minExtra===null)warnings.push("Tăng thu nhập vào các ngày lương đã chọn vẫn không khắc phục được rủi ro trước đó hoặc không đủ kỳ tích lũy. Điều chỉnh ngày, chi linh hoạt hay hạn mục tiêu.");
  if(settings.rows.some(x=>x.kind==="debt")&&source.events.some(x=>x.source==="debt_fund"))warnings.push("Kiểm tra khoản tất toán và quỹ nợ đã phân bổ để không trừ trùng cùng một nghĩa vụ.");
  return {...base,name:settings.name,minimumAdditionalIncomePerPaydayTwd:minExtra,
    goal:settings.goal,loans,bridgeWindow,sourceDebtTwdPrincipal:source.debtTwdPrincipal,
