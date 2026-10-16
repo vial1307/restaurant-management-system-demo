@@ -549,7 +549,7 @@ function renderGoals(){
 const workbookState={loaded:false,loading:false,book:null,saved:[],id:null,preview:null,error:null,busy:false,request:0,methodologyOpen:false};
 const newWorkbook=()=>({name:"Kịch bản mới",months:12,salaryDay:10,bufferTwd:"0",
   monthlyExtraIncomeTwd:"0",rows:[],goal:null});
-const wbKinds={income:"Thu thêm",expense:"Chi phát sinh",debt:"Trả nợ thêm",goal:"Để dành",borrow:"Vay tạm",repay:"Hoàn trả vay"};
+const wbKinds={income:"Thu thêm",income_loss:"Thu nhập giảm",expense:"Chi phát sinh",debt:"Trả nợ thêm",goal:"Để dành",borrow:"Vay tạm",repay:"Hoàn trả vay"};
 function workbenchMoney(v){return moneyLabel(v??"0");}
 function workbookField(name,value,type="text",hint=""){
  return '<label class="fin-wb-field"><span>'+esc(hint||name)+'</span><input data-wb-field="'+esc(name)+'" type="'+type+'" '+(type==="number"?'min="0" step="1"':'')+
@@ -583,8 +583,8 @@ function renderWorkbenchMethodology(){
     "So sánh ngày cần tiền với ngày có tiền về. Một khoản vay thử phải có đúng dòng nhận tiền và dòng hoàn trả, bao gồm chi phí vay. Mốc hoàn gốc do công cụ đề xuất chỉ là phép thử không tính phí, không phải cam kết vay hay bảo đảm trả được.",
     "Mô phỏng có điều kiện"],
   ["06","Mục tiêu và độ trễ",
-    "Số tiền còn cần tích lũy được chia theo các kỳ thu nhập giả định trước hạn mục tiêu. Nếu tháng cao điểm không đủ tiền, bạn phải điều chỉnh lịch phân bổ; hệ thống chưa tự chuyển tiền góp sang tháng nhẹ hơn.",
-    "Chia kỳ đều; chưa tối ưu tháng cao điểm"],
+    "Chọn chia đều hoặc phân bổ linh hoạt vào các kỳ còn khả năng giữ dự trữ. Khi lịch chi cao điểm khiến mọi kỳ đều không đủ, công cụ báo khoản thiếu và không mặc định tăng vay.",
+    "Đã tính hai cách phân bổ theo lịch dự kiến"],
   ["07","Khi có biến động",
     "Sửa khoản thu, chi, ngày nhận lương, tiền vay hoặc ngày mục tiêu rồi chọn Tính lại để đánh giá toàn bộ lịch mới. Chỉ khi dữ liệu nguồn Finance được tải lại mới phản ánh thay đổi ở những phần khác; chưa có cảnh báo nền tự động hay đồng bộ sự kiện tức thời.",
     "Tính lại theo yêu cầu; chưa tự theo dõi nền"]
@@ -644,14 +644,22 @@ function renderWorkbench(){
  const goal=book.goal||{label:"",totalTwd:"",targetDate:""};
  const goalUi='<div class="fin-wb-settings">'+workbookField("goal.label",goal.label,"text","Mục tiêu (chuyến đi, học phí…)")+
    workbookField("goal.totalTwd",goal.totalTwd,"number","Cần tích lũy thêm (NT$)")+
-   workbookField("goal.targetDate",goal.targetDate,"date","Hạn cần đạt")+'</div>'+
-   '<p class="fin-note">Khoản cần tích lũy sẽ chia đều theo các ngày thu nhập giả định trước hạn và bị khóa khỏi tiền có thể chi. Không tự chuyển vào tài khoản tiết kiệm.</p>';
+   workbookField("goal.targetDate",goal.targetDate,"date","Hạn cần đạt")+
+   '<label class="fin-wb-field"><span>Cách phân bổ</span><select data-wb-field="goal.mode">'+
+   '<option value="adaptive"'+((goal.mode||"adaptive")==="adaptive"?' selected':'')+'>Linh hoạt · ưu tiên giữ dự trữ</option>'+
+   '<option value="even"'+(goal.mode==="even"?' selected':'')+'>Chia đều theo các kỳ thu</option></select></label></div>'+
+   '<p class="fin-note">Linh hoạt phân bổ quỹ ở những kỳ còn đủ tiền sau nghĩa vụ; nếu không thể đạt mục tiêu trong dự trữ, hệ thống báo khoản thiếu. Đây vẫn là khoản giả định, không chuyển tiền thật.</p>'+
+   (p?.goalSchedule?.length?'<div class="fin-scenario-goal-schedule"><strong>Phân bổ theo kỳ</strong><div class="fin-table-scroll"><table class="fin-data-table"><thead><tr><th>Ngày dự kiến</th><th>Số tiền dành</th></tr></thead><tbody>'+
+     p.goalSchedule.map(x=>'<tr><td>'+esc(x.date)+'</td><td class="fin-right">'+esc(workbenchMoney(x.amountTwd))+'</td></tr>').join("")+
+   '</tbody></table></div></div>':'')+
+   (p&&Number(p.goalFundingGapTwd)>0?'<p class="fin-wb-risk"><strong>Chưa đủ quỹ mục tiêu theo dòng tiền hiện tại: '+esc(workbenchMoney(p.goalFundingGapTwd))+'</strong></p>':'');
  const items='<div class="fin-wb-tablewrap"><table class="fin-wb-grid fin-wb-editor"><thead><tr>'+
    '<th>#</th><th>Loại</th><th>Tên / bên cho vay</th><th>Ngày dự kiến</th><th>NT$</th><th>Xóa</th></tr></thead><tbody>'+
    (book.rows.length?book.rows.map(workbenchRow).join(""):'<tr><td colspan="6" class="fin-wb-empty">Chưa có điều chỉnh. Dữ liệu thật đã được tính từ nguồn Finance Database.</td></tr>')+
    '</tbody></table></div>';
  const add='<div class="fin-toolbar fin-wb-add">'+
    '<button class="fin-btn secondary" type="button" data-wb-action="add-income">+ Thu nhập</button>'+
+   '<button class="fin-btn secondary" type="button" data-wb-action="add-income_loss">− Thu nhập giảm</button>'+
    '<button class="fin-btn secondary" type="button" data-wb-action="add-expense">+ Chi lớn</button>'+
    '<button class="fin-btn secondary" type="button" data-wb-action="add-debt">+ Trả nợ thêm</button>'+
    '<button class="fin-btn secondary" type="button" data-wb-action="loan">+ Vay & hoàn trả</button>'+
@@ -671,6 +679,25 @@ function renderWorkbench(){
    '</strong>, nếu mọi nghĩa vụ đã được khai báo đầy đủ. Nếu ưu tiên tiết kiệm lãi, rà soát khoản <strong>'+
    esc(p.debtRanking[0].name)+'</strong> trước, vì lãi suất được nhập cao nhất trong các khoản nợ TWD.</p>':
    '<p>Chưa xác định được phần tiền dư an toàn để tăng trả nợ trước kỳ lương tiếp theo. Không dùng nguyên số dư cuối tháng để tất toán.</p>';
+ const actionOptions=p?'<div class="fin-action-options">'+
+   '<div class="fin-action-option"><div><strong>1. Bảo vệ tiền sống và nghĩa vụ bắt buộc</strong><small>'+
+   (p.earliestRisk?'Ngày rủi ro gần nhất '+esc(p.earliestRisk.date)+'; kiểm tra lịch chi trước ngày này.':
+    'Chưa có ngày thủng mức dự trữ trong những khoản đã nhập.')+'</small></div>'+
+   '<button type="button" class="fin-btn secondary" data-go-finance-tab="budget">Sửa kế hoạch</button></div>'+
+   '<div class="fin-action-option"><div><strong>2. Phân bổ mục tiêu sang kỳ còn dư</strong><small>'+
+   (p.goal?.totalTwd?'Chọn Linh hoạt để kiểm tra khả năng góp quỹ theo mức dự trữ.':
+   'Nhập số tiền và hạn mục tiêu để so sánh chia đều với phân bổ linh hoạt.')+'</small></div>'+
+   '<button type="button" class="fin-btn secondary" data-wb-action="adaptive-goal">Thử phân bổ</button></div>'+
+   '<div class="fin-action-option"><div><strong>3. Xử lý thiếu tiền trước kỳ lương</strong><small>'+
+   (p.bridgeWindow?'Khoảng bù cần kiểm tra '+esc(workbenchMoney(p.bridgeWindow.minimumPrincipalTwd))+
+    ', kỳ thu để thử hoàn gốc '+esc(p.bridgeWindow.earliestPrincipalOnlyRepayDate)+'. Chưa tính phí vay.':
+    'Chưa xác minh được kỳ hoàn gốc an toàn; không coi vay mới là giải pháp mặc định.')+
+   '</small></div><button type="button" class="fin-btn secondary" data-wb-action="loan">Thử vay & trả</button></div>'+
+   '<div class="fin-action-option"><div><strong>4. Dùng tiền dư giảm nợ</strong><small>'+
+   'Ước tính dư trên dự trữ trước kỳ thu tiếp theo: '+esc(workbenchMoney(p.safeExtraDebtTwd))+
+   '. Cần đối chiếu nợ ngoại tệ, lãi/phí và lịch còn thiếu.</small></div>'+
+   '<button type="button" class="fin-btn secondary" data-wb-action="add-debt">Thử trả nợ</button></div>'+
+   '</div>':'<p class="fin-muted">Chọn Tính lại để xem phương án dựa trên lịch đã khai báo.</p>';
  const payments=p?.loans?.length?p.loans.map(x=>'<div class="fin-row"><div><strong>'+esc(x.label)+'</strong>'+
    '<small>Vay '+esc(x.borrowDate)+' → Hoàn '+esc(x.repayDate)+' · '+esc(x.daysToRepay)+' ngày</small></div>'+
    '<div class="fin-amount">Nhận '+esc(workbenchMoney(x.borrowedTwd))+
@@ -691,6 +718,7 @@ function renderWorkbench(){
     (p?.firstPayday?'<p class="fin-note">Kỳ thu tăng thêm gần nhất: '+esc(p.firstPayday)+'</p>':'<p class="fin-note">Không tìm thấy kỳ thu tăng thêm trong giai đoạn dự báo.</p>'))+
    panel("Xoay vòng tiền & lịch hoàn vay sơ bộ",bridge)+
    panel("Phân bổ tiền dư để giảm nợ",recommended)+
+   panel("Gợi ý hành động có điều kiện",actionOptions,"Chọn thử sẽ chỉ thay đổi kịch bản, không tự thanh toán hoặc vay tiền.")+
    panel("Bảng tháng (giống spreadsheet)",summary)+
    panel("Dòng điều chỉnh / kịch bản",items+add+
     '<p class="fin-note">Dòng vay và hoàn trả phải đi theo một cặp, nhập đầy đủ số tiền nhận và tổng tiền trả gồm lãi/phí. Khoản vay chỉ là giả định; không tự ghi nhận là thu nhập.</p>')+
@@ -753,7 +781,7 @@ function wbAdd(kind){
   b.rows.push({key:crypto.randomUUID(),kind:"borrow",date,label:"Nguồn vay tạm",amountTwd:"0",linkId:key},
     {key:crypto.randomUUID(),kind:"repay",date:wbDate(30),label:"Hoàn vay tạm",amountTwd:"0",linkId:key});
  }else{
-  b.rows.push({key,kind,date,label:kind==="debt"?"Thanh toán nợ thêm":kind==="income"?"Thu nhập mới":kind==="goal"?"Phân bổ quỹ":"Chi phát sinh",amountTwd:"0"});
+  b.rows.push({key,kind,date,label:kind==="debt"?"Thanh toán nợ thêm":kind==="income"?"Thu nhập mới":kind==="income_loss"?"Thu nhập hụt so với kế hoạch":kind==="goal"?"Phân bổ quỹ":"Chi phát sinh",amountTwd:"0"});
  }
  workbookState.preview=null;render();
 }
@@ -764,6 +792,12 @@ async function wbAction(action,element){
  if(action==="clone"){workbookState.id=null;workbookState.book=structuredClone(b);workbookState.book.name+=" (bản sao)";render();return;}
  if(action.startsWith("add-")){wbAdd(action.slice(4));return;}
  if(action==="loan"){wbAdd("loan");return;}
+ if(action==="adaptive-goal"){
+   if(!b.goal)b.goal={label:"Mục tiêu mới",totalTwd:"0",targetDate:wbDate(90),mode:"adaptive"};
+   else b.goal.mode="adaptive";
+   workbookState.preview=null;render();
+   root.querySelector('[data-wb-field="goal.totalTwd"]')?.focus();return;
+ }
  if(action==="payoff"){
   const twd=(state.data?.debts||[]).filter(x=>x.currency_code==="TWD");
   const amount=twd.reduce((s,x)=>s+Number(x.outstanding_amount||0),0);
