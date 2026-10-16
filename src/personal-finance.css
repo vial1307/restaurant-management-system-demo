@@ -31,3 +31,12 @@
 @media(max-width:720px){.fin-plan-kpis{grid-template-columns:1fr;gap:8px}.fin-cashflow-totals{grid-template-columns:1fr}.fin-action-row{flex-wrap:wrap}.fin-action-end{margin-left:auto;max-width:100%}}
 
 @media (min-width:721px) and (max-width:1100px){.fin-plan-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Linked goal/debt action groups must wrap inside narrow cards, never force page width. */
+.fin-grid>.fin-stack,.fin-grid>.fin-card,.fin-cashflow-section>.fin-card{min-width:0}
+@media(max-width:720px){
+  .fin-grid{grid-template-columns:minmax(0,1fr)}
+  .fin-row:has(.fin-action-end){flex-wrap:wrap;align-items:flex-start}
+  .fin-row .fin-action-end{flex:1 1 100%;min-width:0;justify-content:flex-start;gap:5px;margin-left:0}
+  .fin-row .fin-action-end .fin-small-action{margin-left:0;white-space:normal;overflow-wrap:anywhere}
+}
