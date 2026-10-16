@@ -67,6 +67,15 @@ function failure(error){
     INVALID_GOAL_FUND:"Số tiền quỹ mục tiêu không hợp lệ với ngoại tệ.",
     GOAL_FUND_RATE_REQUIRED:"Nhập tỷ giá TWD giả định cho mục tiêu bằng ngoại tệ.",
     GOAL_NOT_FOUND:"Mục tiêu đã bị xóa hoặc bạn không có quyền truy cập.",
+    INVALID_FINANCE_SCENARIO:"Kịch bản chưa hợp lệ. Kiểm tra ngày, số tiền, thời hạn và khoản vay/hoàn trả.",
+    INVALID_SCENARIO_ROW:"Kiểm tra ngày và số tiền lớn hơn 0 của từng dòng kịch bản.",
+    LOAN_REPAYMENT_PAIR_REQUIRED:"Khoản vay giả định phải có đúng một dòng nhận tiền và một dòng hoàn trả.",
+    INVALID_LOAN_REPAYMENT:"Ngày hoàn vay phải sau/ngang ngày nhận, tổng hoàn trả không thấp hơn tiền vay.",
+    SCENARIO_DATE_OUTSIDE_WINDOW:"Có dòng kịch bản nằm ngoài phạm vi dự báo 3, 6 hoặc 12 tháng.",
+    SCENARIO_LIMIT_REACHED:"Tối đa 20 kịch bản. Xóa bản không dùng trước khi tạo tiếp.",
+    INVALID_SCENARIO_GOAL:"Nhập đủ hạn hoàn thành mục tiêu và số tiền cần tích lũy.",
+    SCENARIO_NOT_FOUND:"Kịch bản không còn tồn tại hoặc không thuộc tài khoản của bạn.",
+
   };
   return errors[error?.message]||("Không lưu được: "+(error?.message||"Lỗi hệ thống"));
 }
@@ -75,6 +84,7 @@ async function refresh(){
   state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;
   state.advisor=null;state.advisorError=null;render();
   void loadAdvice();
+  if(state.tab==="workbench"&&workbookState.loaded)void loadWorkbench();
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -346,6 +356,196 @@ function renderGoals(){
    '<div class="fin-list-empty">Chưa có khoản trả nợ thực tế trong tháng.</div>')+
   '</div></div>';
 }
+
+// Finance scenario workbench: visually spreadsheet-like, financially isolated from ledger.
+// Saved workbooks are persisted via authenticated, audited Finance PostgreSQL only.
+const workbookState={loaded:false,loading:false,book:null,saved:[],id:null,preview:null,error:null,busy:false,request:0};
+const newWorkbook=()=>({name:"Kịch bản mới",months:12,salaryDay:10,bufferTwd:"0",
+  monthlyExtraIncomeTwd:"0",rows:[],goal:null});
+const wbKinds={income:"Thu thêm",expense:"Chi phát sinh",debt:"Trả nợ thêm",goal:"Để dành",borrow:"Vay tạm",repay:"Hoàn trả vay"};
+function workbenchMoney(v){return moneyLabel(v??"0");}
+function workbookField(name,value,type="text",hint=""){
+ return '<label class="fin-wb-field"><span>'+esc(hint||name)+'</span><input data-wb-field="'+esc(name)+'" type="'+type+'" '+(type==="number"?'min="0" step="1"':'')+
+   ' value="'+esc(value??"")+'" autocomplete="off"></label>';
+}
+function workbenchRow(row,index){
+ return '<tr><td class="fin-wb-row-num">'+(index+1)+'</td>'+
+   '<td><select data-wb-row="'+index+'" data-wb-prop="kind" aria-label="Loại dòng '+(index+1)+'">'+
+   Object.entries(wbKinds).map(([key,label])=>'<option value="'+key+'"'+(row.kind===key?' selected':'')+'>'+label+'</option>').join("")+'</select></td>'+
+   '<td><input data-wb-row="'+index+'" data-wb-prop="label" aria-label="Tên dòng '+(index+1)+'" value="'+esc(row.label)+'"></td>'+
+   '<td><input data-wb-row="'+index+'" data-wb-prop="date" aria-label="Ngày dòng '+(index+1)+'" type="date" value="'+esc(row.date)+'"></td>'+
+   '<td><input data-wb-row="'+index+'" data-wb-prop="amountTwd" aria-label="Số tiền dòng '+(index+1)+'" inputmode="numeric" value="'+esc(row.amountTwd)+'"></td>'+
+   '<td><button type="button" class="fin-btn secondary fin-wb-remove" data-wb-remove="'+index+'" aria-label="Xóa dòng '+(index+1)+'">×</button></td></tr>';
+}
+function renderWorkbench(){
+ const b=workbookState,book=b.book||newWorkbook();
+ const head=heading("Bảng điều hành tài chính","Bảng tính kịch bản 3–12 tháng, gắn dữ liệu Finance PostgreSQL; chỉ mô phỏng, không chuyển tiền.");
+ if(b.loading)return head+'<div class="fin-state">Đang tải kịch bản đã lưu từ Database...</div>';
+ if(b.error&&!b.book)return head+panel("Không đọc được kịch bản",'<p class="fin-error">'+esc(failure(b.error))+'</p>');
+ const choices='<select id="fin-wb-saved" aria-label="Chọn kịch bản đã lưu"><option value="">Kịch bản chưa lưu</option>'+
+    b.saved.map(x=>'<option value="'+esc(x.id)+'"'+(x.id===b.id?' selected':'')+'>'+esc(x.name)+'</option>').join("")+'</select>';
+ const controls='<div class="fin-wb-menu"><label><span>Kịch bản</span>'+choices+'</label>'+
+   '<button type="button" class="fin-btn secondary" data-wb-action="new">Tạo mới</button>'+
+   '<button type="button" class="fin-btn secondary" data-wb-action="clone">Nhân bản</button>'+
+   '<button type="button" class="fin-btn" data-wb-action="save"'+(b.busy?' disabled':'')+'>Lưu kịch bản</button>'+
+   (b.id?'<button type="button" class="fin-btn secondary" data-wb-action="delete">Xóa</button>':'')+'</div>';
+ const settings='<div class="fin-wb-settings">'+
+   workbookField("name",book.name,"text","Tên kế hoạch")+
+   '<label class="fin-wb-field"><span>Thời gian dự báo</span><select data-wb-field="months">'+
+     [3,6,12].map(n=>'<option value="'+n+'"'+(Number(book.months)===n?' selected':'')+'>'+n+' tháng</option>').join("")+'</select></label>'+
+   workbookField("bufferTwd",book.bufferTwd,"number","Tiền dự trữ tối thiểu (NT$)")+
+   '<label class="fin-wb-field"><span>Ngày nhận khoản thu thêm mỗi tháng</span><input data-wb-field="salaryDay" type="number" min="1" max="31" step="1" value="'+esc(book.salaryDay)+'"></label>'+
+   workbookField("monthlyExtraIncomeTwd",book.monthlyExtraIncomeTwd,"number","Thu nhập tăng thêm / tháng (NT$)")+
+   '</div>';
+ const p=b.preview,stats=p?'<div class="fin-wb-metrics">'+
+   '<div><small>Tiền đầu kỳ</small><strong>'+esc(workbenchMoney(p.startingBalanceTwd))+'</strong></div>'+
+   '<div><small>Đáy thanh khoản</small><strong class="'+(Number(p.minimumTwd)<Number(p.bufferTwd)?'fin-negative':'')+'">'+esc(workbenchMoney(p.minimumTwd))+'</strong></div>'+
+   '<div><small>Có thể trả nợ thêm ngay (theo lịch đã nhập)</small><strong>'+esc(workbenchMoney(p.safeExtraDebtTwd))+'</strong></div>'+
+   '<div><small>Cần tăng thu nhập mỗi kỳ lương</small><strong>'+
+   (p.minimumAdditionalIncomePerPaydayTwd===null?'Không thể bù chỉ bằng lương':esc(workbenchMoney(p.minimumAdditionalIncomePerPaydayTwd)))+'</strong></div></div>':
+   '<p class="fin-muted">Nhập ngày và số tiền, sau đó chọn “Tính lại” để xem kết quả thực tế theo Database.</p>';
+ const risk=p?.earliestRisk?'<div class="fin-wb-risk"><strong>Nguy cơ thiếu tiền: '+esc(p.earliestRisk.date)+'</strong><p>'+
+   'Thiếu '+esc(workbenchMoney(p.earliestRisk.gapTwd))+' so với dự trữ, gần khoản '+esc(p.earliestRisk.label)+
+   '. Lương về sau ngày này không xử lý được thiếu hụt trước đó.</p></div>':
+   (p?'<p class="fin-wb-safe">Theo các khoản đã khai báo, chưa phát hiện ngày xuống dưới mức dự trữ.</p>':'');
+ const summary=p?'<div class="fin-wb-tablewrap"><table class="fin-wb-grid"><thead><tr>'+
+   '<th>Tháng</th><th>Thu dự kiến</th><th>Chi & nợ</th><th>Quỹ mục tiêu</th><th>Vay tạm</th><th>Hoàn vay</th><th>Số dư cuối</th><th>Biên dự trữ *</th></tr></thead><tbody>'+
+   p.months.map(m=>'<tr><th>'+esc(m.month)+'</th><td>'+esc(workbenchMoney(m.incomeTwd))+'</td>'+
+   '<td>'+esc(workbenchMoney(m.costTwd))+'</td><td>'+esc(workbenchMoney(m.goalTwd))+'</td>'+
+   '<td>'+esc(workbenchMoney(m.borrowedTwd))+'</td><td>'+esc(workbenchMoney(m.repaymentTwd))+'</td>'+
+   '<td class="'+(Number(m.endingTwd)<0?'fin-negative':'')+'">'+esc(workbenchMoney(m.endingTwd))+'</td>'+
+   '<td>'+esc(workbenchMoney(m.surplusTwd))+'</td></tr>').join("")+
+   '</tbody></table></div><p class="fin-note">* Biên dự trữ chỉ là mức thấp nhất trong tháng so với ngưỡng đã chọn; không phải số tiền chắc chắn có thể chi nếu thiếu lịch tháng sau.</p>':'';
+ const goal=book.goal||{label:"",totalTwd:"",targetDate:""};
+ const goalUi='<div class="fin-wb-settings">'+workbookField("goal.label",goal.label,"text","Mục tiêu (chuyến đi, học phí…)")+
+   workbookField("goal.totalTwd",goal.totalTwd,"number","Cần tích lũy thêm (NT$)")+
+   workbookField("goal.targetDate",goal.targetDate,"date","Hạn cần đạt")+'</div>'+
+   '<p class="fin-note">Khoản cần tích lũy sẽ chia đều theo các ngày thu nhập giả định trước hạn và bị khóa khỏi tiền có thể chi. Không tự chuyển vào tài khoản tiết kiệm.</p>';
+ const items='<div class="fin-wb-tablewrap"><table class="fin-wb-grid fin-wb-editor"><thead><tr>'+
+   '<th>#</th><th>Loại</th><th>Tên / bên cho vay</th><th>Ngày dự kiến</th><th>NT$</th><th>Xóa</th></tr></thead><tbody>'+
+   (book.rows.length?book.rows.map(workbenchRow).join(""):'<tr><td colspan="6" class="fin-wb-empty">Chưa có điều chỉnh. Dữ liệu thật đã được tính từ nguồn Finance Database.</td></tr>')+
+   '</tbody></table></div>';
+ const add='<div class="fin-toolbar fin-wb-add">'+
+   '<button class="fin-btn secondary" type="button" data-wb-action="add-income">+ Thu nhập</button>'+
+   '<button class="fin-btn secondary" type="button" data-wb-action="add-expense">+ Chi lớn</button>'+
+   '<button class="fin-btn secondary" type="button" data-wb-action="add-debt">+ Trả nợ thêm</button>'+
+   '<button class="fin-btn secondary" type="button" data-wb-action="loan">+ Vay & hoàn trả</button>'+
+   '<button class="fin-btn secondary" type="button" data-wb-action="payoff">+ Tất toán gốc TWD</button>'+
+   '<button class="fin-btn" type="button" data-wb-action="preview"'+(b.busy?' disabled':'')+'>Tính lại</button></div>';
+ const warnings=p?.warnings?.length?'<details open class="fin-wb-warnings"><summary>Cảnh báo & dữ liệu chưa chắc chắn ('+p.warnings.length+')</summary>'+
+   p.warnings.map(w=>'<p>'+esc(w)+'</p>').join("")+'</details>':'';
+ const payments=p?.loans?.length?p.loans.map(x=>'<div class="fin-row"><div><strong>'+esc(x.label)+'</strong>'+
+   '<small>Vay '+esc(x.borrowDate)+' → Hoàn '+esc(x.repayDate)+'</small></div>'+
+   '<div class="fin-amount">Nhận '+esc(workbenchMoney(x.borrowedTwd))+
+   '<small>Trả '+esc(workbenchMoney(x.repayTwd))+' · Chi phí '+esc(workbenchMoney(x.financingCostTwd))+'</small></div></div>').join("")+
+   '<p class="fin-note">Phải có kế hoạch trả nợ mới đúng ngày, đúng số tiền. Không khuyến nghị vay để đảo nợ nếu tổng chi phí và lịch thanh toán không khả thi.</p>':'<p class="fin-muted">Chưa mô phỏng khoản vay ngắn hạn.</p>';
+ const events=p?'<div class="fin-wb-tablewrap"><table class="fin-wb-grid"><thead><tr><th>Ngày</th><th>Nội dung</th><th>Loại nguồn</th><th>Thu/Chi</th><th>Số dư sau khoản</th></tr></thead><tbody>'+
+   p.timeline.map(x=>'<tr><td>'+esc(x.date)+'</td><td>'+esc(x.label)+(x.estimatedDate?' <small>Ngày ước tính</small>':'')+'</td>'+
+   '<td>'+esc(x.source==="scenario"?"Giả định":x.source==="assumption"?"Lương tăng thêm":x.source==="scenario_goal"?"Phân bổ mục tiêu":"Database")+'</td>'+
+   '<td class="'+(Number(x.amountTwd)<0?'fin-negative':'')+'">'+(Number(x.amountTwd)>=0?'+':'')+esc(workbenchMoney(x.amountTwd))+'</td>'+
+   '<td class="'+(Number(x.balanceTwd)<0?'fin-negative':'')+'">'+esc(workbenchMoney(x.balanceTwd))+'</td></tr>').join("")+
+   '</tbody></table></div>':'';
+ return head+
+   panel("Kịch bản lưu trong Database",controls,'Mỗi kịch bản độc lập; thay đổi bản mô phỏng không làm thay đổi giao dịch hay dư nợ thật.')+
+   panel("Thông số đầu vào",settings)+
+   panel("Sức chịu đựng dòng tiền",stats+risk+
+    (p?.firstPayday?'<p class="fin-note">Kỳ thu tăng thêm gần nhất: '+esc(p.firstPayday)+'</p>':'<p class="fin-note">Không tìm thấy kỳ thu tăng thêm trong giai đoạn dự báo.</p>'))+
+   panel("Bảng tháng (giống spreadsheet)",summary)+
+   panel("Dòng điều chỉnh / kịch bản",items+add+
+    '<p class="fin-note">Dòng vay và hoàn trả phải đi theo một cặp, nhập đầy đủ số tiền nhận và tổng tiền trả gồm lãi/phí. Khoản vay chỉ là giả định; không tự ghi nhận là thu nhập.</p>')+
+   panel("Mục tiêu cần tiền trước ngày cụ thể",goalUi)+
+   panel("Chi phí vay tạm",payments)+
+   warnings+
+   panel("Sổ dòng tiền theo ngày",events,'Khoản thực tế lấy từ Database; các dòng kịch bản chỉ phục vụ tính toán, chưa ghi sổ.')+
+   (b.error?'<p class="fin-error">'+esc(failure(b.error))+'</p>':'');
+}
+function wbDate(step=0){
+ const day=workbookState.book?.asOf||workbookState.asOf||new Date().toISOString().slice(0,10);
+ return new Date(Date.parse(day+"T00:00:00Z")+step*86400000).toISOString().slice(0,10);
+}
+async function loadWorkbench(){
+ if(workbookState.loading)return;
+ workbookState.loading=true;workbookState.error=null;if(state.tab==="workbench")render();
+ try{
+  const payload=await api("/workbench");
+  workbookState.saved=payload.scenarios||[];
+  workbookState.asOf=payload.asOf;
+  const selected=workbookState.saved.find(x=>x.id===workbookState.id)||workbookState.saved[0];
+  workbookState.id=selected?.id||null;
+  workbookState.book=selected?structuredClone(selected.settings):newWorkbook();
+  workbookState.loaded=true;
+  workbookState.loading=false;
+  await previewWorkbook();
+ }catch(error){workbookState.loading=false;workbookState.error=error;if(state.tab==="workbench")render();}
+}
+async function previewWorkbook(){
+ if(!workbookState.book)return;
+ const seq=++workbookState.request;
+ workbookState.busy=true;workbookState.error=null;workbookState.preview=null;
+ if(state.tab==="workbench")render();
+ try{
+  const result=await api("/workbench/preview",{scenario:workbookState.book},"POST");
+  if(seq===workbookState.request)workbookState.preview=result.projection;
+ }catch(error){if(seq===workbookState.request)workbookState.error=error;}
+ finally{if(seq===workbookState.request){workbookState.busy=false;if(state.tab==="workbench")render();}}
+}
+function workBookSet(prop,value){if(workbookState.book)workbookState.book[prop]=value;}
+function wbAdd(kind){
+ const b=workbookState.book;if(!b||b.rows.length>=118)return;
+ const date=wbDate(0);
+ const key=crypto.randomUUID();
+ if(kind==="loan"){
+  b.rows.push({key:crypto.randomUUID(),kind:"borrow",date,label:"Nguồn vay tạm",amountTwd:"0",linkId:key},
+    {key:crypto.randomUUID(),kind:"repay",date:wbDate(30),label:"Hoàn vay tạm",amountTwd:"0",linkId:key});
+ }else{
+  b.rows.push({key,kind,date,label:kind==="debt"?"Thanh toán nợ thêm":kind==="income"?"Thu nhập mới":kind==="goal"?"Phân bổ quỹ":"Chi phát sinh",amountTwd:"0"});
+ }
+ workbookState.preview=null;render();
+}
+async function wbAction(action,element){
+ const b=workbookState.book;
+ if(action==="new"){workbookState.id=null;workbookState.book=newWorkbook();workbookState.preview=null;render();await previewWorkbook();return;}
+ if(action==="clone"){workbookState.id=null;workbookState.book=structuredClone(b);workbookState.book.name+=" (bản sao)";render();return;}
+ if(action.startsWith("add-")){wbAdd(action.slice(4));return;}
+ if(action==="loan"){wbAdd("loan");return;}
+ if(action==="payoff"){
+  const twd=(state.data?.debts||[]).filter(x=>x.currency_code==="TWD");
+  const amount=twd.reduce((s,x)=>s+Number(x.outstanding_amount||0),0);
+  if(!amount){flash("Chưa có dư nợ gốc TWD được khai báo. Ngoại tệ cần tỷ giá riêng.");return;}
+  b.rows.push({key:crypto.randomUUID(),kind:"debt",date:wbDate(30),
+    label:"Dự kiến tất toán gốc nợ TWD (chưa gồm lãi/phí)",amountTwd:String(amount)});
+  workbookState.preview=null;render();return;
+ }
+ if(action==="preview"){await previewWorkbook();return;}
+ if(action==="save"){
+  workbookState.busy=true;workbookState.error=null;render();
+  try{
+   const method=workbookState.id?"PUT":"POST";
+   const address="/workbench/scenarios"+(workbookState.id?"/"+encodeURIComponent(workbookState.id):"");
+   const result=await api(address,{scenario:b},method);
+   workbookState.id=result.scenario.id;
+   await loadWorkbookListAfterSave();
+   flash("Kịch bản đã lưu và đọc lại từ Finance Database.");
+  }catch(error){workbookState.error=error;flash(failure(error));}
+  finally{workbookState.busy=false;render();}
+  return;
+ }
+ if(action==="delete"){
+  if(!workbookState.id||!window.confirm("Xóa kịch bản giả định này? Không thay đổi giao dịch thật."))return;
+  try{await api("/workbench/scenarios/"+encodeURIComponent(workbookState.id),{},"DELETE");
+   workbookState.id=null;workbookState.book=newWorkbook();workbookState.preview=null;
+   await loadWorkbookListAfterSave();flash("Đã xóa kịch bản, không tác động tới giao dịch thật.");
+  }catch(error){workbookState.error=error;flash(failure(error));}
+  return;
+ }
+}
+async function loadWorkbookListAfterSave(){
+ const fresh=await api("/workbench");workbookState.saved=fresh.scenarios||[];
+ const selected=workbookState.saved.find(x=>x.id===workbookState.id);
+ if(selected)workbookState.book=structuredClone(selected.settings);
+ await previewWorkbook();
+}
+
 function render(){
   const showLogin=!state.loading&&state.problem?.status===401;
   loginView.hidden=!showLogin;
@@ -355,7 +555,7 @@ function render(){
   tabs.forEach(b=>{const active=b.dataset.tab===state.tab;b.classList.toggle("active",active);b.setAttribute("aria-current",active?"page":"false");});
   if(state.loading){root.innerHTML='<div class="fin-state"><div class="fin-spinner"></div>Đang đọc dữ liệu được bảo vệ...</div>';return;}
   if(state.problem){root.innerHTML='<div class="fin-card"><h2>Không thể mở tài chính</h2><p class="fin-error">'+esc(failure(state.problem))+'</p><p class="fin-note">Nếu bạn vừa đăng nhập sai tài khoản, hãy đăng xuất và đăng nhập bằng tài khoản được cấp quyền.</p></div>';return;}
-  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():state.tab==="advisor"?renderAdvice():renderLedger();
+  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():state.tab==="advisor"?renderAdvice():state.tab==="workbench"?renderWorkbench():renderLedger();
 }
 function selectField(name,label,options,placeholder="Chọn"){
  return '<label>'+esc(label)+'<select name="'+esc(name)+'" required><option value="">'+esc(placeholder)+'</option>'+options.map(o=>'<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>').join("")+'</select></label>';
@@ -553,8 +753,22 @@ logoutButton.addEventListener("click",async()=>{
   state.data=null;state.overview=null;state.loading=false;
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
-tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();}));
+tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();}));
 root.addEventListener("click",async event=>{
+ const wb=event.target.closest("[data-wb-action]");
+ if(wb){await wbAction(wb.dataset.wbAction,wb);return;}
+ const remove=event.target.closest("[data-wb-remove]");
+ if(remove){
+   const idx=Number(remove.dataset.wbRemove);
+   const item=workbookState.book?.rows?.[idx];
+   if(item){
+     if(item.linkId)workbookState.book.rows=workbookState.book.rows.filter(r=>r.linkId!==item.linkId);
+     else workbookState.book.rows.splice(idx,1);
+     workbookState.preview=null;render();
+   }
+   return;
+ }
+
  const go=event.target.closest("[data-go-finance-tab]");
  if(go){state.tab=go.dataset.goFinanceTab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();return;}
  const adviceButton=event.target.closest("[data-advice-refresh]");
@@ -606,6 +820,27 @@ root.addEventListener("click",async event=>{
  }
 });
 root.addEventListener("change",async event=>{
+ if(event.target.id==="fin-wb-saved"){
+   const selected=workbookState.saved.find(x=>x.id===event.target.value);
+   workbookState.id=selected?.id||null;
+   workbookState.book=selected?structuredClone(selected.settings):newWorkbook();
+   await previewWorkbook();return;
+ }
+ const wbInput=event.target.closest("[data-wb-field]");
+ if(wbInput&&workbookState.book){
+   const prop=wbInput.dataset.wbField,value=wbInput.value;
+   if(prop.startsWith("goal.")){
+     if(!workbookState.book.goal)workbookState.book.goal={label:"",totalTwd:"",targetDate:""};
+     workbookState.book.goal[prop.slice(5)]=value;
+   }else workBookSet(prop,value);
+   await previewWorkbook();return;
+ }
+ const wbRow=event.target.closest("[data-wb-row]");
+ if(wbRow&&workbookState.book){
+   const index=Number(wbRow.dataset.wbRow),prop=wbRow.dataset.wbProp;
+   if(workbookState.book.rows[index])workbookState.book.rows[index][prop]=wbRow.value;
+   await previewWorkbook();return;
+ }
  if(event.target.id!=="fin-month")return;
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value))return;
  state.month=event.target.value;state.loading=true;render();
