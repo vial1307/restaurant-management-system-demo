@@ -1,3 +1,11 @@
+## IN PROGRESS — Finance OS Stage 2 backend + responsive UI (2026-10-16)
+
+- **ACTIVE PR:** [#243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`, still draft and NOT production.
+- Separate PostgreSQL `personal_finance` and volume, schema/migrations, dedicated env setup, optional Compose overlay retained.
+- Implemented owner-only `/api/finance` access/bootstrap/overview/year, accounts, categories, budgets, FX plans, atomic ledger postings (income, expense, own-account transfer, actual owned-wallet FX), immutable history, audit, idempotency and opening balance exclusion from monthly income. Non-owner restaurant superadmin explicitly denied.
+- Responsive standalone `finance.html` with 1440/390/320px browser smoke test and conditional Super Admin link; tests live in `tests/personal-finance-browser-regression.mjs`. No real bank transfer or official live exchange rates. Mobile mockup previously designed is only visual reference.
+- **Needs before DONE:** final PR CI/Staging certification, private VPS DB provisioning with owner UUID and secrets, API/UI production rollout, dedicated backup/restore schedule and production verification. DO NOT merge or deploy while these prerequisites remain unresolved.
+
 ## IN PROGRESS — Private Personal Finance OS independent database foundation (2026-10-16)
 
 - [Draft PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016`. **NOT MERGED / NOT PRODUCTION DEPLOYED**.
