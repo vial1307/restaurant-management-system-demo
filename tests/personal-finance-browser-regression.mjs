@@ -215,6 +215,7 @@ try {
     await page.locator("h1").filter({hasText:"Mô phỏng & Tư vấn"}).waitFor();
     assert.match(await page.locator('.fin-nav [data-tab="workbench"]').innerText(),/Mô phỏng.*Tư vấn/,
       "The navigation must describe the combined simulation and advisory capability");
+    await page.locator(".fin-wb-metrics").waitFor();
     const method=page.locator("[data-fin-methodology]");
     assert.equal(await method.count(),1,"Financial logic disclosure must be visible on desktop and mobile");
     assert.equal(await method.getAttribute("open"),null,"Long methodology should default to compact mode");
@@ -224,7 +225,6 @@ try {
     assert.match(await method.innerText(),/trước ngày nhận lương.*không được coi là giải pháp/s);
     assert.match(await method.innerText(),/chưa tự chuyển tiền góp sang tháng nhẹ hơn/);
     assert.match(await method.innerText(),/chưa có cảnh báo nền tự động/);
-    await page.locator(".fin-wb-metrics").waitFor();
     assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
     const horizonRequest=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
       String(resp.request().postDataJSON()?.scenario?.months)==="3",{timeout:10000});
