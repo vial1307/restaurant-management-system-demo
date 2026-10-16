@@ -170,7 +170,7 @@ export async function registerFinanceRoutes(app) {
   app.post("/api/finance/transactions",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const b=request.body||{},kind=b.kind,key=b.idempotencyKey;
-    if(!id(key)||!["income","expense","transfer","fx"].includes(kind))return fail(reply,"INVALID_FINANCE_TRANSACTION");
+    if(!id(key)||!["income","expense","transfer","fx","adjustment"].includes(kind))return fail(reply,"INVALID_FINANCE_TRANSACTION");
     const occurredAt=b.occurredAt||new Date().toISOString();
     if(typeof occurredAt!=="string"||Number.isNaN(Date.parse(occurredAt))||!/[zZ]|[+-]\d\d:\d\d$/.test(occurredAt))return fail(reply,"INVALID_FINANCE_TIMESTAMP");
     const description=trim(b.description,250);
@@ -187,6 +187,10 @@ export async function registerFinanceRoutes(app) {
           if(kind==="fx"&&primary.currency_code===secondary.currency_code)return {error:"FX_CURRENCIES_MUST_DIFFER"};
         }
         if(!positive(b.amount,Number(primary.minor_units)))return {error:"INVALID_AMOUNT"};
+        if(kind==="adjustment"){
+          const prior=await client.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,primary.id]);
+          if(prior.rows[0])return {error:"ACCOUNT_ALREADY_HAS_LEDGER",status:409};
+        }
         if(kind==="fx"){
           if(!positive(b.receivedAmount,Number(secondary.minor_units)) || !money(b.feeAmount||"0",Number(primary.minor_units)))return {error:"INVALID_EXCHANGE_AMOUNT"};
         }else if(kind==="income"||kind==="expense"){
