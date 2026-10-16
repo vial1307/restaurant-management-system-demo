@@ -450,6 +450,7 @@ jobs:
           EXPECTED_RELEASE: ${{ env.KITCHEN_TARGET_SHA }}
         run: node tests/production-ui-smoke.mjs
       - name: Verify standalone Finance HTTPS and API isolation
+        shell: bash
         run: |
           set -euo pipefail
           URL=https://finance.82.47.180.185.nip.io
