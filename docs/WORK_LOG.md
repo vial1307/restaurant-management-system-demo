@@ -1,3 +1,10 @@
+## Verified CI evidence — 2026-10-16
+
+- **PASS** PostgreSQL 16 separate databases + authenticated owner-only finance API: [Finance DB Regression run 38872361161](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872361161). Includes single-owner/forbidden-admin access, TWD/VND/USD/JPY, budgets, FX transactions, fees, history immutability, opening balance and annual reporting.
+- **PASS** mobile 320px, mobile 390px, desktop 1440px responsive Finance UI smoke: [Finance UI Regression run 38872361013](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872361013). Confirms approved API-saves and rejected writes leave the dialog open.
+- **PASS** Kitchen OS isolated PR Staging [run 38872360955](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38872360955). This certifies existing Kitchen OS staging on the candidate code; it does **not** mean the separate Finance PostgreSQL is provisioned on VPS.
+- **NOT PRODUCTION**: Finance DB owner UUID/secret, server provisioning, finance-specific backup and restore test, and production data/UI access checks remain outstanding. PR #243 remains draft.
+
 ## 2026-10-16 — Finance OS Stage 2: isolated finance API and responsive UI (NOT PRODUCTION)
 
 - Continued draft [PR #243](https://github.com/vial1307/restaurant-management-system-demo/pull/243), branch `feature/personal-finance-db-20261016` from Stage 1 independent PostgreSQL schema.
