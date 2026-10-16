@@ -1,3 +1,13 @@
+## ACTIVE — Finance monthly cashflow & debt repayment fund (2026-10-16)
+
+ACTIVE_PR: #246
+- PR: https://github.com/vial1307/restaurant-management-system-demo/pull/246. Branch `feat/finance-cashflow-debt-fund-20261016`; base release `b5e3a7a` already running in private Finance OS.
+- Scope: **Finance-only PostgreSQL migration 002** (`finance.cashflow_items`, `finance.debt_fund_allocations`, immutable `debt_payments` valuation) + owner-scoped planning routes/UI. No restaurant database, inventory, or branch rights changes.
+- Cashflow: owner can create/edit/delete monthly planned income and spending, view planned net after debt fund allocations, actual net after posted debt payments, see 12-month summaries. Forecast amounts use TWD as reporting currency; FX assumptions must be explicitly entered for non-TWD debt funds.
+- Quỹ nợ: per-debt monthly planned and manually earmarked amounts; earmark **is not transferred cash** and does not change real wallet balances. Actual debt payments require a same-currency owned wallet with sufficient recorded balance, native-currency principal/interest/fee, explicit TWD FX snapshot if necessary, idempotency, immutable event/entry/payment, atomic audit, and debt outstanding recalculation.
+- Expected verification: migration applied twice and Kitchen DB isolated; negative-owner API tests; ledger double-post/insufficient funds prevention; user UI 320/390/1440 with saved plan, reserve and payment after F5; entire Super Admin/Kitchen regression, exact-head Staging, merge, production Finance migration 002, `DATA_INTEGRITY_OK`, restore-tested encrypted backup, HTTPS/mobile smoke.
+- **NOT YET PRODUCTION for 002 until gated release is verified.** Plans do not initiate bank transfers; reserve values are manual designations only. Identity still uses a specifically authorized Kitchen OS account; ideally replace a shared administrator with a private owner account.
+
 ## IN PROGRESS — Finance OS audit and owner-scoped planning completion (2026-10-16)
 
 - **ACTIVE_PR: #245**, branch `fix/finance-superadmin-contract-audit-20261016`. Source: main release `afed444`; prior Finance root fix `88831b1`; exact-head CI required.
