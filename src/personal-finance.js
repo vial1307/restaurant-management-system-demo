@@ -313,7 +313,7 @@ function renderBudget(){
    '<div class="fin-dash-main">'+
     panel("Bảng kế hoạch theo tháng",renderFinancePlanTable(),"Có thể sửa các ô kế hoạch; các khoản công nợ & mục tiêu điều chỉnh từ mục tương ứng.")+
     '<div class="fin-dash-bottom">'+
-     panel("Dòng tiền "+esc(state.advisor?.days||30)+" ngày tới",'<div class="fin-chart-legend"><span class="blue">Số dư</span><span class="green">Thu dự kiến</span><span class="coral">Chi & quỹ</span><span class="orange">Mức dự trữ</span></div>'+charts)+
+     panel("Dòng tiền "+esc(state.advisor?.days||state.advisorDays)+" ngày tới",'<div class="fin-plan-range"><span>Khoảng dự báo</span>'+[30,60,90].map(n=>'<button type="button" class="'+(n===state.advisorDays?'selected':'')+'" data-fin-forecast-days="'+n+'">'+n+' ngày</button>').join("")+'</div><div class="fin-chart-legend"><span class="blue">Số dư</span><span class="green">Thu dự kiến</span><span class="coral">Chi & quỹ</span><span class="orange">Mức dự trữ</span></div>'+charts)+
      panel("Gợi ý xoay vòng",renderAdvisorActionsCompact(state.advisor))+'</div>'+
     panel("Kế hoạch 3 tháng tới",threeMonth)+
     panel("Ngân sách theo danh mục",renderBudgetCategories())+
@@ -1049,6 +1049,12 @@ logoutButton.addEventListener("click",async()=>{
 });
 tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();if(state.tab==="report"&&(state.year?.year!==Number(state.month.slice(0,4))))void loadYear();if(state.tab==="budget"&&state.yearCashflow?.year!==Number(state.month.slice(0,4)))void loadYear();}));
 root.addEventListener("click",async event=>{
+ const range=event.target.closest("[data-fin-forecast-days]");
+ if(range){
+   const nextDays=Number(range.dataset.finForecastDays);
+   if(![30,60,90].includes(nextDays)||state.advisorBusy)return;
+   state.advisorDays=nextDays;await loadAdvice();return;
+ }
  if(event.target.closest("[data-report-print]")){
    window.print();return;
  }
