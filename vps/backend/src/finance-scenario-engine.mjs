@@ -249,6 +249,30 @@ export function simulateScenario({asOf,source,scenario}){
      minExtra=String(whole);
    }
  }
+ // Informational bridge window only: principal, zero assumed fees. Never an instruction to borrow.
+ // Repayment is considered affordable only after the candidate day AND every later
+ // scheduled obligation remains above buffer; before then, calculate the peak bridge.
+ let bridgeWindow=null;
+ if(base.earliestRisk){
+   const buffer=units(settings.bufferTwd);
+   const paydays=[...new Set(base.timeline.filter(e=>e.kind==="income" &&
+     units(e.amountTwd)>0n && e.date>base.earliestRisk.date).map(e=>e.date))];
+   for(const payday of paydays){
+     const tail=base.timeline.filter(e=>e.date>=payday);
+     if(tail.some(e=>units(e.balanceTwd)<buffer))continue;
+     const preceding=base.timeline.filter(e=>e.date<payday);
+     let peak=buffer-units(source.startingBalanceTwd);
+     for(const x of preceding){
+       const gap=buffer-units(x.balanceTwd);
+       if(gap>peak)peak=gap;
+     }
+     const gap=peak>0n?peak:0n;
+     bridgeWindow={neededBy:base.earliestRisk.date,
+       minimumPrincipalTwd:plain(gap),earliestPrincipalOnlyRepayDate:payday,
+       feeKnown:false,financialAdvice:false};
+     break;
+   }
+ }
  const loans=settings.rows.filter(r=>r.kind==="borrow").map(r=>{
    const pay=settings.rows.find(t=>t.kind==="repay"&&t.linkId===r.linkId);
    return {label:r.label,borrowDate:r.date,repayDate:pay.date,borrowedTwd:r.amountTwd,
@@ -259,7 +283,7 @@ export function simulateScenario({asOf,source,scenario}){
  if(base.earliestRisk&&minExtra===null)warnings.push("Tăng lương ở ngày được chọn vẫn không khắc phục được thiếu tiền trước kỳ lương. Cần xem lịch chi, thời điểm tiền về hoặc nguồn tiền hợp pháp có chi phí rõ ràng.");
  if(settings.rows.some(x=>x.kind==="debt")&&source.events.some(x=>x.source==="debt_fund"))warnings.push("Kiểm tra khoản tất toán và quỹ nợ đã phân bổ để không trừ trùng cùng một nghĩa vụ.");
  return {...base,name:settings.name,minimumAdditionalIncomePerPaydayTwd:minExtra,
-   goal:settings.goal,loans,sourceDebtTwdPrincipal:source.debtTwdPrincipal,
+   goal:settings.goal,loans,bridgeWindow,sourceDebtTwdPrincipal:source.debtTwdPrincipal,
    debtRanking:source.debtRanking,warnings:[...new Set(warnings)].slice(0,18),
    methodology:"Mô phỏng thanh khoản; không phải dự báo xác suất, giao dịch thực tế hay lời đề nghị vay."};
 }
