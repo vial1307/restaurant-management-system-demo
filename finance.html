@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10273e">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Finance OS · Kế hoạch tài chính cá nhân</title>
+  <link rel="stylesheet" href="./src/personal-finance.css">
+</head>
+<body class="finance-app">
+  <header class="fin-header">
+    <a class="fin-back" href="./.admindev.html#development" aria-label="Trở lại Super Admin">←</a>
+    <div><span class="fin-brand">FINANCE OS</span><small>Kế hoạch tài chính cá nhân</small></div>
+    <span class="fin-private" aria-label="Dữ liệu riêng tư">Riêng tư</span>
+  </header>
+  <div class="fin-layout">
+    <nav class="fin-nav" aria-label="Điều hướng tài chính">
+      <button type="button" data-tab="overview" class="active"><span>◫</span> Tổng quan</button>
+      <button type="button" data-tab="budget"><span>▦</span> Kế hoạch</button>
+      <button type="button" data-tab="fx"><span>⇄</span> Ngoại tệ</button>
+      <button type="button" data-tab="ledger"><span>≡</span> Giao dịch</button>
+    </nav>
+    <main id="finance-content" class="fin-content" aria-live="polite">
+      <div class="fin-state"><div class="fin-spinner" aria-hidden="true"></div>Đang xác thực quyền truy cập...</div>
+    </main>
+  </div>
+  <div id="finance-toast" class="fin-toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="finance-dialog" class="fin-dialog" aria-labelledby="finance-dialog-title">
+    <div class="fin-dialog-head"><h2 id="finance-dialog-title"></h2><button type="button" id="finance-dialog-close" aria-label="Đóng">×</button></div>
+    <form id="finance-form" class="fin-form">
+      <div id="finance-fields"></div>
+      <div class="fin-actions"><button type="button" class="fin-secondary" id="finance-dialog-cancel">Hủy</button><button type="submit" id="finance-submit">Lưu vào Database</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./src/personal-finance.js"></script>
+</body>
+</html>
