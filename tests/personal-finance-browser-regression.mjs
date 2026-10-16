@@ -206,8 +206,28 @@ try {
     assert.equal(advisorCalls.at(-1).days,"90");
     assert.equal(advisorCalls.at(-1).buffer,"3000");
     await page.locator('[data-go-finance-tab="budget"]').click();
-    await page.locator("h1").filter({hasText:"Kế hoạch tháng / năm"}).waitFor();
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
+    // New finance plan is backed by the existing cashflow API, not a static screenshot.
+    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
+    await page.locator(".fin-plan-table").waitFor();
+    assert.equal(await page.locator(".fin-metrics-4 .fin-metric").count(),4,
+      "Reference design four real-data metrics must be present");
+    assert.equal(await page.locator("[data-open='cashIncome']").count()>0,true,
+      "Planning income button must stay functional");
+    await page.locator("[data-fin-table-filter]").fill("không tồn tại trên bảng");
+    assert.equal(await page.locator(".fin-plan-table tbody tr:not([hidden])").count(),0,
+      "Spreadsheet search should filter by user-entered terms");
+    await page.locator("[data-fin-table-filter]").fill("");
+    await page.locator('.fin-nav [data-tab="report"]').click();
+    await page.locator("h1").filter({hasText:"Dòng tiền & Báo cáo"}).waitFor();
+    assert.equal(await page.locator(".fin-report-charts").count(),1,
+      "Trends and category chart must be rendered in reports");
+    assert.equal(await page.locator("[data-report-export='csv']").count(),1);
+    assert.equal(await page.locator("[data-report-print='1']").count(),1);
+    await page.locator('.fin-nav [data-tab="overview"]').click();
+
     await page.locator('.fin-nav [data-tab="overview"]').click();
 
     // 12-month scenario workbench is a spreadsheet, not a second real ledger.
@@ -223,7 +243,7 @@ try {
     assert.equal(await method.locator(".fin-wb-methodology-item").count(),7,
       "The user can inspect the seven actual calculation assumptions and limits");
     assert.match(await method.innerText(),/trước ngày nhận lương.*không được coi là giải pháp/s);
-    assert.match(await method.innerText(),/chưa tự chuyển tiền góp sang tháng nhẹ hơn/);
+    assert.match(await method.innerText(),/Chọn chia đều hoặc phân bổ linh hoạt/);
     assert.match(await method.innerText(),/chưa có cảnh báo nền tự động/);
     assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
     const horizonRequest=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
