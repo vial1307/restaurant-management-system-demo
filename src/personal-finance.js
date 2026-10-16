@@ -44,6 +44,14 @@ function failure(error){
     TWD_RATE_REQUIRED:"Giao dịch ngoài TWD cần nhập tỷ giá quy đổi sang TWD để báo cáo chính xác.",
     FINANCE_DUPLICATE_REQUEST:"Yêu cầu này đã được ghi nhận. Hãy tải lại giao dịch, không gửi lại cùng mã.",
     FINANCE_WRITE_HEADER_REQUIRED:"Yêu cầu ghi dữ liệu bị chặn vì thiếu xác thực chống gửi từ trang ngoài.",
+    FINANCE_DUPLICATE:"Dữ liệu có thể đã được lưu. Kiểm tra lịch sử trước khi tạo yêu cầu mới.",
+    ACCOUNT_ALREADY_HAS_LEDGER:"Tài khoản đã có giao dịch; không thể ghi lại số dư đầu kỳ.",
+    INVALID_GOAL:"Kiểm tra tên, ngoại tệ, số tiền mục tiêu và ngày.",
+    INVALID_GOAL_AMOUNT:"Số tiền mục tiêu không hợp lệ với ngoại tệ.",
+    INVALID_GOAL_UPDATE:"Giá trị tiến độ mục tiêu không hợp lệ.",
+    INVALID_DEBT:"Kiểm tra số nợ, lãi suất năm (0–100%) và ngày đến hạn.",
+    INVALID_DEBT_AMOUNT:"Số nợ không hợp lệ với ngoại tệ.",
+    PLAN_NOT_FOUND_OR_NOT_PLANNED:"Kế hoạch không còn ở trạng thái có thể hủy.",
   };
   return errors[error?.message]||("Không lưu được: "+(error?.message||"Lỗi hệ thống"));
 }
@@ -110,7 +118,7 @@ function renderFx(){
   return heading("Ngoại tệ & chuyển tiền","Lập kế hoạch và ghi nhận các giao dịch đã thực hiện")+
    '<div class="fin-grid"><div class="fin-stack">'+
     panel("Đổi ngoại tệ",'<div class="fin-toolbar">'+button("+ Lên lịch đổi tiền","fxPlan")+button("Ghi nhận đã đổi","fxPost",true)+'</div>'+note("Hỗ trợ mọi đồng tiền đang được bật trong Database. Hoạt động trên trang chỉ ghi sổ; không tự chuyển tiền qua ngân hàng."))+
-    panel("Kế hoạch chuyển tiền",plans.length?plans.map(p=>row(p.from_currency+" → "+p.to_currency,p.plan_date+" · "+(p.plan_kind==="remittance"?"Chuyển ra ngoài":"Chuyển đổi"),moneyLabel(p.source_amount,p.from_currency),p.status==="planned"?"Dự kiến · "+safeRate(p.expected_rate):p.status)).join(""):'<div class="fin-list-empty">Chưa có lịch. Có thể lên kế hoạch đổi TWD → VND hàng tháng.</div>')+
+    panel("Kế hoạch chuyển tiền",plans.length?plans.map(p=>row(p.from_currency+" → "+p.to_currency,p.plan_date+" · "+(p.plan_kind==="remittance"?"Chuyển ra ngoài":"Chuyển đổi"),moneyLabel(p.source_amount,p.from_currency),p.status==="planned"?"Dự kiến · "+safeRate(p.expected_rate):"Đã "+p.status)+(p.status==="planned"?'<button class="fin-btn secondary fin-cancel-plan" type="button" data-cancel-plan="'+esc(p.id)+'">Hủy kế hoạch</button>':"")).join(""):'<div class="fin-list-empty">Chưa có lịch. Có thể lên kế hoạch đổi TWD → VND hàng tháng.</div>')+
    '</div><div class="fin-stack">'+
     panel("Các loại ngoại tệ hỗ trợ",'<div style="display:flex;flex-wrap:wrap;gap:8px">'+currencyCards+'</div>')+
     '<div class="fin-warning"><strong>Tỷ giá không phải dữ liệu live</strong><div class="fin-note">Chưa kết nối nhà cung cấp tỷ giá. Bạn nhập tỷ giá và phí tại thời điểm đổi tiền; không dùng con số ví dụ để ghi sổ.</div></div>'+
@@ -127,6 +135,24 @@ function renderLedger(){
     return row(kinds[e.kind]||e.kind,new Date(e.occurred_at).toLocaleDateString("vi-VN",{timeZone:"Asia/Taipei"})+" · "+(e.description||""),detail);
   }).join(""):'<div class="fin-list-empty">Chưa có giao dịch trong tháng.</div>')+'</div>';
 }
+
+function renderGoals(){
+ const goals=state.data.goals||[],debts=state.data.debts||[];
+ const goalRows=goals.length?goals.map(g=>{
+  const percent=Number(g.target_amount)>0?Math.round(Number(g.current_amount)/Number(g.target_amount)*100):0;
+  return '<div class="fin-row"><div style="flex:1;min-width:0"><div class="fin-stat"><strong>'+esc(g.name)+'</strong><span class="fin-tag neutral">'+esc(g.status)+'</span></div>'+
+   '<div class="fin-progress"><span style="width:'+Math.min(100,Math.max(0,percent))+'%"></span></div>'+
+   '<small>'+esc(moneyLabel(g.current_amount,g.currency_code))+' / '+esc(moneyLabel(g.target_amount,g.currency_code))+(g.target_date?' · '+esc(g.target_date):'')+'</small>'+
+   '</div><button class="fin-btn secondary fin-small-action" type="button" data-goal-update="'+esc(g.id)+'">Cập nhật</button></div>';
+ }).join(""):'<div class="fin-list-empty">Chưa có mục tiêu. Nhấn “Thêm mục tiêu” để bắt đầu.</div>';
+ const debtRows=debts.length?debts.map(d=>row(d.name,d.due_date?'Đến hạn '+d.due_date:'Chưa có ngày đến hạn',moneyLabel(d.outstanding_amount,d.currency_code),'Dư nợ gốc theo sổ')).join(""):'<div class="fin-list-empty">Chưa có khoản nợ nào được nhập.</div>';
+ return heading("Mục tiêu & khoản nợ","Theo dõi kế hoạch riêng, không tự trừ tiền trong tài khoản")+
+  '<div class="fin-grid"><div class="fin-stack">'+panel("Mục tiêu tiết kiệm",goalRows)+
+  panel("Tạo mục tiêu",button("+ Thêm mục tiêu","goal")+note("Số tiền tích lũy là tiến độ nhập thủ công; không được cộng vào số dư thực tế."))+
+  '</div><div class="fin-stack">'+panel("Danh sách khoản nợ",debtRows)+
+  panel("Theo dõi nghĩa vụ",button("+ Thêm khoản nợ","debt")+note("Phần này theo dõi nghĩa vụ; không tự tạo giao dịch trả nợ hoặc chuyển khoản. Các khoản trả nợ sẽ cần chức năng đối soát riêng."))+
+  '</div></div>';
+}
 function render(){
   const showLogin=!state.loading&&state.problem?.status===401;
   loginView.hidden=!showLogin;
@@ -136,7 +162,7 @@ function render(){
   tabs.forEach(b=>{const active=b.dataset.tab===state.tab;b.classList.toggle("active",active);b.setAttribute("aria-current",active?"page":"false");});
   if(state.loading){root.innerHTML='<div class="fin-state"><div class="fin-spinner"></div>Đang đọc dữ liệu được bảo vệ...</div>';return;}
   if(state.problem){root.innerHTML='<div class="fin-card"><h2>Không thể mở tài chính</h2><p class="fin-error">'+esc(failure(state.problem))+'</p><p class="fin-note">Nếu bạn vừa đăng nhập sai tài khoản, hãy đăng xuất và đăng nhập bằng tài khoản được cấp quyền.</p></div>';return;}
-  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():renderLedger();
+  root.innerHTML=state.tab==="overview"?renderOverview():state.tab==="budget"?renderBudget():state.tab==="fx"?renderFx():state.tab==="goals"?renderGoals():renderLedger();
 }
 function selectField(name,label,options,placeholder="Chọn"){
  return '<label>'+esc(label)+'<select name="'+esc(name)+'" required><option value="">'+esc(placeholder)+'</option>'+options.map(o=>'<option value="'+esc(o.value)+'">'+esc(o.label)+'</option>').join("")+'</select></label>';
@@ -146,7 +172,7 @@ function input(name,label,type="text",value="",placeholder="",required=true){
 }
 const choices=list=>list.map(x=>({value:x.id,label:accountName(x)}));
 const currencyChoices=()=>state.data.currencies.map(c=>({value:c.code,label:c.code+" · "+c.name_vi}));
-function showForm(kind){
+function showForm(kind,selectedId=null){
  if(!state.data){return;}
  const accounts=state.data.accounts,categories=state.data.categories;
  const expense=categories.filter(c=>c.kind==="expense").map(c=>({value:c.id,label:c.name}));
@@ -171,6 +197,29 @@ function showForm(kind){
    input("expectedFee","Phí dự kiến trong đơn vị tiền gửi","text","0")+
    input("memo","Ghi chú","text","","Dự kiến chuyển tiền tháng này",false)+
    note("Lịch đổi tiền không làm thay đổi số dư ví. Đây không phải lệnh chuyển tiền ngân hàng.");
+ }else if(kind==="goal"){
+  title="Thêm mục tiêu tiết kiệm";
+  fields=input("name","Tên mục tiêu","text","","Quỹ học phí / tiết kiệm")+
+   selectField("currencyCode","Ngoại tệ",currencyChoices())+
+   input("targetAmount","Số tiền mục tiêu","text","","10000")+
+   input("targetDate","Ngày dự kiến hoàn thành (không bắt buộc)","date","","",false)+
+   note("Mục tiêu là kế hoạch. Việc tạo mục tiêu không làm thay đổi số dư ví.");
+ }else if(kind==="goalProgress"){
+  const goal=(state.data.goals||[]).find(g=>g.id===selectedId);
+  if(!goal)return;
+  form.dataset.goalId=goal.id;
+  title="Cập nhật mục tiêu · "+goal.name;
+  fields=input("currentAmount","Đã tích lũy ("+goal.currency_code+")","text",goal.current_amount)+
+   selectField("status","Trạng thái",[{value:"active",label:"Đang thực hiện"},{value:"achieved",label:"Đã đạt"},{value:"archived",label:"Lưu trữ"}])+
+   note("Tiến độ do bạn nhập và không phải số dư của tài khoản ngân hàng.");
+ }else if(kind==="debt"){
+  title="Thêm khoản nợ";
+  fields=input("name","Tên khoản nợ","text","","Thẻ tín dụng / vay cá nhân")+
+   selectField("currencyCode","Ngoại tệ",currencyChoices())+
+   input("principalOriginal","Số nợ gốc","text","","10000")+
+   input("annualInterestPercent","Lãi suất theo năm (%)","text","0")+
+   input("dueDate","Ngày đến hạn (không bắt buộc)","date","","",false)+
+   note("Khoản nợ chỉ dùng để lập kế hoạch; chưa thực hiện ghi nhận trả nợ và không thay đổi số dư tài khoản.");
  }else if(kind==="income"||kind==="expense"){
   title=kind==="income"?"Ghi nhận thu nhập":"Ghi nhận chi tiêu";
   fields=selectField("accountId","Tài khoản",allAccounts)+selectField("categoryId","Danh mục",categoryChoices(kind))+
@@ -192,6 +241,8 @@ function showForm(kind){
  }
  if(!fields)return;
  dialog.dataset.formKind=kind;
+ form.dataset.idempotencyKey=crypto.randomUUID();
+ if(kind!=="goalProgress")delete form.dataset.goalId;
  document.querySelector("#finance-dialog-title").textContent=title;
  fieldRoot.innerHTML=fields;form.reset();
  // Restore prepopulated values after reset; reset defaults are retained by browser.
@@ -205,23 +256,36 @@ async function submitForm(event){
  const data=Object.fromEntries(new FormData(form));
  const path={
   account:"/accounts",category:"/categories",budget:"/budgets",fxPlan:"/fx-plans",
+  goal:"/goals",debt:"/debts",goalProgress:"/goals/"+form.dataset.goalId,
   income:"/transactions",expense:"/transactions",transfer:"/transactions",fxPost:"/transactions",opening:"/transactions"
  }[kind];
  if(!path)return;
  let body=data;
  if(["income","expense","transfer","fxPost","opening"].includes(kind)){
-   body={...data,kind:kind==="fxPost"?"fx":kind==="opening"?"adjustment":kind,idempotencyKey:crypto.randomUUID(),occurredAt:new Date().toISOString()};
+   body={...data,kind:kind==="fxPost"?"fx":kind==="opening"?"adjustment":kind,idempotencyKey:form.dataset.idempotencyKey,occurredAt:new Date().toISOString()};
    if(!data.toTwdRate)delete body.toTwdRate;
  }
  state.busy=true;
  const submit=document.querySelector("#finance-submit");submit.disabled=true;submit.textContent="Đang lưu...";
+ let saved=false;
  try{
-   await api(path,body,kind==="budget"?"PUT":"POST");
+   await api(path,body,["budget","goalProgress"].includes(kind)?"PUT":"POST");
+   saved=true;
    dialog.close();
-   await refresh();
-   flash("Đã lưu và đọc lại từ Database thành công.");
+   try{
+     await refresh();
+     flash("Đã lưu và đọc lại từ Database thành công.");
+   }catch(error){
+     state.loading=false;state.problem=error;render();
+     flash("Database đã xác nhận lưu nhưng chưa tải lại được. Không gửi lại giao dịch; hãy tải lại trang.");
+   }
  }catch(error){
-   flash(failure(error));
+   if(error?.message==="FINANCE_DUPLICATE_REQUEST" || error?.message==="FINANCE_DUPLICATE"){
+     try {await refresh();}catch{}
+     flash("Mã giao dịch đã được dùng. Kiểm tra lịch sử; hệ thống không ghi lại lần thứ hai.");
+   }else{
+     flash(failure(error));
+   }
  }finally{state.busy=false;submit.disabled=false;submit.textContent="Lưu vào Database";}
 }
 document.querySelector("#finance-dialog-close").addEventListener("click",()=>dialog.close());
@@ -233,7 +297,7 @@ loginForm.addEventListener("submit",async(event)=>{
   loginError.hidden=true;button.disabled=true;
   try{
     const response=await fetch("/api/auth/login",{method:"POST",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:fields.get("username"),password:fields.get("password")})});
-    if(!response.ok){loginError.textContent="Tài khoản hoặc mật khẩu không đúng.";loginError.hidden=false;return;}
+    if(!response.ok){loginError.textContent=response.status===403?"Tài khoản này chưa được cấp quyền Finance OS.":response.status===503?"Dịch vụ đăng nhập đang tạm gián đoạn.":"Tài khoản hoặc mật khẩu không đúng.";loginError.hidden=false;return;}
     loginForm.reset();state.loading=true;state.problem=null;render();await refresh();
   }catch(error){state.problem=error;state.loading=false;render();loginError.textContent=failure(error);loginError.hidden=false;}
   finally{button.disabled=false;}
@@ -246,6 +310,20 @@ logoutButton.addEventListener("click",async()=>{
 tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();}));
 root.addEventListener("click",event=>{
  const act=event.target.closest("[data-open]");if(act){showForm(act.dataset.open);return;}
+ const goalButton=event.target.closest("[data-goal-update]");
+ if(goalButton){showForm("goalProgress",goalButton.dataset.goalUpdate);return;}
+ const cancelButton=event.target.closest("[data-cancel-plan]");
+ if(cancelButton){
+   if(state.busy||!window.confirm("Hủy kế hoạch ngoại tệ này? Không có giao dịch tài chính nào bị thay đổi."))return;
+   state.busy=true;cancelButton.disabled=true;
+   try{
+     await api("/fx-plans/"+encodeURIComponent(cancelButton.dataset.cancelPlan)+"/cancel",{},"POST");
+     try{await refresh();flash("Đã hủy kế hoạch trong Database.");}
+     catch{flash("Đã xác nhận hủy, nhưng tải lại bị lỗi. Vui lòng tải lại trang.");}
+   }catch(error){flash(failure(error));}
+   finally{state.busy=false;cancelButton.disabled=false;}
+   return;
+ }
  const period=event.target.closest("[data-period]");if(period){
    state.period=period.dataset.period;render();
    if(state.period==="year")loadYear();
