@@ -75,14 +75,16 @@ export async function registerFinanceRoutes(app) {
   app.get("/api/finance/bootstrap",async(request,reply)=>{
     const ctx=await authorized(request,reply);if(!ctx)return;
     try {
-      const [currencies,accounts,categories,budgets,plans]=await Promise.all([
+      const [currencies,accounts,categories,budgets,plans,goals,debts]=await Promise.all([
         ctx.pool.query("SELECT code,name_vi,symbol,minor_units FROM finance.currencies WHERE enabled=true ORDER BY CASE code WHEN 'TWD' THEN 0 WHEN 'VND' THEN 1 ELSE 2 END,code"),
         ctx.pool.query("SELECT a.id,a.name,a.kind,a.currency_code,a.created_at,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=true GROUP BY a.id ORDER BY a.created_at",[ctx.owner]),
         ctx.pool.query("SELECT id,name,kind FROM finance.categories WHERE owner_user_id=$1 ORDER BY kind,name",[ctx.owner]),
         ctx.pool.query("SELECT b.id,b.category_id,b.month_date::text AS month_date,b.amount_twd::text AS amount_twd,c.name AS category_name FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date>=date_trunc('month',CURRENT_DATE)-interval '12 months' ORDER BY b.month_date DESC,c.name",[ctx.owner]),
-        ctx.pool.query("SELECT id,plan_date::text AS plan_date,plan_kind,from_currency,to_currency,source_amount::text AS source_amount,expected_rate::text AS expected_rate,expected_fee::text AS expected_fee,status,memo FROM finance.fx_plans WHERE owner_user_id=$1 ORDER BY plan_date DESC,created_at DESC LIMIT 100",[ctx.owner])
+        ctx.pool.query("SELECT id,plan_date::text AS plan_date,plan_kind,from_currency,to_currency,source_amount::text AS source_amount,expected_rate::text AS expected_rate,expected_fee::text AS expected_fee,status,memo FROM finance.fx_plans WHERE owner_user_id=$1 ORDER BY plan_date DESC,created_at DESC LIMIT 100",[ctx.owner]),
+        ctx.pool.query("SELECT id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status FROM finance.goals WHERE owner_user_id=$1 ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,target_date NULLS LAST,created_at DESC LIMIT 100",[ctx.owner]),
+        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner])
       ]);
-      return {currencies:currencies.rows,accounts:accounts.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,reportCurrency:"TWD"};
+      return {currencies:currencies.rows,accounts:accounts.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
     } catch(error){return databaseError(request,reply,error);}
   });
   app.get("/api/finance/overview",async(request,reply)=>{
@@ -167,6 +169,132 @@ export async function registerFinanceRoutes(app) {
       return reply.code(201).send({plan:rows[0]});
     }catch(error){return databaseError(request,reply,error);}
   });
+
+  app.post("/api/finance/goals",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const b=request.body||{};
+    if(!trim(b.name)||!ISO.test(String(b.currencyCode||""))||!positive(b.targetAmount,6)
+      ||(b.targetDate && !isDate(b.targetDate)))return fail(reply,"INVALID_GOAL");
+    try{
+      const c=await currency(ctx.pool,b.currencyCode);
+      if(!c||!positive(b.targetAmount,Number(c.minor_units)))return fail(reply,"INVALID_GOAL_AMOUNT");
+      const {rows}=await ctx.pool.query(
+        "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date) VALUES($1,$2,$3,$4::numeric,$5::date) RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status",
+        [ctx.owner,trim(b.name,160),b.currencyCode,b.targetAmount,b.targetDate||null]
+      );
+      return reply.code(201).send({goal:rows[0]});
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.put("/api/finance/goals/:goalId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const goalId=request.params?.goalId,b=request.body||{};
+    if(!id(goalId)||!["active","achieved","archived"].includes(b.status)
+      ||typeof b.currentAmount!=="string")return fail(reply,"INVALID_GOAL_UPDATE");
+    try{
+      const {rows}=await ctx.pool.query(
+        "UPDATE finance.goals g SET current_amount=$3::numeric,status=$4,updated_at=now() FROM finance.currencies c WHERE g.id=$1 AND g.owner_user_id=$2 AND c.code=g.currency_code AND c.enabled=true AND $3 ~ '^(?:0|[1-9][0-9]{0,15})(?:[.][0-9]{1,6})?
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const b=request.body||{},kind=b.kind,key=b.idempotencyKey;
+    if(!id(key)||!["income","expense","transfer","fx","adjustment"].includes(kind))return fail(reply,"INVALID_FINANCE_TRANSACTION");
+    const occurredAt=b.occurredAt||new Date().toISOString();
+    if(typeof occurredAt!=="string"||Number.isNaN(Date.parse(occurredAt))||!/[zZ]|[+-]\d\d:\d\d$/.test(occurredAt))return fail(reply,"INVALID_FINANCE_TIMESTAMP");
+    const description=trim(b.description,250);
+    try {
+      const result=await financeTransaction(async(client)=>{
+        const lockedAccounts=new Map();
+        // Lock all owned wallets in the same order to avoid deadlocks when simultaneous
+        // transfers/FX conversions move funds in opposite directions.
+        const requestedAccountIds=(["transfer","fx"].includes(kind) && id(b.targetAccountId))
+          ? [b.accountId,b.targetAccountId] : [b.accountId];
+        for (const accountId of [...new Set(requestedAccountIds)].sort()) {
+          const record=await account(client,ctx.owner,accountId);
+          if(record)lockedAccounts.set(accountId,record);
+        }
+        const primary=lockedAccounts.get(b.accountId);
+        if(!primary) return {error:"SOURCE_ACCOUNT_NOT_FOUND",status:404};
+        let secondary=null,categoryId=null,toTwdRate=null;
+        if(["transfer","fx"].includes(kind)){
+          if(!id(b.targetAccountId)||b.targetAccountId===b.accountId)return {error:"INVALID_TARGET_ACCOUNT"};
+          secondary=lockedAccounts.get(b.targetAccountId);
+          if(!secondary)return {error:"TARGET_ACCOUNT_NOT_FOUND",status:404};
+          if(kind==="transfer"&&primary.currency_code!==secondary.currency_code)return {error:"USE_FX_FOR_CROSS_CURRENCY"};
+          if(kind==="fx"&&primary.currency_code===secondary.currency_code)return {error:"FX_CURRENCIES_MUST_DIFFER"};
+        }
+        if(!positive(b.amount,Number(primary.minor_units)))return {error:"INVALID_AMOUNT"};
+        if(kind==="adjustment"){
+          const prior=await client.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,primary.id]);
+          if(prior.rows[0])return {error:"ACCOUNT_ALREADY_HAS_LEDGER",status:409};
+        }
+        if(kind==="fx"){
+          if(!positive(b.receivedAmount,Number(secondary.minor_units)) || !money(b.feeAmount||"0",Number(primary.minor_units)))return {error:"INVALID_EXCHANGE_AMOUNT"};
+        }else if(kind==="income"||kind==="expense"){
+          if(!id(b.categoryId))return {error:"CATEGORY_REQUIRED"};
+          const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3",[b.categoryId,ctx.owner,kind]);
+          if(!check.rows[0])return {error:"CATEGORY_NOT_FOUND"};
+          categoryId=b.categoryId;
+          // Never report converted non-TWD spending without an explicitly supplied actual/manual FX snapshot.
+          toTwdRate=primary.currency_code==="TWD"?"1":b.toTwdRate;
+          if(!positiveRate(toTwdRate))return {error:"TWD_RATE_REQUIRED"};
+        }
+        const eventId=await createEvent(client,ctx.owner,kind,description,occurredAt,key);
+        if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
+        const debit=kind==="expense"||kind==="transfer"||kind==="fx";
+        await entry(client,ctx.owner,eventId,primary,(debit?"-":"")+b.amount,categoryId,toTwdRate);
+        if(kind==="transfer")await entry(client,ctx.owner,eventId,secondary,b.amount);
+        if(kind==="fx"){
+          await entry(client,ctx.owner,eventId,secondary,b.receivedAmount);
+          if(b.feeAmount && Number(b.feeAmount)>0)await entry(client,ctx.owner,eventId,primary,"-"+b.feeAmount);
+          await client.query(
+            "INSERT INTO finance.fx_exchanges(event_id,owner_user_id,from_currency,to_currency,source_amount,received_amount,effective_rate,fee_amount,fee_currency,rate_source) VALUES($1,$2,$3,$4,$5::numeric,$6::numeric,$6::numeric/$5::numeric,$7::numeric,$3,'manual')",
+            [eventId,ctx.owner,primary.currency_code,secondary.currency_code,b.amount,b.receivedAmount,b.feeAmount||"0"]
+          );
+        }
+        await audit(client,ctx.owner,"finance."+kind,eventId,{kind});
+        return {id:eventId,kind};
+      });
+      if(result.error)return fail(reply,result.error,result.status||400);
+      return reply.code(201).send({event:result});
+    }catch(error){return databaseError(request,reply,error);}
+  });
+}
+ AND ROUND($3::numeric,c.minor_units)=$3::numeric RETURNING g.id,g.current_amount::text,g.status",
+        [goalId,ctx.owner,b.currentAmount,b.status]
+      );
+      if(!rows[0])return fail(reply,"INVALID_GOAL_OR_OWNER",404);
+      return {goal:rows[0]};
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/debts",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const b=request.body||{};
+    if(!trim(b.name)||!ISO.test(String(b.currencyCode||""))
+      ||!positive(b.principalOriginal,6)
+      ||(b.dueDate && !isDate(b.dueDate))
+      ||!money(b.annualInterestPercent||"0",6)
+      ||Number(b.annualInterestPercent||"0")>100)return fail(reply,"INVALID_DEBT");
+    try {
+      const c=await currency(ctx.pool,b.currencyCode);
+      if(!c||!positive(b.principalOriginal,Number(c.minor_units)))return fail(reply,"INVALID_DEBT_AMOUNT");
+      const {rows}=await ctx.pool.query(
+        "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
+        [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,b.annualInterestPercent||"0",b.dueDate||null]
+      );
+      return reply.code(201).send({debt:rows[0]});
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/fx-plans/:planId/cancel",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const planId=request.params?.planId;
+    if(!id(planId))return fail(reply,"INVALID_PLAN_ID");
+    try{
+      const {rows}=await ctx.pool.query(
+        "UPDATE finance.fx_plans SET status='cancelled' WHERE id=$1 AND owner_user_id=$2 AND status='planned' RETURNING id,status",
+        [planId,ctx.owner]
+      );
+      if(!rows[0])return fail(reply,"PLAN_NOT_FOUND_OR_NOT_PLANNED",404);
+      return {plan:rows[0]};
+    }catch(error){return databaseError(request,reply,error);}
+  });
   app.post("/api/finance/transactions",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const b=request.body||{},kind=b.kind,key=b.idempotencyKey;
@@ -176,12 +304,21 @@ export async function registerFinanceRoutes(app) {
     const description=trim(b.description,250);
     try {
       const result=await financeTransaction(async(client)=>{
-        const primary=await account(client,ctx.owner,b.accountId);
+        const lockedAccounts=new Map();
+        // Lock all owned wallets in the same order to avoid deadlocks when simultaneous
+        // transfers/FX conversions move funds in opposite directions.
+        const requestedAccountIds=(["transfer","fx"].includes(kind) && id(b.targetAccountId))
+          ? [b.accountId,b.targetAccountId] : [b.accountId];
+        for (const accountId of [...new Set(requestedAccountIds)].sort()) {
+          const record=await account(client,ctx.owner,accountId);
+          if(record)lockedAccounts.set(accountId,record);
+        }
+        const primary=lockedAccounts.get(b.accountId);
         if(!primary) return {error:"SOURCE_ACCOUNT_NOT_FOUND",status:404};
         let secondary=null,categoryId=null,toTwdRate=null;
         if(["transfer","fx"].includes(kind)){
           if(!id(b.targetAccountId)||b.targetAccountId===b.accountId)return {error:"INVALID_TARGET_ACCOUNT"};
-          secondary=await account(client,ctx.owner,b.targetAccountId);
+          secondary=lockedAccounts.get(b.targetAccountId);
           if(!secondary)return {error:"TARGET_ACCOUNT_NOT_FOUND",status:404};
           if(kind==="transfer"&&primary.currency_code!==secondary.currency_code)return {error:"USE_FX_FOR_CROSS_CURRENCY"};
           if(kind==="fx"&&primary.currency_code===secondary.currency_code)return {error:"FX_CURRENCIES_MUST_DIFFER"};
