@@ -55,4 +55,30 @@ assert.equal(foreign.startingBalanceTwd,"8500");
 assert.equal(foreign.debtTwdPrincipal,"0");
 assert.equal(foreign.events[0].date,"2026-11-05");
 assert(foreign.warnings.some(x=>x.includes("ngoại tệ")));
+// Adaptive goals redistribute funding away from expensive months instead
+// of forcing equal installments that would breach essential liquidity.
+const seasonal={startingBalanceTwd:"0",warnings:[],debtTwdPrincipal:"0",debtRanking:[],
+ events:[{date:"2026-11-12",kind:"expense",label:"High season rent",amountTwd:"-8000"},
+ {date:"2026-12-12",kind:"expense",label:"Lower season rent",amountTwd:"-1000"}]};
+const goalPlan={...defaults,monthlyExtraIncomeTwd:"10000",
+ goal:{label:"Trip",totalTwd:"9000",targetDate:"2026-12-20",mode:"adaptive"}};
+const elastic=simulateScenario({asOf:from,source:seasonal,scenario:goalPlan});
+assert.equal(elastic.earliestRisk,null);
+assert.equal(elastic.goalFundingGapTwd,"0");
+assert.equal(elastic.goalSchedule.reduce((a,b)=>a+Number(b.amountTwd),0),9000);
+assert.equal(elastic.goalSchedule[0].date,"2026-12-10",
+ "Funding should be deferred to a lower-cost month if total obligations still remain safe");
+const evenPlan=simulateScenario({asOf:from,source:seasonal,scenario:{...goalPlan,goal:{...goalPlan.goal,mode:"even"}}});
+assert(evenPlan.earliestRisk,"Equal target funding during high-cost month must be identified as unsafe");
+const impossible=simulateScenario({asOf:from,source:seasonal,scenario:
+ {...goalPlan,goal:{...goalPlan.goal,totalTwd:"14000"}}});
+assert.equal(impossible.goalFundingGapTwd,"3000",
+ "Cannot claim 100% goal funded when forecast income and obligations do not allow it");
+assert(Number(impossible.minimumAdditionalIncomePerPaydayTwd)>0,
+ "Reverse income calculation should account for goal funding shortfall, not just negative cash");
+const loss=simulateScenario({asOf:from,source:seasonal,scenario:
+ {...defaults,rows:[{kind:"income_loss",date:"2026-11-10",label:"Lower salary",amountTwd:"1500"}]}});
+assert.equal(loss.months[1].incomeTwd,"-1500",
+ "Income shortfall is a negative income adjustment, not consumption expense");
+
 console.log("PASS scenario due-before-payday, safe bridge, loan cost, goal funding, required income, no invented FX and empty-month carry");
