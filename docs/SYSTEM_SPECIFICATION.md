@@ -1266,3 +1266,22 @@ Personal Finance OS is a separate **private** domain hosted on the existing VPS 
 Owner access must be explicitly allowed by `FINANCE_OWNER_USER_ID` and enforced server-side on every finance API call. Missing owner configuration or missing database is a fail-closed condition. No sensitive finance information may be included in general admin snapshots, public handoff, generic audit reporting, or restaurant database exports.
 
 Initial schema, finance ledger invariants, multi-currency plans and staged release acceptance criteria are defined in `docs/spec-deltas/2026-10-16-personal-finance-os.md`. Implementation is staged, and production must not be marked DONE until finance API, permission tests, mobile/desktop responsive UI, dedicated backups and VPS smoke tests succeed.
+
+## Personal Finance OS — synchronization between Planning, Goals and Debt (2026-10-17)
+
+Finance OS is served only on `finance.82.47.180.185.nip.io` and uses the separate `finance` PostgreSQL database, with an explicitly allowed owner session. The "Kế hoạch" and "Mục tiêu & Nợ" tabs **must read a common monthly finance/cashflow projection from PostgreSQL**.
+
+- Planned income and ordinary expenses are kept in `finance.cashflow_items`. Savings goals have an independent owner-scoped `finance.goal_fund_allocations` monthly planned/earmarked schedule, linked by FK to `finance.goals`. Debts continue to use `finance.debt_fund_allocations` linked to `finance.debts`. Missing allocations must display as **unallocated**, not be silently treated as a commitment; creating a goal/debt does not invent installment amounts.
+- **Planned remaining TWD = planned income - planned ordinary expense - planned goal allocation - planned debt allocation.** Native-currency goal and debt planned amounts use explicit user-entered TWD-per-unit snapshot for the month; TWD uses rate 1. Yearly views use the exact same monthly categories and rates. No double counting: goal and debt allocations must **not** also be entered as ordinary planned expenses; the UI distinguishes these budget components.
+- **Earmarked** savings/debt fund amounts are *planning annotations*, not paid cash, separate wallets or real transfers. They do not create income/expense postings, change wallet balances, reduce principal or automatically change the manual `goals.current_amount` progress. Each surface must show the same monthly allocation values after an API save, browser reload or month switch.
+- **Actual remaining** remains measured from posted incomes, actual ordinary expenses, and posted debt payments (principal + interest + fee). A debt payment cannot be counted twice as an ordinary expense. Actual goal deposits are not inferred from manual progress or earmarks; only existing ledger-backed financial events affect actual cash.
+- Planning tab provides goal/debt allocation breakdown and direct actions to edit linked allocations. Goals/Debts tab shows each goal/debt and its allocation for the selected month. Both use one finance cashflow API response and one owner-only mutation API. No duplicate local copy, no optimistic "saved" state and no hard-coded financial numbers.
+- Budget category ceilings remain distinct from planned cash expenditure forecasts; avoid adding expense ceilings to the projected spending a second time.
+
+Acceptance criteria:
+1. Create a goal and a debt without allocations: their planned monthly contribution is zero, and UI clearly marks them unallocated.
+2. Allocate a goal and a debt in a given month, e.g. TWD 8,000 savings and VND 1,000,000 debt at user-entered 0.0013 TWD/VND: both tabs and monthly/yearly plans reflect TWD 9,300 outflow in addition to ordinary expenses. The values persist after F5, month switching and across sessions.
+3. Edit allocations in either view: the same PostgreSQL-backed summary updates without additional financial entries, wallet mutations or audit gaps; another owner-only session sees the identical values.
+4. Switching to a month without allocations shows unallocated labels and does not carry over or infer spending. Other users, including a restaurant Super Admin, receive 403 on finance writes; anonymous receives 401.
+5. Finance migration 003 is additive and idempotent; it does not modify restaurant DB, posted history, or previously saved goal/debt balances. PostgreSQL/API, mobile/desktop Chromium, Super Admin/Kitchen regression, backup/restore, production smoke all pass.
+
