@@ -245,6 +245,7 @@ function showForm(kind,selectedId=null){
  if(kind!=="goalProgress")delete form.dataset.goalId;
  document.querySelector("#finance-dialog-title").textContent=title;
  fieldRoot.innerHTML=fields;form.reset();
+ if(kind==="goalProgress")fieldRoot.querySelector('[name="status"]').value=state.data.goals.find(g=>g.id===selectedId)?.status||"active";
  // Restore prepopulated values after reset; reset defaults are retained by browser.
  dialog.showModal();
  fieldRoot.querySelector("input,select")?.focus();
