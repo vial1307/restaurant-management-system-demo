@@ -1,3 +1,10 @@
+## IN PROGRESS — Finance OS audit and owner-scoped planning completion (2026-10-16)
+
+- **ACTIVE_PR: #245**, branch `fix/finance-superadmin-contract-audit-20261016`. Source: main release `afed444`; prior Finance root fix `88831b1`; exact-head CI required.
+- Scoped Finance only: fix wallet row lock order; preserve idempotency on network retries; owner-only goals/debts and FX-plan cancellation; atomic audit for budgets, categories, wallets, plans and goals; mobile/desktop controls/F5 verification.
+- No new bank transfers or financial hard-coded data. Debt/goal progress is manual planning only, not account balance or actual debt repayment.
+- Do not mark production DONE until exact tested SHA, merge, VPS release, Finance database integrity and post-deploy smoke PASS.
+
 ## DONE — Procurement manual form and literal product search Production (2026-10-12)
 
 - Release `a22cfbf` / PostgreSQL schema `036` confirmed by gated Production [workflow 38157246580](https://github.com/vial1307/restaurant-management-system-demo/actions/runs/38157246580): preflight, full CI/browser, backup `kitchen_os_20261011T170107Z.dump`, schema migration, DB integrity (0 errors), API health, UI smoke all PASS. PR #241 merged; main Staging `38157179600` PASS.
