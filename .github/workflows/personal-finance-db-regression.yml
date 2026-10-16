@@ -6,6 +6,11 @@ on:
       - "vps/finance/**"
       - "vps/docker-compose.finance.yml"
       - "tests/personal-finance-schema-contract-regression.mjs"
+      - "vps/backend/src/finance-*.mjs"
+      - "vps/backend/src/server.mjs"
+      - "vps/backend/scripts/finance-api-regression.mjs"
+      - "finance.html"
+      - "src/personal-finance.*"
       - ".github/workflows/personal-finance-db-regression.yml"
   workflow_dispatch:
 permissions:
@@ -32,6 +37,18 @@ jobs:
       PGHOST: 127.0.0.1
       PGPORT: 5432
       PGUSER: finance_test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      POSTGRES_DB: kitchen_test
+      POSTGRES_USER: finance_test
+      POSTGRES_PASSWORD: finance_test
+      FINANCE_DB_HOST: 127.0.0.1
+      FINANCE_DB_PORT: 5432
+      FINANCE_DB_NAME: personal_finance_test
+      FINANCE_DB_USER: finance_test
+      FINANCE_DB_PASSWORD: finance_test
+      TEST_API_BASE: http://127.0.0.1:8080
+      COOKIE_SECURE: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,6 +77,33 @@ jobs:
           SQL
           COUNT=$(psql -At -d kitchen_test -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='finance'")
           test "$COUNT" = "0"
+      - name: Install backend dependencies
+        run: npm ci --prefix vps/backend
+      - name: Create isolated Kitchen OS test session fixtures
+        run: node vps/backend/scripts/regression-setup.mjs
+      - name: Set test finance owner UUID from isolated Kitchen OS fixture
+        run: |
+          OWNER=$(psql -At -d kitchen_test -c "SELECT id FROM public.app_users WHERE username='managerfx'")
+          test -n "$OWNER"
+          echo "FINANCE_OWNER_USER_ID=$OWNER" >> "$GITHUB_ENV"
+      - name: Start private API with both test DBs
+        run: |
+          node --check vps/backend/src/finance-db.mjs
+          node --check vps/backend/src/finance-routes.mjs
+          node --check vps/backend/scripts/finance-api-regression.mjs
+          node --check src/personal-finance.js
+          node vps/backend/src/server.mjs > /tmp/finance-api-test.log 2>&1 &
+          for attempt in $(seq 1 35); do
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/finance-api-test.log
+          exit 1
+      - name: Owner authorization, budget, multi-currency and ledger API regression
+        run: node vps/backend/scripts/finance-api-regression.mjs
+      - name: Debug isolated API when failed
+        if: failure()
+        run: tail -n 120 /tmp/finance-api-test.log || true
       - name: Assert negative amounts and currencies are rejected
         run: |
           set -e
