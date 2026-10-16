@@ -243,8 +243,7 @@ function renderFinancePlanTable(){
    '<th>Số dư sau dòng *</th><th>Ưu tiên</th><th>Ghi chú</th><th></th></tr></thead><tbody>'+
    (body||'<tr><td colspan="11" class="fin-table-empty">Chưa có lịch tiền. Thêm dòng thu/chi hoặc phân bổ quỹ nợ, mục tiêu.</td></tr>')+
    '</tbody></table></div><div class="fin-table-footer"><small>* Số dư chỉ hiện với dòng dự báo khớp lịch Finance; các khoản quá khứ, ngoài phạm vi hoặc chưa đủ thông tin hiển thị “—”. Không trừ các khoản đã ghi sổ lần nữa.</small>'+
-   '<button type="button" class="fin-table-add" data-open="cashIncome">+ Thu dự kiến</button>'+
-   '<button type="button" class="fin-table-add" data-open="cashExpense">+ Chi dự kiến</button></div>';
+   '<button type="button" class="fin-table-add" data-go-finance-tab="workbench">+ Thử thay đổi kế hoạch</button></div>';
 }
 function finMetric(label,value,color="blue",subtitle=""){
  return '<div class="fin-metric fin-metric-'+color+'"><div><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong>'+
@@ -316,9 +315,29 @@ function renderBudget(){
      panel("Dòng tiền "+esc(state.advisor?.days||state.advisorDays)+" ngày tới",'<div class="fin-plan-range"><span>Khoảng dự báo</span>'+[30,60,90].map(n=>'<button type="button" class="'+(n===state.advisorDays?'selected':'')+'" data-fin-forecast-days="'+n+'">'+n+' ngày</button>').join("")+'</div><div class="fin-chart-legend"><span class="blue">Số dư</span><span class="green">Thu dự kiến</span><span class="coral">Chi & quỹ</span><span class="orange">Mức dự trữ</span></div>'+charts)+
      panel("Gợi ý xoay vòng",renderAdvisorActionsCompact(state.advisor))+'</div>'+
     panel("Kế hoạch 3 tháng tới",threeMonth)+
+    panel("Quỹ & phân bổ kế hoạch",renderFinanceAllocationActions())+
     panel("Ngân sách theo danh mục",renderBudgetCategories())+
    '</div>'+renderPlanAlertSummary()+
    '</div>';
+}
+function renderFinanceAllocationActions(){
+ const goals=state.data?.goals||[],debts=state.data?.debts||[],cf=state.cashflow||{},s=cf.summary||{};
+ const header='<div class="fin-fund-summary">'+
+  '<div><span>Quỹ mục tiêu dự kiến</span><strong>'+esc(moneyLabel(s.planned_goal_fund_twd||0))+'</strong></div>'+
+  '<div><span>Quỹ trả nợ dự kiến</span><strong>'+esc(moneyLabel(s.planned_debt_fund_twd||0))+'</strong></div></div>';
+ const items=goals.map(g=>{
+  const fund=(cf.goalFunds||[]).find(f=>f.goal_id===g.id);
+  return '<div class="fin-fund-line"><div><strong>'+esc(g.name)+'</strong><small>'+
+   (fund?'Dành '+esc(moneyLabel(fund.planned_amount,g.currency_code)):'Chưa lập quỹ tháng này')+
+   '</small></div><button type="button" class="fin-btn secondary" data-goal-fund="'+esc(g.id)+'">Phân bổ mục tiêu</button></div>';
+ }).concat(debts.map(d=>{
+  const fund=(cf.debtFunds||[]).find(f=>f.debt_id===d.id);
+  return '<div class="fin-fund-line"><div><strong>'+esc(d.name)+'</strong><small>'+
+   (fund?'Quỹ nợ '+esc(moneyLabel(fund.planned_amount,d.currency_code)):'Chưa lập quỹ tháng này')+
+   '</small></div><button type="button" class="fin-btn secondary" data-fund-debt="'+esc(d.id)+'">Phân bổ nợ</button></div>';
+ })).join("");
+ return header+(items||'<p class="fin-muted">Tạo mục tiêu hoặc khoản nợ để phân bổ theo tháng.</p>')+
+  '<p class="fin-note">Quỹ dự kiến không phải tiền đã chi; đánh dấu dành dụm không làm thay đổi tài khoản hay dư nợ.</p>';
 }
 function renderBudgetCategories(){
  const rows=(state.overview?.budget||[]).filter(c=>c.kind==="expense");
