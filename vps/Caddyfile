@@ -14,7 +14,10 @@
   # Always revalidate application shells so every device sees the newest
   # release from the same URL. Static assets may be kept locally, but must be
   # revalidated by Caddy before reuse.
-  @freshShell path / /index.html /.admindev.html /finance.html /manifest.webmanifest /sw.js /RELEASE
+  @financeOld path /finance.html
+  redir @financeOld https://finance.82.47.180.185.nip.io/ 302
+
+  @freshShell path / /index.html /.admindev.html /manifest.webmanifest /sw.js /RELEASE
   header @freshShell Cache-Control "no-store, no-cache, must-revalidate"
 
   @appAssets path /src/*
@@ -69,5 +72,44 @@ marketing.82.47.180.185.nip.io {
     X-Content-Type-Options "nosniff"
     X-Frame-Options "SAMEORIGIN"
     Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}
+
+# Standalone origin: do NOT expose inventory, restaurant users, admin, or business APIs.
+finance.82.47.180.185.nip.io {
+  encode zstd gzip
+  @loginApi path /api/auth/login /api/auth/logout /api/auth/me
+  handle @loginApi {
+    reverse_proxy app:8080
+  }
+  handle /api/finance/* {
+    reverse_proxy app:8080
+  }
+  handle / {
+    redir /finance.html 302
+  }
+  handle /finance.html {
+    root * /srv
+    file_server
+  }
+  handle /src/personal-finance.js {
+    root * /srv
+    file_server
+  }
+  handle /src/personal-finance.css {
+    root * /srv
+    file_server
+  }
+  handle {
+    respond "Not Found" 404
+  }
+  header {
+    Cache-Control "no-store, no-cache, must-revalidate"
+    X-Robots-Tag "noindex, nofollow, noarchive"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
   }
 }
