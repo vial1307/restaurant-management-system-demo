@@ -427,7 +427,7 @@ function open(kind,id=""){
    '<div class="notice">Số tiền ở trên là quỹ dự kiến dành trong tháng. Nợ gốc và hạn trả được ghi vào Công nợ; không tạo thêm một khoản chi trùng.</div></fieldset>'+
    '<fieldset id="finance-plan-goal-fields" class="fin-conditional" hidden disabled>'+
    field("targetAmount","Tổng số tiền muốn tiết kiệm","text","",'inputmode="decimal"')+
-   field("targetDate","Ngày muốn đạt mục tiêu","date","")+
+   field("targetDate","Ngày muốn đạt mục tiêu (có thể để trống)","date","")+
    '<div class="notice">Số tiền ở trên là quỹ tiết kiệm của tháng; mục tiêu xuất hiện đồng thời tại Công nợ & mục tiêu.</div></fieldset>'+
 
    field("dueDay","Ngày trong tháng (1–31)","number",i?.due_day||10,'min="1" max="31"')+
@@ -466,7 +466,7 @@ function open(kind,id=""){
   body=field("name","Tên khoản nợ","text",d.name,'maxlength="160"')+
    '<div class="notice">Nợ gốc và tiền đã thanh toán không thay đổi. Sửa hạn trả hoặc lãi suất sẽ cập nhật kế hoạch và tư vấn.</div>'+
    field("annualInterestPercent","Lãi suất năm (%)","number",number(val(d.annual_interest_rate)*100,2),'min="0" max="100" step="0.01"')+
-   field("dueDate","Ngày đến hạn","date",d.due_date||"");
+   field("dueDate","Ngày đến hạn (có thể để trống)","date",d.due_date||"");
  }else if(kind==="goal"){
   name="Thêm mục tiêu";
   body=field("name","Tên mục tiêu","text","",'maxlength="160"')+
