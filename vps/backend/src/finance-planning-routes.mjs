@@ -127,15 +127,22 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
        getFinanceFxSnapshot(ctx.pool)
       ]);
-      const {rows:funds}=await ctx.pool.query(
-       "SELECT debt_id,month_date::text,planned_amount::text FROM finance.debt_fund_allocations "+
-       "WHERE owner_user_id=$1 AND month_date>=$2::date AND month_date<=$3::date",
-       [ctx.owner,today.slice(0,7)+"-01",through.slice(0,7)+"-01"]);
+      const [fundRows,paymentRows]=await Promise.all([
+       ctx.pool.query(
+        "SELECT debt_id,month_date::text,planned_amount::text FROM finance.debt_fund_allocations "+
+        "WHERE owner_user_id=$1 AND month_date>=$2::date AND month_date<=$3::date",
+        [ctx.owner,today.slice(0,7)+"-01",through.slice(0,7)+"-01"]),
+       ctx.pool.query(
+        "SELECT debt_id,payment_date::text,SUM(principal_paid+interest_paid+fee_paid)::text AS native_paid "+
+        "FROM finance.debt_payments WHERE owner_user_id=$1 AND payment_date>=$2::date "+
+        "AND payment_date<=$3::date GROUP BY debt_id,payment_date",
+        [ctx.owner,today.slice(0,7)+"-01",through])
+      ]);
       const baseline=simulateScenario({asOf:today,source,scenario:{
        name:"Tự phân bổ nợ theo kế hoạch",months,salaryDay:10,
        bufferTwd:bufferText,monthlyExtraIncomeTwd:"0",rows:[]}});
-      const advice=planDebtPayoff({asOf:today,baseline,debts:result.rows,funds,
-       quotes:fx.quotes,bufferTwd:bufferText});
+      const advice=planDebtPayoff({asOf:today,baseline,debts:result.rows,
+       funds:fundRows.rows,payments:paymentRows.rows,quotes:fx.quotes,bufferTwd:bufferText});
       reply.header("Cache-Control","private, no-store");
       return {...advice,baseline:{through:baseline.through,minimumTwd:baseline.minimumTwd,
        earliestRisk:baseline.earliestRisk},fxObservedAt:Object.fromEntries(
