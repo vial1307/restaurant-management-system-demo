@@ -507,8 +507,29 @@ try {
     assert.equal(Number(accounts[0].balance),prior+275,"Wallet reconciliation survives F5");
     await openFinancePage(page,"budget");
     if(await page.locator('[data-period="month"]').count())await page.locator('[data-period="month"]').click();
+    // Actual receipts/spending: one currency picker selects the matching
+    // wallet and the existing Finance FX quote supplies the TWD estimate.
+    await page.locator('[data-open="expense"]').first().click();
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
+    await page.locator('#finance-dialog [name="amount"]').fill("1000000");
+    assert.equal(await page.locator('#finance-dialog [name="accountId"]').inputValue(),
+      initialAccounts[1].id,"VND expense must select the VND wallet, not deduct TWD");
+    assert.match(await page.locator('[data-fx-real-estimate]').innerText(),/1\.250/);
+    assert.equal(await page.locator('#finance-dialog [name="toTwdRate"]').count(),0,
+      "Normal income and expense forms should not require manual exchange-rate input");
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("TWD");
+    assert.equal(await page.locator('#finance-dialog [name="accountId"]').inputValue(),
+      initialAccounts[0].id,"Changing back to TWD selects a TWD account");
+    await page.locator("#finance-dialog-cancel").click();
+    await page.locator('[data-open="income"]').first().click();
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
+    await page.locator('#finance-dialog [name="amount"]').fill("250000");
+    assert.match(await page.locator('[data-fx-real-estimate]').innerText(),/NT\$/);
+    await page.locator("#finance-dialog-cancel").click();
     await page.locator('[data-open="cashExpense"]').click();
     await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
+    assert.equal(await page.locator('#finance-dialog [name="fxRateToTwd"]').count(),0,
+      "Plan form should auto-convert using the Finance FX rate instead of requiring manual FX input");
     await page.locator('#finance-dialog [name="label"]').fill("Chi phí gửi về Việt Nam");
     await page.locator('#finance-dialog [name="originalAmount"]').fill("1000000");
     assert.match(await page.locator("[data-fx-form-estimate]").innerText(),/1.250 TWD/);
