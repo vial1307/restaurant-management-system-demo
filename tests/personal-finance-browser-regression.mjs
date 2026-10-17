@@ -7,7 +7,7 @@ const currencies=["TWD","VND","USD","JPY","EUR","CNY"].map(code=>({code,name_vi:
 const account=(id,name,code,balance)=>({id,name,currency_code:code,balance,kind:"bank"});
 async function openFinancePage(page,tab){
  if(["budget","report","workbench"].includes(tab)){
-   await openFinancePage(page,"'+tab+'");
+   await page.locator(`.fin-nav [data-tab="${tab}"]`).click();
  }else{
    // The legacy tool remains reachable through "Công cụ bổ sung" and task shortcuts.
    const tool=page.locator('.fin-nav [data-tab="'+tab+'"]');
