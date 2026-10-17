@@ -468,5 +468,45 @@ try{
  assert.equal(fxTransfers[0].n,0,"Automatic valuation cannot post an FX trade");
 }finally{await actualExchangeCheck.end();}
 
+
+// One action from the monthly plan must atomically create one debt and one
+// linked fund, with no posted wallet change or duplicate expense.
+const debtPlanBody={month:monthly,name:"Vay mẹ (tạo tại kế hoạch)",currencyCode:"TWD",
+ principalOriginal:"20000",plannedAmount:"2500",annualInterestPercent:"6.5",
+ dueDate:monthly+"-28"};
+assert.equal((await request("/finance/debt-plans",{method:"POST",body:debtPlanBody})).status,401);
+assert.equal((await request("/finance/debt-plans",{method:"POST",cookie:stranger,body:debtPlanBody})).status,403);
+assert.equal((await request("/finance/debt-plans",{method:"POST",cookie:owner,body:debtPlanBody,write:false})).status,403);
+assert.equal((await request("/finance/debt-plans",{method:"POST",cookie:owner,
+ body:{...debtPlanBody,dueDate:""}})).status,400);
+const startBank=Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance);
+const createdDebtPlan=await post("/debt-plans",debtPlanBody);
+assert.equal(Number(createdDebtPlan.debt.principal_original),20000);
+assert.equal(Number(createdDebtPlan.debt.annual_interest_rate),0.065);
+assert.equal(Number(createdDebtPlan.fund.planned_amount),2500);
+const createdGoalPlan=await post("/goal-plans",{
+ month:monthly,name:"Quỹ phòng rủi ro",currencyCode:"TWD",
+ targetAmount:"10000",plannedAmount:"1000",targetDate:monthly+"-29"
+});
+const syncedPlan=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert(syncedPlan.data.debtFunds.some(x=>x.debt_id===createdDebtPlan.debt.id&&Number(x.planned_twd)===2500));
+assert(syncedPlan.data.goalFunds.some(x=>x.goal_id===createdGoalPlan.goal.id&&Number(x.planned_twd)===1000));
+assert.equal((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance,startBank.toString(),
+ "Linking a debt reserve and savings goal must not debit real bank money");
+const updateInterest=await request("/finance/debts/"+createdDebtPlan.debt.id,{method:"PUT",cookie:owner,
+ body:{name:"Vay mẹ · mới",annualInterestPercent:"7",dueDate:monthly+"-30"}});
+assert.equal(updateInterest.status,200,JSON.stringify(updateInterest.data));
+assert.equal(Number(updateInterest.data.debt.annual_interest_rate),0.07);
+assert.equal((await request("/finance/debts/"+createdDebtPlan.debt.id,{method:"PUT",cookie:stranger,
+ body:{name:"Cannot edit",annualInterestPercent:"0"}})).status,403);
+const payoff=await request("/finance/debt-payoff-plan?months=3&bufferTwd=5000",{cookie:owner});
+assert.equal(payoff.status,200,JSON.stringify(payoff.data));
+assert.equal(payoff.data.readOnly,true);
+assert.deepEqual(payoff.data.priority,["debt","essential_expense","saving"]);
+assert(payoff.data.months.length>=1);
+assert(payoff.data.remaining.some(x=>x.debtId===createdDebtPlan.debt.id));
+assert.equal((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance,startBank.toString(),
+ "Payoff recommendations must not automatically move cash");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
