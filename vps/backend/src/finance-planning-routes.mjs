@@ -169,10 +169,10 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     try{
       const saved=await auditedWrite(ctx,"finance.debt.terms.update","finance_debt",async db=>{
         const {rows}=await db.query(
-          "SELECT d.currency_code,c.minor_units,COALESCE(SUM(p.principal_paid),0)::text AS paid "+
+          "SELECT d.currency_code,c.minor_units,"+
+          "(SELECT COALESCE(SUM(p.principal_paid),0)::text FROM finance.debt_payments p WHERE p.debt_id=d.id AND p.owner_user_id=d.owner_user_id) AS paid "+
           "FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code "+
-          "LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
-          "WHERE d.id=$1 AND d.owner_user_id=$2 GROUP BY d.id,c.minor_units FOR UPDATE OF d",
+          "WHERE d.id=$1 AND d.owner_user_id=$2 FOR UPDATE OF d",
           [debtId,ctx.owner]);
         const debt=rows[0];if(!debt)return null;
         if(!positive(b.principalOriginal,Number(debt.minor_units))||Number(b.principalOriginal)<Number(debt.paid))
