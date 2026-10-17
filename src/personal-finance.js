@@ -435,6 +435,7 @@ function linkedDebtFields(d={},prefix=""){
  field(n("InterestPercent"),"Lãi suất năm (%)","number",String(val(d.annual_interest_rate)*100),'min="0" max="100" step="0.01"')+
  field(n("DueDate"),"Ngày phải trả","date",d.due_date||"")+
  field(n("PlannedAmount"),"Phân bổ trả nợ trong tháng","text",amt(found?.planned_amount||"0"),'inputmode="decimal"')+
+ '<div class="preview" data-debt-currency-preview>Tự quy đổi phần trả nợ được phân bổ theo tỷ giá Finance.</div>'+
  '<label>Ghi chú khoản nợ<textarea name="'+safe(n("Memo"))+'" maxlength="600">'+safe(d.memo||"")+'</textarea></label>'+
  '<div class="notice">Phân bổ là kế hoạch, chưa phải trả nợ. Dư nợ thực chỉ giảm sau khi bạn xác nhận “Đã trả nợ”.</div>';
 }
@@ -485,6 +486,7 @@ function open(kind,id=""){
    (goals.length?select("goalPick","Chọn mục tiêu tiết kiệm",options(goals,"id",g=>g.name+" · "+g.currency_code)):
     '<div class="notice warn">Chưa có mục tiêu. Hãy tạo mục tiêu ở “Công nợ & mục tiêu” trước, rồi chọn phân bổ trong Kế hoạch.</div>')+
    field("goalPlannedAmount","Để dành trong tháng (ngoại tệ mục tiêu)","text","0",'inputmode="decimal"')+
+ '<div class="preview" data-goal-currency-preview>Giá trị quỹ sẽ được quy đổi TWD tự động.</div>'+
    '<div class="notice">Mục tiêu và ngày đạt được lấy từ mục Công nợ & mục tiêu. Không tự trừ ví thật.</div>'+
    '</div>';
  }else if(kind==="transaction"){
@@ -555,6 +557,21 @@ function open(kind,id=""){
 }
 function updateEstimate(){
  const kind=form.dataset.kind,values=Object.fromEntries(new FormData(form));
+ const selectedKind=values.kind||"expense";
+ const debtPreview=fields.querySelector("[data-debt-currency-preview]");
+ if(debtPreview){
+   const prefix=kind==="plan"?"debt":"",code=values[prefix+"CurrencyCode"]||"TWD";
+   const v=estimate(values[prefix+"PlannedAmount"]||"0",code);
+   debtPreview.textContent=v===null?"Chưa có tỷ giá cập nhật cho "+code:
+     "Phần trả nợ tháng này ≈ "+money(v)+" · không trừ số dư ví.";
+ }
+ const goalPreview=fields.querySelector("[data-goal-currency-preview]");
+ if(goalPreview){
+   const g=(state.data?.goals||[]).find(x=>x.id===values.goalPick),code=g?.currency_code||"TWD";
+   const v=estimate(values.goalPlannedAmount||"0",code);
+   goalPreview.textContent=v===null?"Chưa có tỷ giá cập nhật cho "+code:
+     "Quỹ tiết kiệm ≈ "+money(v)+" (tham khảo).";
+ }
  const note=$("#finance-fx-preview");if(!note)return;
  let code=values.currencyCode||"TWD",amount=values.originalAmount||values.amount||"0";
  if(["fundDebt","fundGoal"].includes(kind)){
