@@ -74,6 +74,38 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
        summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
     return {month:m,items:items.rows,debtFunds:liveDebts,goalFunds:liveGoals,debtPayments:payments.rows,unconvertedFunds:unconverted,summary:{...summary,...net[0],fx_estimate_incomplete:unconverted.length>0}};
   };
+  // Equivalent bidirectional goal flow, no spending posted when planning.
+  app.post("/api/finance/goal-plans",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{};
+    if(!monthKey(b.month)||!trim(b.name)||!/^[A-Z]{3}$/.test(String(b.currencyCode||""))||
+       !positive(String(b.targetAmount||""),6)||typeof b.plannedAmount!=="string"||
+       !money(b.plannedAmount,6)||(b.targetDate&&!isDate(b.targetDate)))
+      return fail(reply,"INVALID_GOAL_PLAN");
+    try{
+      const c=(await ctx.pool.query("SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[b.currencyCode])).rows[0];
+      if(!c||!positive(b.targetAmount,Number(c.minor_units))||
+        !money(b.plannedAmount,Number(c.minor_units)))return fail(reply,"INVALID_GOAL_PLAN_AMOUNT");
+      const snap=b.currencyCode==="TWD"?null:await getFinanceFxSnapshot(ctx.pool);
+      const rate=b.currencyCode==="TWD"?"1":snap?.quotes?.[b.currencyCode]?.rateToTwd;
+      if(!positiveRate(rate))return fail(reply,"FX_RATE_UNAVAILABLE");
+      const saved=await auditedWrite(ctx,"finance.goal_plan.create","finance_goal",async db=>{
+        const {rows:goals}=await db.query(
+         "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date) "+
+         "VALUES($1,$2,$3,$4::numeric,$5::date) "+
+         "RETURNING id,name,currency_code,target_amount::text,target_date::text",
+         [ctx.owner,trim(b.name,160),b.currencyCode,b.targetAmount,b.targetDate||null]);
+        const goal=goals[0];
+        const {rows:funds}=await db.query(
+         "INSERT INTO finance.goal_fund_allocations(owner_user_id,goal_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+         "VALUES($1,$2,$3::date,$4::numeric,0,$5::numeric) "+
+         "RETURNING id,goal_id,month_date::text,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
+         [ctx.owner,goal.id,startMonth(b.month),b.plannedAmount,rate]);
+        return {goal,fund:funds[0]};
+      });
+      return reply.code(201).send(saved);
+    }catch(error){return databaseError(req,reply,error);}
+  });
   app.get("/api/finance/debt-payoff-plan",async(req,reply)=>{
     const ctx=await authorized(req,reply);if(!ctx)return;
     const months=Number(req.query?.months||12),bufferText=String(req.query?.bufferTwd??"0");
