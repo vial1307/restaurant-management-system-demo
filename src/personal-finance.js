@@ -12,7 +12,7 @@ const fieldRoot=document.querySelector("#finance-fields");
 const form=document.querySelector("#finance-form");
 const tabs=[...document.querySelectorAll(".fin-nav [data-tab]")];
 const nowMonth=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit"}).format(new Date()).slice(0,7);
-const state={tab:"budget",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0};
+const state={tab:"budget",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0,fx:null,fxBusy:false,fxError:null};
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=(v,dec=0)=>Number(v||0).toLocaleString("vi-VN",{minimumFractionDigits:0,maximumFractionDigits:Math.max(0,Math.min(6,dec))});
 const moneyLabel=(v,c="TWD")=>(c==="TWD"?"NT$":c+" ")+num(v,c==="USD"||c==="EUR"||c==="CNY"?2:0);
@@ -84,9 +84,61 @@ async function refresh(){
   const [data,overview,cashflow]=await Promise.all([api("/bootstrap"),api("/overview?month="+encodeURIComponent(state.month)),api("/cashflow?month="+encodeURIComponent(state.month))]);
   state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;
   state.advisor=null;state.advisorError=null;render();
+  if(!state.fx&&!state.fxBusy)void loadFxEstimates();
   void loadAdvice();
   if(state.tab==="workbench"&&workbookState.loaded)void loadWorkbench();
   if(["budget","report"].includes(state.tab)&&state.year?.year!==Number(state.month.slice(0,4)))void loadYear();
+}
+async function loadFxEstimates(){
+ if(state.fxBusy)return;
+ state.fxBusy=true;state.fxError=null;
+ try{
+  const result=await api("/fx/estimates");
+  state.fx=result;
+ }catch(error){state.fxError=error;}
+ finally{
+  state.fxBusy=false;
+  if(state.data&&["budget","report","workbench"].includes(state.tab)&&!dialog.open)render();
+ }
+}
+function fxReference(code){
+ if(code==="TWD")return {rateToTwd:"1",status:"base"};
+ const quote=state.fx?.quotes?.[code];
+ return quote?.status==="fresh"&&quote.rateToTwd?quote:null;
+}
+function quoteLabel(code){
+ const quote=fxReference(code);
+ return quote?("1 "+code+" ≈ "+Number(quote.rateToTwd).toLocaleString("vi-VN",{maximumFractionDigits:10})+" TWD"):"Chưa có tỷ giá mới cho "+code;
+}
+function fxAsTwd(nativeAmount,currency){
+ const q=fxReference(currency);
+ if(!q||!Number.isFinite(Number(nativeAmount)))return null;
+ const value=Number(nativeAmount)*Number(q.rateToTwd);
+ return Number.isFinite(value)?value:null;
+}
+function renderFxSummary(){
+ const entries=Object.entries(state.fx?.quotes||{}).filter(([code])=>code!=="TWD");
+ const cards=entries.map(([code,q])=>'<div class="fin-rate-chip"><strong>'+esc(code)+'</strong><span>'+
+   (q.status==="fresh"?esc(quoteLabel(code))+" · ngày "+esc(q.observedAt?.slice(0,10)||"không rõ"):'Không có giá trị tham chiếu mới')+'</span></div>').join("");
+ const quotes=entries.filter(([,q])=>q.status==="fresh");
+ const foreign=(state.data?.accounts||[]).filter(a=>a.currency_code!=="TWD");
+ const valued=foreign.filter(a=>fxReference(a.currency_code)).reduce((sum,a)=>sum+(fxAsTwd(a.balance,a.currency_code)||0),0);
+ const incomplete=foreign.filter(a=>!fxReference(a.currency_code)).length;
+ const foreignDebts=(state.data?.debts||[]).filter(d=>d.currency_code!=="TWD");
+ const estimableDebts=foreignDebts.filter(d=>fxReference(d.currency_code));
+ const debtEstimated=estimableDebts.reduce((sum,d)=>sum+(fxAsTwd(d.outstanding_amount,d.currency_code)||0),0);
+ const omittedDebtCount=foreignDebts.length-estimableDebts.length;
+ return '<div class="fin-fx-summary"><div class="fin-fx-summary-head"><strong>Tỷ giá tham chiếu tự động · Quy đổi về TWD</strong>'+
+  '<button class="fin-btn secondary" type="button" data-fin-fx-reload>↻ Cập nhật</button></div>'+
+  (state.fxBusy?'<p class="fin-note">Đang kiểm tra tỷ giá theo nguồn đã xác minh...</p>':
+   cards||'<p class="fin-note">Chưa có tỷ giá tham chiếu. Không tự tạo tỷ giá giả.</p>')+
+  (foreign.length?'<p class="fin-note">Giá trị tham khảo của ví ngoại tệ đã có tỷ giá: <strong>'+
+   esc(moneyLabel(valued))+'</strong> · '+esc(String(incomplete))+' ví chưa quy đổi. Đây không phải tiền TWD chi được ngay.</p>':'')+
+  (foreignDebts.length?'<p class="fin-note">Dư nợ ngoại tệ tham chiếu: <strong>'+esc(moneyLabel(debtEstimated))+
+  '</strong> · '+esc(String(omittedDebtCount))+' khoản nợ chưa quy đổi. Đây không phải lịch trả nợ tháng và không tự tạo nghĩa vụ.</p>':'')+
+  '<p class="fin-note">Chỉ dùng để dự báo. Tỷ giá giao dịch của ngân hàng và phí thực tế có thể khác. '+
+  '<a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a>'+
+  ' · Cập nhật khoảng mỗi ngày. '+(state.fxError?'Nguồn không truy cập được.':'')+'</p></div>';
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -191,7 +243,7 @@ function financePlanRows(){
  const cf=state.cashflow||{},items=cf.items||[],funds=cf.debtFunds||[],goals=cf.goalFunds||[];
  const rows=items.map(i=>({id:i.id,kind:i.kind,title:i.label,category:i.kind==="income"?"Thu nhập":"Chi tiêu",
   due:i.due_day?state.month+"-"+String(Math.min(Number(i.due_day),Number(fMonthEnd(state.month).slice(-2)))).padStart(2,"0"):fMonthEnd(state.month),
-  guessed:!i.due_day,value:Number(i.amount_twd)||0,source:"plan",memo:i.memo||"",priority:i.kind==="income"?"Thường":"Cần kiểm tra"}));
+  guessed:!i.due_day,value:Number(i.amount_twd)||0,source:"plan",memo:(i.original_currency&&i.original_currency!=="TWD"?(i.original_amount+" "+i.original_currency+" · quy đổi theo tỷ giá "+(i.fx_rate_provider||"lưu tại thời điểm lập"))+" · ":"")+(i.memo||""),priority:i.kind==="income"?"Thường":"Cần kiểm tra"}));
  for(const x of funds)rows.push({id:x.id,kind:"debt",title:x.debt_name||"Quỹ nợ",category:"Công nợ",
   due:x.due_date?.startsWith(state.month)?x.due_date:fMonthEnd(state.month),
   guessed:!x.due_date?.startsWith(state.month),value:Number(x.planned_amount)*Number(x.fx_rate_to_twd||0),
@@ -309,6 +361,7 @@ function renderBudget(){
    finMetric("Chi dự kiến + quỹ nợ",moneyLabel(Number(s.planned_expense_twd||0)+debt),"orange","Chưa gồm quỹ mục tiêu")+
    finMetric("Còn phân bổ theo kế hoạch",moneyLabel(planned),"purple","Thu - Chi - Nợ - Mục tiêu")+'</div>'+
   panel("Tài khoản & số dư thực tế",renderAccountManagement(),"Chỉnh số dư của từng ví; số dư TWD và ngoại tệ được quản lý riêng.")+
+  renderFxSummary()+
   '<div class="fin-dash-layout">'+
    '<div class="fin-dash-main">'+
     panel("Bảng kế hoạch theo tháng",renderFinancePlanTable(),"Có thể sửa các ô kế hoạch; các khoản công nợ & mục tiêu điều chỉnh từ mục tương ứng.")+
@@ -433,6 +486,7 @@ function renderReport(){
     panel("Điểm cần chú ý",notice)+
    '</div>'+
    panel("Tài khoản & chỉnh số dư",renderAccountManagement(),"Số dư hiện tại lấy từ Finance Database.")+
+   renderFxSummary()+
    renderFinanceAdvancedTools()+
    panel("Giao dịch chi tiết đã ghi",'<div class="fin-table-scroll"><table class="fin-data-table"><thead><tr>'+
      '<th>Ngày</th><th>Nội dung</th><th>Loại</th><th>Tiền vào TWD</th><th>Tiền ra TWD</th><th>Ghi chú</th></tr></thead><tbody>'+
@@ -548,7 +602,8 @@ function renderFx(){
     panel("Kế hoạch chuyển tiền",plans.length?plans.map(p=>row(p.from_currency+" → "+p.to_currency,p.plan_date+" · "+(p.plan_kind==="remittance"?"Chuyển ra ngoài":"Chuyển đổi"),moneyLabel(p.source_amount,p.from_currency),p.status==="planned"?"Dự kiến · "+safeRate(p.expected_rate):"Đã "+p.status)+(p.status==="planned"?'<button class="fin-btn secondary fin-cancel-plan" type="button" data-cancel-plan="'+esc(p.id)+'">Hủy kế hoạch</button>':"")).join(""):'<div class="fin-list-empty">Chưa có lịch. Có thể lên kế hoạch đổi TWD → VND hàng tháng.</div>')+
    '</div><div class="fin-stack">'+
     panel("Các loại ngoại tệ hỗ trợ",'<div style="display:flex;flex-wrap:wrap;gap:8px">'+currencyCards+'</div>')+
-    '<div class="fin-warning"><strong>Tỷ giá không phải dữ liệu live</strong><div class="fin-note">Chưa kết nối nhà cung cấp tỷ giá. Bạn nhập tỷ giá và phí tại thời điểm đổi tiền; không dùng con số ví dụ để ghi sổ.</div></div>'+
+    renderFxSummary()+
+    '<div class="fin-warning"><strong>Tỷ giá tham chiếu không phải tỷ giá thanh toán</strong><div class="fin-note">Dự báo tự lấy tỷ giá gần nhất có nguồn/ngày. Khi thực đổi tiền vẫn phải nhập số tiền, tỷ giá và phí thực nhận; Finance OS không thực hiện giao dịch ngân hàng.</div></div>'+
     panel("Ví đa ngoại tệ",balances())+
    '</div></div>';
 }
@@ -657,6 +712,18 @@ function renderWorkbenchMethodology(){
    '</details>';
 }
 
+function renderWorkbenchFxHelper(){
+ const cs=(state.data?.currencies||[]).filter(c=>["TWD",...Object.keys(state.fx?.quotes||{})].includes(c.code));
+ return '<div class="fin-wb-fx-helper"><div class="fin-wb-fx-grid">'+
+  '<label><span>Đơn vị tiền gốc</span><select data-wb-fx-input="currency">'+cs.map(c=>
+  '<option value="'+esc(c.code)+'"'+(c.code==="VND"?' selected':'')+'>'+esc(c.code)+'</option>').join("")+'</select></label>'+
+  '<label><span>Số tiền gốc</span><input data-wb-fx-input="amount" type="text" inputmode="decimal" placeholder="Nhập số tiền"></label>'+
+  '<label><span>Loại kịch bản</span><select data-wb-fx-input="kind">'+
+  '<option value="expense">Chi phát sinh</option><option value="income">Thu nhập</option>'+
+  '<option value="debt">Trả nợ thêm</option><option value="goal">Để dành mục tiêu</option></select></label>'+
+  '<button type="button" class="fin-btn secondary" data-wb-fx-add>Quy đổi & thêm dòng</button></div>'+
+  '<p class="fin-note">Bảng mô phỏng tính theo TWD. Nhập số ngoại tệ ở đây để tự tạo dòng TWD xấp xỉ, ghi tên ngoại tệ/tỷ giá vào nhãn, không biến thành giao dịch thật. Khi tỷ giá đổi, xem lại các dòng cũ để chủ động cập nhật.</p></div>';
+}
 function renderWorkbench(){
  const b=workbookState,book=b.book||newWorkbook();
  const head=heading("Mô phỏng & Tư vấn","Thử các biến động thu nhập, khoản nợ, kế hoạch chi và mục tiêu theo lịch dòng tiền. Mỗi đề xuất đều có điều kiện và giới hạn rõ ràng.");
@@ -775,6 +842,7 @@ function renderWorkbench(){
    panel("Phân bổ tiền dư để giảm nợ",recommended)+
    panel("Gợi ý hành động có điều kiện",actionOptions,"Chọn thử sẽ chỉ thay đổi kịch bản, không tự thanh toán hoặc vay tiền.")+
    panel("Bảng tháng (giống spreadsheet)",summary)+
+   panel("Quy đổi ngoại tệ để thử kịch bản",renderWorkbenchFxHelper(),"Cùng một tỷ giá tham chiếu theo ngày, không tính ngoại tệ đang có như tiền TWD chi được.")+
    panel("Dòng điều chỉnh / kịch bản",items+add+
     '<p class="fin-note">Dòng vay và hoàn trả phải đi theo một cặp, nhập đầy đủ số tiền nhận và tổng tiền trả gồm lãi/phí. Khoản vay chỉ là giả định; không tự ghi nhận là thu nhập.</p>')+
    panel("Mục tiêu cần tiền trước ngày cụ thể",goalUi)+
@@ -914,6 +982,7 @@ function input(name,label,type="text",value="",placeholder="",required=true){
 }
 const choices=list=>list.map(x=>({value:x.id,label:accountName(x)}));
 const currencyChoices=()=>state.data.currencies.map(c=>({value:c.code,label:c.code+" · "+c.name_vi}));
+const financeMoneyInput=value=>String(value??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
 function showForm(kind,selectedId=null){
  if(!state.data){return;}
  const accounts=state.data.accounts,categories=state.data.categories;
@@ -950,7 +1019,7 @@ function showForm(kind,selectedId=null){
    selectField("planKind","Mục đích",[{value:"remittance",label:"Gửi tiền / chuyển ra ngoài"},{value:"fx",label:"Đổi ngoại tệ"}])+
    selectField("fromCurrency","Tiền gửi",currencyChoices())+selectField("toCurrency","Tiền nhận",currencyChoices())+
    input("sourceAmount","Số tiền dự kiến đổi","text","","10000")+
-   input("expectedRate","Tỷ giá dự kiến (không bắt buộc)","text","","Ví dụ: 785",false)+
+   input("expectedRate","Tỷ giá dự kiến (1 tiền nguồn = ? tiền đích)","text","","Tự động điền khi có tỷ giá",false)+
    input("expectedFee","Phí dự kiến trong đơn vị tiền gửi","text","0")+
    input("memo","Ghi chú","text","","Dự kiến chuyển tiền tháng này",false)+
    note("Lịch đổi tiền không làm thay đổi số dư ví. Đây không phải lệnh chuyển tiền ngân hàng.");
@@ -985,27 +1054,30 @@ function showForm(kind,selectedId=null){
   title=existing?"Sửa dòng tiền dự kiến":kind==="cashIncome"?"Thêm thu nhập dự kiến":"Thêm chi tiêu dự kiến";
   fields=selectField("kind","Loại dự kiến",[{value:"income",label:"Thu nhập"},{value:"expense",label:"Chi tiêu"}])+
    input("label","Tên khoản thu/chi","text",existing?.label||"","Lương / tiền thuê nhà")+
-   input("amountTwd","Số tiền TWD","text",existing?.amount_twd||"","10000")+
+   selectField("currencyCode","Ngoại tệ của khoản dự kiến",currencyChoices())+
+   input("originalAmount","Số tiền gốc","text",financeMoneyInput(existing?.original_amount||existing?.amount_twd||""),"Nhập số tiền theo ngoại tệ đã chọn")+
+   '<p class="fin-balance-diff" data-fx-form-estimate>Quy đổi dự kiến sang TWD sẽ được tính tự động.</p>'+
+   input("fxRateToTwd","Tỷ giá thủ công khi nguồn tự động chưa có","text","","Bỏ trống nếu đã có tỷ giá tự động",false)+
    input("dueDay","Ngày nhận / ngày phải trả (1–31)","number",existing?.due_day||"","1–31",false)+
    input("memo","Ghi chú","text",existing?.memo||"","",false)+
-   note("Nhập đúng ngày nhận lương hoặc ngày chi trả. Bỏ trống ngày sẽ bị tạm xếp cuối tháng và cảnh báo có thể trễ. Đây chỉ là dự kiến, chưa ghi tiền thật; cần lập cho từng tháng.");
+   note("Giữ nguyên số tiền gốc; server sẽ tự tính TWD bằng tỷ giá tham chiếu mới nhất đang có. Nếu nguồn lỗi có thể nhập tỷ giá thủ công để ước tính. Đây là kế hoạch, không phải giao dịch thật.");
  }else if(kind==="goalFund"){
   const goal=(state.data.goals||[]).find(g=>g.id===selectedId);if(!goal)return;
   form.dataset.goalId=goal.id;
   const existing=(state.cashflow?.goalFunds||[]).find(f=>f.goal_id===goal.id);
   title="Quỹ mục tiêu · "+goal.name+" · "+monthText(state.month);
-  fields=input("plannedAmount","Dự kiến dành ("+goal.currency_code+")","text",existing?.planned_amount||"0")+
-   input("earmarkedAmount","Đánh dấu đã dành ("+goal.currency_code+")","text",existing?.earmarked_amount||"0")+
-   (goal.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+goal.currency_code+" = ? TWD","text",existing?.fx_rate_to_twd||"","Bắt buộc"))+
+  fields=input("plannedAmount","Dự kiến dành ("+goal.currency_code+")","text",financeMoneyInput(existing?.planned_amount||"0"))+
+   input("earmarkedAmount","Đánh dấu đã dành ("+goal.currency_code+")","text",financeMoneyInput(existing?.earmarked_amount||"0"))+
+   (goal.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+goal.currency_code+" = ? TWD","text",fxReference(goal.currency_code)?.rateToTwd||existing?.fx_rate_to_twd||"","Nhập nếu chưa có tỷ giá"))+
    note("Khoản dự kiến sẽ trừ trong dòng tiền kế hoạch tháng/năm. Đánh dấu đã dành chỉ để theo dõi, không đổi ví, dư nợ hoặc tiến độ tích lũy.");
  }else if(kind==="debtFund"){
   const debt=(state.data.debts||[]).find(d=>d.id===selectedId);if(!debt)return;
   form.dataset.debtId=debt.id;
   const existing=(state.cashflow?.debtFunds||[]).find(f=>f.debt_id===debt.id);
   title="Quỹ trả nợ · "+debt.name;
-  fields=input("plannedAmount","Dự kiến dành ("+debt.currency_code+")","text",existing?.planned_amount||"0")+
-   input("earmarkedAmount","Đánh dấu đã dành ("+debt.currency_code+")","text",existing?.earmarked_amount||"0")+
-   (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+debt.currency_code+" = ? TWD","text",existing?.fx_rate_to_twd||"","Bắt buộc"))+
+  fields=input("plannedAmount","Dự kiến dành ("+debt.currency_code+")","text",financeMoneyInput(existing?.planned_amount||"0"))+
+   input("earmarkedAmount","Đánh dấu đã dành ("+debt.currency_code+")","text",financeMoneyInput(existing?.earmarked_amount||"0"))+
+   (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+debt.currency_code+" = ? TWD","text",fxReference(debt.currency_code)?.rateToTwd||existing?.fx_rate_to_twd||"","Nhập nếu chưa có tỷ giá"))+
    note("Đánh dấu đã dành không chuyển tiền giữa các ví, không thanh toán khoản nợ, không trừ số dư.");
  }else if(kind==="debtPayment"){
   const debt=(state.data.debts||[]).find(d=>d.id===selectedId);if(!debt)return;
@@ -1049,6 +1121,9 @@ function showForm(kind,selectedId=null){
  fieldRoot.innerHTML=fields;form.reset();
  if(kind==="goalProgress")fieldRoot.querySelector('[name="status"]').value=state.data.goals.find(g=>g.id===selectedId)?.status||"active";
  if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="kind"]').value=kind==="cashIncome"?"income":kind==="cashExpense"?"expense":(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.kind||"expense";
+ if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="currencyCode"]').value=kind==="cashEdit"?(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.original_currency||"TWD":"TWD";
+ if(kind==="fxPlan"){const a=fieldRoot.querySelector('[name="fromCurrency"]'),b=fieldRoot.querySelector('[name="toCurrency"]');if(a&&b){a.value="TWD";b.value="VND";}}
+ updateFinanceFormFx();
  // Restore prepopulated values after reset; reset defaults are retained by browser.
  dialog.showModal();
  fieldRoot.querySelector("input,select")?.focus();
@@ -1126,6 +1201,26 @@ tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;document
 root.addEventListener("click",async event=>{
  const reconcileButton=event.target.closest("[data-balance-reconcile]");
  if(reconcileButton){showForm("balanceReconcile",reconcileButton.dataset.balanceReconcile);return;}
+ if(event.target.closest("[data-fin-fx-reload]")){state.fx=null;await loadFxEstimates();return;}
+ const fxScenario=event.target.closest("[data-wb-fx-add]");
+ if(fxScenario){
+  const code=root.querySelector('[data-wb-fx-input="currency"]')?.value||"TWD";
+  const amount=String(root.querySelector('[data-wb-fx-input="amount"]')?.value||"");
+  const kind=root.querySelector('[data-wb-fx-input="kind"]')?.value||"expense";
+  const minor=Number((state.data?.currencies||[]).find(c=>c.code===code)?.minor_units??0);
+  const valid=/^(?:0|[1-9]\d{0,15})(?:\.\d{1,6})?$/.test(amount) &&
+    (!amount.includes(".")||amount.split(".")[1].length<=minor);
+  const quote=fxReference(code),twd=fxAsTwd(amount,code);
+  if(!valid||Number(amount)<=0||!quote||!Number.isFinite(twd)||twd<1||twd>1e12){
+   flash("Số tiền hoặc tỷ giá chưa hợp lệ. Cần tỷ giá mới được xác nhận; không tự đoán.");return;
+  }
+  if(!workbookState.book||workbookState.book.rows.length>=120){flash("Đã đầy bảng kịch bản.");return;}
+  workbookState.book.rows.push({key:crypto.randomUUID(),kind,date:wbDate(0),
+    amountTwd:String(Math.round(twd)),label:"Quy đổi "+amount+" "+code+
+     " · 1 "+code+" ≈ "+quote.rateToTwd+" TWD"+(quote.observedAt?" · "+quote.observedAt.slice(0,10):""),linkId:""});
+  workbookState.preview=null;render();
+  flash("Đã thêm dòng TWD ước tính từ "+code+"; chọn Tính lại để xem dự báo.");return;
+ }
  const range=event.target.closest("[data-fin-forecast-days]");
  if(range){
    const nextDays=Number(range.dataset.finForecastDays);
@@ -1222,7 +1317,33 @@ root.addEventListener("click",async event=>{
 root.addEventListener("toggle",event=>{
  if(event.target.matches?.("[data-fin-methodology]"))workbookState.methodologyOpen=event.target.open;
 },true);
+function updateFinanceFormFx(){
+ const kind=dialog.dataset.formKind;
+ if(kind==="cashIncome"||kind==="cashExpense"||kind==="cashEdit"){
+  const code=fieldRoot.querySelector('[name="currencyCode"]')?.value;
+  const amount=fieldRoot.querySelector('[name="originalAmount"]')?.value||"";
+  const manual=fieldRoot.querySelector('[name="fxRateToTwd"]')?.value||"";
+  const quote=fxReference(code);
+  const rate=quote?.rateToTwd||manual;
+  const target=fieldRoot.querySelector("[data-fx-form-estimate]");
+  const amountTwd=Number(amount)*Number(rate);
+  if(target)target.textContent=code==="TWD"?
+   "Khoản TWD: "+(amount||"0")+" TWD":
+   rate&&Number.isFinite(amountTwd)?"Giá trị ước tính: "+Math.round(amountTwd).toLocaleString("vi-VN")+" TWD · "+(quote?"tự động":"tỷ giá nhập tay")+" · "+quoteLabel(code):
+   "Chưa có tỷ giá mới: cần nhập tỷ giá tham khảo để ước tính.";
+ }
+ if(kind==="fxPlan"){
+  const from=fieldRoot.querySelector('[name="fromCurrency"]')?.value,to=fieldRoot.querySelector('[name="toCurrency"]')?.value;
+  const a=fxReference(from),b=fxReference(to);
+  const expected=fieldRoot.querySelector('[name="expectedRate"]');
+  if(expected&&a&&b&&Number(b.rateToTwd)>0){
+   expected.value=(Number(a.rateToTwd)/Number(b.rateToTwd)).toFixed(10).replace(/0+$/,"").replace(/\.$/,"");
+  }
+ }
+}
+fieldRoot.addEventListener("change",event=>{if(event.target.matches('[name="currencyCode"],[name="fromCurrency"],[name="toCurrency"]'))updateFinanceFormFx();});
 fieldRoot.addEventListener("input",event=>{
+ if(event.target.matches('[name="originalAmount"],[name="fxRateToTwd"]'))updateFinanceFormFx();
  if(!event.target.matches('[name="targetBalance"]')||dialog.dataset.formKind!=="balanceReconcile")return;
  const before=String(fieldRoot.querySelector('[name="expectedBalance"]')?.value||"0");
  const after=String(event.target.value).trim();

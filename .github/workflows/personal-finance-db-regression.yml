@@ -8,6 +8,7 @@ on:
       - "tests/personal-finance-schema-contract-regression.mjs"
       - "tests/finance-advisor-engine-regression.mjs"
       - "tests/finance-scenario-engine-regression.mjs"
+      - "tests/finance-fx-valuation-regression.mjs"
       - "vps/backend/src/finance-*.mjs"
       - "vps/backend/src/server.mjs"
       - "vps/backend/scripts/finance-api-regression.mjs"
@@ -51,6 +52,7 @@ jobs:
       FINANCE_DB_PASSWORD: finance_test
       TEST_API_BASE: http://127.0.0.1:8080
       COOKIE_SECURE: "false"
+      FINANCE_FX_AUTO_REFRESH: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,6 +62,8 @@ jobs:
         run: node tests/personal-finance-schema-contract-regression.mjs
       - name: Deterministic cashflow advisor engine regression
         run: node tests/finance-advisor-engine-regression.mjs
+      - name: Exchange rate valuation and stale-rate safety regression
+        run: node tests/finance-fx-valuation-regression.mjs
       - name: Scenario finance simulation regression
         run: node tests/finance-scenario-engine-regression.mjs
       - name: Create separate test database
@@ -74,6 +78,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/003_finance_goal_funds.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/004_finance_scenario_workbooks.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/004_finance_scenario_workbooks.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/005_finance_estimated_fx_cashflow.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/005_finance_estimated_fx_cashflow.sql
       - name: Validate core constraints and kitchen DB isolation
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test <<'SQL'
@@ -100,6 +106,7 @@ jobs:
           echo "FINANCE_OWNER_USER_ID=$OWNER" >> "$GITHUB_ENV"
       - name: Start private API with both test DBs
         run: |
+          node --check vps/backend/src/finance-fx-valuation.mjs
           node --check vps/backend/src/finance-db.mjs
           node --check vps/backend/src/finance-routes.mjs
           node --check vps/backend/src/finance-planning-routes.mjs

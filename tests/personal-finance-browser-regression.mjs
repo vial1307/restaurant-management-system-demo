@@ -43,6 +43,12 @@ try {
       let data={},status=200;
       if(method==="GET"&&pathname.endsWith("/bootstrap")){
         data={currencies,accounts,categories:[],budgets:[],plans,goals,debts,reportCurrency:"TWD"};
+      }else if(method==="GET"&&pathname.endsWith("/fx/estimates")){
+        data={baseCurrency:"TWD",readOnlyValuation:true,automaticCurrencyExchange:false,
+         quotes:{TWD:{rateToTwd:"1",status:"base"},VND:{rateToTwd:"0.001250000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"},
+          USD:{rateToTwd:"31.250000000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"},
+          JPY:{rateToTwd:"0.220000000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"}},
+         source:{attribution:"Rates By Exchange Rate API",url:"https://www.exchangerate-api.com"},warnings:[]};
       }else if(method==="GET"&&pathname.endsWith("/overview")){
         data={month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
       }else if(method==="GET"&&pathname.endsWith("/advisor")){
@@ -158,12 +164,19 @@ try {
       }else if(method==="POST"&&pathname.endsWith("/cashflow/items")){
         const b=route.request().postDataJSON();
         const i={id:"00000000-0000-4000-8000-"+String(cashItems.length+21).padStart(12,"0"),kind:b.kind,label:b.label,month_date:b.month+"-01",
-          amount_twd:b.amountTwd,due_day:b.dueDay||null,memo:b.memo||""};
+          amount_twd:b.currencyCode==="VND"?String(Math.round(Number(b.originalAmount)*0.00125)):b.originalAmount||b.amountTwd,
+          original_currency:b.currencyCode||"TWD",original_amount:b.originalAmount||b.amountTwd,
+          fx_rate_to_twd:b.currencyCode==="VND"?"0.001250000000":"1",
+          due_day:b.dueDay||null,memo:b.memo||""};
         cashItems.push(i);data={item:i};status=201;
       }else if(method==="PUT"&&pathname.includes("/cashflow/items/")){
         const b=route.request().postDataJSON();
         const item=cashItems.find(i=>pathname.endsWith(i.id));assert.ok(item);
-        Object.assign(item,{kind:b.kind,label:b.label,amount_twd:b.amountTwd,due_day:b.dueDay||null,memo:b.memo||""});
+        Object.assign(item,{kind:b.kind,label:b.label,
+          amount_twd:b.currencyCode==="VND"?String(Math.round(Number(b.originalAmount)*0.00125)):b.originalAmount||b.amountTwd,
+          original_currency:b.currencyCode||"TWD",original_amount:b.originalAmount||b.amountTwd,
+          fx_rate_to_twd:b.currencyCode==="VND"?"0.001250000000":"1",
+          due_day:b.dueDay||null,memo:b.memo||""});
         data={item};
       }else if(method==="DELETE"&&pathname.includes("/cashflow/items/")){
         cashItems=cashItems.filter(i=>!pathname.endsWith(i.id));data={deleted:true};
@@ -243,6 +256,9 @@ try {
     await openFinancePage(page,"budget");
     await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     await page.locator(".fin-plan-table").waitFor();
+    await page.getByText("Tỷ giá tham chiếu tự động · Quy đổi về TWD").waitFor();
+    assert.match(await page.locator(".fin-fx-summary").innerText(),/1 VND.*TWD/);
+
     assert.equal(await page.locator(".fin-metrics-4 .fin-metric").count(),4,
       "Reference design four real-data metrics must be present");
     assert.equal(await page.locator("[data-open='cashIncome']").count()>0,true,
@@ -424,16 +440,16 @@ try {
     await openFinancePage(page,"budget");
     await page.locator('[data-open="cashIncome"]').click();
     await page.locator('#finance-dialog [name="label"]').fill("Lương dự kiến");
-    await page.locator('#finance-dialog [name="amountTwd"]').fill("60000");
+    await page.locator('#finance-dialog [name="originalAmount"]').fill("60000");
     await page.locator("#finance-submit").click();
     await page.getByText("Lương dự kiến").waitFor();
     await page.locator('[data-open="cashExpense"]').click();
     await page.locator('#finance-dialog [name="label"]').fill("Sinh hoạt");
-    await page.locator('#finance-dialog [name="amountTwd"]').fill("10000");
+    await page.locator('#finance-dialog [name="originalAmount"]').fill("10000");
     await page.locator("#finance-submit").click();
     await page.getByText("Sinh hoạt").waitFor();
     await page.locator('[data-edit-cashflow]').first().click();
-    await page.locator('#finance-dialog [name="amountTwd"]').fill("12000");
+    await page.locator('#finance-dialog [name="originalAmount"]').fill("12000");
     await page.locator("#finance-submit").click();
     await page.reload({waitUntil:"domcontentloaded"});
     await openFinancePage(page,"budget");
@@ -489,6 +505,25 @@ try {
     await page.reload({waitUntil:"domcontentloaded"});
     await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     assert.equal(Number(accounts[0].balance),prior+275,"Wallet reconciliation survives F5");
+    await openFinancePage(page,"budget");
+    if(await page.locator('[data-period="month"]').count())await page.locator('[data-period="month"]').click();
+    await page.locator('[data-open="cashExpense"]').click();
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
+    await page.locator('#finance-dialog [name="label"]').fill("Chi phí gửi về Việt Nam");
+    await page.locator('#finance-dialog [name="originalAmount"]').fill("1000000");
+    assert.match(await page.locator("[data-fx-form-estimate]").innerText(),/1.250 TWD/);
+    await page.locator("#finance-submit").click();
+    assert(cashItems.some(x=>x.original_currency==="VND"&&Number(x.amount_twd)===1250),
+      "Foreign plan should store native currency and unified estimated TWD");
+    await openFinancePage(page,"workbench");
+    await page.locator('[data-wb-fx-input="currency"]').selectOption("VND");
+    await page.locator('[data-wb-fx-input="amount"]').fill("1000000");
+    await page.locator('[data-wb-fx-input="kind"]').selectOption("expense");
+    await page.locator('[data-wb-fx-add]').click();
+    const mostRecent=page.locator(".fin-wb-editor tbody tr").last();
+    await mostRecent.locator('[data-wb-prop="amountTwd"]').waitFor();
+    assert.equal(await mostRecent.locator('[data-wb-prop="amountTwd"]').inputValue(),"1250");
+    assert.match(await mostRecent.locator('[data-wb-prop="label"]').inputValue(),/1000000 VND/);
     assert.equal(await page.locator('.fin-nav > button[data-tab]').count(),3);
 
     assert(size.doc<=size.view+1,"Finance mobile horizontal overflow "+JSON.stringify({viewport,size}));
