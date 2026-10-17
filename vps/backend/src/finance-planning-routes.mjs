@@ -1,3 +1,4 @@
+import {priceFinanceFund,summarizeFinanceFundValues,missingFinanceFundQuotes} from "./finance-fund-valuation.mjs";
 import {getFinanceFxSnapshot,convertToTwd} from "./finance-fx-valuation.mjs";
 // Owner-only Finance OS planning & debt-fund endpoints, backed by the *separate* finance PostgreSQL.
 // A plan or earmark does not create a financial posting; actual repayments do.
@@ -29,7 +30,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     const date=startMonth(m);
     const [items,funds,payments,sums,goalFunds]=await Promise.all([
       ctx.pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
-      ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,(f.planned_amount*f.fx_rate_to_twd)::text AS planned_twd,(f.earmarked_amount*f.fx_rate_to_twd)::text AS earmarked_twd,d.due_date::text FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
+      ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.due_date::text FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
       ctx.pool.query("SELECT p.id,p.debt_id,d.name AS debt_name,d.currency_code,p.payment_date::text,p.principal_paid::text,p.interest_paid::text,p.fee_paid::text,p.base_amount_twd::text,p.event_id FROM finance.debt_payments p JOIN finance.debts d ON d.id=p.debt_id AND d.owner_user_id=p.owner_user_id WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month') ORDER BY p.payment_date DESC,p.created_at DESC LIMIT 100",[ctx.owner,date]),
       ctx.pool.query(
         "SELECT "+
@@ -45,18 +46,30 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         [ctx.owner,date]
       ),
       ctx.pool.query(
-        "SELECT f.id,f.goal_id,g.name AS goal_name,g.currency_code,g.status,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,(f.planned_amount*f.fx_rate_to_twd)::text AS planned_twd,(f.earmarked_amount*f.fx_rate_to_twd)::text AS earmarked_twd,g.target_amount::text,g.current_amount::text,g.target_date::text FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY g.name,f.id",
+        "SELECT f.id,f.goal_id,g.name AS goal_name,g.currency_code,g.status,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,g.target_amount::text,g.current_amount::text,g.target_date::text FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY g.name,f.id",
         [ctx.owner,date]
       )
     ]);
-    const summary=sums.rows[0];
+    // Debt/goal allocations are editable plans. Always value them using the
+    // ONE verified Finance snapshot, never a potentially inverted legacy rate.
+    const fx=await getFinanceFxSnapshot(ctx.pool);
+    const liveDebts=funds.rows.map(row=>priceFinanceFund(row,fx));
+    const liveGoals=goalFunds.rows.map(row=>priceFinanceFund(row,fx));
+    const unconverted=missingFinanceFundQuotes(liveDebts,liveGoals);
+    const summary={
+      ...sums.rows[0],
+      planned_debt_fund_twd:summarizeFinanceFundValues(liveDebts,"planned_twd"),
+      earmarked_debt_fund_twd:summarizeFinanceFundValues(liveDebts,"earmarked_twd"),
+      planned_goal_fund_twd:summarizeFinanceFundValues(liveGoals,"planned_twd"),
+      earmarked_goal_fund_twd:summarizeFinanceFundValues(liveGoals,"earmarked_twd")
+    };
     // Numeric projection is calculated by PostgreSQL for precision, never as optimistic UI state.
     const {rows:net}=await ctx.pool.query(
       "SELECT ($1::numeric-$2::numeric-$3::numeric-$4::numeric)::text AS planned_net_twd,"+
       "($5::numeric-$6::numeric-$7::numeric)::text AS actual_net_twd",
       [summary.planned_income_twd,summary.planned_expense_twd,summary.planned_debt_fund_twd,summary.planned_goal_fund_twd,
        summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
-    return {month:m,items:items.rows,debtFunds:funds.rows,goalFunds:goalFunds.rows,debtPayments:payments.rows,summary:{...summary,...net[0]}};
+    return {month:m,items:items.rows,debtFunds:liveDebts,goalFunds:liveGoals,debtPayments:payments.rows,unconvertedFunds:unconverted,summary:{...summary,...net[0],fx_estimate_incomplete:unconverted.length>0}};
   };
   app.get("/api/finance/cashflow",async(req,reply)=>{
     const ctx=await authorized(req,reply);if(!ctx)return;
@@ -80,6 +93,27 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "FROM months m ORDER BY m.dt",
         [ctx.owner,year]
       );
+      // Recompute all 12 month totals from the same live quote basis used by
+      // /cashflow and the advisor. Stored rates remain audit-only metadata.
+      const {rows:allFunds}=await ctx.pool.query(
+        "SELECT 'debt' AS kind,f.month_date::text,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text "+
+        "FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND EXTRACT(YEAR FROM f.month_date)=$2 "+
+        "UNION ALL "+
+        "SELECT 'goal' AS kind,f.month_date::text,g.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text "+
+        "FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND EXTRACT(YEAR FROM f.month_date)=$2",
+        [ctx.owner,year]);
+      const fx=await getFinanceFxSnapshot(ctx.pool),byMonth=new Map();
+      for(const fund of allFunds){
+        const month=String(fund.month_date).slice(0,7),priced=priceFinanceFund(fund,fx);
+        if(!byMonth.has(month))byMonth.set(month,{debt:[],goal:[]});
+        byMonth.get(month)[fund.kind].push(priced);
+      }
+      for(const row of rows){
+        const funds=byMonth.get(row.month)||{debt:[],goal:[]};
+        row.debt_fund_twd=summarizeFinanceFundValues(funds.debt,"planned_twd");
+        row.goal_fund_twd=summarizeFinanceFundValues(funds.goal,"planned_twd");
+        row.fx_estimate_incomplete=missingFinanceFundQuotes(funds.debt,funds.goal).length>0;
+      }
       return {year,months:rows};
     }catch(error){return databaseError(req,reply,error);}
   });
@@ -148,7 +182,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         if(!money(b.plannedAmount,Number(goal.minor_units))||!money(b.earmarkedAmount,Number(goal.minor_units)))
           return {error:"INVALID_GOAL_FUND"};
         const snapRate=goal.currency_code==="TWD"?"1":(await getFinanceFxSnapshot(ctx.pool)).quotes?.[goal.currency_code]?.rateToTwd;
-        const rate=goal.currency_code==="TWD"?"1":positiveRate(b.fxRateToTwd)?b.fxRateToTwd:snapRate;
+        const rate=goal.currency_code==="TWD"?"1":snapRate;
         if(!positiveRate(rate))return {error:"GOAL_FUND_RATE_REQUIRED"};
         const {rows:funds}=await db.query(
           "INSERT INTO finance.goal_fund_allocations(owner_user_id,goal_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,goal_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() RETURNING id,goal_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
@@ -173,7 +207,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         if(!debt)return null;
         if(!money(b.plannedAmount,Number(debt.minor_units))||!money(b.earmarkedAmount,Number(debt.minor_units)))return {error:"INVALID_DEBT_FUND"};
         const snapRate=debt.currency_code==="TWD"?"1":(await getFinanceFxSnapshot(ctx.pool)).quotes?.[debt.currency_code]?.rateToTwd;
-        const rate=debt.currency_code==="TWD"?"1":positiveRate(b.fxRateToTwd)?b.fxRateToTwd:snapRate;
+        const rate=debt.currency_code==="TWD"?"1":snapRate;
         if(!positiveRate(rate))return {error:"DEBT_FUND_RATE_REQUIRED"};
         const {rows:funds}=await db.query(
           "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
