@@ -9,9 +9,9 @@ async function openFinancePage(page,tab){
  if(["budget","report","workbench"].includes(tab)){
    await page.locator(`.fin-nav [data-tab="${tab}"]`).click();
  }else{
-   // The legacy tool remains reachable through "Công cụ bổ sung" and task shortcuts.
-   const tool=page.locator('.fin-nav [data-tab="'+tab+'"]');
-   await tool.evaluate(button=>button.click());
+   // Real user pathway: expand "Công cụ bổ sung", select a legacy tool.
+   await page.locator(".fin-nav-tools summary").click();
+   await page.locator('.fin-nav-tools [data-tab="'+tab+'"]').click();
  }
 }
 const initialAccounts=[
