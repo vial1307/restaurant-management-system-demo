@@ -34,6 +34,7 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
   byMonth.set(key,(byMonth.get(key)||0)+asMoney(fund.planned_amount));
  }
  const months=[],suggestions=[],allMonths=baseline.months.filter(x=>mm(x.month)>=mm(asOf));
+ let openingTwd=asMoney(baseline.startingBalanceTwd||0);
  let allocatedEarlier=0;
  for(let i=0;i<allMonths.length;i++){
   const m=allMonths[i],month=mm(m.month),alreadyPlanned=[],suggested=[];
@@ -50,7 +51,7 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
   }
   // Protect the lowest subsequent baseline month, the desired cash buffer,
   // and any optional extra payments suggested in prior months.
-  const futureFloor=Math.min(...allMonths.slice(i).map(x=>Number(x.endingTwd)));
+  const futureFloor=Math.min(...allMonths.slice(i).map(x=>Number(x.minimumTwd??x.endingTwd)));
   const budget=Math.max(0,Math.floor(futureFloor-buffer-allocatedEarlier));
   let spare=budget;
   for(const debt of outstanding){
@@ -68,12 +69,13 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
      suggestedTotalNative:fmt((byMonth.get(month+"|"+debt.id)||0)+nativePay)};
    suggested.push(row);suggestions.push(row);
   }
-  months.push({month,startingTwd:String(m.startingTwd??"0"),incomeTwd:String(m.incomeTwd??"0"),
+  months.push({month,startingTwd:fmt(openingTwd),incomeTwd:String(m.incomeTwd??"0"),
    essentialOutgoTwd:String(m.costTwd??"0"),existingDebtTwd:String(m.repaymentTwd??"0"),
    savingsTwd:String(m.goalTwd??"0"),baselineEndingTwd:String(m.endingTwd),
    suggestedExtraTwd:fmt(budget-spare),
    endingAfterSuggestionsTwd:fmt(Number(m.endingTwd)-allocatedEarlier),
    plannedPayments:alreadyPlanned,suggestions:suggested});
+  openingTwd=Number(m.endingTwd);
  }
  const remaining=outstanding.map(d=>({debtId:d.id,name:d.name,currency:d.currency_code,
   dueDate:d.due_date,annualInterestPercent:d.apr*100,
