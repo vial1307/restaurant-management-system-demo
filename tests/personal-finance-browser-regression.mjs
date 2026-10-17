@@ -235,6 +235,7 @@ try{
   assert(goals.some(g=>g.name==="Quỹ dự phòng"));
   assert(goalFunds.some(g=>g.goal_name==="Quỹ dự phòng"));
   assert.equal(items.length,4,"Savings goals must not be duplicate expense entries");
+  await page.getByText("Quỹ dự phòng",{exact:true}).waitFor();
   assert.match(await page.locator("#finance-content").innerText(),/3 · Sau cùng/);
   await page.locator('.main-nav [data-tab="reports"]').click();
   assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
