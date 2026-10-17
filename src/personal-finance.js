@@ -415,7 +415,7 @@ function open(kind,id=""){
  if(kind==="plan"||kind==="editPlan"){
   name=kind==="plan"?"Thêm thu / chi dự kiến":"Sửa khoản dự kiến";
   body=select("kind","Loại · Ưu tiên Nợ > Chi > Tiết kiệm",escOption("expense","Chi dự kiến",i?.kind!=="income")+escOption("income","Thu dự kiến",i?.kind==="income")+
-   (kind==="plan"?escOption("debt","Công nợ · Tạo khoản nợ và quỹ trả tháng này"):''))+
+   (kind==="plan"?escOption("debt","Công nợ · Tạo khoản nợ và quỹ trả tháng này")+escOption("goal","Tiết kiệm · Tạo mục tiêu và quỹ tháng này"):''))+
    field("label","Nội dung","text",i?.label||"",'maxlength="140"')+
    select("currencyCode","Ngoại tệ",currOpts(i?.original_currency||"TWD"))+
    field("originalAmount","Số tiền","text",amt(i?.original_amount||i?.amount_twd||""),'inputmode="decimal"')+
@@ -425,6 +425,11 @@ function open(kind,id=""){
    field("annualInterestPercent","Lãi suất năm (%)","number","0",'min="0" max="100" step="0.01"')+
    field("debtDueDate","Ngày bắt buộc phải trả","date","")+
    '<div class="notice">Số tiền ở trên là quỹ dự kiến dành trong tháng. Nợ gốc và hạn trả được ghi vào Công nợ; không tạo thêm một khoản chi trùng.</div></fieldset>'+
+   '<fieldset id="finance-plan-goal-fields" class="fin-conditional" hidden disabled>'+
+   field("targetAmount","Tổng số tiền muốn tiết kiệm","text","",'inputmode="decimal"')+
+   field("targetDate","Ngày muốn đạt mục tiêu","date","")+
+   '<div class="notice">Số tiền ở trên là quỹ tiết kiệm của tháng; mục tiêu xuất hiện đồng thời tại Công nợ & mục tiêu.</div></fieldset>'+
+
    field("dueDay","Ngày trong tháng (1–31)","number",i?.due_day||10,'min="1" max="31"')+
    '<label>Ghi chú <small>(không bắt buộc)</small><textarea name="memo" maxlength="250">'+safe(i?.memo||"")+'</textarea></label>'+
    '<div class="notice">Khoản này là kế hoạch, không tự cộng/trừ ví tiền thật.</div>';
@@ -504,8 +509,10 @@ function updateEstimate(){
  if(kind==="plan"){
   const fs=$("#finance-plan-debt-fields"),enabled=values.kind==="debt";
   if(fs){fs.hidden=!enabled;fs.disabled=!enabled;}
+  const goalFields=$("#finance-plan-goal-fields"),savings=values.kind==="goal";
+  if(goalFields){goalFields.hidden=!savings;goalFields.disabled=!savings;}
   const amountLabel=fields.querySelector('[name="originalAmount"]')?.closest("label");
-  if(amountLabel){amountLabel.firstChild.textContent=enabled?"Số tiền dự kiến dành trả nợ tháng này":"Số tiền";}
+  if(amountLabel){amountLabel.firstChild.textContent=enabled?"Dự kiến dành trả nợ trong tháng":savings?"Dự kiến dành tiết kiệm trong tháng":"Số tiền";}
  }
  const note=$("#finance-fx-preview");if(!note)return;
  let code=values.currencyCode||"TWD",amount=values.originalAmount||values.amount||"0";
@@ -544,6 +551,11 @@ async function submit(event){
     plannedAmount:amountInput(b.originalAmount,b.currencyCode),
     annualInterestPercent:b.annualInterestPercent||"0",dueDate:b.debtDueDate};
    path="/debt-plans";method="POST";
+  }else if(type==="plan"&&b.kind==="goal"){
+   body={month:state.month,name:b.label,currencyCode:b.currencyCode,
+    targetAmount:amountInput(b.targetAmount,b.currencyCode),
+    plannedAmount:amountInput(b.originalAmount,b.currencyCode),targetDate:b.targetDate||null};
+   path="/goal-plans";method="POST";
   }else if(type==="plan"||type==="editPlan"){
    body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,originalAmount:amountInput(b.originalAmount,b.currencyCode),dueDay:+b.dueDay||null,memo:b.memo||""};
    path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
