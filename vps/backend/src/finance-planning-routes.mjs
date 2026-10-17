@@ -25,16 +25,44 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   }
 
   const startMonth=m=>m+"-01";
+  async function resolveFunding(ctx,b,converted){
+   const c=converted.originalCurrency,foreign=c!=="TWD",kind=b.kind;
+   const mode=foreign?(b.fundingMode||((kind==="expense")?"twd_pending_fx":"foreign_wallet")):"twd_wallet";
+   if(!["twd_wallet","twd_pending_fx","foreign_wallet"].includes(mode)
+     ||(foreign&&mode==="twd_wallet")||(!foreign&&mode!=="twd_wallet")
+     ||(kind==="income"&&mode==="twd_pending_fx"))return {error:"INVALID_FUNDING_MODE"};
+   const day=b.conversionDay==null||b.conversionDay===""?null:Number(b.conversionDay);
+   const fee=String(b.fxFeeTwd??"0");
+   if(mode!=="twd_pending_fx"&&(day!==null||Number(fee)!==0))return {error:"INVALID_FOREIGN_FEE"};
+   if(mode==="twd_pending_fx"){
+    if(!money(fee,0)||Number(fee)<0)return {error:"INVALID_FOREIGN_FEE"};
+    if(day!==null&&(!Number.isInteger(day)||day<1||day>31))return {error:"INVALID_FX_CONVERSION_DAY"};
+    if(day!==null&&b.dueDay&&day>Number(b.dueDay))return {error:"FX_CONVERSION_AFTER_DUE"};
+   }
+   const accountId=b.fundingAccountId||null;
+   if(accountId!==null){
+    if(!id(accountId))return {error:"INVALID_FUNDING_ACCOUNT"};
+    const expected=mode==="foreign_wallet"?c:"TWD";
+    const {rows}=await ctx.pool.query(
+     "SELECT id FROM finance.accounts WHERE owner_user_id=$1 AND id=$2 AND currency_code=$3 AND active=true",
+     [ctx.owner,accountId,expected]);
+    if(!rows.length)return {error:"FUNDING_ACCOUNT_CURRENCY_MISMATCH"};
+   }
+   if(foreign&&kind==="expense"&&mode==="foreign_wallet"&&!accountId)
+     return {error:"FOREIGN_WALLET_REQUIRED"};
+   return {mode,accountId,conversionDay:day,fee:mode==="twd_pending_fx"?fee:"0"};
+  }
+
   const roundTripQuery=async(ctx,m)=>{
     const date=startMonth(m);
     const [items,funds,payments,sums,goalFunds]=await Promise.all([
-      ctx.pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
+      ctx.pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,funding_mode,funding_account_id,conversion_day,fx_fee_twd::text,due_day,memo,month_date::text FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
       ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,(f.planned_amount*f.fx_rate_to_twd)::text AS planned_twd,(f.earmarked_amount*f.fx_rate_to_twd)::text AS earmarked_twd,d.due_date::text FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
       ctx.pool.query("SELECT p.id,p.debt_id,d.name AS debt_name,d.currency_code,p.payment_date::text,p.principal_paid::text,p.interest_paid::text,p.fee_paid::text,p.base_amount_twd::text,p.event_id FROM finance.debt_payments p JOIN finance.debts d ON d.id=p.debt_id AND d.owner_user_id=p.owner_user_id WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month') ORDER BY p.payment_date DESC,p.created_at DESC LIMIT 100",[ctx.owner,date]),
       ctx.pool.query(
         "SELECT "+
-        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='income'),0)::text AS planned_income_twd,"+
-        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='expense'),0)::text AS planned_expense_twd,"+
+        "COALESCE((SELECT SUM(CASE WHEN original_currency='TWD' THEN amount_twd ELSE 0 END) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='income'),0)::text AS planned_income_twd,"+
+        "COALESCE((SELECT SUM(CASE WHEN original_currency='TWD' THEN amount_twd WHEN funding_mode='twd_pending_fx' THEN amount_twd+fx_fee_twd ELSE 0 END) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS planned_debt_fund_twd,"+
         "COALESCE((SELECT SUM(earmarked_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS earmarked_debt_fund_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS planned_goal_fund_twd,"+
@@ -72,8 +100,8 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       const {rows}=await ctx.pool.query(
         "WITH months AS (SELECT generate_series(make_date($2,1,1),make_date($2,12,1),interval '1 month')::date AS dt) "+
         "SELECT to_char(m.dt,'YYYY-MM') AS month,"+
-        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='income'),0)::text AS planned_income_twd,"+
-        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='expense'),0)::text AS planned_expense_twd,"+
+        "COALESCE((SELECT SUM(CASE WHEN original_currency='TWD' THEN amount_twd ELSE 0 END) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='income'),0)::text AS planned_income_twd,"+
+        "COALESCE((SELECT SUM(CASE WHEN original_currency='TWD' THEN amount_twd WHEN funding_mode='twd_pending_fx' THEN amount_twd+fx_fee_twd ELSE 0 END) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS debt_fund_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS goal_fund_twd,"+
         "COALESCE((SELECT SUM(base_amount_twd) FROM finance.debt_payments WHERE owner_user_id=$1 AND payment_date>=m.dt AND payment_date<m.dt+interval '1 month'),0)::text AS debt_paid_twd "+
@@ -92,10 +120,12 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     try{
       const converted=await plannedAmount(ctx,b);
       if(converted.error)return fail(reply,converted.error);
+      const funding=await resolveFunding(ctx,b,converted);
+      if(funding.error)return fail(reply,funding.error);
       const saved=await auditedWrite(ctx,"finance.cashflow.create","finance_cashflow_item",async db=>{
         const {rows}=await db.query(
-          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
-          [ctx.owner,startMonth(b.month),b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider]
+          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider,funding_mode,funding_account_id,conversion_day,fx_fee_twd) VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12,$13,$14,$15,$16::numeric) RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,funding_mode,funding_account_id,conversion_day,fx_fee_twd::text,month_date::text,due_day,memo",
+          [ctx.owner,startMonth(b.month),b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider,funding.mode,funding.accountId,funding.conversionDay,funding.fee]
         );
         return rows[0];
       });
@@ -111,10 +141,12 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     try{
       const converted=await plannedAmount(ctx,b);
       if(converted.error)return fail(reply,converted.error);
+      const funding=await resolveFunding(ctx,b,converted);
+      if(funding.error)return fail(reply,funding.error);
       const saved=await auditedWrite(ctx,"finance.cashflow.update","finance_cashflow_item",async db=>{
         const {rows}=await db.query(
-          "UPDATE finance.cashflow_items SET kind=$3,label=$4,amount_twd=$5::numeric,due_day=$6,memo=$7,updated_at=now(),original_currency=$8,original_amount=$9::numeric,fx_rate_to_twd=$10::numeric,fx_rate_observed_at=$11::timestamptz,fx_rate_provider=$12 WHERE owner_user_id=$1 AND id=$2 RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
-          [ctx.owner,itemId,b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider]
+          "UPDATE finance.cashflow_items SET kind=$3,label=$4,amount_twd=$5::numeric,due_day=$6,memo=$7,updated_at=now(),original_currency=$8,original_amount=$9::numeric,fx_rate_to_twd=$10::numeric,fx_rate_observed_at=$11::timestamptz,fx_rate_provider=$12,funding_mode=$13,funding_account_id=$14,conversion_day=$15,fx_fee_twd=$16::numeric WHERE owner_user_id=$1 AND id=$2 RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,funding_mode,funding_account_id,conversion_day,fx_fee_twd::text,month_date::text,due_day,memo",
+          [ctx.owner,itemId,b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider,funding.mode,funding.accountId,funding.conversionDay,funding.fee]
         );return rows[0];
       });
       if(!saved)return fail(reply,"CASHFLOW_ITEM_NOT_FOUND",404);
