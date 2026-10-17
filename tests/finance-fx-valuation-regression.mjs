@@ -26,6 +26,8 @@ const fetcher=async(url)=>{calls++;assert.equal(url,"https://open.er-api.com/v6/
  result:"success",base_code:"TWD",time_last_update_unix:Math.floor(now/1000),
  rates:{TWD:1,VND:800,USD:0.032}
 })}};
+const prior=process.env.FINANCE_FX_AUTO_REFRESH;
+process.env.FINANCE_FX_AUTO_REFRESH="true";
 const fresh=await getFinanceFxSnapshot(pool,{fetcher,now:()=>now});
 assert.equal(fresh.quotes.VND.rateToTwd,"0.001250000000");
 assert.equal(fresh.quotes.USD.status,"fresh");
@@ -39,4 +41,5 @@ const stale=await getFinanceFxSnapshot(pool,{allowRemote:false,now:()=>now+7*864
 assert.equal(stale.quotes.VND.rateToTwd,null,"Stale quote cannot be shown as an actionable estimate");
 assert.equal(stale.quotes.VND.status,"stale");
 assert(stale.warnings.length);
+if(prior===undefined)delete process.env.FINANCE_FX_AUTO_REFRESH;else process.env.FINANCE_FX_AUTO_REFRESH=prior;
 console.log("PASS exact indicative FX, cached TWD quotes, provenance, stale fail-closed and no automatic exchange");
