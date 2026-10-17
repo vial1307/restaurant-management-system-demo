@@ -129,6 +129,7 @@ try{
    if(/^\/debts\/[^/]+$/.test(p)&&m==="PUT"){
     const d=debts.find(x=>x.id===p.split("/").at(-1));
     Object.assign(d,{name:b.name,annual_interest_rate:String(Number(b.annualInterestPercent)/100),due_date:b.dueDate});
+    funds.filter(x=>x.debt_id===d.id).forEach(x=>{x.due_date=b.dueDate;x.debt_name=b.name;});
     return respond(route,{debt:d});
    }
    if(p==="/debts"&&m==="POST"){debts.push({id:next(),name:b.name,currency_code:b.currencyCode,outstanding_amount:b.principalOriginal});return respond(route,{debt:debts.at(-1)},201);}
@@ -205,6 +206,51 @@ try{
 
   await page.locator('[data-action="simulate"]').click();
   await page.getByText("Cuối kỳ dự báo").waitFor();
+  await page.locator('.main-nav [data-tab="plan"]').click();
+  await page.getByText("1 · Nợ đến hạn").waitFor();
+  const oldItems=items.length,oldPosted=wroteLedger;
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("debt");
+  await page.locator("#finance-plan-debt-fields:not([hidden])").waitFor();
+  await page.locator('#finance-fields [name="label"]').fill("Vay học phí");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("2000");
+  await page.locator('#finance-fields [name="principalOriginal"]').fill("10000");
+  await page.locator('#finance-fields [name="annualInterestPercent"]').fill("8.5");
+  await page.locator('#finance-fields [name="debtDueDate"]').fill("2026-11-25");
+  await page.locator("#finance-submit").click();
+  assert.equal(debts.at(-1).name,"Vay học phí");
+  assert.equal(Number(debts.at(-1).annual_interest_rate),0.085);
+  assert.equal(funds.filter(x=>x.debt_id===debts.at(-1).id).length,1);
+  assert.equal(items.length,oldItems,"Debt created via plan must NOT create a duplicate expense row");
+  assert.equal(wroteLedger,oldPosted,"No real money moves when creating debt/fund plans");
+  await page.locator(".main-nav [data-tab='commitments']").click();
+  assert.match(await page.locator("#finance-content").innerText(),/Vay học phí/);
+  const editNew=page.locator('[data-action="editDebt"][data-id="'+debts.at(-1).id+'"]');
+  await editNew.click();
+  await page.locator('#finance-fields [name="annualInterestPercent"]').fill("9");
+  await page.locator('#finance-fields [name="dueDate"]').fill("2026-11-28");
+  await page.locator("#finance-submit").click();
+  assert.equal(Number(debts.at(-1).annual_interest_rate),0.09);
+  await page.locator(".main-nav [data-tab='simulator']").click();
+  await page.getByText("Lịch phân bổ lương và nguồn thu để trả nợ").waitFor();
+  await page.locator('[data-action="suggestDebtFund"]').first().click();
+  assert.equal(await page.locator('#finance-fields [name="plannedAmount"]').inputValue(),"2500");
+  await page.locator("#finance-submit").click();
+  assert.equal(Number(funds.find(x=>x.debt_id===debts.at(-1).id).planned_amount),2500);
+  await page.locator(".main-nav [data-tab='plan']").click();
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("goal");
+  await page.locator("#finance-plan-goal-fields:not([hidden])").waitFor();
+  await page.locator('#finance-fields [name="label"]').fill("Quỹ tiết kiệm");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("1500");
+  await page.locator('#finance-fields [name="targetAmount"]').fill("30000");
+  await page.locator('#finance-fields [name="targetDate"]').fill("2027-01-20");
+  await page.locator("#finance-submit").click();
+  assert.equal(goals.at(-1).name,"Quỹ tiết kiệm");
+  assert.equal(items.length,oldItems,"Saving funds may not create a real spending row");
+  await page.locator(".main-nav [data-tab='commitments']").click();
+  await page.getByText("Quỹ tiết kiệm",{exact:true}).first().waitFor();
+
   await page.locator("#finance-settings").click();
   assert.match(await page.locator("#finance-content").innerText(),/Tài khoản & cài đặt/);
   const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,view:innerWidth}));
