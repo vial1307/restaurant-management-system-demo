@@ -123,7 +123,7 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
      "minimum_due_amount=EXCLUDED.minimum_due_amount,relationship_priority=EXCLUDED.relationship_priority,"+
      "negotiation_status=EXCLUDED.negotiation_status,next_contact_date=EXCLUDED.next_contact_date,"+
      "reminders_enabled=EXCLUDED.reminders_enabled,memo=EXCLUDED.memo,updated_at=now() "+
-     "RETURNING debt_id,creditor_type,obligation_type,minimum_due_amount::text,"+
+     "RETURNING debt_id AS id,creditor_type,obligation_type,minimum_due_amount::text,"+
      "relationship_priority,negotiation_status,next_contact_date::text,reminders_enabled",
      [ctx.owner,debtId,b.creditorType,b.obligationType,b.minimumDueAmount??null,
        b.relationshipPriority,b.negotiationStatus,b.nextContactDate??null,b.remindersEnabled,b.memo]
