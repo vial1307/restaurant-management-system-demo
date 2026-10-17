@@ -145,6 +145,48 @@ export async function registerFinanceRoutes(app) {
       return reply.code(201).send({account:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
+  // Owner-only balance reconciliation. Never rewrite the immutable ledger:
+  // insert one signed correcting entry after locking the owned account.
+  app.post("/api/finance/accounts/:accountId/reconcile",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const accountId=request.params?.accountId,b=request.body||{};
+    const signed=/^-?(?:0|[1-9]\d{0,15})(?:\.\d{1,6})?$/;
+    const reason=trim(b.reason,250);
+    if(!id(accountId)||!id(b.idempotencyKey)||typeof b.targetBalance!=="string"||
+       typeof b.expectedBalance!=="string"||!signed.test(b.targetBalance)||!signed.test(b.expectedBalance)||
+       reason.length<8)return fail(reply,"INVALID_BALANCE_RECONCILIATION");
+    try {
+      const result=await financeTransaction(async client=>{
+        const wallet=await account(client,ctx.owner,accountId);
+        if(!wallet)return {error:"ACCOUNT_NOT_FOUND",status:404};
+        const minor=Number(wallet.minor_units);
+        const valid=value=>!value.includes(".")||value.split(".")[1].length<=minor;
+        if(!valid(b.targetBalance)||!valid(b.expectedBalance))return {error:"INVALID_CURRENCY_PRECISION"};
+        const {rows}=await client.query(
+          "SELECT COALESCE(SUM(amount),0)::text AS actual FROM finance.entries WHERE account_id=$1 AND owner_user_id=$2",
+          [wallet.id,ctx.owner]);
+        const actual=rows[0].actual;
+        const diff=await client.query(
+          "SELECT ($1::numeric-$2::numeric)::text AS delta,($2::numeric=$3::numeric) AS matches",
+          [b.targetBalance,actual,b.expectedBalance]);
+        if(!diff.rows[0].matches)return {error:"BALANCE_CHANGED_RELOAD",status:409,actualBalance:actual};
+        const delta=diff.rows[0].delta;
+        if(Number(delta)===0)return {error:"BALANCE_UNCHANGED",status:409,actualBalance:actual};
+        const eventId=await createEvent(client,ctx.owner,"adjustment",
+          "Đối soát số dư · "+reason,new Date().toISOString(),b.idempotencyKey);
+        if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
+        await entry(client,ctx.owner,eventId,wallet,delta,null,wallet.currency_code==="TWD"?"1":null);
+        await audit(client,ctx.owner,"finance.account.balance_reconciled",eventId,{
+          accountId:wallet.id,currency:wallet.currency_code,previousBalance:actual,
+          targetBalance:b.targetBalance,difference:delta,reason
+        },"finance_event");
+        return {id:eventId,accountId:wallet.id,currency:wallet.currency_code,
+          previousBalance:actual,newBalance:b.targetBalance,delta};
+      });
+      if(result.error)return reply.code(result.status||400).send({error:result.error,...(result.actualBalance!==undefined?{actualBalance:result.actualBalance}:{})});
+      return reply.code(201).send({reconciliation:result});
+    }catch(error){return databaseError(request,reply,error);}
+  });
   app.post("/api/finance/categories",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const {name,kind}=request.body||{};
