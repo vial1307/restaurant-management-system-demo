@@ -21,7 +21,7 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
         pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
         pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
-          "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
+          "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.payment_day,f.month_date::text,"+
           "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.currency_code "+
           "FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id "+
           "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
