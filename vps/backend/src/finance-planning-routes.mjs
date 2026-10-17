@@ -342,7 +342,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         const rate=debt.currency_code==="TWD"?"1":positiveRate(snapRate)?snapRate:positiveRate(b.fxRateToTwd)?b.fxRateToTwd:null;
         if(!positiveRate(rate))return {error:"DEBT_FUND_RATE_REQUIRED"};
         const {rows:funds}=await db.query(
-          "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,payment_day=COALESCE(EXCLUDED.payment_day,debt_fund_allocations.payment_day),updated_at=now() RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text,payment_day",
+          "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd,payment_day) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric,$7) ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,payment_day=COALESCE(EXCLUDED.payment_day,debt_fund_allocations.payment_day),updated_at=now() RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text,payment_day",
           [ctx.owner,b.debtId,startMonth(b.month),b.plannedAmount,b.earmarkedAmount,rate,b.paymentDay||null]
         );
         return funds[0];
