@@ -15,7 +15,7 @@ const rank=(a,b)=>{
  if(a.apr!==b.apr)return b.apr-a.apr;
  return a.name.localeCompare(b.name);
 };
-export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},bufferTwd="0"}){
+export function planDebtPayoff({asOf,baseline,debts=[],funds=[],payments=[],quotes={},bufferTwd="0"}){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(asOf))||!baseline||!Array.isArray(baseline.months))
   throw new Error("INVALID_DEBT_PAYOFF_INPUT");
  const buffer=asMoney(bufferTwd),warnings=[];
@@ -40,6 +40,11 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
   const month=mm(fund.month_date),key=month+"|"+fund.debt_id;
   byMonth.set(key,(byMonth.get(key)||0)+asMoney(fund.planned_amount));
  }
+ const paidByMonth=new Map();
+ for(const payment of payments){
+  const key=mm(payment.payment_date)+"|"+payment.debt_id;
+  paidByMonth.set(key,(paidByMonth.get(key)||0)+asMoney(payment.native_paid));
+ }
  const months=[],suggestions=[],allMonths=baseline.months.filter(x=>mm(x.month)>=mm(asOf));
  let openingTwd=asMoney(baseline.startingBalanceTwd||0);
  let allocatedEarlier=0;
@@ -49,7 +54,12 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
   // They never become a second expense or a second debit in this plan.
   for(const debt of outstanding){
    if(debt.rate===null||debt.remainingNative<=0)continue;
-   const interest=debt.remainingNative*debt.apr/12,scheduled=byMonth.get(month+"|"+debt.id)||0;
+   const interest=debt.remainingNative*debt.apr/12;
+   // The actual principal has already reduced outstanding_amount in Finance DB.
+   // Never subtract a posted repayment a second time from projected principal.
+   const originallyPlanned=byMonth.get(month+"|"+debt.id)||0;
+   const paid=paidByMonth.get(month+"|"+debt.id)||0;
+   const scheduled=Math.max(0,originallyPlanned-paid);
    const principalPay=Math.max(0,Math.min(debt.remainingNative,scheduled-interest));
    // Unpaid estimated interest is carried conservatively into the next month.
    // This is a forecast only and never changes recorded principal/posted payments.
