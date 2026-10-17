@@ -413,5 +413,48 @@ assert.equal(Number(financeAfterFX.data.accounts.find(x=>x.id===bank.id).balance
 assert.equal(Number(financeAfterFX.data.accounts.find(x=>x.id===vnd.id).balance),6850000,
  "FX planning must not transfer foreign-currency wallet balance");
 
+// Actual posted foreign expense: native amount changes only the matching VND wallet;
+// TWD valuation is calculated server-side from the finance DB quote, not a
+// browser rate and never creates a cross-currency transfer.
+const mismatchedWallet=await request("/finance/transactions",{method:"POST",cookie:owner,body:{
+ kind:"expense",accountId:vnd.id,currencyCode:"TWD",categoryId:food.id,
+ amount:"100000",fxRateMode:"estimate",idempotencyKey:key()
+}});
+assert.equal(mismatchedWallet.status,400);
+assert.equal(mismatchedWallet.data.error,"TRANSACTION_CURRENCY_ACCOUNT_MISMATCH");
+const noRateWallet=await request("/finance/transactions",{method:"POST",cookie:owner,body:{
+ kind:"expense",accountId:jpy.id,currencyCode:"JPY",categoryId:food.id,
+ amount:"100",fxRateMode:"estimate",idempotencyKey:key()
+}});
+assert.equal(noRateWallet.status,400);
+assert.equal(noRateWallet.data.error,"FX_RATE_UNAVAILABLE","No exchange quote must never fabricate a TWD value");
+const vndBefore=await request("/finance/bootstrap",{cookie:owner});
+const balanceBefore=Number(vndBefore.data.accounts.find(a=>a.id===vnd.id).balance);
+const realForeign=await post("/transactions",{
+ kind:"expense",accountId:vnd.id,currencyCode:"VND",categoryId:food.id,
+ amount:"100000",fxRateMode:"estimate",description:"Thanh toán tiền Việt",
+ idempotencyKey:key()
+});
+assert.equal(realForeign.event.kind,"expense");
+const vndAfter=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(vndAfter.data.accounts.find(a=>a.id===vnd.id).balance),balanceBefore-100000);
+assert.equal(Number(vndAfter.data.accounts.find(a=>a.id===bank.id).balance),40250,
+ "A VND expense must never debit the TWD bank or execute an implicit exchange");
+const actualExchangeCheck=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),
+ database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
+await actualExchangeCheck.connect();
+try{
+ const {rows}=await actualExchangeCheck.query(
+  "SELECT amount::text,base_amount_twd::text,fx_rate_to_twd::text FROM finance.entries WHERE event_id=$1",
+  [realForeign.event.id]);
+ assert.equal(rows.length,1);
+ assert.equal(Number(rows[0].amount),-100000);
+ assert.equal(Number(rows[0].base_amount_twd),-125);
+ assert.equal(Number(rows[0].fx_rate_to_twd),0.00125);
+ const {rows:fxTransfers}=await actualExchangeCheck.query(
+  "SELECT count(*)::int AS n FROM finance.fx_exchanges WHERE event_id=$1",[realForeign.event.id]);
+ assert.equal(fxTransfers[0].n,0,"Automatic valuation cannot post an FX trade");
+}finally{await actualExchangeCheck.end();}
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
