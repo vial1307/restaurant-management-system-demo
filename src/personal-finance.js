@@ -3,7 +3,7 @@ import {financeMonthlyTrend,financeLiquidityForecast,financeDonut} from "./finan
 const $=s=>document.querySelector(s);
 const root=$("#finance-content"),dlg=$("#finance-dialog"),form=$("#finance-form"),fields=$("#finance-fields");
 const nowDate=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-const state={tab:"overview",month:nowDate().slice(0,7),user:null,data:null,overview:null,cashflow:null,year:null,fx:null,advice:null,days:30,buffer:"0",scenarioList:[],preview:null,busy:false,ready:false,partial:[],error:null,editing:null,
+const state={tab:"overview",month:nowDate().slice(0,7),user:null,data:null,overview:null,cashflow:null,year:null,fx:null,advice:null,days:90,buffer:"0",scenarioList:[],preview:null,baseline:null,baselineBusy:false,baselineError:null,analysisVersion:0,busy:false,ready:false,partial:[],error:null,editing:null,
  sim:{name:"Kế hoạch của tôi",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]}};
 const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const number=(v,d=0)=>Number(v||0).toLocaleString("vi-VN",{maximumFractionDigits:d});
@@ -61,6 +61,74 @@ function planRows(){
  };
  addFund(cf.debtFunds,"debt");addFund(cf.goalFunds,"goal");
  return rows.sort((a,b)=>a.date.localeCompare(b.date)||(a.kind==="income"?-1:1));
+}
+
+function forecastMonths(){
+ const current=nowDate().slice(0,7),offset=(+state.month.slice(0,4)-+current.slice(0,4))*12+
+   (+state.month.slice(5)-+current.slice(5))+1;
+ return offset<=3?3:offset<=6?6:12;
+}
+function linkedMonth(){
+ // This is a reference forecast from saved Finance DB records, NOT transaction history.
+ if(state.month<nowDate().slice(0,7))return {status:"past",events:[]};
+ const b=state.baseline;
+ if(!b)return {status:state.baselineBusy?"loading":"unavailable",events:[]};
+ if(state.month>b.through.slice(0,7))return {status:"outside",events:[]};
+ const before=b.timeline.filter(x=>x.date<state.month+"-01");
+ const start=before.length?val(before.at(-1).balanceTwd):val(b.startingBalanceTwd);
+ const events=b.timeline.filter(x=>x.date.startsWith(state.month));
+ const closing=events.length?val(events.at(-1).balanceTwd):start;
+ const low=Math.min(start,...events.map(x=>val(x.balanceTwd)));
+ const missing=events.filter(x=>val(x.balanceTwd)<val(b.bufferTwd));
+ const income=events.filter(x=>val(x.amountTwd)>0).reduce((n,x)=>n+val(x.amountTwd),0);
+ const outgo=events.filter(x=>val(x.amountTwd)<0).reduce((n,x)=>n-Math.abs(val(x.amountTwd)),0);
+ return {status:"ready",events,opening:start,closing,minimum:low,income,expense:-outgo,
+   firstGap:missing[0]||null,buffer:val(b.bufferTwd),
+   incomplete:(state.cashflow?.unconvertedFunds||[]).length>0};
+}
+function linkedCashTable(limit=50){
+ const m=linkedMonth();
+ if(m.status==="loading")return empty("Đang đọc lịch thu/chi từ Database để tính số dư dự kiến…");
+ if(m.status==="past")return '<div class="notice">Tháng đã qua: xem các giao dịch thực tế bên dưới. Hệ thống không giả lập lại số dư lịch sử.</div>';
+ if(m.status==="outside")return '<div class="notice warn">Tháng được chọn nằm ngoài 12 tháng dự báo. Chọn tháng gần hơn để có lịch chi tiết; không tự điền số dư ước đoán.</div>';
+ if(m.status!=="ready")return '<div class="notice warn">Chưa nhận được kết quả phân tích tự động. '+safe(state.baselineError||"Hãy tải lại dữ liệu.")+'</div>';
+ if(!m.events.length)return empty("Trong tháng này chưa có lịch tương lai hợp lệ. Hãy kiểm tra ngày hoặc dữ liệu đã nhập.");
+ return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Nguồn dữ liệu</th><th>Nội dung</th><th class="num">Thu / chi TWD</th><th class="num">Số dư dự kiến</th></tr></thead><tbody>'+
+ m.events.slice(0,limit).map(e=>'<tr><td>'+safe(e.date.slice(8)+"/"+e.date.slice(5,7))+'</td><td>'+
+ '<span class="tag '+(e.source==="scenario"?"goal":e.kind==="income"?"income":e.kind==="debt"?"debt":"expense")+'">'+
+ safe(e.source==="scenario"?"Mô phỏng":e.source==="debt_fund"?"Quỹ nợ":e.source==="goal_fund"?"Quỹ mục tiêu":"Kế hoạch")+'</span></td>'+
+ '<td><strong>'+safe(e.label)+'</strong></td><td class="num '+(val(e.amountTwd)<0?"negative":"positive")+'">'+
+ safe(money(e.amountTwd))+'</td><td class="num '+(val(e.balanceTwd)<m.buffer?"negative":"")+'">'+
+ safe(money(e.balanceTwd))+'</td></tr>').join("")+
+ '</tbody></table></div>';
+}
+function linkedInsights(){
+ const p=planSummary(),m=linkedMonth(),wallet=walletTwd();
+ const status=m.status==="ready";
+ const headline=status?
+  '<div class="mini-list"><div><small>Số dư dự kiến đầu '+safe(fmtMonth(state.month))+'</small><strong>'+money(m.opening)+'</strong></div>'+
+  '<div><small>Cuối tháng sau kế hoạch</small><strong class="'+(m.closing<0?"negative":"")+'">'+money(m.closing)+'</strong></div>'+
+  '<div><small>Số dư thấp nhất</small><strong class="'+(m.minimum<0?"negative":"")+'">'+money(m.minimum)+'</strong></div></div>':
+  '<div class="notice warn">Dự báo theo ngày chưa khả dụng cho tháng này. '+(m.status==="loading"?"Đang đồng bộ tự động…":"Kiểm tra phạm vi dự báo hoặc kết nối.")+'</div>';
+ const conclusions=[];
+ if(status&&m.firstGap)conclusions.push({urgent:true,label:"Cần xử lý trước "+m.firstGap.date,
+  detail:"Số dư dự kiến xuống "+money(m.firstGap.balanceTwd)+
+   " sau khoản “"+m.firstGap.label+"”. Kiểm tra thời điểm tiền về hoặc điều chỉnh chi linh hoạt, không tự trì hoãn nợ đến hạn."});
+ if(p.net<0)conclusions.push({urgent:true,label:"Chi vượt thu dự kiến trong "+fmtMonth(state.month),
+  detail:"Các khoản đã lập kế hoạch có chênh lệch "+money(p.net)+". Rà soát khoản bắt buộc, ưu tiên và số dư khả dụng đầu kỳ."});
+ if(wallet===0)conclusions.push({urgent:true,label:"Chưa ghi nhận số dư TWD khả dụng",
+  detail:"Số dư các ví TWD đang bằng 0. Nếu chưa đối soát ví thật, kết quả dự báo thiếu đầu vào quan trọng."});
+ const currenciesInPlan=planRows().filter(x=>x.code!=="TWD");
+ if(currenciesInPlan.length)conclusions.push({urgent:false,label:"Đã tính kế hoạch ngoại tệ vào TWD tham chiếu",
+  detail:currenciesInPlan.length+" khoản VND/ngoại tệ đang được định giá theo tỷ giá tham chiếu. Tỷ giá ngân hàng, phí đổi và ngày thanh toán thực tế có thể khác."});
+ if(state.cashflow?.unconvertedFunds?.length||p.incomplete)conclusions.push({urgent:true,label:"Có quỹ chưa định giá được",
+  detail:"Chưa có tỷ giá hợp lệ. Tổng dòng tiền và khả năng thanh toán chưa đầy đủ; không tự thay giá trị bị thiếu bằng 0."});
+ if(!conclusions.length)conclusions.push({urgent:false,label:"Chưa thấy chênh lệch lớn trong tháng được chọn",
+  detail:"Dự báo dựa trên các khoản đã lưu; số tiền chưa khai báo và thay đổi thu nhập sau này chưa được tính."});
+ return '<div class="stack">'+headline+
+  conclusions.map((x,i)=>'<div class="alert-row"'+(!x.urgent?' style="background:#f3f8ff"':'')+'>'+
+  '<div><strong>'+(i+1)+". "+safe(x.label)+'</strong><p>'+safe(x.detail)+'</p></div></div>').join("")+
+  '<div class="notice">Phân tích đọc từ Finance Database theo ngày. Thu/chi dự kiến chưa phải giao dịch đã ghi sổ. Quỹ nợ chỉ được tính một lần trong mô hình và khoản đã trả được đối chiếu riêng.</div></div>';
 }
 function planSummary(){
  const r=planRows();const income=r.filter(x=>x.kind==="income").reduce((n,x)=>n+(x.twd||0),0);
