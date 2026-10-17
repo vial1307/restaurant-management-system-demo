@@ -26,6 +26,154 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   }
 
   const startMonth=m=>m+"-01";
+  // The plan's "Công nợ" editor and the debt register write to ONE liability
+  // record. The monthly reserve is linked by debt_id, never copied as a cashflow
+  // expense. Transactionally committed, Finance DB only, owner scoped.
+  async function linkedDebt(req,reply,edit=false){
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{},debtId=edit?req.params?.debtId:null;
+    const code=String(b.currencyCode||""),month=b.month;
+    const name=trim(b.name,160),memo=trim(b.memo,600)||"";
+    const rateText=String(b.annualInterestPercent??"0");
+    const fund=String(b.plannedAmount??"0"),earmark=String(b.earmarkedAmount??"0");
+    if((edit&&!id(debtId))||!name||!monthKey(month)||
+       (b.fromPlanning?!isDate(b.dueDate):(b.dueDate&&!isDate(b.dueDate)))||
+       !/^[A-Z]{3}$/.test(code)||!money(rateText,6)||Number(rateText)>100||
+       !money(fund,6)||!money(earmark,6)||
+       (!edit&&!positive(b.principalOriginal,6)))
+      return fail(reply,"INVALID_LINKED_DEBT");
+    try{
+      const {rows:currencies}=await ctx.pool.query(
+        "SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[code]);
+      if(!currencies[0])return fail(reply,"INVALID_LINKED_DEBT_CURRENCY");
+      const minor=Number(currencies[0].minor_units);
+      if(!money(fund,minor)||!money(earmark,minor)||
+         (!edit&&!positive(b.principalOriginal,minor)))
+        return fail(reply,"INVALID_LINKED_DEBT_AMOUNT");
+      // An empty plan reserve does NOT imply a full repayment by due date.
+      // Owner can distribute repayments in subsequent months.
+      const needsReserve=Number(fund)>0||Number(earmark)>0;
+      const quote=needsReserve&&code!=="TWD"?
+        (await getFinanceFxSnapshot(ctx.pool)).quotes?.[code]:null;
+      const fxRate=code==="TWD"?"1":
+        quote?.status==="fresh"&&positiveRate(quote.rateToTwd)?quote.rateToTwd:null;
+      if(needsReserve&&!fxRate)return fail(reply,"FX_RATE_UNAVAILABLE");
+      const saved=await auditedWrite(ctx,edit?"finance.debt.plan_update":"finance.debt.plan_create","finance_debt",async db=>{
+        let d;
+        if(edit){
+          const {rows}=await db.query(
+            "SELECT d.id,d.currency_code,d.principal_original::text, "+
+            "(SELECT COALESCE(SUM(p.principal_paid),0)::text FROM finance.debt_payments p "+
+            "WHERE p.debt_id=d.id AND p.owner_user_id=d.owner_user_id) AS repaid "+
+            "FROM finance.debts d WHERE d.id=$1 AND d.owner_user_id=$2 FOR UPDATE OF d",
+            [debtId,ctx.owner]);
+          d=rows[0];
+          if(!d)return {error:"DEBT_NOT_FOUND",status:404};
+          if(d.currency_code!==code)return {error:"DEBT_CURRENCY_IMMUTABLE"};
+          if(b.principalOriginal!=null&&Number(b.principalOriginal)!==Number(d.principal_original)){
+            if(Number(d.repaid)>0)return {error:"PAID_DEBT_PRINCIPAL_IMMUTABLE"};
+            if(!positive(b.principalOriginal,minor))return {error:"INVALID_LINKED_DEBT_AMOUNT"};
+          }
+          const nextPrincipal=b.principalOriginal!=null?b.principalOriginal:d.principal_original;
+          const u=await db.query(
+            "UPDATE finance.debts SET name=$3,annual_interest_rate=$4::numeric/100,due_date=$5::date,"+
+            "memo=$6,principal_original=$7::numeric WHERE id=$1 AND owner_user_id=$2 "+
+            "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text,memo",
+            [debtId,ctx.owner,name,rateText,b.dueDate||null,memo,nextPrincipal]);d=u.rows[0];
+        }else{
+          const r=await db.query(
+            "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date,memo) "+
+            "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date,$7) "+
+            "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text,memo",
+            [ctx.owner,name,code,b.principalOriginal,rateText,b.dueDate||null,memo]);d=r.rows[0];
+        }
+        let allocation=null;
+        if(needsReserve){
+          const r=await db.query(
+            "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+            "VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) "+
+            "ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET "+
+            "planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,"+
+            "fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() "+
+            "RETURNING id,debt_id,month_date::text,planned_amount::text,earmarked_amount::text",
+            [ctx.owner,d.id,startMonth(month),fund,earmark,fxRate]);
+          allocation=r.rows[0];
+        }else if(edit){
+          // Do not erase old allocations implicitly. The owner must explicitly
+          // set the month reserve to zero through the existing fund editor.
+        }
+        return {debt:d,allocation};
+      });
+      if(saved?.error)return fail(reply,saved.error,saved.status||400);
+      return reply.code(edit?200:201).send(saved);
+    }catch(error){return databaseError(req,reply,error);}
+  }
+  app.post("/api/finance/linked-debts",(req,reply)=>linkedDebt(req,reply,false));
+  app.put("/api/finance/linked-debts/:debtId",(req,reply)=>linkedDebt(req,reply,true));
+  // Matching link for savings goals. Goal progress and all posted movements are
+  // independent of this monthly allocation and remain unchanged.
+  async function linkedGoal(req,reply,edit=false){
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{},goalId=edit?req.params?.goalId:null,code=String(b.currencyCode||"");
+    const name=trim(b.name,160),memo=trim(b.memo,600)||"",month=b.month;
+    const planned=String(b.plannedAmount??"0"),earmark=String(b.earmarkedAmount??"0");
+    if((edit&&!id(goalId))||!monthKey(month)||!name||!/^[A-Z]{3}$/.test(code)||
+       !positive(b.targetAmount,6)||!money(planned,6)||!money(earmark,6)||
+       (b.targetDate&&!isDate(b.targetDate)))return fail(reply,"INVALID_LINKED_GOAL");
+    try{
+      const {rows:c}=await ctx.pool.query(
+        "SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[code]);
+      if(!c[0])return fail(reply,"INVALID_LINKED_GOAL_CURRENCY");
+      const minor=Number(c[0].minor_units);
+      if(!positive(b.targetAmount,minor)||!money(planned,minor)||!money(earmark,minor))
+        return fail(reply,"INVALID_LINKED_GOAL_AMOUNT");
+      const hasAllocation=Number(planned)>0||Number(earmark)>0;
+      const quote=hasAllocation&&code!=="TWD"?
+        (await getFinanceFxSnapshot(ctx.pool)).quotes?.[code]:null;
+      const rate=code==="TWD"?"1":quote?.status==="fresh"&&positiveRate(quote.rateToTwd)?quote.rateToTwd:null;
+      if(hasAllocation&&!rate)return fail(reply,"FX_RATE_UNAVAILABLE");
+      const result=await auditedWrite(ctx,edit?"finance.goal.plan_update":"finance.goal.plan_create","finance_goal",async db=>{
+        let g;
+        if(edit){
+          const existing=await db.query(
+           "SELECT id,currency_code FROM finance.goals WHERE id=$1 AND owner_user_id=$2 FOR UPDATE",
+           [goalId,ctx.owner]);
+          if(!existing.rows[0])return {error:"GOAL_NOT_FOUND",status:404};
+          if(existing.rows[0].currency_code!==code)return {error:"GOAL_CURRENCY_IMMUTABLE"};
+          const r=await db.query(
+           "UPDATE finance.goals SET name=$3,target_amount=$4::numeric,target_date=$5::date,memo=$6,updated_at=now() "+
+           "WHERE id=$1 AND owner_user_id=$2 RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,memo",
+           [goalId,ctx.owner,name,b.targetAmount,b.targetDate||null,memo]);
+          g=r.rows[0];
+        }else{
+          const r=await db.query(
+           "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date,memo) "+
+           "VALUES($1,$2,$3,$4::numeric,$5::date,$6) RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,memo",
+           [ctx.owner,name,code,b.targetAmount,b.targetDate||null,memo]);
+          g=r.rows[0];
+        }
+        let allocation=null;
+        if(hasAllocation){
+          const q=await db.query(
+           "INSERT INTO finance.goal_fund_allocations(owner_user_id,goal_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+           "VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) "+
+           "ON CONFLICT(owner_user_id,goal_id,month_date) DO UPDATE SET "+
+           "planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,"+
+           "fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() "+
+           "RETURNING id,goal_id,month_date::text,planned_amount::text",
+           [ctx.owner,g.id,startMonth(month),planned,earmark,rate]);
+          allocation=q.rows[0];
+        }
+        return {goal:g,allocation};
+      });
+      if(result?.error)return fail(reply,result.error,result.status||400);
+      return reply.code(edit?200:201).send(result);
+    }catch(error){return databaseError(req,reply,error);}
+  }
+  app.post("/api/finance/linked-goals",(req,reply)=>linkedGoal(req,reply,false));
+  app.put("/api/finance/linked-goals/:goalId",(req,reply)=>linkedGoal(req,reply,true));
+
+
   const roundTripQuery=async(ctx,m)=>{
     const date=startMonth(m);
     const [items,funds,payments,sums,goalFunds]=await Promise.all([

@@ -13,7 +13,7 @@ try{
   const accounts=[{id:T,name:"Ví TWD",kind:"bank",currency_code:"TWD",balance:"30000"},{id:V,name:"Ví VND",kind:"bank",currency_code:"VND",balance:"2000000"}];
   const currencies=["TWD","VND","USD","JPY","EUR","CNY"].map(code=>({code,name_vi:code,minor_units:["USD","CNY","EUR"].includes(code)?2:0}));
   const categories=[{id:expense,name:"Ăn uống",kind:"expense"},{id:income,name:"Lương",kind:"income"}];
-  const debts=[{id:debtId,name:"Thẻ tín dụng",currency_code:"VND",principal_original:"22000000",outstanding_amount:"22000000",due_date:"2026-11-03"}];
+  const debts=[{id:debtId,name:"Thẻ tín dụng",currency_code:"VND",principal_original:"22000000",outstanding_amount:"22000000",annual_interest_rate:"0.125",due_date:"2026-11-03",memo:"Đến hạn phải thanh toán"}];
   const goals=[{id:goalId,name:"Học phí",currency_code:"TWD",target_amount:"50000",current_amount:"15000",status:"active",target_date:"2027-02-15"}];
   const items=[];const funds=[{id:uuid(7),debt_id:debtId,debt_name:"Thẻ tín dụng",currency_code:"VND",month_date:"2026-10-01",due_date:"2026-11-03",planned_amount:"10000000",earmarked_amount:"0",fx_rate_to_twd:"0.00125",planned_twd:"12500"}];
   const goalFunds=[],history=[],scenarioBooks=[];
@@ -31,7 +31,9 @@ try{
      budget:[{id:expense,category_id:expense,name:"Ăn uống",kind:"expense",budget_twd:"15000",actual_twd:"12000"}],events:history});
    if(p==="/cashflow")return respond(route,{month:url.searchParams.get("month"),
      items:items.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),
-     debtFunds:funds,goalFunds,summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
+     debtFunds:funds.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),
+     goalFunds:goalFunds.filter(x=>x.month_date?.startsWith(url.searchParams.get("month"))),
+     summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
    if(p==="/year")return respond(route,{year:+url.searchParams.get("year"),months:[{month:"2026-10",income_twd:"50000",expense_twd:"12000"}]});
    if(p==="/cashflow/year"){
     const year=+url.searchParams.get("year");
@@ -88,10 +90,23 @@ try{
    if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="DELETE"){
     items.splice(items.findIndex(x=>x.id===p.split("/").at(-1)),1);return respond(route,{deleted:true});
    }
+   if((p==="/linked-debts"&&m==="POST")||(/^\/linked-debts\/[^/]+$/.test(p)&&m==="PUT")){
+    let d=debts.find(x=>x.id===p.split("/").at(-1));
+    if(!d){d={id:next(),outstanding_amount:b.principalOriginal};debts.push(d);}
+    Object.assign(d,{name:b.name,currency_code:b.currencyCode,principal_original:b.principalOriginal,
+     due_date:b.dueDate,annual_interest_rate:String(Number(b.annualInterestPercent)/100),memo:b.memo});
+    const monthDate=b.month+"-01";
+    let fund=funds.find(x=>x.debt_id===d.id&&x.month_date===monthDate);
+    if(!fund&&Number(b.plannedAmount)>0){fund={id:next(),debt_id:d.id,month_date:monthDate};funds.push(fund);}
+    if(fund){Object.assign(fund,{planned_amount:b.plannedAmount,
+     earmarked_amount:b.earmarkedAmount,debt_name:d.name,currency_code:d.currency_code,due_date:d.due_date,
+     planned_twd:String(Math.round(Number(b.plannedAmount)*(d.currency_code==="VND"?0.00125:1)))});}
+    return respond(route,{debt:d,allocation:fund||null},m==="POST"?201:200);
+   }
    if(p==="/debt-funds"&&m==="PUT"){const d=funds.find(x=>x.debt_id===b.debtId);
     Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,planned_twd:String(Math.round(+b.plannedAmount*.00125)),fx_rate_to_twd:"0.00125"});
     return respond(route,{fund:d});}
-   if(p==="/goal-funds"&&m==="PUT"){const f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount};goalFunds.push(f);return respond(route,{fund:f});}
+   if(p==="/goal-funds"&&m==="PUT"){let f=goalFunds.find(x=>x.goal_id===b.goalId&&x.month_date===b.month+"-01");if(!f){f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",month_date:b.month+"-01"};goalFunds.push(f);}Object.assign(f,{planned_amount:b.plannedAmount,planned_twd:b.plannedAmount});return respond(route,{fund:f});}
    if(p==="/transactions"&&m==="POST"){const a=accounts.find(a=>a.id===b.accountId);a.balance=String(+a.balance+Number(b.amount)*(b.kind==="income"?1:-1));
      wroteLedger++;return respond(route,{event:{id:next(),kind:b.kind}},201);}
    if(p==="/categories"&&m==="POST"){categories.push({id:next(),name:b.name,kind:b.kind});return respond(route,{category:categories.at(-1)},201);}
@@ -140,6 +155,36 @@ try{
   // appear automatically in both reporting and simulation, without re-entry.
   await page.locator("#finance-month").fill("2026-11");
   await page.locator('.main-nav [data-tab="plan"]').click();
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("debt");
+  assert.equal(await page.locator('#finance-fields [name="debtInterestPercent"]').count(),1);
+  assert.equal(await page.locator('#finance-fields [name="debtDueDate"]').count(),1);
+  await page.locator('#finance-fields [name="debtPick"]').selectOption(debtId);
+  await page.locator('#finance-fields [name="debtInterestPercent"]').fill("16");
+  await page.locator('#finance-fields [name="debtDueDate"]').fill("2026-11-28");
+  await page.locator('#finance-fields [name="debtPlannedAmount"]').fill("5000000");
+  await page.locator('#finance-fields [name="debtMemo"]').fill("Ưu tiên trả từ lương tháng 11");
+  await page.locator("#finance-submit").click();
+  assert.equal(debts.length,1,"Editing existing debt from plan cannot create a second liability");
+  assert.equal(debts[0].memo,"Ưu tiên trả từ lương tháng 11");
+  assert.equal(funds.filter(x=>x.debt_id===debtId&&x.month_date==="2026-11-01").length,1);
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("goal");
+  await page.locator('#finance-fields [name="goalPick"]').selectOption(goalId);
+  await page.locator('#finance-fields [name="goalPlannedAmount"]').fill("3000");
+  await page.locator("#finance-submit").click();
+  assert(goalFunds.some(x=>x.goal_id===goalId));
+  await page.locator('.main-nav [data-tab="commitments"]').click();
+  await page.locator('[data-action="editLinkedDebt"]').first().click();
+  await page.locator('#finance-fields [name="Memo"]').fill("Sửa từ Công nợ đồng bộ ngược");
+  await page.locator("#finance-submit").click();
+  assert.equal(debts.length,1);
+  assert.equal(debts[0].memo,"Sửa từ Công nợ đồng bộ ngược");
+  await page.locator('.main-nav [data-tab="plan"]').click();
+  assert.match(await page.locator("#finance-content").innerText(),/Sửa từ Công nợ đồng bộ ngược/);
+  assert.match(await page.locator("#finance-content").innerText(),/1 · Nợ/);
+  assert.match(await page.locator("#finance-content").innerText(),/3 · Tiết kiệm/);
+
   await page.locator('[data-action="newPlan"]').first().click();
   await page.locator('#finance-fields [name="kind"]').selectOption("income");
   await page.locator('#finance-fields [name="label"]').fill("Lương tháng 11");

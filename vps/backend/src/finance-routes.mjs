@@ -101,8 +101,8 @@ export async function registerFinanceRoutes(app) {
         ctx.pool.query("SELECT id,name,kind FROM finance.categories WHERE owner_user_id=$1 ORDER BY kind,name",[ctx.owner]),
         ctx.pool.query("SELECT b.id,b.category_id,b.month_date::text AS month_date,b.amount_twd::text AS amount_twd,c.name AS category_name FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date>=date_trunc('month',CURRENT_DATE)-interval '12 months' ORDER BY b.month_date DESC,c.name",[ctx.owner]),
         ctx.pool.query("SELECT id,plan_date::text AS plan_date,plan_kind,from_currency,to_currency,source_amount::text AS source_amount,expected_rate::text AS expected_rate,expected_fee::text AS expected_fee,status,memo FROM finance.fx_plans WHERE owner_user_id=$1 ORDER BY plan_date DESC,created_at DESC LIMIT 100",[ctx.owner]),
-        ctx.pool.query("SELECT id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status FROM finance.goals WHERE owner_user_id=$1 ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,target_date NULLS LAST,created_at DESC LIMIT 100",[ctx.owner]),
-        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner])
+        ctx.pool.query("SELECT id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status,memo FROM finance.goals WHERE owner_user_id=$1 ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,target_date NULLS LAST,created_at DESC LIMIT 100",[ctx.owner]),
+        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,d.memo,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner])
       ]);
       return {currencies:currencies.rows,accounts:accounts.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
     } catch(error){return databaseError(request,reply,error);}
@@ -254,8 +254,8 @@ export async function registerFinanceRoutes(app) {
       if(!c||!positive(b.targetAmount,Number(c.minor_units)))return fail(reply,"INVALID_GOAL_AMOUNT");
       const saved=await auditedWrite(ctx,"finance.goal.create","finance_goal",async db=>{
         const {rows}=await db.query(
-        "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date) VALUES($1,$2,$3,$4::numeric,$5::date) RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status",
-        [ctx.owner,trim(b.name,160),b.currencyCode,b.targetAmount,b.targetDate||null]
+        "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date,memo) VALUES($1,$2,$3,$4::numeric,$5::date,$6) RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status",
+        [ctx.owner,trim(b.name,160),b.currencyCode,b.targetAmount,b.targetDate||null,trim(b.memo,600)||""]
       );
         return rows[0];
       });
@@ -273,11 +273,22 @@ export async function registerFinanceRoutes(app) {
         [goalId,ctx.owner]
       );
       if(!goal.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
-      if(!money(b.currentAmount,Number(goal.rows[0].minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
+      if(!money(b.currentAmount,Number(goal.rows[0].minor_units))||
+         (b.name!==undefined&&!trim(b.name,160))||
+         (b.targetAmount!==undefined&&!positive(b.targetAmount,Number(goal.rows[0].minor_units)))||
+         (b.targetDate!==undefined&&b.targetDate!==null&&b.targetDate!==""&&!isDate(b.targetDate))||
+         (b.memo!==undefined&&(typeof b.memo!=="string"||b.memo.length>600)))
+         return fail(reply,"INVALID_GOAL_UPDATE");
       const saved=await auditedWrite(ctx,"finance.goal.update","finance_goal",async db=>{
         const {rows}=await db.query(
-        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,current_amount::text,status",
-        [goalId,ctx.owner,b.currentAmount,b.status]
+        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,"+
+        "name=COALESCE($5,name),target_amount=COALESCE($6::numeric,target_amount),"+
+        "target_date=CASE WHEN $8::boolean THEN $7::date ELSE target_date END,"+
+        "memo=COALESCE($9,memo),updated_at=now() "+
+        "WHERE id=$1 AND owner_user_id=$2 "+
+        "RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status,memo",
+        [goalId,ctx.owner,b.currentAmount,b.status,b.name?trim(b.name,160):null,b.targetAmount??null,
+         b.targetDate||null,b.targetDate!==undefined,b.memo===undefined?null:trim(b.memo,600)]
       );
         return rows[0];
       });
