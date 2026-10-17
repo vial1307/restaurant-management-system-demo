@@ -48,8 +48,9 @@ export async function getFinanceFxSnapshot(pool,{allowRemote=true,now=()=>Date.n
  let cached=(await query()).rows;
  const missing=codes.some(code=>code!=="TWD"&&
   !cached.some(row=>row.currency===code&&isRecentQuote(row.observed_at,current)));
+ const due=cached.some(row=>current-Date.parse(row.observed_at)>26*60*60*1000);
  const remoteAllowed=process.env.FINANCE_FX_AUTO_REFRESH!=="false";
- if(missing&&allowRemote&&remoteAllowed&&current-lastAttemptMs>=10*60*1000){
+ if((missing||due)&&allowRemote&&remoteAllowed&&current-lastAttemptMs>=10*60*1000){
   if(!inFlight){
    lastAttemptMs=current;
    inFlight=(async()=>{
