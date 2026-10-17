@@ -1,4 +1,5 @@
 import {financeMonthlyTrend,financeLiquidityForecast,financeDonut} from "./finance-visuals.js";
+import {createFinanceMentorUI} from "./finance-mentor-ui.js";
 // Finance OS V2 is an entirely new, owner-only interface. All records remain in Finance PostgreSQL.
 const $=s=>document.querySelector(s);
 const root=$("#finance-content"),dlg=$("#finance-dialog"),form=$("#finance-form"),fields=$("#finance-fields");
@@ -38,7 +39,8 @@ function btn(name,action,css="soft",attrs=""){return '<button type="button" clas
 function card(t,body,extra="",subtitle=""){return '<section class="card"><div class="section-title"><div><h2>'+safe(t)+'</h2>'+(subtitle?'<p class="section-sub">'+safe(subtitle)+'</p>':"")+'</div>'+extra+'</div>'+body+'</section>';}
 function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Tiết kiệm"}[kind]||"Khác")+'</span>';}
 function empty(t){return '<div class="empty">'+safe(t)+'</div>';}
-function nav(tab){state.tab=tab;render();window.scrollTo(0,0);}
+const mentorUI=createFinanceMentorUI({api,safe,card,title,money,notify,onChange:()=>render(),getBuffer:()=>state.buffer});
+function nav(tab){state.tab=tab;render();window.scrollTo(0,0);if(tab==="mentor")void mentorUI.load();}
 function quoteCards(){
  const used=[...new Set([...(state.data?.accounts||[]).map(x=>x.currency_code),...(state.data?.debts||[]).map(x=>x.currency_code),...(state.data?.goals||[]).map(x=>x.currency_code),"VND","USD"])].filter(c=>c!=="TWD");
  const html=used.map(c=>{const q=quote(c);return '<span class="rate-pill"><b>'+safe(c)+'</b> · '+(q?number(q.rateToTwd,10)+" TWD":"Chưa có tỷ giá")+'</span>';}).join("");
@@ -227,6 +229,7 @@ function overview(){
  card("Kế hoạch dòng tiền theo ngày",planTable(18),btn("Xem tất cả →","goPlan","small soft"),"Số tiền kế hoạch bằng ngoại tệ được quy đổi theo tỷ giá tham chiếu.")+
  card("Dòng tiền 90 ngày tới",'<div class="chart-box">'+financeLiquidityForecast(state.advice)+'</div>',btn("Xem tư vấn","goSim","small soft"))+
  '</div><div class="stack">'+
+ card("Nghĩa vụ cần nhớ",mentorUI.brief(),'<button type="button" class="btn small soft" data-tab="mentor">Mở AI Mentor</button>')+
  card("Cảnh báo quan trọng",warningList(4))+
  card("Phân bổ chi tiêu tháng này",reportDonut())+
  '</div></div>'+
@@ -353,7 +356,7 @@ function render(){
  document.querySelectorAll("[data-tab]").forEach(b=>{b.classList.toggle("selected",b.dataset.tab===state.tab);b.setAttribute("aria-current",b.dataset.tab===state.tab?"page":"false");});
  if(!state.ready){root.innerHTML='<div class="card">Đang tải dữ liệu tài chính…</div>';return;}
  if(state.error){root.innerHTML='<div class="card error">'+safe(errorText(state.error))+' <button class="btn soft" data-action="reload">Thử tải lại</button></div>';return;}
- root.innerHTML=({overview,plan:planning,commitments,reports:reporting,simulator:scenario,settings})[state.tab]();
+ root.innerHTML=({overview,plan:planning,commitments,reports:reporting,simulator:scenario,mentor:()=>mentorUI.render(),settings})[state.tab]();
  if(state.partial.length){root.insertAdjacentHTML("afterbegin",'<div class="notice warn" style="margin-bottom:14px">Một số dữ liệu tham chiếu chưa tải được: '+safe(state.partial.join(", "))+'. Dữ liệu đã lưu không bị xóa.</div>');}
 }
 
@@ -393,7 +396,7 @@ async function refresh(){
   if(k==="payoff")state.payoff=null;
  }}
  state.ready=true;render();
- if(!state.error)void loadLinkedAnalysis(version);
+ if(!state.error){void loadLinkedAnalysis(version);void mentorUI.load({force:true});}
 }
 function showLogin(){state.ready=false;state.data=null;state.error=null;$("#finance-layout").hidden=true;$("#finance-login").hidden=false;}
 async function initialize(){
@@ -682,5 +685,5 @@ $("#finance-login-form").addEventListener("submit",async event=>{
   $("#finance-layout").hidden=false;$("#finance-login").hidden=true;event.target.reset();await refresh();
  }catch(e){error.textContent=errorText(e);error.hidden=false;}
 });
-$("#finance-logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:"{}"}).catch(()=>{});showLogin();});
+$("#finance-logout").addEventListener("click",async()=>{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:"{}"}).catch(()=>{});mentorUI.reset();showLogin();});
 await initialize();

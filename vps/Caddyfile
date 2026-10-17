@@ -108,6 +108,10 @@ finance.82.47.180.185.nip.io {
     root * /srv
     file_server
   }
+  handle /src/finance-mentor-ui.js {
+    root * /srv
+    file_server
+  }
   handle /src/personal-finance.css {
     root * /srv
     file_server

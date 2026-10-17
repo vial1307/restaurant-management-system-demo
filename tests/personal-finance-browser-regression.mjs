@@ -24,6 +24,29 @@ try{
   await page.route("**/api/finance/**",async route=>{
    const req=route.request(),url=new URL(req.url()),p=url.pathname.slice("/api/finance".length),m=req.method(),b=m!=="GET"?req.postDataJSON()||{}:{};
    counts[m+" "+p]=(counts[m+" "+p]||0)+1;
+   if(p==="/mentor/status")return respond(route,{configured:true,mode:"user_initiated_only"});
+   if(p==="/mentor/obligations"){
+    return respond(route,{asOf:"2026-10-18",
+      debts:debts.map(d=>({
+       ...d,creditor_type:d.creditor_type||"other",obligation_type:d.obligation_type||"unconfirmed",
+       minimum_due_amount:d.minimum_due_amount??null,relationship_priority:d.relationship_priority||"normal",
+       negotiation_status:d.negotiation_status||"none",next_contact_date:d.next_contact_date||null,
+       reminders_enabled:!!d.reminders_enabled,memo:d.memo||""
+      })),alerts:[],creditorLabels:{other:"Khác",bank_loan:"Ngân hàng",credit_card:"Thẻ tín dụng",
+       friend_family:"Người quen / gia đình",installment_provider:"Trả góp"},
+      obligationLabels:{fixed:"Đã cam kết đúng hạn",agreed_flexible:"Lịch linh hoạt đã thỏa thuận",unconfirmed:"Chưa xác nhận lịch trả"},
+      automaticRemindersActive:false});
+   }
+   if(p==="/mentor/conversations"&&m==="GET")return respond(route,{conversations:[]});
+   if(p==="/mentor/messages"&&m==="POST")
+    return respond(route,{conversationId:uuid(970),answer:"Cần thanh toán theo ngày đã cam kết, không coi nợ người quen tự động hoãn.",asOf:"2026-10-18",simulationOnly:true});
+   if(/^\/mentor\/debts\/[^/]+\/terms$/.test(p)&&m==="PUT"){
+    const d=debts.find(x=>x.id===p.split("/")[3]);
+    Object.assign(d,{creditor_type:b.creditorType,obligation_type:b.obligationType,
+     minimum_due_amount:b.minimumDueAmount,relationship_priority:b.relationshipPriority,
+     negotiation_status:b.negotiationStatus,next_contact_date:b.nextContactDate,reminders_enabled:b.remindersEnabled,memo:b.memo});
+    return respond(route,{terms:{id:d.id,...b}});
+   }
    if(p==="/access")return respond(route,{allowed:true});
    if(p==="/bootstrap")return respond(route,{currencies,accounts,categories,budgets:[],debts,goals,reportCurrency:"TWD",plans:[]});
    if(p==="/fx/estimates")return respond(route,{baseCurrency:"TWD",quotes:{TWD:{rateToTwd:"1",status:"base"},VND:{rateToTwd:"0.001250000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"},USD:{rateToTwd:"31.500000000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"}},source:{attribution:"Rates By Exchange Rate API"},readOnlyValuation:true,automaticCurrencyExchange:false});
@@ -141,7 +164,7 @@ try{
   });
   await page.goto(BASE+"/finance.html",{waitUntil:"domcontentloaded"});
   await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor({timeout:12000});
-  assert.equal(await page.locator(".main-nav [data-tab]").count(),5,"Only five clean finance sections should be visible");
+  assert.equal(await page.locator(".main-nav [data-tab]").count(),6,"Finance navigation includes AI Mentor");
   assert.equal(await page.locator(".fin-nav-tools").count(),0,"Legacy finance drawer must be removed");
   assert(await page.locator(".metric").count()===4);
   await page.locator('.main-nav [data-tab="plan"]').click();
@@ -250,6 +273,21 @@ try{
   assert.equal(items.length,oldItems,"Saving funds may not create a real spending row");
   await page.locator(".main-nav [data-tab='commitments']").click();
   await page.getByText("Quỹ tiết kiệm",{exact:true}).first().waitFor();
+
+  await page.locator('.main-nav [data-tab="mentor"]').click();
+  await page.getByRole("heading",{name:"AI Financial Mentor"}).waitFor();
+  await page.locator('[data-mentor-action="terms"]').first().click();
+  await page.locator('#mentor-terms-dialog [name="creditorType"]').selectOption("friend_family");
+  await page.locator('#mentor-terms-dialog [name="obligationType"]').selectOption("fixed");
+  await page.locator('#mentor-terms-dialog [name="minimumDueAmount"]').fill("5000");
+  await page.locator("#mentor-terms-dialog [type='submit']").click();
+  await page.locator("#mentor-terms-dialog").waitFor({state:"detached"});
+  assert.equal(debts[0].creditor_type,"friend_family");
+  assert.equal(debts[0].minimum_due_amount,"5000");
+  await page.locator('[data-mentor-action="example"]').first().click();
+  await page.locator('[data-mentor-action="send"]').click();
+  await page.getByText("Cần thanh toán theo ngày đã cam kết",{exact:false}).waitFor();
+  assert.equal(wroteLedger,oldPosted,"AI Mentor must not write any posted ledger transaction");
 
   await page.locator("#finance-settings").click();
   assert.match(await page.locator("#finance-content").innerText(),/Tài khoản & cài đặt/);

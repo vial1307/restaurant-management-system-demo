@@ -6,6 +6,7 @@ on:
       - "finance.html"
       - "src/personal-finance.js"
       - "src/finance-visuals.js"
+      - "src/finance-mentor-ui.js"
       - "vps/Caddyfile"
       - "tests/finance-caddy-module-contract.mjs"
       - "src/personal-finance.css"
