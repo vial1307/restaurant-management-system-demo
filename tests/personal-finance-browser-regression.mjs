@@ -5,6 +5,15 @@ const BASE=process.env.TEST_WEB_BASE||"http://127.0.0.1:3000";
 const browser=await chromium.launch({headless:true});
 const currencies=["TWD","VND","USD","JPY","EUR","CNY"].map(code=>({code,name_vi:code,symbol:code,minor_units:["USD","EUR","CNY"].includes(code)?2:0}));
 const account=(id,name,code,balance)=>({id,name,currency_code:code,balance,kind:"bank"});
+async function openFinancePage(page,tab){
+ if(["budget","report","workbench"].includes(tab)){
+   await page.locator(`.fin-nav [data-tab="${tab}"]`).click();
+ }else{
+   // Real user pathway: expand "Công cụ bổ sung", select a legacy tool.
+   await page.locator(".fin-nav-tools summary").click();
+   await page.locator('.fin-nav-tools [data-tab="'+tab+'"]').click();
+ }
+}
 const initialAccounts=[
  account("00000000-0000-4000-8000-000000000001","Ngân hàng Đài","TWD","0"),
  account("00000000-0000-4000-8000-000000000002","Ngân hàng VN","VND","0")
@@ -101,6 +110,20 @@ try {
       }else if(method==="GET"&&pathname.endsWith("/year")){
         const year=Number(url.searchParams.get("year"));
         data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),budget_twd:"0",income_twd:"0",expense_twd:"0"}))};
+      }else if(method==="POST"&&/\/accounts\/[^/]+\/reconcile$/.test(pathname)){
+        const b=route.request().postDataJSON();
+        assert.equal(route.request().headers()["x-finance-write"],"1");
+        const id=pathname.split("/").at(-2);
+        const owned=accounts.find(a=>a.id===id);
+        assert(owned,"Reconciliation account should be owned");
+        if(String(owned.balance)!==String(b.expectedBalance)){data={error:"BALANCE_CHANGED_RELOAD"};status=409;}
+        else{
+         assert(b.reason.length>=8);
+         const prev=Number(owned.balance),next=Number(b.targetBalance);
+         owned.balance=String(next);
+         data={reconciliation:{id:"00000000-0000-4000-8000-000000000088",accountId:id,
+           previousBalance:String(prev),newBalance:String(next),delta:String(next-prev)}};status=201;
+        }
       }else if(method==="POST"&&pathname.endsWith("/accounts")){
         const b=route.request().postDataJSON();
         assert.equal(route.request().headers()["x-finance-write"],"1");
@@ -184,7 +207,15 @@ try {
       await route.fulfill({status,contentType:"application/json",body:JSON.stringify(data)});
     });
     await page.goto(BASE+"/finance.html",{waitUntil:"domcontentloaded"});
-    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor({timeout:12000});
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor({timeout:12000});
+    assert.equal(await page.locator('.fin-nav > button[data-tab]').count(),3,
+      "Only the three approved dashboard areas are in primary navigation");
+    assert.equal(await page.locator('.fin-nav-tools:not([open])').count(),1,
+      "Legacy data tools must be collapsed, not deleted");
+    assert.equal(await page.locator("[data-balance-reconcile]").count(),2,
+      "Both owned wallets must be editable from the new primary plan");
+    await openFinancePage(page,"overview");
+    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
     assert((await page.locator(".fin-kpi-value").allTextContents()).every(t=>t.includes("0")),
       "No invented money values can appear before actual postings");
     await page.locator(".fin-control-summary").waitFor();
@@ -192,7 +223,7 @@ try {
       "Overview must show a readable day-specific liquidity alert from the advisor API");
     assert.equal(await page.locator('.fin-howto summary').count(),1,"Getting-started guide is available on all viewports");
     // A dedicated advisory tab must read protected API and permit 30/60/90d controls.
-    await page.locator('.fin-nav [data-tab="advisor"]').click();
+    await openFinancePage(page,"advisor");
     await page.locator("h1").filter({hasText:"Tư vấn dòng tiền"}).waitFor();
     await page.getByText("Ưu tiên xử lý thiếu hụt").waitFor();
     assert.equal(advisorCalls.length,1);
@@ -209,7 +240,7 @@ try {
     await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
     // New finance plan is backed by the existing cashflow API, not a static screenshot.
-    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await openFinancePage(page,"budget");
     await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     await page.locator(".fin-plan-table").waitFor();
     assert.equal(await page.locator(".fin-metrics-4 .fin-metric").count(),4,
@@ -220,18 +251,18 @@ try {
     assert.equal(await page.locator(".fin-plan-table tbody tr:not([hidden])").count(),0,
       "Spreadsheet search should filter by user-entered terms");
     await page.locator("[data-fin-table-filter]").fill("");
-    await page.locator('.fin-nav [data-tab="report"]').click();
+    await openFinancePage(page,"report");
     await page.locator("h1").filter({hasText:"Dòng tiền & Báo cáo"}).waitFor();
     assert.equal(await page.locator(".fin-report-charts").count(),1,
       "Trends and category chart must be rendered in reports");
     assert.equal(await page.locator("[data-report-export='csv']").count(),1);
     assert.equal(await page.locator("[data-report-print='1']").count(),1);
-    await page.locator('.fin-nav [data-tab="overview"]').click();
+    await openFinancePage(page,"overview");
 
-    await page.locator('.fin-nav [data-tab="overview"]').click();
+    await openFinancePage(page,"overview");
 
     // 12-month scenario workbench is a spreadsheet, not a second real ledger.
-    await page.locator('.fin-nav [data-tab="workbench"]').click();
+    await openFinancePage(page,"workbench");
     await page.locator("h1").filter({hasText:"Mô phỏng & Tư vấn"}).waitFor();
     assert.match(await page.locator('.fin-nav [data-tab="workbench"]').innerText(),/Mô phỏng.*Tư vấn/,
       "The navigation must describe the combined simulation and advisory capability");
@@ -274,19 +305,19 @@ try {
     assert.equal(scenarioBooks[0].settings.rows[1].linkId,scenarioBooks[0].settings.rows[2].linkId);
     assert.equal(accounts[0].balance,"0","Scenario borrowing must never post cash");
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
-    await page.locator('.fin-nav [data-tab="workbench"]').click();
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
+    await openFinancePage(page,"workbench");
     await page.locator(".fin-wb-editor tbody tr").first().waitFor();
     assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
       "Saved scenario must survive F5 through Finance DB readback");
-    await page.locator('.fin-nav [data-tab="overview"]').click();
+    await openFinancePage(page,"overview");
     await page.locator('[data-open="account"]').click();
     await page.locator('#finance-dialog [name="name"]').fill("Ví VN thêm");
     await page.locator('#finance-dialog [name="kind"]').selectOption("bank");
     await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
     await page.locator("#finance-submit").click();
     await page.locator('.fin-row').filter({hasText:"Ví VN thêm"}).waitFor();
-    await page.locator('.fin-nav [data-tab="fx"]').click();
+    await openFinancePage(page,"fx");
     await page.locator('[data-open="fxPlan"]').click();
     await page.locator('#finance-dialog [name="planDate"]').fill("2026-10-25");
     await page.locator('#finance-dialog [name="planKind"]').selectOption("remittance");
@@ -318,11 +349,11 @@ try {
     await page.locator('[data-cancel-plan]').click();
     assert.equal(plans[0].status,"cancelled");
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('h1').filter({hasText:"Tổng quan tài chính"}).waitFor();
-    await page.locator('.fin-nav [data-tab="fx"]').click();
+    await page.locator('h1').filter({hasText:"Kế hoạch tài chính"}).waitFor();
+    await openFinancePage(page,"fx");
     assert(await page.getByText("Đã cancelled").count()===1,"Reload preserves canceled FX plan");
     assert.equal(accounts[0].balance,"0");
-    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await openFinancePage(page,"goals");
     await page.locator('[data-open="goal"]').click();
     await page.locator('#finance-dialog [name="name"]').fill("Học phí");
     await page.locator('#finance-dialog [name="currencyCode"]').selectOption("TWD");
@@ -342,7 +373,7 @@ try {
     await page.locator("#finance-submit").click();
     await page.getByText("Thẻ tín dụng").first().waitFor();
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await openFinancePage(page,"goals");
     assert(await page.getByText("15.000").count()>0,"Saved goal survives F5");
     assert(await page.getByText("Thẻ tín dụng").count()>0,"Saved debt survives F5");
     assert.equal(accounts[0].balance,"0","Debt and goal planning do not move wallet funds");
@@ -354,7 +385,7 @@ try {
     await page.locator("#finance-submit").click();
     await page.getByText("Phân bổ tháng: NT$8.000").waitFor();
     assert.equal(accounts[0].balance,"0","Goal allocation must not debit wallet");
-    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await openFinancePage(page,"budget");
     await page.getByText("Quỹ mục tiêu dự kiến").waitFor();
     await page.getByText("Quỹ mục tiêu dự kiến").locator("..").getByText("NT$8.000").waitFor();
     // The allocation button on Planning edits the same row, never creates a second copy.
@@ -365,7 +396,7 @@ try {
     assert.equal(goalFunds.length,1,"Goal allocation upsert must not double-count one goal/month");
     await page.getByText("Quỹ mục tiêu dự kiến").locator("..").getByText("NT$9.000").waitFor();
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await openFinancePage(page,"goals");
     await page.getByText("Phân bổ tháng: NT$9.000").waitFor();
     assert.equal(Number(goals[0].current_amount),15000,"Manual savings progress remains independent of monthly allocation");
     assert.equal(accounts[0].balance,"0","Goal funding never moves wallet balance");
@@ -381,7 +412,7 @@ try {
     // Inject server-owned test fixture balance, then verify posting decrements it.
     accounts[1].balance="2000000";
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('.fin-nav [data-tab="goals"]').click();
+    await openFinancePage(page,"goals");
     await page.locator('[data-pay-debt]').click();
     await page.locator('#finance-dialog [name="accountId"]').selectOption(initialAccounts[1].id);
     await page.locator('#finance-dialog [name="principalPaid"]').fill("1000000");
@@ -390,7 +421,7 @@ try {
     await page.getByText("Các khoản trả nợ đã ghi sổ").waitFor();
     assert.equal(accounts[1].balance,"1000000","Posted payment must debit wallet exactly once");
     assert.equal(debts[0].outstanding_amount,"11000000","Posted principal reduces debt");
-    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await openFinancePage(page,"budget");
     await page.locator('[data-open="cashIncome"]').click();
     await page.locator('#finance-dialog [name="label"]').fill("Lương dự kiến");
     await page.locator('#finance-dialog [name="amountTwd"]').fill("60000");
@@ -405,7 +436,7 @@ try {
     await page.locator('#finance-dialog [name="amountTwd"]').fill("12000");
     await page.locator("#finance-submit").click();
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await openFinancePage(page,"budget");
     await page.getByText("Lương dự kiến").waitFor();
     assert.equal(cashItems.length,2,"Forecast data persists over refresh");
     assert.equal(Number(cashItems[0].amount_twd),12000,"Edited amount persists after F5");
@@ -413,7 +444,7 @@ try {
     await page.locator('[data-delete-cashflow]').first().click();
     await page.waitForFunction(()=>document.querySelectorAll("[data-delete-cashflow]").length===1);
     assert.equal(cashItems.length,1,"Deleting a forecast item persists");
-    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await openFinancePage(page,"budget");
     await page.locator('[data-period="year"]').click();
     await page.locator('h2').filter({hasText:"Tổng hợp năm"}).waitFor();
     const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,view:innerWidth}));
@@ -442,6 +473,24 @@ try {
       });
       console.error("FINANCE_LAYOUT_OVERFLOW_OFFENDERS",JSON.stringify({viewport,size,overflowing,metrics}));
     }
+    // Balance edit is a real change to a wallet, never an income/expense or a fabricated new balance.
+    await openFinancePage(page,"budget");
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
+    const firstWallet=accounts[0],prior=Number(firstWallet.balance);
+    await page.locator('[data-balance-reconcile="'+firstWallet.id+'"]').click();
+    await page.locator('#finance-dialog [name="expectedBalance"]').waitFor();
+    assert.equal(await page.locator('#finance-dialog [name="expectedBalance"]').inputValue(),String(prior));
+    await page.locator('#finance-dialog [name="targetBalance"]').fill(String(prior+275));
+    await page.locator('#finance-dialog [name="reason"]').fill("Đối soát số dư thực tế");
+    assert.match(await page.locator("[data-fin-balance-diff]").innerText(),/Cộng 275 TWD/);
+    await page.locator("#finance-submit").click();
+    await page.locator('.fin-wallet-value').first().getByText("NT$275",{exact:false}).count().catch(()=>{});
+    assert.equal(Number(accounts[0].balance),prior+275);
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
+    assert.equal(Number(accounts[0].balance),prior+275,"Wallet reconciliation survives F5");
+    assert.equal(await page.locator('.fin-nav > button[data-tab]').count(),3);
+
     assert(size.doc<=size.view+1,"Finance mobile horizontal overflow "+JSON.stringify({viewport,size}));
     assert.deepEqual(pageErrors,[],"Page JavaScript errors "+JSON.stringify({viewport,pageErrors}));
     await context.close();
@@ -478,9 +527,9 @@ try {
   await authPage.locator('#finance-login-form [name="username"]').fill("owner");
   await authPage.locator('#finance-login-form [name="password"]').fill("test");
   await authPage.locator('#finance-login-form button[type="submit"]').click();
-  await authPage.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+  await authPage.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
   await authPage.reload({waitUntil:"domcontentloaded"});
-  await authPage.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+  await authPage.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
   await authPage.locator("#finance-logout").click();
   await authPage.locator("#finance-login-form").waitFor({state:"visible"});
   assert.deepEqual(authErrors,[],"Authenticated Finance browser has no uncaught page errors");

@@ -306,5 +306,65 @@ assert.equal(Number(afterSimulation.data.debts.find(x=>x.id===debt.id).outstandi
   Number(afterConcurrency.data.debts.find(x=>x.id===debt.id).outstanding_amount),
   "Scenario borrowing and repayment cannot change existing actual debt principal");
 
+
+// Explicit real-balance reconciliation must be append-only, owned and race-safe.
+const reconPath="/finance/accounts/"+bank.id+"/reconcile";
+const reconciliation={expectedBalance:"40900",targetBalance:"40250",reason:"Đối soát số dư từ ứng dụng ngân hàng",idempotencyKey:key()};
+const beforeReconcile=await request("/finance/overview?month="+monthly,{cookie:owner});
+assert.equal((await request(reconPath,{method:"POST",body:reconciliation})).status,401,
+ "Anonymous cannot edit private wallet balances");
+assert.equal((await request(reconPath,{method:"POST",cookie:stranger,body:reconciliation})).status,403,
+ "Other Kitchen/Super Admin users cannot edit Finance balances");
+assert.equal((await request(reconPath,{method:"POST",cookie:owner,write:false,body:reconciliation})).status,403,
+ "Mutations require Finance write header");
+assert.equal((await request(reconPath,{method:"POST",cookie:owner,
+ body:{...reconciliation,reason:"test"}})).status,400,
+ "A meaningful reason is mandatory");
+assert.equal((await request(reconPath,{method:"POST",cookie:owner,
+ body:{...reconciliation,targetBalance:"40.125"}})).status,400,
+ "TWD balance must obey zero-minor-unit precision");
+const savedReconcile=await request(reconPath,{method:"POST",cookie:owner,body:reconciliation});
+assert.equal(savedReconcile.status,201,JSON.stringify(savedReconcile.data));
+assert.equal(Number(savedReconcile.data.reconciliation.delta),-650);
+let reconciled=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(reconciled.data.accounts.find(x=>x.id===bank.id).balance),40250);
+assert.equal(Number(reconciled.data.accounts.find(x=>x.id===vnd.id).balance),6850000);
+assert.equal((await request(reconPath,{method:"POST",cookie:owner,body:reconciliation})).status,409,
+ "Replaying a balance adjustment must not post it again");
+assert.equal((await request(reconPath,{method:"POST",cookie:owner,
+ body:{...reconciliation,idempotencyKey:key(),targetBalance:"39500"}})).status,409,
+ "Concurrent stale balance read must not overwrite an intervening transaction");
+const afterReconcile=await request("/finance/overview?month="+monthly,{cookie:owner});
+assert.deepEqual(afterReconcile.data.flow,beforeReconcile.data.flow,
+ "Manual balance adjustments are not income or expenses");
+const monthlyRows=afterReconcile.data.events;
+assert(monthlyRows.some(x=>x.kind==="adjustment"&&x.description.includes("Đối soát số dư")),
+ "Balance edits leave a visible immutable reconciliation history");
+const vndReconPath="/finance/accounts/"+vnd.id+"/reconcile";
+assert.equal((await request(vndReconPath,{method:"POST",cookie:owner,
+ body:{expectedBalance:"6850000",targetBalance:"6850000.5",reason:"Đối soát tài khoản VND theo sổ",idempotencyKey:key()}})).status,400,
+ "VND precision must be verified separately");
+const settledAfter=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(settledAfter.data.debts.find(x=>x.id===debt.id).outstanding_amount),11000000,
+ "Correcting a cash wallet never modifies actual creditor outstanding principal");
+const verify=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),
+ database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
+await verify.connect();
+try{
+ const reconciliationEvent=await verify.query(
+  "SELECT e.id FROM finance.events e WHERE e.owner_user_id=$1 AND e.idempotency_key=$2",
+  [process.env.FINANCE_OWNER_USER_ID,reconciliation.idempotencyKey]);
+ assert.equal(reconciliationEvent.rows.length,1);
+ const audited=await verify.query(
+  "SELECT metadata FROM finance.audit_events WHERE owner_user_id=$1 AND action='finance.account.balance_reconciled' AND entity_id=$2",
+  [process.env.FINANCE_OWNER_USER_ID,reconciliationEvent.rows[0].id]);
+ assert.equal(audited.rows.length,1);
+ assert.equal(Number(audited.rows[0].metadata.difference),-650);
+ let immutableCorrection=false;
+ try{await verify.query("DELETE FROM finance.events WHERE id=$1",[reconciliationEvent.rows[0].id]);}
+ catch(error){immutableCorrection=error.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
+ assert(immutableCorrection,"Balance reconciliation cannot be erased after posting");
+}finally{await verify.end();}
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 

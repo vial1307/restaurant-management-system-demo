@@ -12,7 +12,7 @@ const fieldRoot=document.querySelector("#finance-fields");
 const form=document.querySelector("#finance-form");
 const tabs=[...document.querySelectorAll(".fin-nav [data-tab]")];
 const nowMonth=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit"}).format(new Date()).slice(0,7);
-const state={tab:"overview",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0};
+const state={tab:"budget",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0};
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=(v,dec=0)=>Number(v||0).toLocaleString("vi-VN",{minimumFractionDigits:0,maximumFractionDigits:Math.max(0,Math.min(6,dec))});
 const moneyLabel=(v,c="TWD")=>(c==="TWD"?"NT$":c+" ")+num(v,c==="USD"||c==="EUR"||c==="CNY"?2:0);
@@ -279,7 +279,7 @@ function renderBudget(){
   return heading("Kế hoạch tài chính · Theo năm","Đối chiếu tổng ngân sách thực chi và phân bổ quỹ từng tháng từ dữ liệu đã ghi.",periodInput())+
     '<div class="fin-toolbar fin-page-toolbar"><button class="fin-btn secondary" type="button" data-period="month">← Về kế hoạch tháng</button>'+
     button("+ Ngân sách","budget")+button("+ Danh mục","category",true)+'</div>'+
-    renderYearBudget()+renderYearCashflow();
+    panel("Tài khoản & chỉnh số dư",renderAccountManagement(),"Giữ nguyên lịch sử giao dịch khi đối soát số dư thực tế.")+renderYearBudget()+renderYearCashflow();
  }
  const s=state.cashflow?.summary||{},planned=Number(s.planned_net_twd)||0;
  const debt=Number(s.planned_debt_fund_twd)||0,goal=Number(s.planned_goal_fund_twd)||0;
@@ -308,6 +308,7 @@ function renderBudget(){
    finMetric("Thu nhập dự kiến",moneyLabel(s.planned_income_twd||0),"green","Theo lịch đã nhập trong tháng")+
    finMetric("Chi dự kiến + quỹ nợ",moneyLabel(Number(s.planned_expense_twd||0)+debt),"orange","Chưa gồm quỹ mục tiêu")+
    finMetric("Còn phân bổ theo kế hoạch",moneyLabel(planned),"purple","Thu - Chi - Nợ - Mục tiêu")+'</div>'+
+  panel("Tài khoản & số dư thực tế",renderAccountManagement(),"Chỉnh số dư của từng ví; số dư TWD và ngoại tệ được quản lý riêng.")+
   '<div class="fin-dash-layout">'+
    '<div class="fin-dash-main">'+
     panel("Bảng kế hoạch theo tháng",renderFinancePlanTable(),"Có thể sửa các ô kế hoạch; các khoản công nợ & mục tiêu điều chỉnh từ mục tương ứng.")+
@@ -317,9 +318,42 @@ function renderBudget(){
     panel("Kế hoạch 3 tháng tới",threeMonth)+
     panel("Quỹ & phân bổ kế hoạch",renderFinanceAllocationActions())+
     panel("Ngân sách theo danh mục",renderBudgetCategories())+
+    renderFinanceAdvancedTools()+
    '</div>'+renderPlanAlertSummary()+
    '</div>';
 }
+function renderAccountManagement(){
+ const accounts=state.data?.accounts||[];
+ const rowButtons=accounts.length?accounts.map(a=>
+  '<div class="fin-wallet-row"><div class="fin-wallet-info"><strong>'+esc(a.name)+'</strong><small>'+esc(a.kind)+' · '+esc(a.currency_code)+'</small></div>'+
+  '<strong class="fin-wallet-value">'+esc(moneyLabel(a.balance,a.currency_code))+'</strong>'+
+  '<button type="button" class="fin-wallet-edit" data-balance-reconcile="'+esc(a.id)+'">Chỉnh số dư</button></div>'
+ ).join(""):'<p class="fin-muted">Chưa có tài khoản. Bạn có thể tạo ví tiền mặt hoặc tài khoản ngân hàng.</p>';
+ const actions='<div class="fin-toolbar fin-wallet-toolbar">'+
+  button("+ Tài khoản","account")+
+  button("+ Thu nhập thật","income",true)+
+  button("+ Chi tiêu thật","expense",true)+
+  button("Chuyển giữa ví","transfer",true)+
+  button("Đổi ngoại tệ","fxPost",true)+'</div>';
+ return '<div class="fin-wallet-list">'+rowButtons+'</div>'+actions+
+  '<p class="fin-note">Chỉnh số dư sẽ tạo một bút toán chênh lệch có lý do và lưu dấu kiểm toán. Không xóa lịch sử, không ghi thành thu nhập/chi tiêu, không tự chuyển tiền thật.</p>';
+}
+function renderFinanceAdvancedTools(){
+ const section='<div class="fin-tools-grid">'+
+ '<div><h3>Mục tiêu & công nợ</h3><div class="fin-toolbar">'+
+  button("+ Mục tiêu","goal",true)+button("+ Khoản nợ","debt",true)+
+  '<button class="fin-btn secondary" type="button" data-go-finance-tab="goals">Quản lý chi tiết</button></div></div>'+
+ '<div><h3>Ngoại tệ & lịch chuyển tiền</h3><div class="fin-toolbar">'+
+  button("+ Lịch ngoại tệ","fxPlan",true)+
+  '<button class="fin-btn secondary" type="button" data-go-finance-tab="fx">Lịch và giao dịch</button></div></div>'+
+ '<div><h3>Danh mục & ngân sách</h3><div class="fin-toolbar">'+
+  button("+ Danh mục","category",true)+button("+ Ngân sách","budget",true)+
+  '<button type="button" class="fin-btn secondary" data-go-finance-tab="ledger">Lịch sử chi tiết</button></div></div>'+
+ '</div>';
+ return '<details class="fin-advanced-tools"><summary>Quản lý dữ liệu & công cụ nâng cao <span>⌄</span></summary>'+
+  '<p class="fin-note">Tất cả dữ liệu và chức năng cũ vẫn được giữ; chỉ thu gọn điều hướng.</p>'+section+'</details>';
+}
+
 function renderFinanceAllocationActions(){
  const goals=state.data?.goals||[],debts=state.data?.debts||[],cf=state.cashflow||{},s=cf.summary||{};
  const header='<div class="fin-fund-summary">'+
@@ -360,16 +394,16 @@ function renderReport(){
    '<td><div class="fin-ratio"><span>'+esc(budget>0?Math.round(actual/budget*100)+"%":"Chưa lập")+'</span>'+
    '<div class="fin-progress"><span style="width:'+Math.min(100,budget>0?actual/budget*100:0)+'%;background:'+(actual>budget?'#f17678':'#24b891')+'"></span></div></div></td></tr>';
  }).join("");
- const history=(state.overview?.events||[]).filter(e=>["income","expense","remittance","fx","transfer"].includes(e.kind));
+ const history=(state.overview?.events||[]).filter(e=>["income","expense","remittance","fx","transfer","adjustment"].includes(e.kind));
  const ledger=history.map(e=>{
   const t=new Date(e.occurred_at).toLocaleDateString("vi-VN",{timeZone:"Asia/Taipei"});
   const twdEntries=(e.entries||[]).filter(x=>x.currency==="TWD");
   const credit=twdEntries.filter(x=>Number(x.amount)>0).reduce((n,x)=>n+Number(x.amount),0);
   const debit=twdEntries.filter(x=>Number(x.amount)<0).reduce((n,x)=>n+Math.abs(Number(x.amount)),0);
   return '<tr><td>'+esc(t)+'</td><td><strong>'+esc(e.description||e.kind)+'</strong></td><td>'+
-   esc(({income:"Thu nhập",expense:"Chi tiêu",remittance:"Chuyển ra ngoài",fx:"Ngoại tệ",transfer:"Chuyển nội bộ"})[e.kind])+'</td>'+
+   esc(({income:"Thu nhập",expense:"Chi tiêu",remittance:"Chuyển ra ngoài",fx:"Ngoại tệ",transfer:"Chuyển nội bộ",adjustment:"Đối soát số dư"})[e.kind])+'</td>'+
    '<td class="fin-right">'+(credit?finMoneyCell(credit,false):"—")+'</td><td class="fin-right">'+(debit?finMoneyCell(debit,true):"—")+
-   '</td><td><small>'+esc(e.kind==="transfer"?"Không phải chi tiêu":e.kind==="fx"?"Đổi ngoại tệ, không phải chi tiêu":"Đã ghi sổ")+'</small></td></tr>';
+   '</td><td><small>'+esc(e.kind==="transfer"?"Không phải chi tiêu":e.kind==="fx"?"Đổi ngoại tệ, không phải chi tiêu":e.kind==="adjustment"?"Không tính vào thu nhập / chi tiêu":"Đã ghi sổ")+'</small></td></tr>';
  }).join("");
  const warnings=rows.filter(x=>Number(x.actual_twd)>Number(x.budget_twd)&&Number(x.budget_twd)>0).sort((a,b)=>
   (Number(b.actual_twd)-Number(b.budget_twd))-(Number(a.actual_twd)-Number(a.budget_twd))).slice(0,4);
@@ -398,6 +432,8 @@ function renderReport(){
       (spending||'<tr><td colspan="5" class="fin-table-empty">Chưa có dữ liệu chi tiêu theo danh mục.</td></tr>')+'</tbody></table></div>')+
     panel("Điểm cần chú ý",notice)+
    '</div>'+
+   panel("Tài khoản & chỉnh số dư",renderAccountManagement(),"Số dư hiện tại lấy từ Finance Database.")+
+   renderFinanceAdvancedTools()+
    panel("Giao dịch chi tiết đã ghi",'<div class="fin-table-scroll"><table class="fin-data-table"><thead><tr>'+
      '<th>Ngày</th><th>Nội dung</th><th>Loại</th><th>Tiền vào TWD</th><th>Tiền ra TWD</th><th>Ghi chú</th></tr></thead><tbody>'+
      (ledger||'<tr><td colspan="6" class="fin-table-empty">Chưa có giao dịch trong kỳ.</td></tr>')+'</tbody></table></div>',
@@ -889,6 +925,21 @@ function showForm(kind,selectedId=null){
   title="Thêm tài khoản / ví";fields=input("name","Tên tài khoản","text","","Ví tiền mặt / ngân hàng")+
    selectField("kind","Loại tài khoản",[{value:"cash",label:"Tiền mặt"},{value:"bank",label:"Ngân hàng"},{value:"ewallet",label:"Ví điện tử"},{value:"other",label:"Khác"}])+
    selectField("currencyCode","Đơn vị tiền tệ",currencyChoices());
+ }else if(kind==="balanceReconcile"){
+  const wallet=accounts.find(a=>a.id===selectedId);
+  if(!wallet)return;
+  form.dataset.reconcileAccountId=wallet.id;
+  form.dataset.reconcileCurrency=wallet.currency_code;
+  const minor=Number((state.data.currencies||[]).find(c=>c.code===wallet.currency_code)?.minor_units??0);
+  const posted=String(wallet.balance).replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
+  form.dataset.reconcileMinor=String(minor);
+  title="Chỉnh số dư · "+wallet.name;
+  fields='<p class="fin-balance-description">Đối soát số dư thực tế. Hệ thống tạo một giao dịch điều chỉnh chênh lệch, không sửa hay xóa bút toán cũ.</p>'+
+   '<label>Số dư đang ghi ('+esc(wallet.currency_code)+')<input type="text" name="expectedBalance" readonly value="'+esc(posted)+'"></label>'+
+   input("targetBalance","Số dư đúng hiện tại ("+wallet.currency_code+")","text",posted)+
+   '<p class="fin-balance-diff" data-fin-balance-diff>Chênh lệch sẽ được tính theo số dư hiện tại.</p>'+
+   input("reason","Lý do đối soát (ít nhất 8 ký tự)","text","","Kiểm tra số dư ngân hàng / tiền mặt")+
+   note("Mỗi lần chỉnh số dư đều được lưu vào lịch sử điều chỉnh. Nếu số dư thay đổi do thiết bị khác, hệ thống sẽ yêu cầu tải lại trước khi lưu.");
  }else if(kind==="category"){
   title="Thêm danh mục";fields=input("name","Tên danh mục")+
    selectField("kind","Loại danh mục",[{value:"expense",label:"Chi tiêu"},{value:"income",label:"Thu nhập"}]);
@@ -1012,7 +1063,8 @@ async function submitForm(event){
   goal:"/goals",debt:"/debts",goalProgress:"/goals/"+form.dataset.goalId,
   cashIncome:"/cashflow/items",cashExpense:"/cashflow/items",cashEdit:"/cashflow/items/"+form.dataset.cashflowId,
   debtFund:"/debt-funds",goalFund:"/goal-funds",debtPayment:"/debt-payments",
-  income:"/transactions",expense:"/transactions",transfer:"/transactions",fxPost:"/transactions",opening:"/transactions"
+  income:"/transactions",expense:"/transactions",transfer:"/transactions",fxPost:"/transactions",opening:"/transactions",
+  balanceReconcile:"/accounts/"+encodeURIComponent(form.dataset.reconcileAccountId||"")+"/reconcile"
  }[kind];
  if(!path)return;
  let body=data;
@@ -1020,6 +1072,8 @@ async function submitForm(event){
  if(kind==="debtFund")body={...data,month:state.month,debtId:form.dataset.debtId};
  if(kind==="goalFund")body={...data,month:state.month,goalId:form.dataset.goalId};
  if(kind==="debtPayment")body={...data,debtId:form.dataset.debtId,idempotencyKey:form.dataset.idempotencyKey};
+ if(kind==="balanceReconcile")body={targetBalance:data.targetBalance,expectedBalance:data.expectedBalance,
+  reason:data.reason,idempotencyKey:form.dataset.idempotencyKey};
  if(["income","expense","transfer","fxPost","opening"].includes(kind)){
    body={...data,kind:kind==="fxPost"?"fx":kind==="opening"?"adjustment":kind,idempotencyKey:form.dataset.idempotencyKey,occurredAt:new Date().toISOString()};
    if(!data.toTwdRate)delete body.toTwdRate;
@@ -1039,7 +1093,9 @@ async function submitForm(event){
      flash("Database đã xác nhận lưu nhưng chưa tải lại được. Không gửi lại giao dịch; hãy tải lại trang.");
    }
  }catch(error){
-   if(error?.message==="FINANCE_DUPLICATE_REQUEST" || error?.message==="FINANCE_DUPLICATE"){
+   if(kind==="balanceReconcile"&&error?.message==="BALANCE_CHANGED_RELOAD"){
+     flash("Số dư đã thay đổi trên Database. Tải lại để đối soát trên số dư mới.");await refresh().catch(()=>{});
+   }else if(error?.message==="FINANCE_DUPLICATE_REQUEST" || error?.message==="FINANCE_DUPLICATE"){
      try {await refresh();}catch{}
      flash("Mã giao dịch đã được dùng. Kiểm tra lịch sử; hệ thống không ghi lại lần thứ hai.");
    }else{
@@ -1066,8 +1122,10 @@ logoutButton.addEventListener("click",async()=>{
   state.data=null;state.overview=null;state.loading=false;
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
-tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();window.scrollTo(0,0);if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();if(state.tab==="report"&&(state.year?.year!==Number(state.month.slice(0,4))))void loadYear();if(state.tab==="budget"&&state.yearCashflow?.year!==Number(state.month.slice(0,4)))void loadYear();}));
+tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;document.querySelector("#fin-advanced").open=false;render();window.scrollTo(0,0);if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();if(state.tab==="report"&&(state.year?.year!==Number(state.month.slice(0,4))))void loadYear();if(state.tab==="budget"&&state.yearCashflow?.year!==Number(state.month.slice(0,4)))void loadYear();}));
 root.addEventListener("click",async event=>{
+ const reconcileButton=event.target.closest("[data-balance-reconcile]");
+ if(reconcileButton){showForm("balanceReconcile",reconcileButton.dataset.balanceReconcile);return;}
  const range=event.target.closest("[data-fin-forecast-days]");
  if(range){
    const nextDays=Number(range.dataset.finForecastDays);
@@ -1112,7 +1170,7 @@ root.addEventListener("click",async event=>{
  }
 
  const go=event.target.closest("[data-go-finance-tab]");
- if(go){state.tab=go.dataset.goFinanceTab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();return;}
+ if(go){state.tab=go.dataset.goFinanceTab;document.querySelector("#fin-advanced").open=false;render();window.scrollTo(0,0);if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();return;}
  const adviceButton=event.target.closest("[data-advice-refresh]");
  if(adviceButton){
    const days=Number(root.querySelector("#fin-advice-days")?.value);
@@ -1164,6 +1222,29 @@ root.addEventListener("click",async event=>{
 root.addEventListener("toggle",event=>{
  if(event.target.matches?.("[data-fin-methodology]"))workbookState.methodologyOpen=event.target.open;
 },true);
+fieldRoot.addEventListener("input",event=>{
+ if(!event.target.matches('[name="targetBalance"]')||dialog.dataset.formKind!=="balanceReconcile")return;
+ const before=String(fieldRoot.querySelector('[name="expectedBalance"]')?.value||"0");
+ const after=String(event.target.value).trim();
+ const decimals=Number(form.dataset.reconcileMinor||0);
+ const read=value=>{
+  if(!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value))return null;
+  const [whole,frac=""]=value.split(".");
+  if(frac.length>decimals)return null;
+  const negative=whole.startsWith("-");
+  const abs=negative?whole.slice(1):whole;
+  const number=BigInt(abs)*10n**BigInt(decimals)+BigInt((frac+"0".repeat(decimals)).slice(0,decimals)||"0");
+  return negative?-number:number;
+ };
+ const a=read(before),b=read(after),result=fieldRoot.querySelector("[data-fin-balance-diff]");
+ if(!result)return;
+ if(a===null||b===null){result.textContent="Nhập số tiền hợp lệ theo đơn vị tiền tệ.";return;}
+ const diff=b-a,currency=form.dataset.reconcileCurrency;
+ const units=10n**BigInt(decimals),abs=diff<0n?-diff:diff;
+ result.textContent=(diff>0n?"Cộng ":diff<0n?"Trừ ":"Không thay đổi ")+
+   (abs/units).toString()+(decimals?"."+(abs%units).toString().padStart(decimals,"0"):"")+" "+currency+
+   " qua bút toán điều chỉnh.";
+});
 root.addEventListener("input",event=>{
  if(event.target.matches("[data-fin-table-filter]")){
    const term=event.target.value.trim().toLocaleLowerCase("vi");
