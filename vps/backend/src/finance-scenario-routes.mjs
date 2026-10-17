@@ -1,3 +1,4 @@
+import {buildDebtRepaymentAdvice} from "./finance-debt-repayment-advisor.mjs";
 import {getFinanceFxSnapshot} from "./finance-fx-valuation.mjs";
 import {priceFinanceFund,missingFinanceFundQuotes} from "./finance-fund-valuation.mjs";
 import {addDays,sourceEvents,simulateScenario,validateScenario,dateOk} from "./finance-scenario-engine.mjs";
@@ -17,7 +18,7 @@ async function sources(pool,owner,asOf,through){
   pool.query("SELECT f.goal_id,g.name AS goal_name,g.target_date::text,f.month_date::text,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,g.currency_code FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date",[owner,first,last]),
   pool.query("SELECT debt_id,payment_date::text,COALESCE(base_amount_twd,0)::text AS base_amount_twd FROM finance.debt_payments WHERE owner_user_id=$1 AND payment_date >= $2::date AND payment_date <= $3::date + interval '1 month'",[owner,first,last]),
   pool.query("SELECT plan_date::text,plan_kind,status,from_currency,to_currency,source_amount::text,expected_fee::text FROM finance.fx_plans WHERE owner_user_id=$1 AND plan_date BETWEEN $2::date AND $3::date AND status='planned'",[owner,asOf,through]),
-  pool.query("SELECT d.id,d.name,d.currency_code,d.annual_interest_rate::text,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.name",[owner])
+  pool.query("SELECT d.id,d.name,d.currency_code,d.due_date::text,d.annual_interest_rate::text,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.name",[owner])
  ]);
  const fx=await getFinanceFxSnapshot(pool);
  const pricedDebt=debtFunds.rows.map(x=>priceFinanceFund(x,fx));
@@ -31,6 +32,9 @@ async function sources(pool,owner,asOf,through){
    fxPlans:fxPlans.rows,debts:debts.rows});
  source.warnings.push(...missing.map(x=>"Quỹ "+x.name+" ("+x.currency+") đang thiếu tỷ giá tham chiếu; không tính vào TWD dự báo."));
  source.unconvertedFunds=missing;
+ source.fxQuotes=fx.quotes;
+ source.allDebts=debts.rows;
+ source.debtFundSchedules=pricedDebt.filter(x=>x.planned_twd!==null);
  return source;
 }
 export function registerFinanceScenarioRoutes(app,{authorized,fail,databaseError,auditedWrite,id}){
@@ -52,7 +56,10 @@ export function registerFinanceScenarioRoutes(app,{authorized,fail,databaseError
    const source=await sources(ctx.pool,ctx.owner,asOf,through);
    const projection=simulateScenario({asOf,source,scenario});
    reply.header("Cache-Control","private, no-store");
-   return {projection,scenario,sourceTag:"finance_postgresql",saved:false};
+   const repaymentAdvice=buildDebtRepaymentAdvice({
+     projection,debts:source.allDebts,debtFunds:source.debtFundSchedules,
+     quotes:source.fxQuotes,cashBufferTwd:scenario.bufferTwd});
+   return {projection,repaymentAdvice,scenario,sourceTag:"finance_postgresql",saved:false};
   }catch(error){
    if(/^(INVALID_SCENARIO|LOAN_REPAYMENT|SCENARIO_DATE)/.test(error.message))return fail(reply,error.message);
    return databaseError(req,reply,error);
