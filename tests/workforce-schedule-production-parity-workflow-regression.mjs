@@ -14,7 +14,9 @@ assert.match(workflow, /group: kitchen-os-production-schedule-parity/, "parity m
 assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/, "parity audit must require successful deploy");
 assert.match(workflow, /github\.event\.workflow_run\.head_branch == 'main'/, "parity audit must only follow main deploys");
 assert.match(workflow, /github\.event_name == 'push'/, "parity job must permit the workflow-only push trigger");
-assert.match(workflow, /workforce-schedule-backfill\.mjs --parity/, "production parity must run read-only parity mode");
+const verifier=fs.readFileSync(path.join(ROOT,"vps/scripts/production-postdeploy-verify.sh"),"utf8");
+assert(workflow.includes("kitchen-os-verify workforce-parity"),"production parity must use sealed read-only command");
+assert(verifier.includes('args+=("--parity")'),"fixed schedule runner must receive parity flag");
 assert.doesNotMatch(workflow, /--apply/, "production parity workflow must never apply backfill writes");
 assert.doesNotMatch(workflow, /backup\.sh/, "read-only parity workflow must not create a write/backfill backup path");
 assert.match(workflow, /test "\$ACTUAL_RELEASE" = "\$REMOTE_RELEASE"/, "parity must verify live release matches VPS repo");
