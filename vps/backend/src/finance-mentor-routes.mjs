@@ -60,7 +60,7 @@ async function requestOpenAI(input){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),25000);
  try{
-  const model=process.env.FINANCE_AI_MODEL||"gpt-5-mini";
+  const model=process.env.FINANCE_AI_MODEL||"gpt-5.6-terra";
   const response=await fetch("https://api.openai.com/v1/responses",{
    method:"POST",signal:controller.signal,
    headers:{"Content-Type":"application/json",Authorization:"Bearer "+process.env.OPENAI_API_KEY},
