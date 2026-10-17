@@ -36,7 +36,30 @@ try{
    if(p==="/advisor")return respond(route,{asOf:"2026-10-17",through:"2026-11-15",days:30,startingBalanceTwd:"30000",
      entries:[{date:"2026-10-30",kind:"income",source:"cashflow",label:"Lương",amountTwd:"50000",projectedBalanceTwd:"80000"}],recommendations:[{title:"Giữ quỹ dự phòng",detail:"Đối chiếu tiền lương và khoản chi trước khi cam kết."}],warnings:[],bufferTwd:"0"});
    if(p==="/workbench"&&m==="GET")return respond(route,{scenarios:scenarioBooks,asOf:"2026-10-17"});
-   if(p==="/workbench/preview"&&m==="POST")return respond(route,{projection:{endingTwd:"40000",minimumTwd:"28000",minimumAdditionalIncomePerPaydayTwd:"0",warnings:[],earliestRisk:null},scenario:b.scenario});
+   if(p==="/workbench/preview"&&m==="POST"){
+    // A representative read-only server forecast assembled from exactly the
+    // same persisted monthly plan and debt fund mock data used by each tab.
+    const endMonth=String(new Date(Date.UTC(2026,9+(b.scenario?.months||3),0)).toISOString()).slice(0,7);
+    const forthcoming=[
+     ...items.filter(x=>x.month_date.slice(0,7)<=endMonth).map(x=>({
+       date:x.month_date.slice(0,7)+"-"+String(x.due_day||30).padStart(2,"0"),label:x.label,kind:x.kind,
+       source:"cashflow",amountTwd:String(Number(x.amount_twd)*(x.kind==="income"?1:-1))})),
+     ...funds.filter(x=>x.month_date.slice(0,7)<=endMonth).map(x=>({
+       date:x.month_date.slice(0,7)+"-30",label:"Quỹ nợ · "+x.debt_name,
+       source:"debt_fund",kind:"debt",amountTwd:String(-Number(x.planned_twd))}))
+    ].filter(x=>x.date>="2026-10-17").sort((a,b)=>a.date.localeCompare(b.date)||
+       (Number(b.amountTwd)>0?1:0)-(Number(a.amountTwd)>0?1:0));
+    let current=Number(accounts.find(a=>a.id===T).balance),min=current,firstGap=null;
+    const timeline=forthcoming.map(x=>{
+      current+=Number(x.amountTwd);min=Math.min(min,current);
+      if(current<0&&!firstGap)firstGap={date:x.date,gapTwd:String(-current),label:x.label};
+      return {...x,balanceTwd:String(current)};
+    });
+    return respond(route,{projection:{asOf:"2026-10-17",through:endMonth+"-30",
+      startingBalanceTwd:accounts.find(a=>a.id===T).balance,
+      endingTwd:String(current),minimumTwd:String(min),bufferTwd:"0",
+      minimumAdditionalIncomePerPaydayTwd:"0",warnings:[],earliestRisk:firstGap,timeline},scenario:b.scenario});
+   }
    if(p==="/workbench/scenarios"&&m==="POST"){scenarioBooks.push({id:next(),name:b.scenario.name,settings:b.scenario,updated_at:"2026-10-17"});return respond(route,{scenario:scenarioBooks.at(-1)},201);}
    if(p==="/accounts"&&m==="POST"){const a={id:next(),name:b.name,kind:b.kind,currency_code:b.currencyCode,balance:"0"};accounts.push(a);return respond(route,{account:a},201);}
    if(/^\/accounts\/[^/]+\/reconcile$/.test(p)&&m==="POST"){
@@ -102,9 +125,35 @@ try{
   await page.locator('#finance-fields [name="plannedAmount"]').fill("10000000");
   await page.locator("#finance-submit").click();
   assert.equal(Number(funds[0].planned_twd),12500);
+  // Reproduce the owner's November example: plan data written once must
+  // appear automatically in both reporting and simulation, without re-entry.
+  await page.locator("#finance-month").fill("2026-11");
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("income");
+  await page.locator('#finance-fields [name="label"]').fill("Lương tháng 11");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("58000");
+  await page.locator('#finance-fields [name="dueDay"]').fill("3");
+  await page.locator("#finance-submit").click();
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="label"]').fill("Tiền nhà tháng 11");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("100000");
+  await page.locator('#finance-fields [name="dueDay"]').fill("15");
+  await page.locator("#finance-submit").click();
   await page.locator('.main-nav [data-tab="reports"]').click();
   assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
+  await page.getByText("Dòng tiền dự kiến từ Kế hoạch tài chính").waitFor();
+  await page.getByText("Tiền nhà tháng 11").waitFor();
+  assert.match(await page.locator("#finance-content").innerText(),/Thu dự kiến/);
+  assert.match(await page.locator("#finance-content").innerText(),/58\.000/);
+  assert.match(await page.locator("#finance-content").innerText(),/100\.000/);
+  assert((counts["POST /workbench/preview"]||0)>=2,"A baseline preview must automatically refresh after edits/month change");
   await page.locator('.main-nav [data-tab="simulator"]').click();
+  await page.getByText("Cuối kỳ dự báo").waitFor();
+  await page.getByText("Tự phân tích từ số liệu Kế hoạch tài chính đã lưu").waitFor();
+  await page.getByText("Tiền nhà tháng 11").first().waitFor();
+  assert.match(await page.locator("#finance-content").innerText(),/19\.500|65\.000|42\.000|7\.000/,
+   "Forecast should reflect saved plans and the real wallet balance; not stale demo numbers.");
+
   await page.locator('[data-action="simulate"]').click();
   await page.getByText("Cuối kỳ dự báo").waitFor();
   await page.locator("#finance-settings").click();
