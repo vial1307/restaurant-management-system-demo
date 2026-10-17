@@ -307,7 +307,7 @@ try{
   await page.getByText("Chat AI chưa kích hoạt",{exact:false}).waitFor();
   await page.locator('[data-mentor-action="analyze"]').first().click();
   await page.getByText("Rủi ro nếu trả đúng cam kết").waitFor();
-  await page.getByText("Thiếu tiền trước kỳ lương",{exact:false}).waitFor();
+  await page.locator(".mentor-analysis-alert strong").filter({hasText:"Thiếu tiền trước kỳ lương"}).first().waitFor();
   assert.match(await page.locator("#finance-content").innerText(),/12\.000|12000/);
   assert((counts["GET /mentor/analysis"]||0)>=1,"No-key Mentor report must call the owner-only readonly API");
   assert.equal(counts["POST /mentor/messages"],1,"No background OpenAI call may occur when key is absent");
