@@ -305,6 +305,29 @@ export async function registerFinanceRoutes(app) {
       return reply.code(201).send({debt:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
+  // Editing metadata adjusts the next forecast; already posted repayments and
+  // immutable original principal never change from this form.
+  app.put("/api/finance/debts/:debtId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const debtId=request.params?.debtId,b=request.body||{};
+    if(!id(debtId)||!trim(b.name)||
+       (b.dueDate&&!isDate(b.dueDate))||
+       !money(String(b.annualInterestPercent??"0"),6)||
+       Number(b.annualInterestPercent??0)>100)
+      return fail(reply,"INVALID_DEBT_UPDATE");
+    try{
+      const saved=await auditedWrite(ctx,"finance.debt.update","finance_debt",async db=>{
+        const {rows}=await db.query(
+         "UPDATE finance.debts SET name=$3,annual_interest_rate=$4::numeric/100,due_date=$5::date "+
+         "WHERE owner_user_id=$1 AND id=$2 "+
+         "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
+         [ctx.owner,debtId,trim(b.name,160),String(b.annualInterestPercent||"0"),b.dueDate||null]);
+        return rows[0]||null;
+      });
+      if(!saved)return fail(reply,"DEBT_NOT_FOUND",404);
+      return {debt:saved};
+    }catch(error){return databaseError(request,reply,error);}
+  });
   app.post("/api/finance/fx-plans/:planId/cancel",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const planId=request.params?.planId;

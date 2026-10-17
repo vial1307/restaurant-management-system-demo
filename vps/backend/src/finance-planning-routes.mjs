@@ -1,3 +1,6 @@
+import {financeScenarioSources} from "./finance-scenario-routes.mjs";
+import {simulateScenario} from "./finance-scenario-engine.mjs";
+import {planDebtPayoff} from "./finance-debt-payoff-engine.mjs";
 import {priceFinanceFund,summarizeFinanceFundValues,missingFinanceFundQuotes} from "./finance-fund-valuation.mjs";
 import {getFinanceFxSnapshot,convertToTwd} from "./finance-fx-valuation.mjs";
 // Owner-only Finance OS planning & debt-fund endpoints, backed by the *separate* finance PostgreSQL.
@@ -71,6 +74,121 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
        summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
     return {month:m,items:items.rows,debtFunds:liveDebts,goalFunds:liveGoals,debtPayments:payments.rows,unconvertedFunds:unconverted,summary:{...summary,...net[0],fx_estimate_incomplete:unconverted.length>0}};
   };
+  // Equivalent bidirectional goal flow, no spending posted when planning.
+  app.post("/api/finance/goal-plans",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{};
+    if(!monthKey(b.month)||!trim(b.name)||!/^[A-Z]{3}$/.test(String(b.currencyCode||""))||
+       !positive(String(b.targetAmount||""),6)||typeof b.plannedAmount!=="string"||
+       !money(b.plannedAmount,6)||(b.targetDate&&!isDate(b.targetDate)))
+      return fail(reply,"INVALID_GOAL_PLAN");
+    try{
+      const c=(await ctx.pool.query("SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[b.currencyCode])).rows[0];
+      if(!c||!positive(b.targetAmount,Number(c.minor_units))||
+        !money(b.plannedAmount,Number(c.minor_units)))return fail(reply,"INVALID_GOAL_PLAN_AMOUNT");
+      const snap=b.currencyCode==="TWD"?null:await getFinanceFxSnapshot(ctx.pool);
+      const rate=b.currencyCode==="TWD"?"1":snap?.quotes?.[b.currencyCode]?.rateToTwd;
+      if(!positiveRate(rate))return fail(reply,"FX_RATE_UNAVAILABLE");
+      const saved=await auditedWrite(ctx,"finance.goal_plan.create","finance_goal",async db=>{
+        const {rows:goals}=await db.query(
+         "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date) "+
+         "VALUES($1,$2,$3,$4::numeric,$5::date) "+
+         "RETURNING id,name,currency_code,target_amount::text,target_date::text",
+         [ctx.owner,trim(b.name,160),b.currencyCode,b.targetAmount,b.targetDate||null]);
+        const goal=goals[0];
+        const {rows:funds}=await db.query(
+         "INSERT INTO finance.goal_fund_allocations(owner_user_id,goal_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+         "VALUES($1,$2,$3::date,$4::numeric,0,$5::numeric) "+
+         "RETURNING id,goal_id,month_date::text,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
+         [ctx.owner,goal.id,startMonth(b.month),b.plannedAmount,rate]);
+        return {goal,fund:funds[0]};
+      });
+      return reply.code(201).send(saved);
+    }catch(error){return databaseError(req,reply,error);}
+  });
+  app.get("/api/finance/debt-payoff-plan",async(req,reply)=>{
+    const ctx=await authorized(req,reply);if(!ctx)return;
+    const months=Number(req.query?.months||12),bufferText=String(req.query?.bufferTwd??"0");
+    if(![3,6,12].includes(months)||!money(bufferText,0))
+      return fail(reply,"INVALID_PAYOFF_QUERY");
+    const today=new Intl.DateTimeFormat("sv-SE",{
+      timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"
+    }).format(new Date());
+    const through=new Date(Date.UTC(Number(today.slice(0,4)),
+      Number(today.slice(5,7))-1+months,0)).toISOString().slice(0,10);
+    try{
+      const [source,result,fx]=await Promise.all([
+       financeScenarioSources(ctx.pool,ctx.owner,today,through),
+       ctx.pool.query(
+        "SELECT d.id,d.name,d.currency_code,d.annual_interest_rate::text,d.due_date::text,"+
+        "(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount "+
+        "FROM finance.debts d LEFT JOIN finance.debt_payments p "+
+        "ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
+        "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
+       getFinanceFxSnapshot(ctx.pool)
+      ]);
+      const [fundRows,paymentRows]=await Promise.all([
+       ctx.pool.query(
+        "SELECT debt_id,month_date::text,planned_amount::text FROM finance.debt_fund_allocations "+
+        "WHERE owner_user_id=$1 AND month_date>=$2::date AND month_date<=$3::date",
+        [ctx.owner,today.slice(0,7)+"-01",through.slice(0,7)+"-01"]),
+       ctx.pool.query(
+        "SELECT debt_id,payment_date::text,SUM(principal_paid+interest_paid+fee_paid)::text AS native_paid "+
+        "FROM finance.debt_payments WHERE owner_user_id=$1 AND payment_date>=$2::date "+
+        "AND payment_date<=$3::date GROUP BY debt_id,payment_date",
+        [ctx.owner,today.slice(0,7)+"-01",through])
+      ]);
+      const baseline=simulateScenario({asOf:today,source,scenario:{
+       name:"Tự phân bổ nợ theo kế hoạch",months,salaryDay:10,
+       bufferTwd:bufferText,monthlyExtraIncomeTwd:"0",rows:[]}});
+      const advice=planDebtPayoff({asOf:today,baseline,debts:result.rows,
+       funds:fundRows.rows,payments:paymentRows.rows,quotes:fx.quotes,bufferTwd:bufferText});
+      reply.header("Cache-Control","private, no-store");
+      return {...advice,baseline:{through:baseline.through,minimumTwd:baseline.minimumTwd,
+       earliestRisk:baseline.earliestRisk},fxObservedAt:Object.fromEntries(
+         Object.entries(fx.quotes).map(([code,q])=>[code,q.observedAt||null]))};
+    }catch(error){return databaseError(req,reply,error);}
+  });
+  // One owner-only action from "Công nợ" in the monthly planner. Debt master
+  // and its monthly planned allocation are created together, never duplicated
+  // as an ordinary expense. No wallet or posted repayment is touched.
+  app.post("/api/finance/debt-plans",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{};
+    if(!monthKey(b.month)||!trim(b.name)||!/^[A-Z]{3}$/.test(String(b.currencyCode||""))||
+       !positive(String(b.principalOriginal||""),6)||
+       !money(String(b.plannedAmount??"0"),6)||
+       !money(String(b.annualInterestPercent??"0"),6)||
+       Number(b.annualInterestPercent??0)>100||
+       !b.dueDate||!isDate(b.dueDate)||
+       typeof b.plannedAmount!=="string")
+      return fail(reply,"INVALID_DEBT_PLAN");
+    try{
+      const c=(await ctx.pool.query(
+       "SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[b.currencyCode])).rows[0];
+      if(!c||!positive(b.principalOriginal,Number(c.minor_units))||
+         !money(b.plannedAmount,Number(c.minor_units)))
+        return fail(reply,"INVALID_DEBT_PLAN_AMOUNT");
+      const snap=b.currencyCode==="TWD"?null:await getFinanceFxSnapshot(ctx.pool);
+      const rate=b.currencyCode==="TWD"?"1":snap?.quotes?.[b.currencyCode]?.rateToTwd;
+      if(!positiveRate(rate))return fail(reply,"FX_RATE_UNAVAILABLE");
+      const saved=await auditedWrite(ctx,"finance.debt_plan.create","finance_debt",async db=>{
+        const {rows:debts}=await db.query(
+         "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) "+
+         "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) "+
+         "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
+         [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,String(b.annualInterestPercent||"0"),b.dueDate]);
+        const debt=debts[0];
+        const {rows:funds}=await db.query(
+         "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+         "VALUES($1,$2,$3::date,$4::numeric,0,$5::numeric) "+
+         "RETURNING id,debt_id,month_date::text,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
+         [ctx.owner,debt.id,startMonth(b.month),b.plannedAmount,rate]);
+        return {debt,fund:funds[0]};
+      });
+      return reply.code(201).send(saved);
+    }catch(error){return databaseError(req,reply,error);}
+  });
   app.get("/api/finance/cashflow",async(req,reply)=>{
     const ctx=await authorized(req,reply);if(!ctx)return;
     const month=monthKey(req.query?.month);
