@@ -477,10 +477,28 @@ function open(kind,id=""){
  $("#finance-dialog-title").textContent=name;
  fields.innerHTML=body;dlg.showModal();updateEstimate();
 }
+function updatePlanKind(){
+ if(form.dataset.kind!=="plan"&&form.dataset.kind!=="editPlan")return;
+ const kind=fields.querySelector('[name="kind"]')?.value||"expense";
+ for(const section of fields.querySelectorAll("[data-plan-extra]")){
+  const show=section.dataset.planExtra===kind;
+  section.hidden=!show;
+  for(const control of section.querySelectorAll("input,select,textarea"))control.disabled=!show;
+ }
+ const main=fields.querySelector('[name="originalAmount"]')?.closest("label");
+ if(main)main.firstChild.textContent=kind==="debt"?"Dự kiến trả trong tháng":
+  kind==="goal"?"Dự kiến tiết kiệm tháng này":kind==="income"?"Thu nhập dự kiến":"Chi tiêu dự kiến";
+}
 function updateEstimate(){
+ updatePlanKind();
  const kind=form.dataset.kind,values=Object.fromEntries(new FormData(form));
  const note=$("#finance-fx-preview");if(!note)return;
  let code=values.currencyCode||"TWD",amount=values.originalAmount||values.amount||"0";
+ if(kind==="debt"||kind==="editDebt"){
+  code=kind==="editDebt"?(state.data.debts.find(x=>x.id===form.dataset.id)?.currency_code||"TWD"):code;
+  amount=values.plannedAmount||"0";
+ }
+ if(kind==="goal"){amount=values.plannedAmount||"0";}
  if(["fundDebt","fundGoal"].includes(kind)){
   const obj=(kind==="fundDebt"?state.data?.debts:state.data?.goals)?.find(x=>x.id===form.dataset.id);
   code=obj?.currency_code||"TWD";amount=values.plannedAmount||"0";
@@ -509,7 +527,20 @@ async function submit(event){
  const type=form.dataset.kind,id=form.dataset.id,b=Object.fromEntries(new FormData(form));
  let path="",body={},method="POST";
  try{
-  if(type==="plan"||type==="editPlan"){
+  if(type==="plan"&&b.kind==="debt"){
+   body={name:b.label,currencyCode:b.currencyCode,
+    principalOriginal:amountInput(b.principalOriginal,b.currencyCode),
+    annualInterestPercent:b.annualInterestPercent,dueDate:b.dueDate,month:state.month,
+    plannedAmount:amountInput(b.originalAmount,b.currencyCode),paymentDay:Number(b.dueDay)};
+   if(!(Number(body.plannedAmount)>0))throw new Error("Dự kiến trả tháng phải lớn hơn 0 khi thêm từ bảng kế hoạch.");
+   path="/debt-plans";
+  }else if(type==="plan"&&b.kind==="goal"){
+   body={name:b.label,currencyCode:b.currencyCode,
+    targetAmount:amountInput(b.targetAmount,b.currencyCode),targetDate:b.targetDate,month:state.month,
+    plannedAmount:amountInput(b.originalAmount,b.currencyCode)};
+   if(!(Number(body.plannedAmount)>0))throw new Error("Dự kiến tiết kiệm tháng phải lớn hơn 0 khi thêm từ bảng kế hoạch.");
+   path="/goal-plans";
+  }else if(type==="plan"||type==="editPlan"){
    body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,originalAmount:amountInput(b.originalAmount,b.currencyCode),dueDay:+b.dueDay||null,memo:b.memo||""};
    path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
   }else if(type==="transaction"){
@@ -523,17 +554,23 @@ async function submit(event){
   }else if(type==="reconcile"){
    const account=getAccount(id);body={targetBalance:amountInput(b.targetBalance,account.currency_code),
     expectedBalance:amt(b.expectedBalance),reason:b.reason,idempotencyKey:form.dataset.key};path="/accounts/"+id+"/reconcile";
-  }else if(type==="debt"){
-   body={name:b.name,currencyCode:b.currencyCode,principalOriginal:amountInput(b.principalOriginal,b.currencyCode),
-    annualInterestPercent:b.annualInterestPercent||"0",dueDate:b.dueDate||null};path="/debts";
+  }else if(type==="debt"||type==="editDebt"){
+   const code=type==="editDebt"?(state.data.debts.find(d=>d.id===id)?.currency_code):b.currencyCode;
+   body={name:b.name,currencyCode:code,principalOriginal:amountInput(b.principalOriginal,code),
+    annualInterestPercent:b.annualInterestPercent,dueDate:b.dueDate,month:state.month,
+    plannedAmount:amountInput(b.plannedAmount,code),paymentDay:Number(b.paymentDay)};
+   path=type==="debt"?"/debt-plans":"/debts/"+id+"/terms";
+   method=type==="debt"?"POST":"PUT";
   }else if(type==="goal"){
-   body={name:b.name,currencyCode:b.currencyCode,targetAmount:amountInput(b.targetAmount,b.currencyCode),targetDate:b.targetDate||null};path="/goals";
+   body={name:b.name,currencyCode:b.currencyCode,targetAmount:amountInput(b.targetAmount,b.currencyCode),
+    targetDate:b.targetDate,month:state.month,plannedAmount:amountInput(b.plannedAmount,b.currencyCode)};
+   path="/goal-plans";
   }else if(type==="fundDebt"||type==="fundGoal"){
    const obj=(type==="fundDebt"?state.data.debts:state.data.goals).find(x=>x.id===id);
    const base={month:state.month,plannedAmount:amountInput(b.plannedAmount,obj.currency_code),
     earmarkedAmount:amountInput(b.earmarkedAmount,obj.currency_code)};
    if(!quote(obj.currency_code))throw new Error("Thiếu tỷ giá tham chiếu mới cho "+obj.currency_code+". Không thể quy đổi quỹ.");
-   body={...base,...(type==="fundDebt"?{debtId:id}:{goalId:id})};
+   body={...base,...(type==="fundDebt"?{debtId:id,paymentDay:Number(b.paymentDay)}:{goalId:id})};
    path=type==="fundDebt"?"/debt-funds":"/goal-funds";method="PUT";
   }else if(type==="payDebt"){
    const d=state.data.debts.find(x=>x.id===id);
@@ -545,7 +582,8 @@ async function submit(event){
     feePaid:amountInput(b.feePaid,d.currency_code),fxRateToTwd:q.rateToTwd||"1",
     memo:"Thanh toán đã thực hiện",idempotencyKey:form.dataset.key};path="/debt-payments";
   }else if(type==="editGoal"){
-   const g=state.data.goals.find(x=>x.id===id);body={currentAmount:amountInput(b.currentAmount,g.currency_code),status:b.status};
+   const g=state.data.goals.find(x=>x.id===id);body={name:b.name,targetAmount:amountInput(b.targetAmount,g.currency_code),
+    targetDate:b.targetDate,currentAmount:amountInput(b.currentAmount,g.currency_code),status:b.status};
    path="/goals/"+id;method="PUT";
   }else if(type==="category"){
    body={name:b.name,kind:b.kind};path="/categories";
@@ -598,7 +636,7 @@ async function act(action,id){
  if(action==="newPlan")return open("plan");
  if(action==="editPlan")return open("editPlan",id);
  if(action==="deletePlan")return deletePlan(id);
- if(["transaction","account","reconcile","debt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
+ if(["transaction","account","reconcile","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
 }
 document.body.addEventListener("click",async event=>{
  const tab=event.target.closest("[data-tab]");if(tab){nav(tab.dataset.tab);return;}
