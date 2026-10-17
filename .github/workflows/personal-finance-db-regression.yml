@@ -8,6 +8,7 @@ on:
       - "tests/personal-finance-schema-contract-regression.mjs"
       - "tests/finance-advisor-engine-regression.mjs"
       - "tests/finance-scenario-engine-regression.mjs"
+      - "tests/finance-debt-payoff-regression.mjs"
       - "tests/finance-fx-valuation-regression.mjs"
       - "vps/backend/src/finance-*.mjs"
       - "vps/backend/src/server.mjs"
@@ -64,6 +65,8 @@ jobs:
         run: node tests/finance-advisor-engine-regression.mjs
       - name: Exchange rate valuation and stale-rate safety regression
         run: node tests/finance-fx-valuation-regression.mjs
+      - name: Debt priority and monthly payoff allocation regression
+        run: node tests/finance-debt-payoff-regression.mjs
       - name: Scenario finance simulation regression
         run: node tests/finance-scenario-engine-regression.mjs
       - name: Create separate test database
@@ -110,6 +113,7 @@ jobs:
           node --check vps/backend/src/finance-db.mjs
           node --check vps/backend/src/finance-routes.mjs
           node --check vps/backend/src/finance-planning-routes.mjs
+          node --check vps/backend/src/finance-debt-payoff-engine.mjs
           node --check vps/backend/src/finance-advisor-engine.mjs
           node --check vps/backend/src/finance-advisor-routes.mjs
           node --check vps/backend/src/finance-scenario-engine.mjs
