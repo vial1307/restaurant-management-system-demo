@@ -102,6 +102,12 @@ finance.82.47.180.185.nip.io {
     root * /srv
     file_server
   }
+  # The finance shell imports only this reviewed chart module.
+  # Keep the origin allowlist explicit: do not expose generic /src/* assets.
+  handle /src/finance-visuals.js {
+    root * /srv
+    file_server
+  }
   handle /src/personal-finance.css {
     root * /srv
     file_server
