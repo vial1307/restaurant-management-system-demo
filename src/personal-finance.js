@@ -36,7 +36,7 @@ function notify(message){const el=$("#finance-toast");el.textContent=message;el.
 function title(t,sub,actions=""){return '<div class="page-head"><div><h1>'+safe(t)+'</h1><p>'+safe(sub)+'</p></div><div class="page-actions">'+actions+'</div></div>';}
 function btn(name,action,css="soft",attrs=""){return '<button type="button" class="btn '+css+'" data-action="'+safe(action)+'" '+attrs+'>'+safe(name)+'</button>';}
 function card(t,body,extra="",subtitle=""){return '<section class="card"><div class="section-title"><div><h2>'+safe(t)+'</h2>'+(subtitle?'<p class="section-sub">'+safe(subtitle)+'</p>':"")+'</div>'+extra+'</div>'+body+'</section>';}
-function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Mục tiêu"}[kind]||"Khác")+'</span>';}
+function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Tiết kiệm"}[kind]||"Khác")+'</span>';}
 function empty(t){return '<div class="empty">'+safe(t)+'</div>';}
 function nav(tab){state.tab=tab;render();window.scrollTo(0,0);}
 function quoteCards(){
@@ -45,7 +45,8 @@ function quoteCards(){
  return '<div class="rate-line">'+html+'</div><div class="notice">Tỷ giá tham chiếu do <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a> cung cấp. TWD là đơn vị tổng hợp. Không tự động đổi tiền, không coi ví VND là TWD có thể chi ngay.</div>';
 }
 function planRows(){
- const cf=state.cashflow||{};const rows=[];
+ const cf=state.cashflow||{},rows=[];
+ const priority={debt:1,expense:2,goal:3,income:0};
  for(const i of cf.items||[])rows.push({id:i.id,kind:i.kind,name:i.label,date:i.due_day?dayOf(i.due_day):lastDay(state.month),
   estimated:!i.due_day,native:i.original_amount||i.amount_twd,code:i.original_currency||"TWD",twd:val(i.amount_twd),
   rate:i.fx_rate_to_twd,detail:i.memo||"",source:"item"});
@@ -53,16 +54,32 @@ function planRows(){
   for(const x of items||[]){
    const code=x.currency_code||"TWD",q=quote(code);
    const twd=x.planned_twd!==undefined&&x.planned_twd!==null?val(x.planned_twd):estimate(x.planned_amount,code);
+   const rawDate=kind==="debt"?x.due_date:x.target_date,day=kind==="debt"?x.payment_day:null;
+   const plannedDate=day?dayOf(day):due(rawDate),estimateDate=!day&&!rawDate?.startsWith(state.month);
+   const related=(kind==="debt"?state.data?.debts:state.data?.goals)?.find(d=>d.id===(kind==="debt"?x.debt_id:x.goal_id));
    rows.push({id:x.id,ref:kind==="debt"?x.debt_id:x.goal_id,kind,name:x.debt_name||x.goal_name||"Quỹ",
-    date:due(kind==="debt"?x.due_date:x.target_date),estimated:!(kind==="debt"?x.due_date:x.target_date)?.startsWith(state.month),
-    native:x.planned_amount,code,twd:twd===null?null:twd,
-    rate:q?.rateToTwd||null,detail:code!=="TWD"?"Quỹ "+number(x.planned_amount)+" "+code+" · tỷ giá tham chiếu":"",source:kind});
+    date:plannedDate,estimated:estimateDate,native:x.planned_amount,code,twd:twd===null?null:twd,
+    rate:q?.rateToTwd||null,detail:kind==="debt"?"Dư nợ "+money(related?.outstanding_amount||0,code)+
+     " · Lãi "+number(100*val(related?.annual_interest_rate),2)+"%/năm · Hạn "+(related?.due_date||"chưa đặt"):
+     "Quỹ mục tiêu · hạn "+(related?.target_date||"chưa đặt"),source:kind});
   }
  };
  addFund(cf.debtFunds,"debt");addFund(cf.goalFunds,"goal");
- return rows.sort((a,b)=>a.date.localeCompare(b.date)||(a.kind==="income"?-1:1));
+ for(const d of state.data?.debts||[]){
+  if(!d.due_date?.startsWith(state.month)||(cf.debtFunds||[]).some(f=>f.debt_id===d.id)||val(d.outstanding_amount)<=0)continue;
+  rows.push({id:d.id,ref:d.id,kind:"debt",name:d.name,date:d.due_date,estimated:false,
+    native:d.outstanding_amount,code:d.currency_code,twd:null,source:"unallocatedDebt",
+    detail:"Đến hạn · CHƯA lập quỹ trả nợ, không tính vào tổng chi. Cần lập kế hoạch ngay."});
+ }
+ for(const g of state.data?.goals||[]){
+  if(!g.target_date?.startsWith(state.month)||(cf.goalFunds||[]).some(f=>f.goal_id===g.id)||g.status!=="active")continue;
+  rows.push({id:g.id,ref:g.id,kind:"goal",name:g.name,date:g.target_date,estimated:false,
+    native:Math.max(0,val(g.target_amount)-val(g.current_amount)),code:g.currency_code,twd:null,
+    source:"unallocatedGoal",detail:"Mục tiêu đến hạn · CHƯA phân bổ, không cộng vào chi dự kiến."});
+ }
+ return rows.sort((a,b)=>a.date.localeCompare(b.date)||
+  (priority[a.kind]??4)-(priority[b.kind]??4)||a.name.localeCompare(b.name));
 }
-
 function forecastMonths(){
  const current=nowDate().slice(0,7),offset=(+state.month.slice(0,4)-+current.slice(0,4))*12+
    (+state.month.slice(5)-+current.slice(5))+1;
@@ -321,6 +338,7 @@ async function loadLinkedAnalysis(version){
   const r=await api("/workbench/preview",{scenario},"POST");
   if(version!==state.analysisVersion)return;
   state.baseline=r.projection;
+  state.debtAdvice=r.repaymentAdvice||null;
  }catch(e){
   if(version!==state.analysisVersion)return;
   state.baselineError=errorText(e);state.baseline=null;
@@ -330,7 +348,7 @@ async function loadLinkedAnalysis(version){
 }
 async function refresh(){
  const version=++state.analysisVersion;
- state.baseline=null;state.preview=null;state.baselineError=null;state.baselineBusy=false;
+ state.baseline=null;state.preview=null;state.debtAdvice=null;state.extraDebtAdvice=null;state.baselineError=null;state.baselineBusy=false;
  state.ready=false;state.error=null;render();
  const year=+state.month.slice(0,4);
  const specs=[["data","/bootstrap"],["overview","/overview?month="+state.month],["cashflow","/cashflow?month="+state.month],["year","/year?year="+year],["yearPlan","/cashflow/year?year="+year],["fx","/fx/estimates"],["advice","/advisor?days="+advisorHorizon()+"&bufferTwd="+encodeURIComponent(state.buffer)],["scenarioData","/workbench"]];
@@ -538,7 +556,7 @@ async function simulate(save=false){
  };}
  try{
   if(save){await api("/workbench/scenarios",{scenario:state.sim});notify("Đã lưu kịch bản.");await refresh();nav("simulator");return;}
-  const r=await api("/workbench/preview",{scenario:state.sim},"POST");state.preview=r.projection;render();
+  const r=await api("/workbench/preview",{scenario:state.sim},"POST");state.preview=r.projection;state.extraDebtAdvice=r.repaymentAdvice||null;render();
  }catch(e){notify(errorText(e));}
 }
 async function act(action,id){
