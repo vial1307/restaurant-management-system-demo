@@ -273,11 +273,22 @@ export async function registerFinanceRoutes(app) {
         [goalId,ctx.owner]
       );
       if(!goal.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
-      if(!money(b.currentAmount,Number(goal.rows[0].minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
+      if(!money(b.currentAmount,Number(goal.rows[0].minor_units))||
+         (b.name!==undefined&&!trim(b.name,160))||
+         (b.targetAmount!==undefined&&!positive(b.targetAmount,Number(goal.rows[0].minor_units)))||
+         (b.targetDate!==undefined&&b.targetDate!==null&&b.targetDate!==""&&!isDate(b.targetDate))||
+         (b.memo!==undefined&&(typeof b.memo!=="string"||b.memo.length>600)))
+         return fail(reply,"INVALID_GOAL_UPDATE");
       const saved=await auditedWrite(ctx,"finance.goal.update","finance_goal",async db=>{
         const {rows}=await db.query(
-        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,current_amount::text,status",
-        [goalId,ctx.owner,b.currentAmount,b.status]
+        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,"+
+        "name=COALESCE($5,name),target_amount=COALESCE($6::numeric,target_amount),"+
+        "target_date=CASE WHEN $8::boolean THEN $7::date ELSE target_date END,"+
+        "memo=COALESCE($9,memo),updated_at=now() "+
+        "WHERE id=$1 AND owner_user_id=$2 "+
+        "RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status,memo",
+        [goalId,ctx.owner,b.currentAmount,b.status,b.name?trim(b.name,160):null,b.targetAmount??null,
+         b.targetDate||null,b.targetDate!==undefined,b.memo===undefined?null:trim(b.memo,600)]
       );
         return rows[0];
       });
