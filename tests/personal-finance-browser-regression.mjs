@@ -505,6 +505,25 @@ try {
     await page.reload({waitUntil:"domcontentloaded"});
     await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     assert.equal(Number(accounts[0].balance),prior+275,"Wallet reconciliation survives F5");
+    await openFinancePage(page,"budget");
+    await page.locator('[data-period="month"]').click().catch(()=>{});
+    await page.locator('[data-open="cashExpense"]').click();
+    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
+    await page.locator('#finance-dialog [name="label"]').fill("Chi phí gửi về Việt Nam");
+    await page.locator('#finance-dialog [name="originalAmount"]').fill("1000000");
+    assert.match(await page.locator("[data-fx-form-estimate]").innerText(),/1.250 TWD/);
+    await page.locator("#finance-submit").click();
+    assert(cashItems.some(x=>x.original_currency==="VND"&&Number(x.amount_twd)===1250),
+      "Foreign plan should store native currency and unified estimated TWD");
+    await openFinancePage(page,"workbench");
+    await page.locator('[data-wb-fx-input="currency"]').selectOption("VND");
+    await page.locator('[data-wb-fx-input="amount"]').fill("1000000");
+    await page.locator('[data-wb-fx-input="kind"]').selectOption("expense");
+    await page.locator('[data-wb-fx-add]').click();
+    const mostRecent=page.locator(".fin-wb-editor tbody tr").last();
+    await mostRecent.locator('[data-wb-prop="amountTwd"]').waitFor();
+    assert.equal(await mostRecent.locator('[data-wb-prop="amountTwd"]').inputValue(),"1250");
+    assert.match(await mostRecent.locator('[data-wb-prop="label"]').inputValue(),/1000000 VND/);
     assert.equal(await page.locator('.fin-nav > button[data-tab]').count(),3);
 
     assert(size.doc<=size.view+1,"Finance mobile horizontal overflow "+JSON.stringify({viewport,size}));
