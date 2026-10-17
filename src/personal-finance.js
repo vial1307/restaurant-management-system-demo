@@ -170,7 +170,7 @@ function scenario(){
   '<div class="stack" style="margin-top:12px">'+(p.warnings||[]).slice(0,6).map(w=>'<div class="notice warn">'+safe(w)+'</div>').join("")+'</div>':empty("Nhập giả định rồi chọn “Phân tích dòng tiền” để xem kết quả.");
  const row=s.rows?.[0]||{kind:"expense",date:nowDate(),amountTwd:"0",label:"Chi phát sinh"};
  return title("Mô phỏng & tư vấn","Thử phương án trước khi quyết định. Mô phỏng không làm thay đổi số dư hay công nợ.")+
- '<div class="layout-2"><div class="stack">'+card("Tạo kịch bản của bạn",'<div class="form-grid" id="scenario-fields">'+
+ '<div class="layout-2"><div class="stack">'+card("Tạo kịch bản của bạn",'<form class="form-grid" id="scenario-fields">'+
  '<label>Đặt tên kịch bản<input name="name" value="'+safe(s.name)+'"></label>'+
  '<label>Khoảng thời gian<select name="months">'+[3,6,12].map(n=>escOption(n,n+" tháng",n===s.months)).join("")+'</select></label>'+
  '<label>Ngày nhận lương (1–31)<input name="salaryDay" type="number" min="1" max="31" value="'+safe(s.salaryDay)+'"></label>'+
@@ -179,7 +179,7 @@ function scenario(){
  '<label>Giả định thêm<select name="kind">'+["expense","income","income_loss","debt"].map(k=>escOption(k,{expense:"Chi phí phát sinh",income:"Thu thêm",income_loss:"Giảm thu nhập",debt:"Trả nợ thêm"}[k],k===row.kind)).join("")+'</select></label>'+
  '<label>Tên khoản thay đổi<input name="rowLabel" value="'+safe(row.label)+'"></label>'+
  '<label>Ngày phát sinh<input name="rowDate" type="date" value="'+safe(row.date)+'"></label>'+
- '<label>Số tiền thay đổi (TWD)<input name="rowAmount" value="'+safe(row.amountTwd)+'"></label></div>'+
+ '<label>Số tiền thay đổi (TWD)<input name="rowAmount" value="'+safe(row.amountTwd)+'"></label></form>'+
  '<div class="page-actions" style="margin-top:14px">'+btn("Phân tích dòng tiền","simulate","primary")+btn("Lưu kịch bản","saveScenario","soft")+btn("Kịch bản mới","newScenario","ghost")+'</div>',
  "", "Chỉ một khoản giả định mỗi lần, dễ hiểu, có thể thay thế để so sánh các phương án.")+
  card("Cách hệ thống tư vấn",'<div class="rowitem"><div><strong>1. Dòng tiền thực</strong><p>Lấy số dư ví TWD và các lịch thu/chi, quỹ nợ đã nhập từ Finance Database.</p></div></div>'+
@@ -222,7 +222,7 @@ async function initialize(){
  catch(error){if(error.status===401){showLogin();return;}$("#finance-layout").hidden=false;$("#finance-login").hidden=true;state.ready=true;state.error=error;render();}
 }
 function field(name,label,type="text",value="",extra=""){
- return '<label>'+safe(label)+'<input name="'+safe(name)+'" type="'+safe(type)+'" value="'+safe(value)+'" '+extra+' required></label>';
+ return '<label>'+safe(label)+'<input name="'+safe(name)+'" type="'+safe(type)+'" value="'+safe(value)+'" '+extra+(label.includes("có thể để trống")?"":" required")+'></label>';
 }
 function select(name,label,list,extra=""){return '<label>'+safe(label)+'<select name="'+safe(name)+'" '+extra+'>'+list+'</select></label>';}
 function currOpts(selected="TWD"){return currencies().map(c=>escOption(c.code,c.code,c.code===selected)).join("");}
