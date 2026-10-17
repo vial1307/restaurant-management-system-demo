@@ -14,6 +14,10 @@ assert(!verifier.includes("eval "));
 assert(!verifier.includes("bash -c"));
 const inv=read(".github/workflows/inventory-site-production-audit.yml");
 assert(!inv.includes("source .env"),"inventory audit must not read VPS secrets");
+assert(!inv.includes("\n  push:"),"inventory audit must not run before the tested commit is deployed");
+assert(inv.includes("workflow_dispatch:"),"operator may rerun a read-only inventory audit");
+assert(inv.includes("Verify production release before database audit"),"must verify production SHA before inspecting DB");
+assert(inv.indexOf("Verify production release before database audit") < inv.indexOf("Audit inventory site isolation"),"validate deployed release before audit queries");
 assert(!inv.includes("<<'SQL'"),"inventory audit must use pinned queries");
 for(let k=1;k<=5;k++){
  assert(inv.includes("kitchen-os-verify inventory-"+k));
@@ -23,6 +27,8 @@ for(let k=1;k<=5;k++){
 }
 const parity=read(".github/workflows/workforce-schedule-production-parity.yml");
 assert(parity.includes("kitchen-os-verify workforce-parity"));
+assert(!parity.includes("\n  push:"),"parity must run only after deploy or an explicit manual request");
+assert(parity.includes("workflow_dispatch:"),"manual parity rerun must remain possible");
 for(const kind of ["staff","schedule","attendance"]){
  const flow=read(".github/workflows/workforce-"+kind+"-production-backfill.yml");
  assert(flow.includes('TASK="workforce-'+kind+'"'),"workflow must choose the allowlisted task");
