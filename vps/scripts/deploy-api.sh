@@ -91,6 +91,19 @@ EOF
 chmod 0440 /etc/sudoers.d/kitchen-finance-activate
 visudo -cf /etc/sudoers.d/kitchen-finance-activate >/dev/null
 
+echo "[2d/12] Installing sealed read-only production verification commands..."
+install -o root -g root -m 0755 "$REPO_DIR/vps/scripts/production-postdeploy-verify.sh" /usr/local/sbin/kitchen-os-verify
+install -d -o root -g root -m 0755 /usr/local/share/kitchen-os-inventory-audit
+for audit in "$REPO_DIR"/vps/scripts/inventory-audit/inventory-[1-5].sql; do
+  [[ -f "$audit" ]] || { echo VERIFY_SQL_FILE_MISSING >&2; exit 66; }
+  install -o root -g root -m 0444 "$audit" /usr/local/share/kitchen-os-inventory-audit/
+done
+cat > /etc/sudoers.d/kitchen-os-verify <<'EOF'
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/kitchen-os-verify
+EOF
+chmod 0440 /etc/sudoers.d/kitchen-os-verify
+visudo -cf /etc/sudoers.d/kitchen-os-verify >/dev/null
+
 echo "[3/12] Installing filtered host metrics snapshot..."
 bash "${REPO_DIR}/vps/scripts/install-host-metrics-timer.sh"
 
