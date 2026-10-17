@@ -305,7 +305,7 @@ try {
     assert.equal(scenarioBooks[0].settings.rows[1].linkId,scenarioBooks[0].settings.rows[2].linkId);
     assert.equal(accounts[0].balance,"0","Scenario borrowing must never post cash");
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     await openFinancePage(page,"workbench");
     await page.locator(".fin-wb-editor tbody tr").first().waitFor();
     assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
