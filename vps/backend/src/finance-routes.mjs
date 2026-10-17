@@ -4,6 +4,7 @@ import { financeConfigured, getFinancePool, financeTransaction } from "./finance
 import { registerFinancePlanningRoutes } from "./finance-planning-routes.mjs";
 import { registerFinanceAdvisorRoutes } from "./finance-advisor-routes.mjs";
 import { registerFinanceScenarioRoutes } from "./finance-scenario-routes.mjs";
+import {getFinanceFxSnapshot} from "./finance-fx-valuation.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO=/^[A-Z]{3}$/;
@@ -81,6 +82,15 @@ export async function registerFinanceRoutes(app) {
     const ctx=await authorized(request,reply);if(!ctx)return;
     try { await ctx.pool.query("SELECT 1 FROM finance.schema_migrations LIMIT 1");return {allowed:true}; }
     catch(error){return databaseError(request,reply,error);}
+  });
+  // Automatic INDICATIVE currency valuation; never posts FX trades or ledger entries.
+  app.get("/api/finance/fx/estimates",async(request,reply)=>{
+    const ctx=await authorized(request,reply);if(!ctx)return;
+    try{
+      const snapshot=await getFinanceFxSnapshot(ctx.pool);
+      reply.header("Cache-Control","private, no-store");
+      return snapshot;
+    }catch(error){return databaseError(request,reply,error);}
   });
   app.get("/api/finance/bootstrap",async(request,reply)=>{
     const ctx=await authorized(request,reply);if(!ctx)return;
