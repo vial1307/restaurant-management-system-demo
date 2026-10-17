@@ -366,5 +366,52 @@ try{
  assert(immutableCorrection,"Balance reconciliation cannot be erased after posting");
 }finally{await verify.end();}
 
+
+// Indicative currency snapshot is protected, source-attributed, cached in Finance DB.
+assert.equal((await request("/finance/fx/estimates")).status,401);
+assert.equal((await request("/finance/fx/estimates",{cookie:stranger})).status,403);
+const fxBefore=await request("/finance/fx/estimates",{cookie:owner});
+assert.equal(fxBefore.status,200);
+assert.equal(fxBefore.data.automaticCurrencyExchange,false);
+assert.equal(fxBefore.data.quotes.VND.rateToTwd,null,"Never guess exchange rate without a quote");
+const fxSeedDb=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),
+ database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
+await fxSeedDb.connect();
+try{
+ await fxSeedDb.query(
+  "INSERT INTO finance.fx_rates(base_currency,quote_currency,rate,provider,observed_at) VALUES('VND','TWD',0.00125,'exchangerate-api-open',now()),('USD','TWD',31.25,'exchangerate-api-open',now())");
+}finally{await fxSeedDb.end();}
+const fxReady=await request("/finance/fx/estimates",{cookie:owner});
+assert.equal(fxReady.status,200);
+assert.equal(Number(fxReady.data.quotes.VND.rateToTwd),0.00125);
+assert.equal(fxReady.data.quotes.VND.status,"fresh");
+assert.equal(fxReady.data.source.attribution,"Rates By Exchange Rate API");
+const nativePlan=await post("/cashflow/items",{month:monthly,kind:"expense",
+ label:"Dự kiến trả 1 triệu đồng",currencyCode:"VND",originalAmount:"1000000",dueDay:"28"});
+assert.equal(Number(nativePlan.item.amount_twd),1250);
+assert.equal(nativePlan.item.original_currency,"VND");
+assert.equal(Number(nativePlan.item.original_amount),1000000);
+const nativeRows=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(nativeRows.status,200);
+assert.equal(Number(nativeRows.data.items.find(x=>x.id===nativePlan.item.id).amount_twd),1250);
+const badFXCurrency=await request("/finance/cashflow/items",{method:"POST",cookie:owner,body:{
+ month:monthly,kind:"expense",label:"Currency missing",currencyCode:"JPY",originalAmount:"500"
+}});
+assert.equal(badFXCurrency.status,400,"Missing current quote must not produce guessed plan amount");
+const wrongPrecision=await request("/finance/cashflow/items",{method:"POST",cookie:owner,body:{
+ month:monthly,kind:"expense",label:"Wrong VND fraction",currencyCode:"VND",originalAmount:"1000.5"
+}});
+assert.equal(wrongPrecision.status,400);
+const foreignFundAuto=await request("/finance/debt-funds",{method:"PUT",cookie:owner,body:{
+ debtId:debt.id,month:monthly,plannedAmount:"1000000",earmarkedAmount:"0"
+}});
+assert.equal(foreignFundAuto.status,200,JSON.stringify(foreignFundAuto.data));
+assert.equal(Number(foreignFundAuto.data.fund.fx_rate_to_twd),0.00125);
+const financeAfterFX=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(financeAfterFX.data.accounts.find(x=>x.id===bank.id).balance),40250,
+ "FX planning must not move any posted TWD wallet");
+assert.equal(Number(financeAfterFX.data.accounts.find(x=>x.id===vnd.id).balance),6850000,
+ "FX planning must not transfer foreign-currency wallet balance");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
