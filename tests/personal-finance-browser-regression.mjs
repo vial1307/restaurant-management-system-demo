@@ -215,7 +215,7 @@ try{
   assert.match(await page.locator("#finance-content").innerText(),/1 · Cao nhất/);
   await page.locator('.main-nav [data-tab="commitments"]').click();
   const editDebt=page.locator('[data-action="editDebt"][data-id="'+addedDebt.id+'"]');
-  await editDebt.click();
+  await editDebt.first().click();
   await page.locator('#finance-fields [name="annualInterestPercent"]').fill("12");
   await page.locator('#finance-fields [name="plannedAmount"]').fill("3000000");
   await page.locator('#finance-fields [name="paymentDay"]').fill("20");
