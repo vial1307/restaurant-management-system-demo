@@ -110,6 +110,69 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   }
   app.post("/api/finance/linked-debts",(req,reply)=>linkedDebt(req,reply,false));
   app.put("/api/finance/linked-debts/:debtId",(req,reply)=>linkedDebt(req,reply,true));
+  // Matching link for savings goals. Goal progress and all posted movements are
+  // independent of this monthly allocation and remain unchanged.
+  async function linkedGoal(req,reply,edit=false){
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{},goalId=edit?req.params?.goalId:null,code=String(b.currencyCode||"");
+    const name=trim(b.name,160),memo=trim(b.memo,600)||"",month=b.month;
+    const planned=String(b.plannedAmount??"0"),earmark=String(b.earmarkedAmount??"0");
+    if((edit&&!id(goalId))||!monthKey(month)||!name||!/^[A-Z]{3}$/.test(code)||
+       !positive(b.targetAmount,6)||!money(planned,6)||!money(earmark,6)||
+       (b.targetDate&&!isDate(b.targetDate)))return fail(reply,"INVALID_LINKED_GOAL");
+    try{
+      const {rows:c}=await ctx.pool.query(
+        "SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[code]);
+      if(!c[0])return fail(reply,"INVALID_LINKED_GOAL_CURRENCY");
+      const minor=Number(c[0].minor_units);
+      if(!positive(b.targetAmount,minor)||!money(planned,minor)||!money(earmark,minor))
+        return fail(reply,"INVALID_LINKED_GOAL_AMOUNT");
+      const hasAllocation=Number(planned)>0||Number(earmark)>0;
+      const quote=hasAllocation&&code!=="TWD"?
+        (await getFinanceFxSnapshot(ctx.pool)).quotes?.[code]:null;
+      const rate=code==="TWD"?"1":quote?.status==="fresh"&&positiveRate(quote.rateToTwd)?quote.rateToTwd:null;
+      if(hasAllocation&&!rate)return fail(reply,"FX_RATE_UNAVAILABLE");
+      const result=await auditedWrite(ctx,edit?"finance.goal.plan_update":"finance.goal.plan_create","finance_goal",async db=>{
+        let g;
+        if(edit){
+          const existing=await db.query(
+           "SELECT id,currency_code FROM finance.goals WHERE id=$1 AND owner_user_id=$2 FOR UPDATE",
+           [goalId,ctx.owner]);
+          if(!existing.rows[0])return {error:"GOAL_NOT_FOUND",status:404};
+          if(existing.rows[0].currency_code!==code)return {error:"GOAL_CURRENCY_IMMUTABLE"};
+          const r=await db.query(
+           "UPDATE finance.goals SET name=$3,target_amount=$4::numeric,target_date=$5::date,memo=$6,updated_at=now() "+
+           "WHERE id=$1 AND owner_user_id=$2 RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,memo",
+           [goalId,ctx.owner,name,b.targetAmount,b.targetDate||null,memo]);
+          g=r.rows[0];
+        }else{
+          const r=await db.query(
+           "INSERT INTO finance.goals(owner_user_id,name,currency_code,target_amount,target_date,memo) "+
+           "VALUES($1,$2,$3,$4::numeric,$5::date,$6) RETURNING id,name,currency_code,target_amount::text,current_amount::text,target_date::text,memo",
+           [ctx.owner,name,code,b.targetAmount,b.targetDate||null,memo]);
+          g=r.rows[0];
+        }
+        let allocation=null;
+        if(hasAllocation){
+          const q=await db.query(
+           "INSERT INTO finance.goal_fund_allocations(owner_user_id,goal_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+           "VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) "+
+           "ON CONFLICT(owner_user_id,goal_id,month_date) DO UPDATE SET "+
+           "planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,"+
+           "fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() "+
+           "RETURNING id,goal_id,month_date::text,planned_amount::text",
+           [ctx.owner,g.id,startMonth(month),planned,earmark,rate]);
+          allocation=q.rows[0];
+        }
+        return {goal:g,allocation};
+      });
+      if(result?.error)return fail(reply,result.error,result.status||400);
+      return reply.code(edit?200:201).send(result);
+    }catch(error){return databaseError(req,reply,error);}
+  }
+  app.post("/api/finance/linked-goals",(req,reply)=>linkedGoal(req,reply,false));
+  app.put("/api/finance/linked-goals/:goalId",(req,reply)=>linkedGoal(req,reply,true));
+
 
   const roundTripQuery=async(ctx,m)=>{
     const date=startMonth(m);
