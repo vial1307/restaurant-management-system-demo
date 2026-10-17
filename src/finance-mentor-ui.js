@@ -1,7 +1,7 @@
 // Finance Mentor is intentionally a separate UI module. No Kitchen data or localStorage.
-export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange}){
+export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange,getBuffer}){
  const state={loaded:false,loading:false,status:null,digest:null,conversations:[],
-   conversationId:null,messages:[],sending:false,error:null};
+   conversationId:null,messages:[],sending:false,error:null,horizonDays:90};
  const s=value=>safe(String(value??""));
  const command=(label,action,id="",className="soft")=>
   '<button type="button" class="btn '+className+' small" data-mentor-action="'+s(action)+
@@ -56,6 +56,7 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
     "Khoản nào là nghĩa vụ bắt buộc? Khoản người quen nào cần xác nhận?",
     "Nếu thu nhập giảm, 90 ngày tới tôi nên phân bổ ra sao?"];
   return title("AI Financial Mentor","Đọc dữ liệu có thật, phân tích theo từng ngày và phản biện khi kế hoạch thiếu an toàn.")+
+   '<div class="mentor-controls"><label>Phạm vi <select id="mentor-horizon">'+[30,60,90,365].map(n=>'<option value="'+n+'"'+(n===state.horizonDays?' selected':'')+'>'+n+' ngày</option>').join('')+'</select></label></div>'+ 
    '<div class="layout-2 mentor-layout"><div class="stack">'+
    card("Trò chuyện với Mentor",config+chat()+
     '<div class="mentor-prompts">'+prompts.map((q,i)=>command(q,"example",i)).join("")+'</div>'+
@@ -139,7 +140,7 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
   state.sending=true;state.messages.push({role:"user",content:message});onChange();
   try{
    const data=await api("/mentor/messages",{conversationId:state.conversationId,
-    message,horizonDays:90,bufferTwd:"3000"},"POST");
+    message,horizonDays:state.horizonDays,bufferTwd:String(getBuffer?.()??"3000")},"POST");
    state.conversationId=data.conversationId;
    state.messages.push({role:"assistant",content:data.answer});
    state.conversations=(await api("/mentor/conversations")).conversations||[];
@@ -171,6 +172,7 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
    }catch(e){notify(e.message||"Không xóa được.");}return;
   }
  }
+ document.body.addEventListener("change",e=>{if(e.target.id==="mentor-horizon")state.horizonDays=Number(e.target.value);},true);
  document.body.addEventListener("click",e=>{
   const button=e.target.closest("[data-mentor-action]");
   if(button){e.preventDefault();e.stopImmediatePropagation();void handle(button.dataset.mentorAction,button.dataset.id||"");}
