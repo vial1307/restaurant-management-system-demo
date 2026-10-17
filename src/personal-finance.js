@@ -437,6 +437,7 @@ document.body.addEventListener("click",async event=>{
 });
 $("#finance-month").addEventListener("change",async event=>{if(/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)){state.month=event.target.value;await refresh();}});
 $("#finance-reload").addEventListener("click",refresh);
+$("#finance-settings").addEventListener("click",()=>nav("settings"));
 $("#finance-dialog-close").addEventListener("click",()=>dlg.close());
 $("#finance-dialog-cancel").addEventListener("click",()=>dlg.close());
 dlg.addEventListener("click",event=>{if(event.target===dlg)dlg.close();});
