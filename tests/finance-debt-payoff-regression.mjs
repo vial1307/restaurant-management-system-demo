@@ -29,6 +29,7 @@ assert(stale.remaining.find(x=>x.debtId==="card").missingRate);
 assert.deepEqual(debts,readOnly,"Projection never changes persisted debt objects");
 const risk=planDebtPayoff({asOf,baseline:{...baseline,months:[
  {...baseline.months[0],minimumTwd:"-12000",endingTwd:"3000"},baseline.months[1]]},debts,funds,quotes,bufferTwd:"5000"});
-assert.equal(risk.suggestions.length,0,"Never suggest extra debt payment when an upcoming month cannot meet the buffer");
+assert.equal(risk.months[0].suggestions.length,0,"Never recommend an extra debt payment before the known near-term cash shortfall");
+assert(risk.suggestions.every(x=>x.month!=="2026-10"),"Later recovered months may independently fund debt");
 assert(risk.warnings.some(x=>x.includes("thiếu tiền")));
 console.log("PASS debt priority, monthly roll-forward, interest, pre-funded debt, stale FX, no double counting and protected cash floor");
