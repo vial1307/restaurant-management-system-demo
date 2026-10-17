@@ -214,6 +214,7 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
     projectedEndingTwd:projection.projectedEndingTwd,
     minimumBalanceTwd:projection.minimumBalanceTwd,minimumDate:projection.minimumDate,
     earliestRisk:projection.earliestRisk,totals:projection.totals,
+    totalEvents:projection.entries.length,eventsTruncated:projection.entries.length>100,
     entries:projection.entries.slice(0,100),warnings:projection.warnings.slice(0,25),
     excludedFxPlans:projection.excludedFxPlans
    };
