@@ -16,7 +16,14 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
     const startMonth=asOf.slice(0,7)+"-01";
     const endMonth=through.slice(0,7)+"-01";
     try{
-      const pool=ctx.pool,owner=ctx.owner;
+      reply.header("Cache-Control","private, no-store");
+      return await loadFinanceAdvice({pool:ctx.pool,owner:ctx.owner,asOf,days:Number(daysText),bufferTwd});
+    }catch(error){return databaseError(request,reply,error);}
+  });
+}
+
+// One authoritative Finance snapshot powers both deterministic Advisor and AI Mentor.
+export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
       const [wallets,cashItems,debtFunds,goalFunds,debtPayments,fxPlans,goals,debts]=await Promise.all([
         pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
         pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
@@ -51,18 +58,15 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
           "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.name",[owner]
         )
       ]);
-      const fx=await getFinanceFxSnapshot(ctx.pool);
+      const fx=await getFinanceFxSnapshot(pool);
       const liveDebts=debtFunds.rows.map(row=>priceFinanceFund(row,fx));
       const liveGoals=goalFunds.rows.map(row=>priceFinanceFund(row,fx));
       const unconverted=missingFinanceFundQuotes(liveDebts,liveGoals);
-      reply.header("Cache-Control","private, no-store");
-      const advice=calculateFinanceAdvice({asOf,days:Number(daysText),bufferTwd,
+      const advice=calculateFinanceAdvice({asOf,days,bufferTwd,
         wallets:wallets.rows,cashItems:cashItems.rows,debtFunds:liveDebts.filter(x=>x.planned_twd!==null),
         goalFunds:liveGoals.filter(x=>x.planned_twd!==null),debtPayments:debtPayments.rows,fxPlans:fxPlans.rows,
         goals:goals.rows,debts:debts.rows});
       return {...advice,unconvertedFunds:unconverted,
         warnings:[...advice.warnings,...unconverted.map(x=>({code:"FX_RATE_UNAVAILABLE",message:"Quỹ "+x.name+" ("+x.currency+") thiếu tỷ giá hiện tại và chưa được tính vào TWD."}))],
         fxEstimateIncomplete:unconverted.length>0};
-    }catch(error){return databaseError(request,reply,error);}
-  });
 }
