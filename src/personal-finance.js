@@ -3,7 +3,7 @@ import {financeMonthlyTrend,financeLiquidityForecast,financeDonut} from "./finan
 const $=s=>document.querySelector(s);
 const root=$("#finance-content"),dlg=$("#finance-dialog"),form=$("#finance-form"),fields=$("#finance-fields");
 const nowDate=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-const state={tab:"overview",month:nowDate().slice(0,7),user:null,data:null,overview:null,cashflow:null,year:null,fx:null,advice:null,days:90,buffer:"0",scenarioList:[],preview:null,baseline:null,baselineBusy:false,baselineError:null,analysisVersion:0,busy:false,ready:false,partial:[],error:null,editing:null,
+const state={tab:"overview",month:nowDate().slice(0,7),user:null,data:null,overview:null,cashflow:null,year:null,yearPlan:null,fx:null,advice:null,days:90,buffer:"0",scenarioList:[],preview:null,baseline:null,baselineBusy:false,baselineError:null,analysisVersion:0,busy:false,ready:false,partial:[],error:null,editing:null,
  sim:{name:"Kế hoạch của tôi",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]}};
 const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const number=(v,d=0)=>Number(v||0).toLocaleString("vi-VN",{maximumFractionDigits:d});
@@ -223,6 +223,17 @@ function reportRows(){
 }
 function reporting(){
  const year=state.year?.months||[];const inc=actualIncome(),out=actualExpense(),planned=planSummary();
+ const projectedMonths=(state.yearPlan?.months||[]).map(m=>({
+  month:m.month,income_twd:m.planned_income_twd,
+  expense_twd:val(m.planned_expense_twd)+val(m.debt_fund_twd)+val(m.goal_fund_twd),
+  missing:!!m.fx_estimate_incomplete
+ }));
+ const incompleteYear=projectedMonths.some(m=>m.missing);
+ const annualTable=projectedMonths.length?'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tháng</th><th class="num">Thu dự kiến</th><th class="num">Chi & quỹ dự kiến</th><th class="num">Chênh lệch</th></tr></thead><tbody>'+
+ projectedMonths.map(m=>'<tr><td>'+safe(fmtMonth(m.month))+(m.missing?' <span class="tag expense">Thiếu tỷ giá</span>':'')+'</td><td class="num positive">'+money(m.income_twd)+
+ '</td><td class="num negative">'+money(m.expense_twd)+'</td><td class="num">'+(m.missing?'Chưa đủ số liệu':money(val(m.income_twd)-val(m.expense_twd)))+'</td></tr>').join("")+
+ '</tbody></table></div>':empty("Chưa có dữ liệu kế hoạch năm.");
+
  const categories=(state.overview?.budget||[]).filter(x=>x.kind==="expense");
  return title("Dòng tiền & báo cáo","Kế hoạch và phát sinh thực được đối chiếu riêng theo "+fmtMonth(state.month)+".",btn("+ Thu / chi","transaction","primary")+btn("Xuất CSV","export","ghost"))+
  '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Dòng tiền thực",value:money(inc-out)},{color:"purple",label:"Số giao dịch",value:String(state.overview?.events?.length||0)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
@@ -230,6 +241,12 @@ function reporting(){
    '<div class="notice">Kế hoạch ≠ phát sinh thực tế. Các khoản đã nhập ở tab Kế hoạch được tự đồng bộ vào đây, không yêu cầu nhập lại. Tránh cộng hai cột thành một số dư.</div>',btn("Xem kế hoạch","goPlan","small soft"))+
  '<div class="layout-2 equal">'+card("Số dư dự báo & hành động",linkedInsights())+
  card("Lịch tiền theo ngày",linkedCashTable(22))+"</div>"+
+ '<div class="layout-2 equal">'+card("Xu hướng kế hoạch cả năm",
+   (incompleteYear?'<div class="notice warn">Một số tháng chưa có đủ tỷ giá ngoại tệ. Biểu đồ chỉ thể hiện phần đã định giá.</div>':"")+
+   '<div class="chart-box">'+financeMonthlyTrend(projectedMonths)+'</div>',
+   "", "Gồm thu/chi dự kiến, quỹ nợ và mục tiêu từ Finance Database.")+
+ card("Xu hướng thực tế cả năm",'<div class="chart-box">'+financeMonthlyTrend(year)+'</div>',"", "Chỉ gồm thu/chi đã thực hiện.")+'</div>'+
+ card("So sánh kế hoạch 12 tháng",annualTable)+
  '<div class="layout-2">'+card("Xu hướng thu/chi thực theo tháng",'<div class="chart-box">'+financeMonthlyTrend(year)+'</div>')+
  card("Phân bổ chi tiêu",reportDonut())+'</div>'+
  '<div class="layout-2 equal">'+card("Ngân sách theo danh mục",categories.length?categories.map(c=>
@@ -239,6 +256,14 @@ function reporting(){
 }
 function scenario(){
  const s=state.sim,p=state.preview||state.baseline;
+ const monthBreakdown=p?.months?.length?'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tháng</th><th class="num">Thu từ lịch</th><th class="num">Chi/Quỹ</th><th class="num">Cuối tháng</th></tr></thead><tbody>'+
+  p.months.map(m=>'<tr><td>'+safe(fmtMonth(m.month))+'</td><td class="num positive">'+money(m.incomeTwd)+'</td><td class="num negative">'+money(val(m.costTwd)+val(m.goalTwd)+val(m.repaymentTwd))+
+  '</td><td class="num">'+money(m.endingTwd)+'</td></tr>').join("")+'</tbody></table></div>':
+  '<div class="notice">Đang tính bảng dòng tiền theo tháng.</div>';
+ const compare=state.preview&&state.baseline?'<div class="notice">Chênh lệch cuối kỳ so với kế hoạch gốc: <strong>'+
+  money(val(state.preview.endingTwd)-val(state.baseline.endingTwd))+
+  '</strong>. Đây là tác động của giả định, chưa phải khoản tiền đã thực hiện.</div>':"";
+
  const preview=p?'<p class="section-sub" style="margin-bottom:10px">'+(state.preview?'Kịch bản bạn vừa phân tích':'Tự phân tích từ số liệu Kế hoạch tài chính đã lưu')+'</p><div class="mini-list"><div><small>Cuối kỳ dự báo</small><strong>'+money(p.endingTwd)+'</strong></div><div><small>Đáy số dư</small><strong>'+money(p.minimumTwd)+'</strong></div><div><small>Thu nhập cần thêm/kỳ lương</small><strong>'+(!p.minimumAdditionalIncomePerPaydayTwd?"Cần đổi lịch":money(p.minimumAdditionalIncomePerPaydayTwd))+'</strong></div></div>'+
   '<div style="height:12px"></div>'+(p.earliestRisk?'<div class="notice warn">Cần kiểm tra nguy cơ thiếu tiền từ '+safe(p.earliestRisk.date)+'</div>':'<div class="notice">Chưa phát hiện hụt so với mức dự trữ theo dữ liệu và giả định đã nhập.</div>')+
   '<div class="stack" style="margin-top:12px">'+(p.warnings||[]).slice(0,6).map(w=>'<div class="notice warn">'+safe(w)+'</div>').join("")+'</div>':(state.baselineBusy?empty("Đang tự đọc kế hoạch, quỹ nợ và dòng tiền để phân tích…"):empty("Chưa thể phân tích. "+(state.baselineError||"Kiểm tra kế hoạch và kết nối Finance Database.")));
@@ -261,7 +286,8 @@ function scenario(){
  '<div class="rowitem"><div><strong>2. Ngày phát sinh</strong><p>Kiểm tra ngày hụt trước khi lương đến; số tiền nhận sau đó không thể trả một khoản đã quá hạn.</p></div></div>'+
  '<div class="rowitem"><div><strong>3. Mô phỏng an toàn</strong><p>So với mức dự trữ và giả định tăng/giảm thu nhập. Không tạo giao dịch thật.</p></div></div>')+'</div>'+
  '<div class="stack">'+card("Kết quả dự báo",preview)+
- card("Tư vấn tự động theo tháng đã chọn",linkedInsights())+
+ card("Dòng tiền theo từng tháng",monthBreakdown+compare)+
+ card("Tư vấn tự động theo tháng đã chọn",linkedInsights())++
  card("Lịch thu/chi và số dư dự kiến",linkedCashTable(24))+
  
  card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div>'+btn("Mở","openScenario","small soft",'data-id="'+safe(x.id)+'"')+'</div>').join(""):empty("Chưa lưu kịch bản nào."))+
@@ -308,7 +334,7 @@ async function refresh(){
  state.baseline=null;state.preview=null;state.baselineError=null;state.baselineBusy=false;
  state.ready=false;state.error=null;render();
  const year=+state.month.slice(0,4);
- const specs=[["data","/bootstrap"],["overview","/overview?month="+state.month],["cashflow","/cashflow?month="+state.month],["year","/year?year="+year],["fx","/fx/estimates"],["advice","/advisor?days="+advisorHorizon()+"&bufferTwd="+encodeURIComponent(state.buffer)],["scenarioData","/workbench"]];
+ const specs=[["data","/bootstrap"],["overview","/overview?month="+state.month],["cashflow","/cashflow?month="+state.month],["year","/year?year="+year],["yearPlan","/cashflow/year?year="+year],["fx","/fx/estimates"],["advice","/advisor?days="+advisorHorizon()+"&bufferTwd="+encodeURIComponent(state.buffer)],["scenarioData","/workbench"]];
  const res=await Promise.allSettled(specs.map(x=>api(x[1])));
  state.partial=[];
  for(let i=0;i<res.length;i++){const [k]=specs[i];if(res[i].status==="fulfilled"){if(k==="scenarioData")state.scenarioList=res[i].value.scenarios||[];else state[k]=res[i].value;}else{
