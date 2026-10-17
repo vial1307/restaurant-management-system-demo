@@ -17,7 +17,7 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
       const pool=ctx.pool,owner=ctx.owner;
       const [wallets,cashItems,debtFunds,goalFunds,debtPayments,fxPlans,goals,debts]=await Promise.all([
         pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
-        pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
+        pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,funding_mode,funding_account_id,conversion_day,fx_fee_twd::text,month_date::text,due_day FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
           "ROUND(f.planned_amount*f.fx_rate_to_twd,6)::text AS planned_twd "+
