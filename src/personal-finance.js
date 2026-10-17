@@ -158,6 +158,28 @@ function walletList(){
  const accounts=state.data?.accounts||[];
  return accounts.length?accounts.map(a=>'<div class="rowitem"><div><strong>'+safe(a.name)+'</strong><p>'+safe(a.currency_code)+' · '+safe(a.kind)+'</p></div><div class="right"><strong>'+safe(money(a.balance,a.currency_code))+'</strong> '+btn("Chỉnh số dư","reconcile","small soft",'data-id="'+safe(a.id)+'"')+'</div></div>').join(""):empty("Chưa có ví. Hãy thêm ví hoặc tài khoản ngân hàng.");
 }
+function debtRepaymentAdvice(){
+ const data=state.preview?(state.extraDebtAdvice||state.debtAdvice):state.debtAdvice;
+ if(state.baselineBusy&&!data)return empty("Đang đọc lịch lương, chi và quỹ nợ để xây kế hoạch trả nợ...");
+ if(!data)return empty("Chưa có dự báo trả nợ. Nhập lịch lương và số tiền dự kiến trả trong Kế hoạch rồi cập nhật.");
+ const priority='<div class="notice"><strong>Thứ tự ưu tiên:</strong> 1. Trả nợ đến hạn → 2. Giữ chi phí thiết yếu → 3. Để dành mục tiêu. '+
+  'Đề xuất trả thêm chỉ xuất hiện khi dòng tiền đã nhập đủ và không khiến số dư xuống dưới mức dự trữ. Không tự ghi nhận đã trả.</div>';
+ const rows=(data.months||[]);
+ const table=rows.length?'<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tháng / nguồn lương</th>'+
+  '<th class="num">Thu đã khai báo</th><th class="num">Quỹ nợ đã lập</th><th class="num">Gợi ý trả thêm</th>'+
+  '<th class="num">Số dư dự kiến sau gợi ý</th><th>Khoản nợ ưu tiên</th></tr></thead><tbody>'+
+  rows.map(m=>'<tr><td><strong>'+safe(fmtMonth(m.month))+'</strong><br><small>'+
+   safe(m.payday?"Tiền về "+m.payday:"Chưa có lịch thu tháng này")+'</small></td>'+
+   '<td class="num positive">'+money(m.incomeTwd)+'</td><td class="num negative">'+money(m.scheduledDebtTwd)+'</td>'+
+   '<td class="num">'+money(m.suggestedAdditionalDebtTwd)+'</td><td class="num">'+money(m.projectedAfterSuggestionsTwd)+'</td>'+
+   '<td>'+safe(m.details?.map(d=>d.name+" (còn ≈ "+money(d.remainingPrincipalEstimateTwd)+")").join("; ")||"Chưa có khoản phân bổ")+'</td></tr>').join("")+
+  '</tbody></table></div>':empty("Chưa có dữ liệu dự báo theo tháng.");
+ const balances=(data.debtBalances||[]).length?'<div style="margin-top:10px">'+data.debtBalances.map(d=>
+  '<div class="rowitem"><div><strong>'+safe(d.name)+'</strong><p>Hạn '+safe(d.dueDate||"chưa khai báo")+' · Dư gốc cuối kỳ nếu thực hiện toàn bộ kế hoạch</p></div>'+
+  '<strong>'+money(d.remainingPrincipalEstimatedTwd)+'</strong></div>').join("")+'</div>':"";
+ const warnings=(data.warnings||[]).slice(0,5).map(w=>'<div class="notice warn" style="margin-top:7px">'+safe(w)+'</div>').join("");
+ return priority+'<div style="height:12px"></div>'+table+balances+warnings;
+}
 function goalList(limit=99){
  const goals=(state.data?.goals||[]).filter(x=>x.status==="active").slice(0,limit);
  return goals.length?goals.map(g=>'<div class="goal-card"><div class="goal-head"><strong>'+safe(g.name)+'</strong><b>'+Math.round(goalPercent(g))+'%</b></div><small>'+money(g.current_amount,g.currency_code)+' / '+money(g.target_amount,g.currency_code)+'</small><div class="progress"><i style="width:'+goalPercent(g)+'%"></i></div></div>').join(""):empty("Chưa có mục tiêu. Tạo mục tiêu đầu tiên.");
@@ -227,6 +249,7 @@ function commitments(){
  '<div class="tools">'+btn("Phân bổ","fundGoal","small soft",'data-id="'+safe(g.id)+'"')+btn("Tiến độ","editGoal","small ghost",'data-id="'+safe(g.id)+'"')+'</div></div>';}).join(""):empty("Chưa có mục tiêu.");
  return title("Công nợ & mục tiêu","Quản lý khoản cần trả và mục tiêu tích lũy trong cùng một trang.",btn("+ Khoản nợ","debt","primary")+btn("+ Mục tiêu","goal","soft"))+
  '<div class="layout-2 equal">'+card("Danh sách khoản nợ",debtHtml)+card("Mục tiêu và quỹ tích lũy",goalHtml)+'</div>'+
+ card("Phân bổ lương trả nợ qua các tháng",debtRepaymentAdvice(),btn("Mô phỏng 3–12 tháng","goSim","small soft"))+
  card("Quỹ trong kế hoạch tháng",planTable(),btn("Xem kế hoạch","goPlan","small soft"))+
  '<div class="notice">Quỹ nợ và quỹ mục tiêu là kế hoạch. Chỉ nút “Đã trả nợ” mới ghi thanh toán thực tế; “Phân bổ” không tự trừ tiền ví.</div>';
 }
@@ -303,6 +326,7 @@ function scenario(){
  '<div class="rowitem"><div><strong>3. Mô phỏng an toàn</strong><p>So với mức dự trữ và giả định tăng/giảm thu nhập. Không tạo giao dịch thật.</p></div></div>')+'</div>'+
  '<div class="stack">'+card("Kết quả dự báo",preview)+
  card("Dòng tiền theo từng tháng",monthBreakdown+compare)+
+ card("Kế hoạch trả nợ từ lương và dòng tiền mới",debtRepaymentAdvice(),btn("Sửa số tiền trả nợ","goCommit","small soft"),"Dư nợ còn lại theo từng tháng chỉ là ước tính. Khoản nợ đã trả thực tế không thay đổi.")+
  card("Tư vấn tự động theo tháng đã chọn",linkedInsights())+
  card("Lịch thu/chi và số dư dự kiến",linkedCashTable(24))+
  
