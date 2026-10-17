@@ -31,7 +31,7 @@ try{
      budget:[{id:expense,category_id:expense,name:"Ăn uống",kind:"expense",budget_twd:"15000",actual_twd:"12000"}],events:history});
    if(p==="/cashflow")return respond(route,{month:url.searchParams.get("month"),
      items:items.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),
-     debtFunds:funds,goalFunds,summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
+     debtFunds:funds.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),goalFunds:goalFunds.filter(x=>x.month_date?.startsWith(url.searchParams.get("month"))),summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
    if(p==="/year")return respond(route,{year:+url.searchParams.get("year"),months:[{month:"2026-10",income_twd:"50000",expense_twd:"12000"}]});
    if(p==="/cashflow/year"){
     const year=+url.searchParams.get("year");
@@ -46,6 +46,18 @@ try{
    }
    if(p==="/advisor")return respond(route,{asOf:"2026-10-17",through:"2026-11-15",days:30,startingBalanceTwd:"30000",
      entries:[{date:"2026-10-30",kind:"income",source:"cashflow",label:"Lương",amountTwd:"50000",projectedBalanceTwd:"80000"}],recommendations:[{title:"Giữ quỹ dự phòng",detail:"Đối chiếu tiền lương và khoản chi trước khi cam kết."}],warnings:[],bufferTwd:"0"});
+   if(p==="/debt-payoff-plan"&&m==="GET"){
+    const d=debts.at(-1),chosen=d?.currency_code==="TWD"?d:debts[0];
+    return respond(route,{readOnly:true,priority:["debt","essential_expense","saving"],bufferTwd:"0",
+      months:[{month:"2026-11",incomeTwd:"58000",essentialOutgoTwd:"25000",
+       existingDebtTwd:"12500",savingsTwd:"1000",suggestedExtraTwd:"2500",
+       endingAfterSuggestionsTwd:"18000",plannedPayments:[],suggestions:[]}],
+      suggestions:chosen?[{month:"2026-11",debtId:chosen.id,name:chosen.name,
+        currency:chosen.currency_code,extraNative:"1500",extraTwd:"1500",
+        suggestedTotalNative:chosen.currency_code==="VND"?"10001000":"2500",dueDate:chosen.due_date,apr:0}]:[],
+      remaining:debts.map(x=>({debtId:x.id,name:x.name,currency:x.currency_code,
+       remainingNative:x.outstanding_amount||"0"})),warnings:[]});
+   }
    if(p==="/workbench"&&m==="GET")return respond(route,{scenarios:scenarioBooks,asOf:"2026-10-17"});
    if(p==="/workbench/preview"&&m==="POST"){
     // A representative read-only server forecast assembled from exactly the
@@ -88,13 +100,37 @@ try{
    if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="DELETE"){
     items.splice(items.findIndex(x=>x.id===p.split("/").at(-1)),1);return respond(route,{deleted:true});
    }
-   if(p==="/debt-funds"&&m==="PUT"){const d=funds.find(x=>x.debt_id===b.debtId);
-    Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,planned_twd:String(Math.round(+b.plannedAmount*.00125)),fx_rate_to_twd:"0.00125"});
+   if(p==="/debt-funds"&&m==="PUT"){const existing=funds.find(x=>x.debt_id===b.debtId&&x.month_date.startsWith(b.month));
+    const obj=debts.find(d=>d.id===b.debtId),conv=obj.currency_code==="VND"?.00125:1;
+    const d=existing||{id:next(),debt_id:b.debtId,debt_name:obj.name,currency_code:obj.currency_code,due_date:obj.due_date,month_date:b.month+"-01"};
+    Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,planned_twd:String(Math.round(+b.plannedAmount*conv)),fx_rate_to_twd:String(conv)});
+    if(!existing)funds.push(d);
     return respond(route,{fund:d});}
    if(p==="/goal-funds"&&m==="PUT"){const f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount};goalFunds.push(f);return respond(route,{fund:f});}
    if(p==="/transactions"&&m==="POST"){const a=accounts.find(a=>a.id===b.accountId);a.balance=String(+a.balance+Number(b.amount)*(b.kind==="income"?1:-1));
      wroteLedger++;return respond(route,{event:{id:next(),kind:b.kind}},201);}
    if(p==="/categories"&&m==="POST"){categories.push({id:next(),name:b.name,kind:b.kind});return respond(route,{category:categories.at(-1)},201);}
+   if(p==="/debt-plans"&&m==="POST"){
+    const d={id:next(),name:b.name,currency_code:b.currencyCode,principal_original:b.principalOriginal,
+      outstanding_amount:b.principalOriginal,annual_interest_rate:String(Number(b.annualInterestPercent)/100),
+      due_date:b.dueDate};debts.push(d);
+    const f={id:next(),debt_id:d.id,debt_name:d.name,currency_code:d.currency_code,due_date:d.due_date,
+      month_date:b.month+"-01",planned_amount:b.plannedAmount,earmarked_amount:"0",
+      planned_twd:String(Math.round(Number(b.plannedAmount)*(d.currency_code==="VND"?.00125:1)))};
+    funds.push(f);return respond(route,{debt:d,fund:f},201);
+   }
+   if(p==="/goal-plans"&&m==="POST"){
+    const g={id:next(),name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,
+     current_amount:"0",status:"active",target_date:b.targetDate};goals.push(g);
+    const f={id:next(),goal_id:g.id,goal_name:g.name,currency_code:g.currency_code,
+      month_date:b.month+"-01",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount,
+      earmarked_amount:"0"};goalFunds.push(f);return respond(route,{goal:g,fund:f},201);
+   }
+   if(/^\/debts\/[^/]+$/.test(p)&&m==="PUT"){
+    const d=debts.find(x=>x.id===p.split("/").at(-1));
+    Object.assign(d,{name:b.name,annual_interest_rate:String(Number(b.annualInterestPercent)/100),due_date:b.dueDate});
+    return respond(route,{debt:d});
+   }
    if(p==="/debts"&&m==="POST"){debts.push({id:next(),name:b.name,currency_code:b.currencyCode,outstanding_amount:b.principalOriginal});return respond(route,{debt:debts.at(-1)},201);}
    if(p==="/goals"&&m==="POST"){goals.push({id:next(),name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,current_amount:"0",status:"active"});return respond(route,{goal:goals.at(-1)},201);}
    if(/^\/goals\/[^/]+$/.test(p)&&m==="PUT"){const g=goals.find(x=>x.id===p.split("/").at(-1));g.status=b.status;g.current_amount=b.currentAmount;return respond(route,{goal:g});}
