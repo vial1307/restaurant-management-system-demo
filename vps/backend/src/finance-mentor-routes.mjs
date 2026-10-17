@@ -98,7 +98,7 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
  app.get("/api/finance/mentor/analysis",async(req,reply)=>{
   const ctx=await authorized(req,reply);if(!ctx)return;
   const range=String(req.query?.days??"90"),buffer=String(req.query?.bufferTwd??"0");
-  if(!/^(30|60|90|365)$/.test(range)||!/^(?:0|[1-9]\\d{0,10})(?:\\.\\d{1,2})?$/.test(buffer))
+  if(!/^(30|60|90|365)$/.test(range)||!dec.test(buffer))
     return fail(reply,"INVALID_MENTOR_ANALYSIS_REQUEST");
   try{
    const asOf=dateTaipei();
