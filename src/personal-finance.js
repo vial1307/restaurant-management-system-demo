@@ -602,7 +602,8 @@ function renderFx(){
     panel("Kế hoạch chuyển tiền",plans.length?plans.map(p=>row(p.from_currency+" → "+p.to_currency,p.plan_date+" · "+(p.plan_kind==="remittance"?"Chuyển ra ngoài":"Chuyển đổi"),moneyLabel(p.source_amount,p.from_currency),p.status==="planned"?"Dự kiến · "+safeRate(p.expected_rate):"Đã "+p.status)+(p.status==="planned"?'<button class="fin-btn secondary fin-cancel-plan" type="button" data-cancel-plan="'+esc(p.id)+'">Hủy kế hoạch</button>':"")).join(""):'<div class="fin-list-empty">Chưa có lịch. Có thể lên kế hoạch đổi TWD → VND hàng tháng.</div>')+
    '</div><div class="fin-stack">'+
     panel("Các loại ngoại tệ hỗ trợ",'<div style="display:flex;flex-wrap:wrap;gap:8px">'+currencyCards+'</div>')+
-    '<div class="fin-warning"><strong>Tỷ giá không phải dữ liệu live</strong><div class="fin-note">Chưa kết nối nhà cung cấp tỷ giá. Bạn nhập tỷ giá và phí tại thời điểm đổi tiền; không dùng con số ví dụ để ghi sổ.</div></div>'+
+    renderFxSummary()+
+    '<div class="fin-warning"><strong>Tỷ giá tham chiếu không phải tỷ giá thanh toán</strong><div class="fin-note">Dự báo tự lấy tỷ giá gần nhất có nguồn/ngày. Khi thực đổi tiền vẫn phải nhập số tiền, tỷ giá và phí thực nhận; Finance OS không thực hiện giao dịch ngân hàng.</div></div>'+
     panel("Ví đa ngoại tệ",balances())+
    '</div></div>';
 }
