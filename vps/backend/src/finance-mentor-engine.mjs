@@ -19,6 +19,10 @@ export function debtMentorAlerts(debts,asOf){
   for(const d of debts){
     if(Number(d.outstanding_amount)<=0)continue;
     const type=d.creditor_type||"other",obligation=d.obligation_type||"unconfirmed";
+    if(obligation!=="unconfirmed" && !d.due_date){
+      alerts.push({debtId:d.id,kind:"missing_agreed_date",date:null,urgency:"review",
+        message:"Khoản "+d.name+" được phân loại có cam kết, nhưng chưa nhập ngày trả chính xác. Hãy xác nhận và nhập hạn trước khi mô phỏng."});
+    }
     if(obligation==="unconfirmed" && d.due_date){
       alerts.push({debtId:d.id,kind:"verify_due",date:d.due_date,urgency:"review",
         message:"Hãy xác nhận lịch trả đã ghi cho "+d.name+". Chưa rõ có cam kết cố định hay không."});
