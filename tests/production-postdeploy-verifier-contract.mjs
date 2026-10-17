@@ -9,7 +9,7 @@ assert.match(hook,/chmod 0440 \/etc\/sudoers.d\/kitchen-os-verify/);
 assert.match(verifier,/VERIFY_TASK_NOT_ALLOWED/);
 assert.match(verifier,/case "\$task" in/);
 assert(!verifier.includes("source .env"));
-assert(!verifier.includes("args+=(\"--apply\")"),"Readonly wrapper may not append write flags");
+assert.match(verifier,/bash \/opt\/kitchen-os\/repo\/vps\/scripts\/backup\.sh[\s\S]*args\+=\("--apply"\)/,"manual apply must make a backup before modifying DB");
 assert(!verifier.includes("eval "));
 assert(!verifier.includes("bash -c"));
 const inv=read(".github/workflows/inventory-site-production-audit.yml");
@@ -28,6 +28,7 @@ for(const kind of ["staff","schedule","attendance"]){
  assert(flow.includes("kitchen-os-verify workforce-"+kind));
  assert(!flow.includes("docker compose --env-file .env"));
  assert(!flow.includes("source .env"));
- assert(!flow.includes("          - apply"),"never implicitly enable write paths");
+ assert(flow.includes("          - apply"),"manual apply choice remains available");
+ assert(flow.includes("GITHUB_EVENT_NAME\" == \"workflow_dispatch"),"write mode restricted to explicit manual runs");
 }
 console.log("PASS sealed production verification, read-only pinned SQL and no secret file access");
