@@ -29,7 +29,7 @@ function dated(month,day,deadline){
 }
 function monthOf(row){return String(row.month||row.month_date||"").slice(0,7);}
 export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashItems=[],debtFunds=[],goalFunds=[],debtPayments=[],fxPlans=[],goals=[],debts=[]}){
-  if(!validDate(asOf)||![30,60,90].includes(days))throw new Error("INVALID_ADVISOR_RANGE");
+  if(!validDate(asOf)||![30,60,90,365].includes(days))throw new Error("INVALID_ADVISOR_RANGE");
   const buffer=twdUnits(bufferTwd);
   if(buffer<0n)throw new Error("INVALID_ADVISOR_BUFFER");
   const through=addDays(asOf,days-1);

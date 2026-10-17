@@ -70,7 +70,8 @@ const sameDay=calculateFinanceAdvice({...input,wallets:[{name:"TWD",currency_cod
  debtFunds:[],goalFunds:[],debtPayments:[],fxPlans:[],goals:[],debts:[]});
 assert.deepEqual(sameDay.entries.map(e=>e.kind),["income","expense"]);
 assert.equal(sameDay.projectedEndingTwd,"100");
-assert.throws(()=>calculateFinanceAdvice({...input,days:365}),/INVALID_ADVISOR_RANGE/);
+assert.equal(calculateFinanceAdvice({...input,days:365}).days,365,"Future selected month needs full 12-month forecast");
+assert.throws(()=>calculateFinanceAdvice({...input,days:366}),/INVALID_ADVISOR_RANGE/);
 // Salary on the 10th must not cover expenses due on the 5th.
 const cycleResult=buildCycleAlerts({
  asOf:"2026-10-17",through:"2026-11-15",startingBalanceTwd:"10000",bufferTwd:"2000",
