@@ -266,18 +266,21 @@ export async function registerFinanceRoutes(app) {
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const goalId=request.params?.goalId,b=request.body||{};
     if(!id(goalId)||!["active","achieved","archived"].includes(b.status)
-      ||typeof b.currentAmount!=="string")return fail(reply,"INVALID_GOAL_UPDATE");
+      ||typeof b.currentAmount!=="string"
+      ||(b.name!==undefined&&!trim(b.name))
+      ||(b.targetDate!==undefined&&b.targetDate!==null&&!isDate(b.targetDate)))return fail(reply,"INVALID_GOAL_UPDATE");
     try{
       const goal=await ctx.pool.query(
-        "SELECT c.minor_units FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",
+        "SELECT c.minor_units,g.target_amount::text,g.current_amount::text FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",
         [goalId,ctx.owner]
       );
       if(!goal.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
-      if(!money(b.currentAmount,Number(goal.rows[0].minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
+      if(!money(b.currentAmount,Number(goal.rows[0].minor_units))||
+         (b.targetAmount!==undefined&&(!positive(b.targetAmount,Number(goal.rows[0].minor_units))||Number(b.targetAmount)<Number(b.currentAmount))))return fail(reply,"INVALID_GOAL_UPDATE");
       const saved=await auditedWrite(ctx,"finance.goal.update","finance_goal",async db=>{
         const {rows}=await db.query(
-        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,current_amount::text,status",
-        [goalId,ctx.owner,b.currentAmount,b.status]
+        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,name=COALESCE($5,name),target_amount=COALESCE($6::numeric,target_amount),target_date=COALESCE($7::date,target_date),updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,name,current_amount::text,target_amount::text,target_date::text,status",
+        [goalId,ctx.owner,b.currentAmount,b.status,b.name===undefined?null:trim(b.name,160),b.targetAmount??null,b.targetDate??null]
       );
         return rows[0];
       });
