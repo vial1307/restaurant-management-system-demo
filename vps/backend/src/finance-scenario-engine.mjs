@@ -1,3 +1,4 @@
+import {summarizeForeignFunding} from "./finance-funding-engine.mjs";
 // Scenario-only deterministic Finance OS simulation. Never mutates real ledger or debts.
 // All values are TWD micro-units to preserve numeric accuracy across FX snapshots.
 const MICRO=1000000n;
@@ -80,13 +81,9 @@ export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[]
    if(units(event.amountTwd)===0n)return;
    events.push(event);
  };
- for(const row of cashItems){
-   const month=String(row.month_date).slice(0,7);
-   const d=dateFor(month,row.due_day);
-   if(d.estimatedDate)warnings.push("Có khoản thu/chi thiếu ngày chính xác, tạm xếp cuối tháng.");
-   include({date:d.date,kind:row.kind,label:row.label,amountTwd:plain(units(row.amount_twd)*(row.kind==="income"?1n:-1n)),
-    source:"cashflow",estimatedDate:d.estimatedDate});
- }
+ const funding=summarizeForeignFunding({asOf,through,items:cashItems,wallets:accounts});
+ for(const event of funding.events)include({...event});
+ warnings.push(...funding.warnings);
  const posted=new Map();
  for(const p of debtPayments){
    const k=p.debt_id+"|"+String(p.payment_date).slice(0,7);
@@ -121,6 +118,7 @@ export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[]
  if(debts.some(d=>d.currency_code!=="TWD"))warnings.push("Công nợ ngoại tệ chưa quy đổi, không dùng dư nợ VND/USD để tính tổng nợ TWD.");
  if(debts.some(d=>!debtFunds.some(f=>f.debt_id===d.id)))warnings.push("Có công nợ chưa lập lịch trả góp theo từng tháng; dự báo có thể thiếu nghĩa vụ.");
  return {startingBalanceTwd:plain(startingBalance),events,warnings:[...new Set(warnings)],
+   foreignFunding:funding.fundingRequirements,foreignShortfalls:funding.foreignShortfalls,
    debtTwdPrincipal:plain(debts.filter(d=>d.currency_code==="TWD").reduce((s,d)=>s+units(d.outstanding_amount??"0"),0n)),
    debtRanking:debts.filter(d=>d.currency_code==="TWD"&&units(d.outstanding_amount??"0")>0n)
      .map(d=>({name:d.name,amountTwd:d.outstanding_amount,rate:String(d.annual_interest_rate??"0")}))
@@ -323,6 +321,7 @@ export function simulateScenario({asOf,source,scenario}){
  if(settings.rows.some(x=>x.kind==="debt")&&source.events.some(x=>x.source==="debt_fund"))warnings.push("Kiểm tra khoản tất toán và quỹ nợ đã phân bổ để không trừ trùng cùng một nghĩa vụ.");
  return {...base,name:settings.name,minimumAdditionalIncomePerPaydayTwd:minExtra,
    goal:settings.goal,loans,bridgeWindow,sourceDebtTwdPrincipal:source.debtTwdPrincipal,
-   debtRanking:source.debtRanking,warnings:[...new Set(warnings)].slice(0,18),
+   debtRanking:source.debtRanking,foreignFunding:source.foreignFunding||[],foreignShortfalls:source.foreignShortfalls||[],
+   warnings:[...new Set(warnings)].slice(0,18),
    methodology:"Mô phỏng thanh khoản; không phải dự báo xác suất, giao dịch thực tế hay lời đề nghị vay."};
 }
