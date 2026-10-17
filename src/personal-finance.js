@@ -39,7 +39,7 @@ function btn(name,action,css="soft",attrs=""){return '<button type="button" clas
 function card(t,body,extra="",subtitle=""){return '<section class="card"><div class="section-title"><div><h2>'+safe(t)+'</h2>'+(subtitle?'<p class="section-sub">'+safe(subtitle)+'</p>':"")+'</div>'+extra+'</div>'+body+'</section>';}
 function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Tiết kiệm"}[kind]||"Khác")+'</span>';}
 function empty(t){return '<div class="empty">'+safe(t)+'</div>';}
-const mentorUI=createFinanceMentorUI({api,safe,card,title,money,notify,onChange:()=>render()});
+const mentorUI=createFinanceMentorUI({api,safe,card,title,money,notify,onChange:()=>render(),getBuffer:()=>state.buffer});
 function nav(tab){state.tab=tab;render();window.scrollTo(0,0);if(tab==="mentor")void mentorUI.load();}
 function quoteCards(){
  const used=[...new Set([...(state.data?.accounts||[]).map(x=>x.currency_code),...(state.data?.debts||[]).map(x=>x.currency_code),...(state.data?.goals||[]).map(x=>x.currency_code),"VND","USD"])].filter(c=>c!=="TWD");
