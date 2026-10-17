@@ -25,7 +25,8 @@ const parity=read(".github/workflows/workforce-schedule-production-parity.yml");
 assert(parity.includes("kitchen-os-verify workforce-parity"));
 for(const kind of ["staff","schedule","attendance"]){
  const flow=read(".github/workflows/workforce-"+kind+"-production-backfill.yml");
- assert(flow.includes("kitchen-os-verify workforce-"+kind));
+ assert(flow.includes('TASK="workforce-'+kind+'"'),"workflow must choose the allowlisted task");
+ assert(flow.includes("sudo -n /usr/local/sbin/kitchen-os-verify $TASK"),"workflow must call verifier");
  assert(!flow.includes("docker compose --env-file .env"));
  assert(!flow.includes("source .env"));
  assert(flow.includes("          - apply"),"manual apply choice remains available");
