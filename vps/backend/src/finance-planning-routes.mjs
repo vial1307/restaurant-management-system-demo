@@ -166,6 +166,19 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       ||typeof b.principalOriginal!=="string"||!money(String(b.annualInterestPercent??""),6)
       ||Number(b.annualInterestPercent)<0||Number(b.annualInterestPercent)>100)
       return fail(reply,"INVALID_DEBT_TERMS");
+    if(b.month!==undefined&&(!monthKey(b.month)||typeof b.plannedAmount!=="string"||
+        b.paymentDay!=null&&(!Number.isInteger(Number(b.paymentDay))||Number(b.paymentDay)<1||Number(b.paymentDay)>31)))
+      return fail(reply,"INVALID_DEBT_FUND");
+    const current=await ctx.pool.query(
+      "SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code "+
+      "WHERE d.id=$1 AND d.owner_user_id=$2",[debtId,ctx.owner]);
+    if(!current.rows.length)return fail(reply,"DEBT_NOT_FOUND",404);
+    if(b.month!==undefined&&!money(b.plannedAmount,Number(current.rows[0].minor_units)))
+      return fail(reply,"INVALID_DEBT_FUND");
+    const rate=b.month!==undefined&&Number(b.plannedAmount)>0?
+      (current.rows[0].currency_code==="TWD"?"1":(await getFinanceFxSnapshot(ctx.pool)).quotes?.[current.rows[0].currency_code]?.rateToTwd):"1";
+    if(b.month!==undefined&&Number(b.plannedAmount)>0&&!positiveRate(rate))
+      return fail(reply,"DEBT_FUND_RATE_REQUIRED");
     try{
       const saved=await auditedWrite(ctx,"finance.debt.terms.update","finance_debt",async db=>{
         const {rows}=await db.query(
@@ -181,6 +194,19 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           "UPDATE finance.debts SET name=$3,principal_original=$4::numeric,annual_interest_rate=$5::numeric/100,due_date=$6::date "+
           "WHERE owner_user_id=$1 AND id=$2 RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
           [ctx.owner,debtId,trim(b.name,160),b.principalOriginal,String(b.annualInterestPercent),b.dueDate]);
+        if(b.month!==undefined){
+          if(Number(b.plannedAmount)>0){
+            await db.query(
+              "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd,payment_day) "+
+              "VALUES($1,$2,$3::date,$4::numeric,0,$5::numeric,$6) "+
+              "ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,"+
+              "fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,payment_day=EXCLUDED.payment_day,updated_at=now()",
+              [ctx.owner,debtId,startMonth(b.month),b.plannedAmount,rate,b.paymentDay||null]);
+          }else{
+            await db.query("DELETE FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND debt_id=$2 AND month_date=$3::date",
+              [ctx.owner,debtId,startMonth(b.month)]);
+          }
+        }
         return result.rows[0];
       });
       if(!saved)return fail(reply,"DEBT_NOT_FOUND",404);
@@ -316,7 +342,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         const rate=debt.currency_code==="TWD"?"1":positiveRate(snapRate)?snapRate:positiveRate(b.fxRateToTwd)?b.fxRateToTwd:null;
         if(!positiveRate(rate))return {error:"DEBT_FUND_RATE_REQUIRED"};
         const {rows:funds}=await db.query(
-          "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,payment_day=COALESCE(EXCLUDED.payment_day,finance.debt_fund_allocations.payment_day),updated_at=now() RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text,payment_day",
+          "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,payment_day=COALESCE(EXCLUDED.payment_day,debt_fund_allocations.payment_day),updated_at=now() RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text,payment_day",
           [ctx.owner,b.debtId,startMonth(b.month),b.plannedAmount,b.earmarkedAmount,rate,b.paymentDay||null]
         );
         return funds[0];
