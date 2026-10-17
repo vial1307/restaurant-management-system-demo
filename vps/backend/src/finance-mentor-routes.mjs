@@ -54,6 +54,7 @@ const instructions=[
  "AI chỉ tư vấn, không gửi lệnh ghi sổ, chuyển tiền, thay đổi công nợ hay lịch thực tế.",
  "Trình bày: Kết luận; lý do và mốc ngày; ưu tiên thanh toán; phương án A/B; dữ liệu còn thiếu.",
  "Không tự tính ra số dư khác với tính toán tất định; nếu muốn mô phỏng chưa có phép tính, nói rõ cần chạy mô phỏng.",
+ "Dùng datedObligationBrief làm nguồn chuẩn cho số tiền chưa đủ quỹ trước hạn và tình trạng trước kỳ lương; chỉ rõ khoản nào còn thiếu dữ liệu.",
  "Phân biệt ngày nhắc liên hệ với hạn nợ pháp lý/đã cam kết."
 ].join("\n");
 
@@ -235,8 +236,21 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
     entries:projection.entries.slice(0,100),warnings:projection.warnings.slice(0,25),
     excludedFxPlans:projection.excludedFxPlans
    };
+   const datedBrief=buildFinanceMentorBrief({forecast:projection,debts,asOf});
    const context={
-    projection:ctxProjection,obligations:debts.map(d=>({
+    projection:ctxProjection,
+    datedObligationBrief:{
+     nextIncome:datedBrief.nextIncome,
+     reserveTwd:datedBrief.reserveTwd,
+     minBeforeNextIncomeTwd:datedBrief.minBeforeNextIncomeTwd,
+     shortageToReserveBeforeNextIncomeTwd:datedBrief.shortageToReserveBeforeNextIncomeTwd,
+     conservativeUnfundedRiskBeforeIncomeTwd:datedBrief.conservativeUnfundedRiskBeforeIncomeTwd,
+     uncovered:datedBrief.uncovered.slice(0,20),
+     needsConfirmation:datedBrief.needsConfirmation.slice(0,20),
+     flags:datedBrief.flags.slice(0,12),
+     limitations:datedBrief.limitations
+    },
+    obligations:debts.map(d=>({
      name:d.name,currency:d.currency_code,outstandingAmount:d.outstanding_amount,
      dueDate:d.due_date,annualInterestRate:d.annual_interest_rate,
      creditorType:d.creditor_type,obligationType:d.obligation_type,
