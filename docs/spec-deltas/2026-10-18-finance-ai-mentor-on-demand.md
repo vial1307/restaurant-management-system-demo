@@ -3,7 +3,7 @@
 **Status:** DESIGN / AUDIT ONLY — no AI service, credential or production deployment activated.  
 **Source baseline audited:** `main` @ `bdfedcc9099f0f5c7b77d85eaeb40be197236490`.  
 **Website:** https://finance.82.47.180.185.nip.io/  
-**Scope:** private Finance OS only; no Kitchen business data, no changes to posted ledger, no autonomous transfers.
+**Scope:** private Finance OS only; no Kitchen business data, no changes to posted ledger, no autonomous transfers. User-initiated AI analysis plus optional **deterministic** scheduled reminders with explicit consent, not background AI inference.
 
 ## 1. Verified repository audit (not live private data acceptance)
 
@@ -98,6 +98,8 @@ Suggested API, not yet implemented:
 
 **Phase D — secure activation:** set a privately generated OpenAI API key on VPS only; choose model and monthly budget; enable flag. Run owner-only readback and smoke tests without exposing private balances in logs.
 
+**Phase E — optional deterministic reminders:** add a consented and auditable scheduler + notification delivery only after the new debt terms and due-date model are stable. The scheduler performs no unsolicited OpenAI call. Disable by default. Test de-duplication, timezone and due-date edits.
+
 **Required pass criteria:**
 - anonymous `401`; unrelated Kitchen admin `403`; owner authenticated `200`; missing finance config and missing API key fail closed.
 - Test balances/dates: salary on 10th versus debt on 8th; no wrong claim that salary covers 8th; TWD opening is from real posted wallets only.
@@ -113,3 +115,60 @@ Suggested API, not yet implemented:
 - Confirm private owner Finance login is unshared.
 - The owner must separately configure an OpenAI API project and secret on VPS. Do not request secret values in GitHub issues, PRs or chat.
 - During implementation, preserve `/api/finance/*` Caddy-only restriction, the isolated PostgreSQL volume and existing backup/restore mechanism.
+
+## 8. New owner requirement — personal mentor + commitments rather than generic debt ranking (2026-10-18)
+
+### Product objective and activity model
+The user is busy and forgets bills and private-person debts. AI Mentor therefore has **two coordinated, separate behaviors**:
+1. **Ask-to-analyze:** OpenAI conversation calls only on user send; fresh owner-specific financial snapshot, confirmed facts and deterministic rolling-day simulation. It may proactively *present* detected problems within its answer.
+2. **Opt-in obligation reminders:** finance-owned deterministic rules run on schedule only with explicit owner permission; can produce in-app alerts, with browser push/email only if separately enabled and technically configured. No independent background OpenAI processing, no automatic account mutation.
+
+A homepage “Mentor briefing” should quickly show **Hôm nay / 7 ngày tới / Trước kỳ lương / Quá hạn / Cần xác nhận** alongside unpaid known minimums, flexible obligations needing follow-up, next income date, minimum projected available balance and actionable links. Group high-priority items first. Persist notification state and deduplicate, do not send the same alert each hourly run. Never expose full creditor names or balances in device lock-screen notifications by default.
+
+### Debt model: independent dimensions, not a binary 'personal loan is optional' shortcut
+For each liability distinguish **creditor type**, **repayment contract**, **cash-flow urgency**, **relationship consequences**, **confidence**. A friend/family creditor can have a firm due date and a legally enforceable repayment contract; a bank may offer restructuring subject to approval. Creditor type alone must **never** silently decide payment deferral.
+
+Suggested normalized creditor types: `bank_loan`, `credit_card`, `personal_friend_family`, `installment_provider`, `other`. User-facing Vietnamese examples: *Ngân hàng*, *Thẻ tín dụng*, *Người quen / gia đình*, *Trả góp*, *Khác*. Record native amount and currency, outstanding principal, interest APR or confirmed fixed fee/zero/unknown, min mandatory amount, statement full amount (credit card), grace period if contractually documented, penalty regime and exact due date where known. Avoid assuming that paying only card minimum is cost-free; show interest and remaining balance.
+
+A second **required** repayment-obligation axis (not implied by creditor type):
+- `fixed_contractual`: enforceable/agreed specific schedule, due day, amount; includes friend loan with a promised date.
+- `agreed_flexible`: lender explicitly agreed an alternate schedule, record agreed amount/dates, timestamp and confirmation source. It still remains an obligation.
+- `open_ended_unconfirmed`: no agreed due date yet. Show an expected check-in date separately from a legal or promised due date, and prompt the owner to confirm; do not invent deadlines or treat as forgiven.
+
+Also separately track `payment_status` (planned, partly_paid, settled, overdue, renegotiation_pending), `relationship_priority` (user-chosen: high/medium/normal), `last_contact_at`, `next_contact_at`, `renegotiation_status`, and `next_income_date` from income schedules. “Asked creditor” ≠ “creditor agreed.” Display source of due date: contract / personal promise / estimate / unconfirmed.
+
+Financial data semantics:
+- `finance.debts` remains the obligation master, `finance.debt_payments` is immutable **actual posted repayment**, allocations are planned funding. Link stable IDs; an additional creditor terms/schedule table should be proposed in a Finance-only migration after current overlapping #260/#261/#262 migration settles.
+- Schedule recurrence and each installment's amount, due date, paid amount, status, version and signed reminder history. Transfer carryover **unpaid obligations** to the next daily projection; never post a negative fictitious bank transaction merely because a planned bill could not be funded, nor roll it as new principal blindly. Interest, penalties and legal terms only from verified user-provided inputs; unknowns remain flagged.
+- When bank loans/credit cards are involved, differentiate amount **required to remain current** from full outstanding balance and voluntary accelerated payoff; do not assume any grace period. For a personal debt, track both agreed repayment terms and relationship cost qualitatively as a user input, not as an invented monetary penalty.
+
+### Priority engine — daily timeline and constraints
+Apply **date-based obligations**, not fixed monthly bucket order:
+1. Avoid immediate liquidity insolvency, cover known essentials and time-critical required payments, including fixed promised friend repayments. Calculate mandatory minimums and penalties separately.
+2. If funds are inadequate, disclose the exact shortfall and date. Suggest conditional choices: request creditor-approved rescheduling, collect known receivables, pre-approved salary advance or permitted bridge funds. Evaluate total cost and long-term rollover impact; never assume approval or recommend skipping required payments as though consequence-free.
+3. Reserve cash up to the next confirmed payday, including every documented bill due before payday and a configurable emergency buffer. A paycheck arriving afterward cannot retroactively fix an earlier due-date deficit.
+4. Only allocate genuinely surplus funds to optional personal-debt acceleration, highest-interest debt repayment or savings goal. Compare APR, due date, contractual risk and owner-chosen relationship priority. Show alternative feasible calendars if relationship preservation matters more than interest savings.
+5. Recompute recursively through upcoming paydays across a 365-day horizon, with daily balances, outstanding contractual requirements, posted-vs-planned reconciliation and clear assumptions.
+
+Do not label friends as “low priority,” “optional,” or “can delay” without a documented agreement. Present bank/credit-card debt constraints and the option to contact a lender early, not automatic missed payments.
+
+### Reminder timing and channel contract
+- Suggested defaults in owner's Asia/Taipei timezone: 7 days before, 3 days before, 1 day before, and on due date, plus overdue daily until marked paid **where appropriate**. Configurable per liability; suppress repeats after settlement and do not trigger on a date whose validity is unknown.
+- Additional high-value alerts: upcoming cash-buffer breach before next income, salary not yet confirmed when a debt deadline approaches, credit card statement/minimum due, forgotten personal-loan follow-up, and mismatch between planned fund and actual payment.
+- Use owner-only `finance.notification_rules`, `finance.notification_events`, `finance.notification_preferences` or equivalent after schema reconciliation. Record stable obligation ID + occurrence + channel idempotency key, sent/seen/acknowledged timestamps, and create audit event; keep notification payload privacy-minimized.
+- Require explicit opt-in independently for in-app, push and email; if push permission denied, provide in-app reminders instead. External delivery needs actual provider configuration and verification. Add mute/snooze/acknowledge controls, but a snoozed reminder must not silently alter the actual due date or mark debt paid.
+- Avoid notification floods and compulsive reminders: daily digest by default with distinct urgent deadline alerts only when opted in, quiet hours, easy pause.
+
+### Worked testcase — bank versus personal debt on two sides of a payday
+**Entirely hypothetical; TWD.** 2026-11-27 posted cash 12,000; essential rent 6,000 on Nov 28; required card minimum 4,000 on Nov 30; personal friend A promised 12,000 on Dec 2; confirmed salary +58,000 on Dec 3. A second friend B is owed 10,000 but has no agreed repayment deadline, next contact date Dec 10.
+- After rent and card minimum: Nov 30 cash 2,000, no bank payment missed. Friend A Dec 2 obligation 12,000 causes a **10,000 TWD cash shortfall**, **13,000 versus a 3,000 TWD buffer**. The Dec 3 salary does not prevent this breach.
+- If A **agrees in advance** to move the 12,000 repayment to Dec 4 without penalty: Dec 3 balance after salary 60,000; Dec 4 balance 48,000. That is a conditional feasible restructuring, not a debt being ignored.
+- Friend B 10,000 remains outstanding and must be shown in total liabilities and the relationship follow-up queue, but cannot be blindly dated as a December spend. The mentor could propose voluntarily allocating for B only after protecting all known December and early January commitments and checking agreement with B.
+- If A does not agree, present available safe alternatives with confirmed dates/costs or an explicit warning of unresolved shortage, never invent bridge financing.
+
+### UI and test additions
+- Debt form: creditor type + obligation type + due/negotiation evidence + confirmed min amount, APR, late costs + relationship priority + optional reminder schedule. Conditionally show fields; no required invented rate for zero-interest friend debt.
+- “AI Mentor → Khoản cần chú ý” separates `Bắt buộc đúng hạn`, `Đã thỏa thuận thay đổi`, `Cần xác nhận ngày trả`, `Trả trước tự nguyện`. Detailed why-prioritized explanation and side-by-side alternative cash calendars.
+- Set up `Tôi quên khoản này` flag + acknowledgment, overdue review and proof-of-payment reconciliation with ledger. Do not auto-settle a debt from planned payments.
+- Tests: friend fixed vs flexible vs unknown; renegotiation requested vs confirmed; credit card minimum vs full statement/APR; due-before-payday gap; carryover vs posted payment; lender partial payment; edited due dates; paid cancellation of scheduled reminder; timezone/DST edge; notification idempotency, opt-out, privacy, rate limits and no background AI usage.
+- **Status:** new product/engineering requirements captured on this design-only PR; none are claimed deployed or live. Coordinate with issue #251 (recurring bills, minimum amounts, reconciliation, notifications).
