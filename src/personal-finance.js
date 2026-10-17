@@ -60,7 +60,24 @@ function planRows(){
   }
  };
  addFund(cf.debtFunds,"debt");addFund(cf.goalFunds,"goal");
- return rows.sort((a,b)=>a.date.localeCompare(b.date)||(a.kind==="income"?-1:1));
+ // A debt or goal is never duplicated as a planned expense. Missing allocation
+ // is visible but is not counted in TWD cashflow until the owner sets its fund.
+ for(const d of state.data?.debts||[]){
+  if(val(d.outstanding_amount)<=0||!d.due_date?.startsWith(state.month)||
+     (cf.debtFunds||[]).some(x=>x.debt_id===d.id))continue;
+  rows.push({id:d.id,ref:d.id,kind:"debt",name:d.name,date:d.due_date,
+   native:d.outstanding_amount,code:d.currency_code,twd:null,unallocated:true,
+   detail:"Đến hạn · Lãi "+number(val(d.annual_interest_rate)*100,2)+"%/năm · Chưa lập quỹ",source:"debt"});
+ }
+ for(const g of state.data?.goals||[]){
+  if(g.status!=="active"||!g.target_date?.startsWith(state.month)||
+     (cf.goalFunds||[]).some(x=>x.goal_id===g.id))continue;
+  rows.push({id:g.id,ref:g.id,kind:"goal",name:g.name,date:g.target_date,
+   native:Math.max(0,val(g.target_amount)-val(g.current_amount)),code:g.currency_code,
+   twd:null,unallocated:true,detail:"Đến hạn mục tiêu · Chưa phân bổ quỹ",source:"goal"});
+ }
+ return rows.sort((a,b)=>a.date.localeCompare(b.date)||
+  ({income:-1,debt:0,expense:1,goal:2}[a.kind]??9)-({income:-1,debt:0,expense:1,goal:2}[b.kind]??9));
 }
 
 function forecastMonths(){
@@ -164,7 +181,7 @@ function payoffSchedule(){
 function planSummary(){
  const r=planRows();const income=r.filter(x=>x.kind==="income").reduce((n,x)=>n+(x.twd||0),0);
  const expenses=r.filter(x=>x.kind!=="income").reduce((n,x)=>n+(x.twd||0),0);
- return {income,expenses,net:income-expenses,incomplete:r.some(x=>x.twd===null)};
+ return {income,expenses,net:income-expenses,incomplete:r.some(x=>x.twd===null&&!x.unallocated),unallocated:r.filter(x=>x.unallocated&&x.kind==="debt").length};
 }
 function walletTwd(){return (state.data?.accounts||[]).filter(x=>x.currency_code==="TWD").reduce((n,x)=>n+val(x.balance),0);}
 function goalPercent(g){return Math.max(0,Math.min(100,val(g.current_amount)/Math.max(1,val(g.target_amount))*100));}
@@ -189,7 +206,7 @@ function planTable(limit=100){
  return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Giá trị gốc</th><th class="num">Thu (TWD)</th><th class="num">Chi (TWD)</th><th>Ghi chú</th><th></th></tr></thead><tbody>'+rows.map(r=>
   '<tr><td>'+safe(r.date.slice(8)+"/"+r.date.slice(5,7))+(r.estimated?' <small>ước tính</small>':'')+'</td><td>'+tag(r.kind)+'</td><td><strong>'+safe(r.name)+'</strong></td>'+
   '<td>'+safe(money(r.native,r.code))+'</td><td class="num positive">'+(r.kind==="income"?safe(money(r.twd)):"—")+'</td>'+
-  '<td class="num negative">'+(r.kind!=="income"?(r.twd===null?"Chưa có tỷ giá":safe(money(r.twd))):"—")+'</td>'+
+  '<td class="num negative">'+(r.kind!=="income"?(r.unallocated?"Chưa lập quỹ":r.twd===null?"Chưa có tỷ giá":safe(money(r.twd))):"—")+'</td>'+
   '<td>'+safe(r.detail||"—")+'</td><td>'+btn("Sửa",r.source==="item"?"editPlan":r.source==="debt"?"fundDebt":"fundGoal","small soft",'data-id="'+safe(r.source==="item"?r.id:r.ref)+'"')+'</td></tr>').join("")+
   '</tbody></table></div>';
 }
@@ -233,8 +250,8 @@ function commitments(){
  const debts=state.data?.debts||[];const funds=state.cashflow?.debtFunds||[];
  const debtHtml=debts.length?debts.map(d=>{const f=funds.find(x=>x.debt_id===d.id),rate=quote(d.currency_code);
  return '<div class="rowitem"><div><strong>'+safe(d.name)+'</strong><p>Dư nợ: '+safe(money(d.outstanding_amount,d.currency_code))+
-  (d.due_date?' · Hạn '+safe(d.due_date):' · Chưa có hạn')+'</p><small>'+(f?'Quỹ tháng: '+money(f.planned_amount,d.currency_code)+(f.planned_twd!==null?' (≈ '+money(f.planned_twd)+')':' · chưa có tỷ giá'):'Chưa có quỹ tháng này')+'</small></div>'+
-  '<div class="tools">'+btn("Lập quỹ","fundDebt","small soft",'data-id="'+safe(d.id)+'"')+btn("Đã trả nợ","payDebt","small ghost",'data-id="'+safe(d.id)+'"')+'</div></div>';}).join(""):empty("Chưa khai báo công nợ.");
+  (d.due_date?' · Hạn '+safe(d.due_date):' · Chưa có hạn')+' · Lãi '+number(val(d.annual_interest_rate)*100,2)+'%/năm</p><small>'+(f?'Quỹ tháng: '+money(f.planned_amount,d.currency_code)+(f.planned_twd!==null?' (≈ '+money(f.planned_twd)+')':' · chưa có tỷ giá'):'Chưa có quỹ tháng này')+'</small></div>'+
+  '<div class="tools">'+btn("Lập quỹ","fundDebt","small soft",'data-id="'+safe(d.id)+'"')+btn("Sửa hạn/lãi","editDebt","small ghost",'data-id="'+safe(d.id)+'"')+btn("Đã trả nợ","payDebt","small ghost",'data-id="'+safe(d.id)+'"')+'</div></div>';}).join(""):empty("Chưa khai báo công nợ.");
  const goals=state.data?.goals||[];const gf=state.cashflow?.goalFunds||[];
  const goalHtml=goals.length?goals.map(g=>{const f=gf.find(x=>x.goal_id===g.id);
  return '<div class="rowitem"><div style="flex:1"><strong>'+safe(g.name)+'</strong><p>'+money(g.current_amount,g.currency_code)+" / "+money(g.target_amount,g.currency_code)+(g.target_date?" · "+safe(g.target_date):"")+'</p><div class="progress"><i style="width:'+goalPercent(g)+'%"></i></div>'+(f?'<small>Quỹ tháng: '+money(f.planned_amount,g.currency_code)+'</small>':"")+'</div>'+
