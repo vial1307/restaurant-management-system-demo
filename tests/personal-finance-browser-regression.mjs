@@ -128,6 +128,7 @@ try{
   // Reproduce the owner's November example: plan data written once must
   // appear automatically in both reporting and simulation, without re-entry.
   await page.locator("#finance-month").fill("2026-11");
+  await page.locator('.main-nav [data-tab="plan"]').click();
   await page.locator('[data-action="newPlan"]').first().click();
   await page.locator('#finance-fields [name="kind"]').selectOption("income");
   await page.locator('#finance-fields [name="label"]').fill("Lương tháng 11");
