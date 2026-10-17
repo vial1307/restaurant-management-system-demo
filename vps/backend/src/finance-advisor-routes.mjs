@@ -1,3 +1,5 @@
+import {getFinanceFxSnapshot} from "./finance-fx-valuation.mjs";
+import {priceFinanceFund,missingFinanceFundQuotes} from "./finance-fund-valuation.mjs";
 import {addDays,calculateFinanceAdvice} from "./finance-advisor-engine.mjs";
 
 // Read-only owner-scoped advice. Finance PostgreSQL is the only source of record.
@@ -20,14 +22,14 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
         pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
-          "ROUND(f.planned_amount*f.fx_rate_to_twd,6)::text AS planned_twd "+
+          "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.currency_code "+
           "FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id "+
           "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]
         ),
         pool.query(
           "SELECT f.id,f.goal_id,g.name AS goal_name,g.target_date::text,f.month_date::text,"+
-          "ROUND(f.planned_amount*f.fx_rate_to_twd,6)::text AS planned_twd "+
+          "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,g.currency_code "+
           "FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id "+
           "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]
@@ -49,11 +51,17 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
           "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.name",[owner]
         )
       ]);
+      const fx=await getFinanceFxSnapshot(ctx.pool);
+      const liveDebts=debtFunds.rows.map(row=>priceFinanceFund(row,fx));
+      const liveGoals=goalFunds.rows.map(row=>priceFinanceFund(row,fx));
+      const unconverted=missingFinanceFundQuotes(liveDebts,liveGoals);
       reply.header("Cache-Control","private, no-store");
-      return calculateFinanceAdvice({asOf,days:Number(daysText),bufferTwd,
-        wallets:wallets.rows,cashItems:cashItems.rows,debtFunds:debtFunds.rows,
-        goalFunds:goalFunds.rows,debtPayments:debtPayments.rows,fxPlans:fxPlans.rows,
+      const advice=calculateFinanceAdvice({asOf,days:Number(daysText),bufferTwd,
+        wallets:wallets.rows,cashItems:cashItems.rows,debtFunds:liveDebts,
+        goalFunds:liveGoals,debtPayments:debtPayments.rows,fxPlans:fxPlans.rows,
         goals:goals.rows,debts:debts.rows});
+      return {...advice,unconvertedFunds:unconverted,
+        fxEstimateIncomplete:unconverted.length>0};
     }catch(error){return databaseError(request,reply,error);}
   });
 }
