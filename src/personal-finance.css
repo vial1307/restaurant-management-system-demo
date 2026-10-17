@@ -420,3 +420,17 @@ html{scroll-padding-top:92px;scroll-padding-bottom:130px}
  .fin-wallet-edit{font-size:11px;padding:7px 8px;margin-left:auto}
  .fin-tools-grid{gap:7px}
 }
+
+
+/* Mobile advanced tools open as a compact floating task list above the bottom nav,
+   never as clipped children inside the fixed horizontal navigation row. */
+@media(max-width:840px){
+ .fin-nav-tools[open]::before{content:"";position:fixed;left:8px;right:8px;bottom:78px;height:220px;background:#fff;border:1px solid #dce7f6;border-radius:12px;box-shadow:0 -6px 23px #132f4b25;pointer-events:none;z-index:9}
+ .fin-nav-tools[open]>button{position:fixed!important;left:14px!important;right:14px!important;width:calc(100vw - 28px)!important;max-width:none!important;min-width:0!important;z-index:11!important;height:38px;min-height:38px!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;background:#fff!important;border-radius:7px!important;text-align:left!important;font-size:12px!important;padding:8px 13px!important;white-space:nowrap!important}
+ .fin-nav-tools[open]>button:nth-of-type(1){bottom:256px!important}
+ .fin-nav-tools[open]>button:nth-of-type(2){bottom:214px!important}
+ .fin-nav-tools[open]>button:nth-of-type(3){bottom:172px!important}
+ .fin-nav-tools[open]>button:nth-of-type(4){bottom:130px!important}
+ .fin-nav-tools[open]>button:nth-of-type(5){bottom:88px!important}
+ .fin-nav-tools[open]>button span{font-size:16px!important;margin-right:8px}
+}
