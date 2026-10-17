@@ -468,5 +468,60 @@ try{
  assert.equal(fxTransfers[0].n,0,"Automatic valuation cannot post an FX trade");
 }finally{await actualExchangeCheck.end();}
 
+// Linked liability write from the plan: source of truth is ONE debt row and
+// ONE monthly allocation; cashflow_items and real entries are not duplicated.
+const linkedBody={name:"Nợ được tạo từ Kế hoạch",currencyCode:"VND",principalOriginal:"22000000",
+ annualInterestPercent:"18",dueDate:monthly+"-28",memo:"Trả trước hạn bằng dòng lương",
+ month:monthly,plannedAmount:"5000000",earmarkedAmount:"0",fromPlanning:true};
+const deniedLinked=await request("/finance/linked-debts",{method:"POST",cookie:stranger,body:linkedBody});
+assert.equal(deniedLinked.status,403);
+const missingDueLinked=await request("/finance/linked-debts",{method:"POST",cookie:owner,
+ body:{...linkedBody,dueDate:null}});
+assert.equal(missingDueLinked.status,400,"Debt entered in monthly planning requires a repayment deadline");
+const beforeLink=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+const previousItems=beforeLink.data.items.length;
+const previousLedger=await request("/finance/bootstrap",{cookie:owner});
+const twdBeforeLink=Number(previousLedger.data.accounts.find(a=>a.id===bank.id).balance);
+const linked=await request("/finance/linked-debts",{method:"POST",cookie:owner,body:linkedBody});
+assert.equal(linked.status,201,JSON.stringify(linked.data));
+assert.equal(linked.data.debt.currency_code,"VND");
+assert.equal(linked.data.debt.memo,"Trả trước hạn bằng dòng lương");
+assert.equal(Number(linked.data.debt.annual_interest_rate),0.18);
+const edited=await request("/finance/linked-debts/"+linked.data.debt.id,{method:"PUT",cookie:owner,
+ body:{...linkedBody,name:"Nợ đã đồng bộ",plannedAmount:"6000000",
+ annualInterestPercent:"12",dueDate:monthly+"-29",memo:"Đã đổi hạn trả"}});
+assert.equal(edited.status,200,JSON.stringify(edited.data));
+const afterLink=await request("/finance/bootstrap",{cookie:owner});
+const debtAgain=afterLink.data.debts.find(d=>d.id===linked.data.debt.id);
+assert.equal(debtAgain.name,"Nợ đã đồng bộ");
+assert.equal(debtAgain.due_date,monthly+"-29");
+assert.equal(Number(debtAgain.annual_interest_rate),0.12);
+assert.equal(debtAgain.memo,"Đã đổi hạn trả");
+assert.equal(Number(afterLink.data.accounts.find(a=>a.id===bank.id).balance),twdBeforeLink,
+ "Planning debt must not post a bank withdrawal or make new income");
+const fundAgain=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(fundAgain.data.items.length,previousItems,"Do not create a duplicate expense row");
+const linkedAllocations=fundAgain.data.debtFunds.filter(x=>x.debt_id===linked.data.debt.id);
+assert.equal(linkedAllocations.length,1,"Saving same linked liability must update one monthly fund");
+assert.equal(Number(linkedAllocations[0].planned_amount),6000000);
+assert(Number(linkedAllocations[0].planned_twd)>0,"Current VND quote should value the allocation");
+const goalMeta=await request("/finance/goals/"+goal.id,{method:"PUT",cookie:owner,body:{
+ name:"Quỹ học phí có hạn",targetAmount:"60000",targetDate:monthly+"-29",
+ currentAmount:"5000",status:"active",memo:"Cần đưa vào lịch kế hoạch"
+}});
+assert.equal(goalMeta.status,200,JSON.stringify(goalMeta.data));
+assert.equal(goalMeta.data.goal.memo,"Cần đưa vào lịch kế hoạch");
+const goalSynced=await request("/finance/bootstrap",{cookie:owner});
+assert(goalSynced.data.goals.some(g=>g.id===goal.id&&g.target_date===monthly+"-29"&&g.memo==="Cần đưa vào lịch kế hoạch"));
+const simpleScenario={name:"Tự phân bổ lương",months:3,salaryDay:10,
+ bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]};
+const debtPreview=await request("/finance/workbench/preview",{method:"POST",cookie:owner,
+ body:{scenario:simpleScenario}});
+assert.equal(debtPreview.status,200,JSON.stringify(debtPreview.data));
+assert.equal(debtPreview.data.projection.debtStrategy.priority[0],"debt");
+assert.equal(debtPreview.data.projection.debtStrategy.months.length,3);
+assert(debtPreview.data.projection.debtStrategy.months[0].remainingDebts.some(x=>x.debtId===linked.data.debt.id),
+ "Debt and its stored monthly allocation must drive the salary allocation forecast");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
