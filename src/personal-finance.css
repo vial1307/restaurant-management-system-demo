@@ -375,3 +375,48 @@ body.finance-app{font-family:Inter,system-ui,-apple-system,"Noto Sans",Arial,san
 html{scroll-padding-top:92px;scroll-padding-bottom:130px}
 .fin-content button,.fin-content input,.fin-content select{scroll-margin-top:95px;scroll-margin-bottom:130px}
 @media(max-width:840px){.fin-content{padding-bottom:165px!important}html{scroll-padding-top:85px;scroll-padding-bottom:125px}}
+
+/* Streamlined Finance OS: three primary pages, optional legacy tool drawer. */
+.fin-nav-tools{margin-top:14px;padding-top:10px;border-top:1px solid #e1e8f3;min-width:0}
+.fin-nav-tools summary{display:flex;align-items:center;gap:8px;border-radius:9px;padding:11px 10px;cursor:pointer;color:#58718e;font-size:12px;font-weight:750;list-style:none}
+.fin-nav-tools summary::-webkit-details-marker{display:none}
+.fin-nav-tools summary:hover{background:#edf3fb}
+.fin-nav-tools summary span{font-size:16px;min-width:23px}
+.fin-nav-tools button{width:100%;font-size:11px!important;padding-left:18px!important;color:#6a8298!important}
+.fin-nav-tools button.active{color:#1d63e3!important}
+.fin-wallet-list{display:flex;flex-direction:column;gap:0;margin:12px 0}
+.fin-wallet-row{display:flex;align-items:center;gap:14px;min-width:0;padding:11px 8px;border-bottom:1px solid #e9eef4}
+.fin-wallet-info{min-width:0;flex:1}
+.fin-wallet-info strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.fin-wallet-info small{font-size:11px;color:#7b8ba0}
+.fin-wallet-value{font-size:15px;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.fin-wallet-edit{border:1px solid #cbdffc;background:#f0f6ff;border-radius:8px;color:#2465bc;padding:8px 11px;white-space:nowrap;font-size:11px;font-weight:750;cursor:pointer}
+.fin-wallet-edit:hover{background:#dae9ff}
+.fin-wallet-toolbar{gap:7px;display:flex;flex-wrap:wrap}
+.fin-wallet-toolbar .fin-btn{font-size:11px}
+.fin-advanced-tools{border:1px solid #e3eaf5;background:#fff;border-radius:12px;padding:5px 15px}
+.fin-advanced-tools>summary{font-size:13px;cursor:pointer;padding:14px 2px;color:#24436a;font-weight:750;display:flex;justify-content:space-between;list-style:none}
+.fin-advanced-tools>summary::-webkit-details-marker{display:none}
+.fin-tools-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin:12px 0}
+.fin-tools-grid>div{border:1px solid #e4ecf5;background:#f8fbff;border-radius:10px;padding:12px}
+.fin-tools-grid h3{font-size:12px;margin:0 0 8px}
+.fin-tools-grid .fin-toolbar{gap:6px}
+.fin-tools-grid .fin-btn{font-size:11px}
+.fin-balance-description{font-size:12px;line-height:1.65;color:#60758e;background:#f2f7ff;padding:11px;border-radius:9px}
+.fin-balance-diff{background:#eaf3ff;padding:9px 11px;border-radius:8px;font-size:12px;font-weight:700;color:#235da8}
+@media(max-width:1040px){.fin-tools-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:840px){
+ .fin-nav-tools{margin:0;border:0;padding:0;flex:0 0 92px;min-width:92px;max-width:110px}
+ .fin-nav-tools summary{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:10px;padding:5px 3px;min-height:53px;line-height:1.22;text-align:center}
+ .fin-nav-tools summary span{font-size:18px;min-width:0}
+ .fin-nav-tools[open]{position:relative;z-index:10}
+ .fin-nav-tools[open]>button{position:relative;border-radius:4px;background:#f4f8ff;min-width:130px}
+ .fin-nav:has(.fin-nav-tools[open]){overflow-x:auto}
+}
+@media(max-width:570px){
+ .fin-wallet-row{gap:7px;flex-wrap:wrap}
+ .fin-wallet-info{flex:1 1 45%}
+ .fin-wallet-value{font-size:13px}
+ .fin-wallet-edit{font-size:11px;padding:7px 8px;margin-left:auto}
+ .fin-tools-grid{gap:7px}
+}
