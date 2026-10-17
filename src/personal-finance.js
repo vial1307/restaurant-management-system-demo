@@ -1348,7 +1348,7 @@ function updateFinanceFormFx(){
   if(target)target.textContent=code==="TWD"?
    "Khoản TWD: "+(amount||"0")+" TWD":
    rate&&Number.isFinite(amountTwd)?"Giá trị ước tính: "+Math.round(amountTwd).toLocaleString("vi-VN")+" TWD · "+(quote?"tự động":"tỷ giá nhập tay")+" · "+quoteLabel(code):
-   "Chưa có tỷ giá mới: cần nhập tỷ giá tham khảo để ước tính.";
+   "Chưa có tỷ giá cập nhật. Hệ thống chưa thể tự quy đổi; số tiền gốc vẫn được giữ.";
  }
  if(kind==="income"||kind==="expense"){
   const code=fieldRoot.querySelector('[name="currencyCode"]')?.value||"TWD";
