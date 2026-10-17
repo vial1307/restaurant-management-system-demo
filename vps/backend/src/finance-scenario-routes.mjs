@@ -100,3 +100,5 @@ export function registerFinanceScenarioRoutes(app,{authorized,fail,databaseError
   }catch(error){return databaseError(req,reply,error);}
  });
 }
+// Shared owner-filtered source for read-only debt payoff advice.
+export {sources as financeScenarioSources};
