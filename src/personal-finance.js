@@ -42,7 +42,9 @@ function failure(error){
     INVALID_FX_PLAN:"Kiểm tra ngày và cặp ngoại tệ.",
     INVALID_FX_AMOUNT:"Số tiền hoặc phí không hợp lệ.",
     USE_FX_FOR_CROSS_CURRENCY:"Chuyển giữa hai ngoại tệ phải ghi nhận dưới dạng đổi ngoại tệ.",
-    TWD_RATE_REQUIRED:"Giao dịch ngoài TWD cần nhập tỷ giá quy đổi sang TWD để báo cáo chính xác.",
+    TWD_RATE_REQUIRED:"Khoản ngoại tệ cần có tỷ giá để báo cáo bằng TWD.",
+    FX_RATE_UNAVAILABLE:"Chưa có tỷ giá tham chiếu mới. Chưa thể tự quy đổi; số tiền gốc vẫn được giữ.",
+    TRANSACTION_CURRENCY_ACCOUNT_MISMATCH:"Ngoại tệ của ví không khớp với ngoại tệ giao dịch.",
     FINANCE_DUPLICATE_REQUEST:"Yêu cầu này đã được ghi nhận. Hãy tải lại giao dịch, không gửi lại cùng mã.",
     FINANCE_WRITE_HEADER_REQUIRED:"Yêu cầu ghi dữ liệu bị chặn vì thiếu xác thực chống gửi từ trang ngoài.",
     FINANCE_DUPLICATE:"Dữ liệu có thể đã được lưu. Kiểm tra lịch sử trước khi tạo yêu cầu mới.",
@@ -98,7 +100,8 @@ async function loadFxEstimates(){
  }catch(error){state.fxError=error;}
  finally{
   state.fxBusy=false;
-  if(state.data&&["budget","report","workbench"].includes(state.tab)&&!dialog.open)render();
+  if(dialog.open)updateFinanceFormFx();
+  else if(state.data&&["budget","report","workbench"].includes(state.tab))render();
  }
 }
 function fxReference(code){
@@ -1057,10 +1060,10 @@ function showForm(kind,selectedId=null){
    selectField("currencyCode","Ngoại tệ của khoản dự kiến",currencyChoices())+
    input("originalAmount","Số tiền gốc","text",financeMoneyInput(existing?.original_amount||existing?.amount_twd||""),"Nhập số tiền theo ngoại tệ đã chọn")+
    '<p class="fin-balance-diff" data-fx-form-estimate>Quy đổi dự kiến sang TWD sẽ được tính tự động.</p>'+
-   input("fxRateToTwd","Tỷ giá thủ công khi nguồn tự động chưa có","text","","Bỏ trống nếu đã có tỷ giá tự động",false)+
+
    input("dueDay","Ngày nhận / ngày phải trả (1–31)","number",existing?.due_day||"","1–31",false)+
    input("memo","Ghi chú","text",existing?.memo||"","",false)+
-   note("Giữ nguyên số tiền gốc; server sẽ tự tính TWD bằng tỷ giá tham chiếu mới nhất đang có. Nếu nguồn lỗi có thể nhập tỷ giá thủ công để ước tính. Đây là kế hoạch, không phải giao dịch thật.");
+   note("Chỉ cần chọn ngoại tệ và nhập số tiền. Hệ thống tự quy đổi sang TWD để lập kế hoạch. Không tự đổi tiền trong tài khoản.");
  }else if(kind==="goalFund"){
   const goal=(state.data.goals||[]).find(g=>g.id===selectedId);if(!goal)return;
   form.dataset.goalId=goal.id;
@@ -1094,10 +1097,14 @@ function showForm(kind,selectedId=null){
    note("LƯU Ý: Chỉ lưu khi đã thực trả. Tổng gốc + lãi + phí bị trừ khỏi ví đã chọn và khoản gốc làm giảm dư nợ. Không tự chuyển tiền qua ngân hàng.");
  }else if(kind==="income"||kind==="expense"){
   title=kind==="income"?"Ghi nhận thu nhập":"Ghi nhận chi tiêu";
-  fields=selectField("accountId","Tài khoản",allAccounts)+selectField("categoryId","Danh mục",categoryChoices(kind))+
-   input("amount","Số tiền","text","","1000")+
-   input("toTwdRate","Tỷ giá sang TWD (tiền khác TWD)","text","","1 ngoại tệ = ? TWD",false)+
-   input("description","Ghi chú","text","","",false);
+  fields=selectField("currencyCode","Ngoại tệ",currencyChoices())+
+   input("amount","Số tiền","text","","Nhập theo ngoại tệ đã chọn")+
+   '<p class="fin-balance-diff" data-fx-real-estimate>Hệ thống tự quy đổi về TWD để báo cáo.</p>'+
+   selectField("accountId","Ví / tài khoản nhận hoặc chi",allAccounts)+
+   '<p class="fin-note" data-fx-real-wallet-hint></p>'+
+   selectField("categoryId","Danh mục",categoryChoices(kind))+
+   input("description","Ghi chú","text","","",false)+
+   note("Tỷ giá tham chiếu được lấy tự động và ghi lại khi lưu. Giao dịch trừ/cộng đúng ngoại tệ trong ví được chọn; không tự chuyển tiền giữa các ví.");
  }else if(kind==="opening"){
   title="Nhập số dư đầu kỳ";fields=selectField("accountId","Tài khoản chưa có giao dịch",allAccounts)+input("amount","Số dư hiện có","text","","1000")+input("description","Ghi chú","text","Số dư ban đầu",false)+note("Chỉ nhập một lần trước khi phát sinh giao dịch. Khoản này không được tính là thu nhập trong tháng.");
  }else if(kind==="transfer"){
@@ -1122,6 +1129,10 @@ function showForm(kind,selectedId=null){
  if(kind==="goalProgress")fieldRoot.querySelector('[name="status"]').value=state.data.goals.find(g=>g.id===selectedId)?.status||"active";
  if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="kind"]').value=kind==="cashIncome"?"income":kind==="cashExpense"?"expense":(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.kind||"expense";
  if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="currencyCode"]').value=kind==="cashEdit"?(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.original_currency||"TWD":"TWD";
+ if(kind==="income"||kind==="expense"){
+   const defaultCurrency=accounts.some(a=>a.currency_code==="TWD")?"TWD":accounts[0]?.currency_code||"TWD";
+   fieldRoot.querySelector('[name="currencyCode"]').value=defaultCurrency;
+ }
  if(kind==="fxPlan"){const a=fieldRoot.querySelector('[name="fromCurrency"]'),b=fieldRoot.querySelector('[name="toCurrency"]');if(a&&b){a.value="TWD";b.value="VND";}}
  updateFinanceFormFx();
  // Restore prepopulated values after reset; reset defaults are retained by browser.
@@ -1151,7 +1162,14 @@ async function submitForm(event){
   reason:data.reason,idempotencyKey:form.dataset.idempotencyKey};
  if(["income","expense","transfer","fxPost","opening"].includes(kind)){
    body={...data,kind:kind==="fxPost"?"fx":kind==="opening"?"adjustment":kind,idempotencyKey:form.dataset.idempotencyKey,occurredAt:new Date().toISOString()};
-   if(!data.toTwdRate)delete body.toTwdRate;
+   if(kind==="income"||kind==="expense"){
+     if(!fxReference(data.currencyCode)){
+       flash("Chưa có tỷ giá mới cho "+data.currencyCode+". Không thể ghi giao dịch với giá trị TWD ước tính.");return;
+     }
+     if(!data.accountId){flash("Cần có ví "+data.currencyCode+" để ghi giao dịch thực tế.");return;}
+     body.fxRateMode="estimate";
+     delete body.toTwdRate;
+   }else if(!data.toTwdRate)delete body.toTwdRate;
  }
  state.busy=true;
  const submit=document.querySelector("#finance-submit");submit.disabled=true;submit.textContent="Đang lưu...";
@@ -1330,7 +1348,34 @@ function updateFinanceFormFx(){
   if(target)target.textContent=code==="TWD"?
    "Khoản TWD: "+(amount||"0")+" TWD":
    rate&&Number.isFinite(amountTwd)?"Giá trị ước tính: "+Math.round(amountTwd).toLocaleString("vi-VN")+" TWD · "+(quote?"tự động":"tỷ giá nhập tay")+" · "+quoteLabel(code):
-   "Chưa có tỷ giá mới: cần nhập tỷ giá tham khảo để ước tính.";
+   "Chưa có tỷ giá cập nhật. Hệ thống chưa thể tự quy đổi; số tiền gốc vẫn được giữ.";
+ }
+ if(kind==="income"||kind==="expense"){
+  const code=fieldRoot.querySelector('[name="currencyCode"]')?.value||"TWD";
+  const account=fieldRoot.querySelector('[name="accountId"]');
+  const matches=state.data?.accounts?.filter(a=>a.currency_code===code)||[];
+  if(account){
+   const current=account.value;
+   for(const option of account.options){
+    if(!option.value)continue;
+    const allowed=matches.some(a=>a.id===option.value);
+    option.disabled=!allowed;
+    option.hidden=!allowed;
+   }
+   if(!matches.some(a=>a.id===current))account.value=matches[0]?.id||"";
+   account.disabled=!matches.length;
+  }
+  const hint=fieldRoot.querySelector("[data-fx-real-wallet-hint]");
+  if(hint)hint.textContent=matches.length?
+    "Số dư ví "+code+" được ghi nhận theo đồng gốc, báo cáo tổng hợp bằng TWD.":
+    "Chưa có ví "+code+". Tạo ví ngoại tệ trước khi ghi thu/chi đã xảy ra; khoản dự kiến có thể lập ngay.";
+  const amount=Number(fieldRoot.querySelector('[name="amount"]')?.value||0);
+  const quote=fxReference(code),estimated=fxAsTwd(amount,code);
+  const el=fieldRoot.querySelector("[data-fx-real-estimate]");
+  if(el)el.textContent=quote&&Number.isFinite(estimated)?
+    "Quy đổi tự động: ≈ "+moneyLabel(estimated)+" · "+quoteLabel(code)+
+     (quote.observedAt?" · "+quote.observedAt.slice(0,10):""):
+    "Chưa có tỷ giá mới cho "+code+". Không tự tính ra số TWD không có cơ sở.";
  }
  if(kind==="fxPlan"){
   const from=fieldRoot.querySelector('[name="fromCurrency"]')?.value,to=fieldRoot.querySelector('[name="toCurrency"]')?.value;
@@ -1341,9 +1386,9 @@ function updateFinanceFormFx(){
   }
  }
 }
-fieldRoot.addEventListener("change",event=>{if(event.target.matches('[name="currencyCode"],[name="fromCurrency"],[name="toCurrency"]'))updateFinanceFormFx();});
+fieldRoot.addEventListener("change",event=>{if(event.target.matches('[name="currencyCode"],[name="accountId"],[name="fromCurrency"],[name="toCurrency"]'))updateFinanceFormFx();});
 fieldRoot.addEventListener("input",event=>{
- if(event.target.matches('[name="originalAmount"],[name="fxRateToTwd"]'))updateFinanceFormFx();
+ if(event.target.matches('[name="originalAmount"],[name="fxRateToTwd"],[name="amount"]'))updateFinanceFormFx();
  if(!event.target.matches('[name="targetBalance"]')||dialog.dataset.formKind!=="balanceReconcile")return;
  const before=String(fieldRoot.querySelector('[name="expectedBalance"]')?.value||"0");
  const after=String(event.target.value).trim();
