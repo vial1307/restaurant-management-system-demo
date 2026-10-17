@@ -13,7 +13,7 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
   return alerts.length?alerts.slice(0,limit).map(x=>
    '<div class="alert-row"><div><strong>'+s(x.date||"Chưa xác nhận ngày")+' · '+
    s(({due:"Nợ đến hạn",contact:"Cần liên hệ",unknown_schedule:"Thiếu lịch trả",
-    verify_due:"Kiểm tra cam kết",unconfirmed_renegotiation:"Chờ đồng ý đổi lịch"})[x.kind]||"Cần kiểm tra")+
+    verify_due:"Kiểm tra cam kết",missing_agreed_date:"Thiếu hạn cam kết",unconfirmed_renegotiation:"Chờ đồng ý đổi lịch"})[x.kind]||"Cần kiểm tra")+
    '</strong><p>'+s(x.message)+'</p></div></div>').join(""):
    '<div class="notice">Chưa có cảnh báo đến hạn trong 7 ngày theo dữ liệu đã khai báo. Vẫn cần kiểm tra nghĩa vụ chưa xác nhận.</div>';
  }
