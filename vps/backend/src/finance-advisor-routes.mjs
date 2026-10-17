@@ -9,7 +9,7 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
     const ctx=await authorized(request,reply);if(!ctx)return;
     const daysText=String(request.query?.days??"30");
     const bufferTwd=String(request.query?.bufferTwd??"0");
-    if(!/^(30|60|90)$/.test(daysText))return fail(reply,"INVALID_ADVISOR_RANGE");
+    if(!/^(30|60|90|365)$/.test(daysText))return fail(reply,"INVALID_ADVISOR_RANGE");
     if(!/^(?:0|[1-9]\d{0,10})(?:\.\d{1,2})?$/.test(bufferTwd))return fail(reply,"INVALID_ADVISOR_BUFFER");
     const asOf=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
     const through=addDays(asOf,Number(daysText)-1);
