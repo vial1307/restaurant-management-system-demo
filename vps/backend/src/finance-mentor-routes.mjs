@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import {debtMentorAlerts,creditorLabels,obligationLabels} from "./finance-mentor-engine.mjs";
 import {loadFinanceAdvice} from "./finance-advisor-routes.mjs";
+import {buildFinanceMentorBrief} from "./finance-mentor-brief.mjs";
 
 const dateTaipei=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",
   year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
@@ -92,6 +93,22 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
    reply.header("Cache-Control","private, no-store");
    return {asOf,debts,alerts:debtMentorAlerts(debts,asOf),creditorLabels,obligationLabels,
     automaticRemindersActive:false,source:"finance_postgresql"};
+  }catch(e){return databaseError(req,reply,e);}
+ });
+ app.get("/api/finance/mentor/analysis",async(req,reply)=>{
+  const ctx=await authorized(req,reply);if(!ctx)return;
+  const range=String(req.query?.days??"90"),buffer=String(req.query?.bufferTwd??"0");
+  if(!/^(30|60|90|365)$/.test(range)||!/^(?:0|[1-9]\\d{0,10})(?:\\.\\d{1,2})?$/.test(buffer))
+    return fail(reply,"INVALID_MENTOR_ANALYSIS_REQUEST");
+  try{
+   const asOf=dateTaipei();
+   const [forecast,debts]=await Promise.all([
+    loadFinanceAdvice({pool:ctx.pool,owner:ctx.owner,asOf,days:Number(range),bufferTwd:buffer}),
+    listFinanceDebtObligations(ctx.pool,ctx.owner)
+   ]);
+   const analysis=buildFinanceMentorBrief({forecast,debts,asOf});
+   reply.header("Cache-Control","private, no-store");
+   return {analysis,configuredAi:enabled(),source:"finance_postgresql",readOnly:true};
   }catch(e){return databaseError(req,reply,e);}
  });
  app.put("/api/finance/mentor/debts/:id/terms",async(req,reply)=>{
