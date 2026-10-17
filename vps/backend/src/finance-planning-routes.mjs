@@ -36,7 +36,8 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     const name=trim(b.name,160),memo=trim(b.memo,600)||"";
     const rateText=String(b.annualInterestPercent??"0");
     const fund=String(b.plannedAmount??"0"),earmark=String(b.earmarkedAmount??"0");
-    if((edit&&!id(debtId))||!name||!monthKey(month)||!isDate(b.dueDate)||
+    if((edit&&!id(debtId))||!name||!monthKey(month)||
+       (b.fromPlanning?!isDate(b.dueDate):(b.dueDate&&!isDate(b.dueDate)))||
        !/^[A-Z]{3}$/.test(code)||!money(rateText,6)||Number(rateText)>100||
        !money(fund,6)||!money(earmark,6)||
        (!edit&&!positive(b.principalOriginal,6)))
@@ -78,13 +79,13 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             "UPDATE finance.debts SET name=$3,annual_interest_rate=$4::numeric/100,due_date=$5::date,"+
             "memo=$6,principal_original=$7::numeric WHERE id=$1 AND owner_user_id=$2 "+
             "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text,memo",
-            [debtId,ctx.owner,name,rateText,b.dueDate,memo,nextPrincipal]);d=u.rows[0];
+            [debtId,ctx.owner,name,rateText,b.dueDate||null,memo,nextPrincipal]);d=u.rows[0];
         }else{
           const r=await db.query(
             "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date,memo) "+
             "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date,$7) "+
             "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text,memo",
-            [ctx.owner,name,code,b.principalOriginal,rateText,b.dueDate,memo]);d=r.rows[0];
+            [ctx.owner,name,code,b.principalOriginal,rateText,b.dueDate||null,memo]);d=r.rows[0];
         }
         let allocation=null;
         if(needsReserve){
