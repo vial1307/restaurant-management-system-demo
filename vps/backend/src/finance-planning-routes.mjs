@@ -153,7 +153,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             [ctx.owner,debt.rows[0].id,startMonth(b.month),b.plannedAmount,rate,payday]);
           fund=result.rows[0];
         }
-        return {debt:debt.rows[0],fund};
+        return {id:debt.rows[0].id,debt:debt.rows[0],fund};
       });
       return reply.code(201).send(saved);
     }catch(error){return databaseError(req,reply,error);}
@@ -242,7 +242,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             [ctx.owner,goal.rows[0].id,startMonth(b.month),b.plannedAmount,rate]);
           fund=alloc.rows[0];
         }
-        return {goal:goal.rows[0],fund};
+        return {id:goal.rows[0].id,goal:goal.rows[0],fund};
       });
       return reply.code(201).send(saved);
     }catch(error){return databaseError(req,reply,error);}
