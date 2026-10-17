@@ -61,9 +61,10 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         let d;
         if(edit){
           const {rows}=await db.query(
-            "SELECT d.id,d.currency_code,d.principal_original::text,COALESCE(SUM(p.principal_paid),0)::text AS repaid "+
-            "FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
-            "WHERE d.id=$1 AND d.owner_user_id=$2 GROUP BY d.id FOR UPDATE OF d",
+            "SELECT d.id,d.currency_code,d.principal_original::text, "+
+            "(SELECT COALESCE(SUM(p.principal_paid),0)::text FROM finance.debt_payments p "+
+            "WHERE p.debt_id=d.id AND p.owner_user_id=d.owner_user_id) AS repaid "+
+            "FROM finance.debts d WHERE d.id=$1 AND d.owner_user_id=$2 FOR UPDATE OF d",
             [debtId,ctx.owner]);
           d=rows[0];
           if(!d)return {error:"DEBT_NOT_FOUND",status:404};
