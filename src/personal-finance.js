@@ -931,11 +931,12 @@ function showForm(kind,selectedId=null){
   form.dataset.reconcileAccountId=wallet.id;
   form.dataset.reconcileCurrency=wallet.currency_code;
   const minor=Number((state.data.currencies||[]).find(c=>c.code===wallet.currency_code)?.minor_units??0);
+  const posted=String(wallet.balance).replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
   form.dataset.reconcileMinor=String(minor);
   title="Chỉnh số dư · "+wallet.name;
   fields='<p class="fin-balance-description">Đối soát số dư thực tế. Hệ thống tạo một giao dịch điều chỉnh chênh lệch, không sửa hay xóa bút toán cũ.</p>'+
-   '<label>Số dư đang ghi ('+esc(wallet.currency_code)+')<input type="text" name="expectedBalance" readonly value="'+esc(wallet.balance)+'"></label>'+
-   input("targetBalance","Số dư đúng hiện tại ("+wallet.currency_code+")","text",wallet.balance)+
+   '<label>Số dư đang ghi ('+esc(wallet.currency_code)+')<input type="text" name="expectedBalance" readonly value="'+esc(posted)+'"></label>'+
+   input("targetBalance","Số dư đúng hiện tại ("+wallet.currency_code+")","text",posted)+
    '<p class="fin-balance-diff" data-fin-balance-diff>Chênh lệch sẽ được tính theo số dư hiện tại.</p>'+
    input("reason","Lý do đối soát (ít nhất 8 ký tự)","text","","Kiểm tra số dư ngân hàng / tiền mặt")+
    note("Mỗi lần chỉnh số dư đều được lưu vào lịch sử điều chỉnh. Nếu số dư thay đổi do thiết bị khác, hệ thống sẽ yêu cầu tải lại trước khi lưu.");
