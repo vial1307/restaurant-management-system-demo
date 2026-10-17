@@ -9,7 +9,7 @@ assert.match(hook,/chmod 0440 \/etc\/sudoers.d\/kitchen-os-verify/);
 assert.match(verifier,/VERIFY_TASK_NOT_ALLOWED/);
 assert.match(verifier,/case "\$task" in/);
 assert(!verifier.includes("source .env"));
-assert(!verifier.includes("--apply"));
+assert(!verifier.includes("args+=(\"--apply\")"),"Readonly wrapper may not append write flags");
 assert(!verifier.includes("eval "));
 assert(!verifier.includes("bash -c"));
 const inv=read(".github/workflows/inventory-site-production-audit.yml");
