@@ -247,8 +247,7 @@ function reporting(){
    "", "Gồm thu/chi dự kiến, quỹ nợ và mục tiêu từ Finance Database.")+
  card("Xu hướng thực tế cả năm",'<div class="chart-box">'+financeMonthlyTrend(year)+'</div>',"", "Chỉ gồm thu/chi đã thực hiện.")+'</div>'+
  card("So sánh kế hoạch 12 tháng",annualTable)+
- '<div class="layout-2">'+card("Xu hướng thu/chi thực theo tháng",'<div class="chart-box">'+financeMonthlyTrend(year)+'</div>')+
- card("Phân bổ chi tiêu",reportDonut())+'</div>'+
+ card("Phân bổ chi tiêu thực trong tháng",reportDonut())+
  '<div class="layout-2 equal">'+card("Ngân sách theo danh mục",categories.length?categories.map(c=>
  '<div class="rowitem"><div><strong>'+safe(c.name)+'</strong><p>Đã dùng '+money(c.actual_twd)+' / '+money(c.budget_twd)+'</p><div class="progress"><i style="width:'+Math.min(100,val(c.actual_twd)/Math.max(1,val(c.budget_twd))*100)+'%"></i></div></div>'+btn("Đặt mức","budget","small soft",'data-id="'+safe(c.category_id)+'"')+'</div>').join(""):empty("Thêm danh mục chi tiêu trước khi đặt ngân sách."),btn("+ Danh mục","category","small soft"))+
  card("Số dư các tài khoản",walletList())+'</div>'+
@@ -287,7 +286,7 @@ function scenario(){
  '<div class="rowitem"><div><strong>3. Mô phỏng an toàn</strong><p>So với mức dự trữ và giả định tăng/giảm thu nhập. Không tạo giao dịch thật.</p></div></div>')+'</div>'+
  '<div class="stack">'+card("Kết quả dự báo",preview)+
  card("Dòng tiền theo từng tháng",monthBreakdown+compare)+
- card("Tư vấn tự động theo tháng đã chọn",linkedInsights())++
+ card("Tư vấn tự động theo tháng đã chọn",linkedInsights())+
  card("Lịch thu/chi và số dư dự kiến",linkedCashTable(24))+
  
  card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div>'+btn("Mở","openScenario","small soft",'data-id="'+safe(x.id)+'"')+'</div>').join(""):empty("Chưa lưu kịch bản nào."))+
