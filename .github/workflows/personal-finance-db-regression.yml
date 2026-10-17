@@ -10,6 +10,7 @@ on:
       - "tests/finance-scenario-engine-regression.mjs"
       - "tests/finance-debt-payoff-regression.mjs"
       - "tests/finance-mentor-engine-regression.mjs"
+      - "tests/finance-mentor-brief-regression.mjs"
       - "tests/finance-fx-valuation-regression.mjs"
       - "vps/backend/src/finance-*.mjs"
       - "vps/backend/src/server.mjs"
@@ -72,6 +73,8 @@ jobs:
         run: node tests/finance-scenario-engine-regression.mjs
       - name: Mentor creditor semantics regression
         run: node tests/finance-mentor-engine-regression.mjs
+      - name: Mentor rolling date liquidity regression
+        run: node tests/finance-mentor-brief-regression.mjs
       - name: Create separate test database
         run: createdb personal_finance_test
       - name: Apply schema twice to verify migration idempotency
@@ -122,6 +125,7 @@ jobs:
           node --check vps/backend/src/finance-advisor-engine.mjs
           node --check vps/backend/src/finance-advisor-routes.mjs
           node --check vps/backend/src/finance-mentor-engine.mjs
+          node --check vps/backend/src/finance-mentor-brief.mjs
           node --check vps/backend/src/finance-mentor-routes.mjs
           node --check src/finance-mentor-ui.js
           node --check vps/backend/src/finance-scenario-engine.mjs
