@@ -9,12 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Read-only production verification; apply requires a separately approved maintenance mechanism"
+        description: "Verify is read-only; manual apply requires an encrypted pre-write backup"
         required: true
         default: verify
         type: choice
         options:
           - verify
+          - apply
       site:
         description: "Optional site code; all runs every active site"
         required: true
@@ -97,12 +98,13 @@ jobs:
             exit 64
           fi
 
-          if [[ "$MODE" != "verify" ]]; then
-            echo "MANUAL_APPLY_REQUIRES_EXPLICIT_PRIVILEGED_MAINTENANCE"
-            exit 69
+          TASK="workforce-schedule"
+          if [[ "$MODE" == "apply" ]]; then
+            [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] || exit 64
+            TASK="workforce-schedule-apply"
           fi
           ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
-            "sudo -n /usr/local/sbin/kitchen-os-verify workforce-schedule '$SITE'"
+            "sudo -n /usr/local/sbin/kitchen-os-verify $TASK '$SITE'"
 
       - name: Verify production remains healthy
         run: |
