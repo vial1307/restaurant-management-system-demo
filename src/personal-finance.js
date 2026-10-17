@@ -293,7 +293,7 @@ function repaymentStrategyView(){
   'Các khoản trả nợ thêm chỉ được đề xuất từ phần tiền còn an toàn sau các nghĩa vụ và quỹ dự trữ.</div>';
  if(!strategy.months?.length)return heading+empty("Chưa có dữ liệu thu/chi cho kỳ dự báo này.");
  const table='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tháng</th><th class="num">Thu nhập có lịch</th>'+
-  '<th class="num">Quỹ trả nợ đã lập</th><th class="num">Trả thêm đề xuất</th><th class="num">Số dư sau đề xuất</th>'+
+  '<th class="num">Quỹ trả nợ đã lập</th><th class="num">Trả thêm đề xuất</th><th class="num">Xem xét giảm tiết kiệm</th><th class="num">Số dư sau đề xuất</th>'+
   '<th>Dư nợ còn lại theo kế hoạch</th></tr></thead><tbody>'+
   strategy.months.map(m=>{
    const remaining=(m.remainingDebts||[]).filter(d=>val(d.remainingNative)>0)
@@ -304,6 +304,7 @@ function repaymentStrategyView(){
    return '<tr><td><strong>'+safe(fmtMonth(m.month))+'</strong></td><td class="num positive">'+
     safe(money(m.incomeTwd))+'</td><td class="num negative">'+safe(money(m.scheduledDebtTwd))+
     '</td><td class="num">'+safe(money(m.proposedExtraDebtTwd))+'</td><td class="num">'+
+    safe(money(m.proposedSavingsRedirectTwd||"0"))+'</td><td class="num">'+
     safe(money(m.afterProposalEndingTwd))+'</td><td>'+remaining+'</td></tr>';
   }).join("")+'</tbody></table></div>';
  const nextAction=(strategy.months||[]).flatMap(m=>(m.proposedExtraAllocations||[]).map(a=>({
