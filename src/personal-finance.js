@@ -1122,7 +1122,7 @@ logoutButton.addEventListener("click",async()=>{
   state.data=null;state.overview=null;state.loading=false;
   const error=new Error("AUTH_REQUIRED");error.status=401;state.problem=error;render();
 });
-tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;render();window.scrollTo(0,0);if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();if(state.tab==="report"&&(state.year?.year!==Number(state.month.slice(0,4))))void loadYear();if(state.tab==="budget"&&state.yearCashflow?.year!==Number(state.month.slice(0,4)))void loadYear();}));
+tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;document.querySelector("#fin-advanced").open=false;render();window.scrollTo(0,0);if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();if(state.tab==="workbench"&&!workbookState.loaded)void loadWorkbench();if(state.tab==="report"&&(state.year?.year!==Number(state.month.slice(0,4))))void loadYear();if(state.tab==="budget"&&state.yearCashflow?.year!==Number(state.month.slice(0,4)))void loadYear();}));
 root.addEventListener("click",async event=>{
  const reconcileButton=event.target.closest("[data-balance-reconcile]");
  if(reconcileButton){showForm("balanceReconcile",reconcileButton.dataset.balanceReconcile);return;}
@@ -1170,7 +1170,7 @@ root.addEventListener("click",async event=>{
  }
 
  const go=event.target.closest("[data-go-finance-tab]");
- if(go){state.tab=go.dataset.goFinanceTab;render();if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();return;}
+ if(go){state.tab=go.dataset.goFinanceTab;document.querySelector("#fin-advanced").open=false;render();window.scrollTo(0,0);if(state.tab==="advisor"&&!state.advisor&&!state.advisorBusy)void loadAdvice();return;}
  const adviceButton=event.target.closest("[data-advice-refresh]");
  if(adviceButton){
    const days=Number(root.querySelector("#fin-advice-days")?.value);
