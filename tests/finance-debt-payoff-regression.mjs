@@ -32,4 +32,13 @@ const risk=planDebtPayoff({asOf,baseline:{...baseline,months:[
 assert.equal(risk.months[0].suggestions.length,0,"Never recommend an extra debt payment before the known near-term cash shortfall");
 assert(risk.suggestions.every(x=>x.month!=="2026-10"),"Later recovered months may independently fund debt");
 assert(risk.warnings.some(x=>x.includes("thiếu tiền")));
+const paid=planDebtPayoff({
+ asOf,baseline,debts:[{...debts[0],outstanding_amount:"20000000",annual_interest_rate:"0"}],
+ funds:[funds[0]],payments:[{debt_id:"card",payment_date:"2026-10-20",native_paid:"2000000"}],
+ quotes,bufferTwd:"100000000"
+});
+assert.equal(paid.months[0].plannedPayments[0].amountNative,"8000000",
+ "Already posted 2m VND must reduce the remaining planned 10m VND reserve");
+assert.equal(paid.remaining[0].remainingNative,"12000000",
+ "Recorded payment already reduced original debt principal; never subtract twice");
 console.log("PASS debt priority, monthly roll-forward, interest, pre-funded debt, stale FX, no double counting and protected cash floor");
