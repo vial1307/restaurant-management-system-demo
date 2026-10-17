@@ -33,6 +33,17 @@ try{
      items:items.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),
      debtFunds:funds,goalFunds,summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
    if(p==="/year")return respond(route,{year:+url.searchParams.get("year"),months:[{month:"2026-10",income_twd:"50000",expense_twd:"12000"}]});
+   if(p==="/cashflow/year"){
+    const year=+url.searchParams.get("year");
+    return respond(route,{year,months:Array.from({length:12},(_,idx)=>{
+     const month=year+"-"+String(idx+1).padStart(2,"0");
+     const flow=items.filter(x=>x.month_date.startsWith(month));
+     return {month,planned_income_twd:String(flow.filter(x=>x.kind==="income").reduce((v,x)=>v+Number(x.amount_twd),0)),
+      planned_expense_twd:String(flow.filter(x=>x.kind==="expense").reduce((v,x)=>v+Number(x.amount_twd),0)),
+      debt_fund_twd:String(funds.filter(x=>x.month_date.startsWith(month)).reduce((v,x)=>v+Number(x.planned_twd),0)),
+      goal_fund_twd:"0",fx_estimate_incomplete:false};
+    })});
+   }
    if(p==="/advisor")return respond(route,{asOf:"2026-10-17",through:"2026-11-15",days:30,startingBalanceTwd:"30000",
      entries:[{date:"2026-10-30",kind:"income",source:"cashflow",label:"Lương",amountTwd:"50000",projectedBalanceTwd:"80000"}],recommendations:[{title:"Giữ quỹ dự phòng",detail:"Đối chiếu tiền lương và khoản chi trước khi cam kết."}],warnings:[],bufferTwd:"0"});
    if(p==="/workbench"&&m==="GET")return respond(route,{scenarios:scenarioBooks,asOf:"2026-10-17"});
@@ -143,6 +154,7 @@ try{
   await page.locator('.main-nav [data-tab="reports"]').click();
   assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
   await page.getByText("Dòng tiền dự kiến từ Kế hoạch tài chính").waitFor();
+  await page.getByText("So sánh kế hoạch 12 tháng").waitFor();
   await page.getByText("Tiền nhà tháng 11").waitFor();
   assert.match(await page.locator("#finance-content").innerText(),/Thu dự kiến/);
   assert.match(await page.locator("#finance-content").innerText(),/58\.000/);
