@@ -394,16 +394,16 @@ function renderReport(){
    '<td><div class="fin-ratio"><span>'+esc(budget>0?Math.round(actual/budget*100)+"%":"Chưa lập")+'</span>'+
    '<div class="fin-progress"><span style="width:'+Math.min(100,budget>0?actual/budget*100:0)+'%;background:'+(actual>budget?'#f17678':'#24b891')+'"></span></div></div></td></tr>';
  }).join("");
- const history=(state.overview?.events||[]).filter(e=>["income","expense","remittance","fx","transfer"].includes(e.kind));
+ const history=(state.overview?.events||[]).filter(e=>["income","expense","remittance","fx","transfer","adjustment"].includes(e.kind));
  const ledger=history.map(e=>{
   const t=new Date(e.occurred_at).toLocaleDateString("vi-VN",{timeZone:"Asia/Taipei"});
   const twdEntries=(e.entries||[]).filter(x=>x.currency==="TWD");
   const credit=twdEntries.filter(x=>Number(x.amount)>0).reduce((n,x)=>n+Number(x.amount),0);
   const debit=twdEntries.filter(x=>Number(x.amount)<0).reduce((n,x)=>n+Math.abs(Number(x.amount)),0);
   return '<tr><td>'+esc(t)+'</td><td><strong>'+esc(e.description||e.kind)+'</strong></td><td>'+
-   esc(({income:"Thu nhập",expense:"Chi tiêu",remittance:"Chuyển ra ngoài",fx:"Ngoại tệ",transfer:"Chuyển nội bộ"})[e.kind])+'</td>'+
+   esc(({income:"Thu nhập",expense:"Chi tiêu",remittance:"Chuyển ra ngoài",fx:"Ngoại tệ",transfer:"Chuyển nội bộ",adjustment:"Đối soát số dư"})[e.kind])+'</td>'+
    '<td class="fin-right">'+(credit?finMoneyCell(credit,false):"—")+'</td><td class="fin-right">'+(debit?finMoneyCell(debit,true):"—")+
-   '</td><td><small>'+esc(e.kind==="transfer"?"Không phải chi tiêu":e.kind==="fx"?"Đổi ngoại tệ, không phải chi tiêu":"Đã ghi sổ")+'</small></td></tr>';
+   '</td><td><small>'+esc(e.kind==="transfer"?"Không phải chi tiêu":e.kind==="fx"?"Đổi ngoại tệ, không phải chi tiêu":e.kind==="adjustment"?"Không tính vào thu nhập / chi tiêu":"Đã ghi sổ")+'</small></td></tr>';
  }).join("");
  const warnings=rows.filter(x=>Number(x.actual_twd)>Number(x.budget_twd)&&Number(x.budget_twd)>0).sort((a,b)=>
   (Number(b.actual_twd)-Number(b.budget_twd))-(Number(a.actual_twd)-Number(a.budget_twd))).slice(0,4);
