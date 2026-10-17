@@ -349,7 +349,7 @@ try {
     await page.locator('[data-cancel-plan]').click();
     assert.equal(plans[0].status,"cancelled");
     await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('h1').filter({hasText:"Tổng quan tài chính"}).waitFor();
+    await page.locator('h1').filter({hasText:"Kế hoạch tài chính"}).waitFor();
     await openFinancePage(page,"fx");
     assert(await page.getByText("Đã cancelled").count()===1,"Reload preserves canceled FX plan");
     assert.equal(accounts[0].balance,"0");
