@@ -27,6 +27,13 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
    return {...d,apr:asMoney(d.annual_interest_rate||0),rate,
      remainingNative:asMoney(d.outstanding_amount)};
  }).sort(rank);
+ const forecastStart=mm(asOf),forecastEnd=mm(baseline.months.at(-1)?.month);
+ for(const debt of outstanding){
+  const due=debt.due_date||"";
+  if(due&&mm(due)>=forecastStart&&mm(due)<=forecastEnd&&
+   !funds.some(f=>f.debt_id===debt.id&&mm(f.month_date)===mm(due)&&asMoney(f.planned_amount)>0))
+   warnings.push("Nợ “"+debt.name+"” đến hạn "+due+" nhưng chưa có quỹ trả trong tháng; dự báo chưa tự coi toàn bộ dư nợ là tiền đã chi.");
+ }
  const byId=new Map(outstanding.map(d=>[d.id,d]));
  const byMonth=new Map();
  for(const fund of funds){
