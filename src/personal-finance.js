@@ -414,11 +414,17 @@ function open(kind,id=""){
  let name="Nhập dữ liệu",body="";
  if(kind==="plan"||kind==="editPlan"){
   name=kind==="plan"?"Thêm thu / chi dự kiến":"Sửa khoản dự kiến";
-  body=select("kind","Loại",escOption("expense","Chi dự kiến",i?.kind!=="income")+escOption("income","Thu dự kiến",i?.kind==="income"))+
+  body=select("kind","Loại · Ưu tiên Nợ > Chi > Tiết kiệm",escOption("expense","Chi dự kiến",i?.kind!=="income")+escOption("income","Thu dự kiến",i?.kind==="income")+
+   (kind==="plan"?escOption("debt","Công nợ · Tạo khoản nợ và quỹ trả tháng này"):''))+
    field("label","Nội dung","text",i?.label||"",'maxlength="140"')+
    select("currencyCode","Ngoại tệ",currOpts(i?.original_currency||"TWD"))+
    field("originalAmount","Số tiền","text",amt(i?.original_amount||i?.amount_twd||""),'inputmode="decimal"')+
    '<div class="preview" id="finance-fx-preview">Quy đổi TWD tự động theo tỷ giá hiện có.</div>'+
+   '<fieldset id="finance-plan-debt-fields" class="fin-conditional" hidden disabled>'+
+   field("principalOriginal","Tổng số nợ gốc","text","",'inputmode="decimal"')+
+   field("annualInterestPercent","Lãi suất năm (%)","number","0",'min="0" max="100" step="0.01"')+
+   field("debtDueDate","Ngày bắt buộc phải trả","date","")+
+   '<div class="notice">Số tiền ở trên là quỹ dự kiến dành trong tháng. Nợ gốc và hạn trả được ghi vào Công nợ; không tạo thêm một khoản chi trùng.</div></fieldset>'+
    field("dueDay","Ngày trong tháng (1–31)","number",i?.due_day||10,'min="1" max="31"')+
    '<label>Ghi chú <small>(không bắt buộc)</small><textarea name="memo" maxlength="250">'+safe(i?.memo||"")+'</textarea></label>'+
    '<div class="notice">Khoản này là kế hoạch, không tự cộng/trừ ví tiền thật.</div>';
@@ -450,6 +456,12 @@ function open(kind,id=""){
    field("principalOriginal","Số tiền gốc","text","",'inputmode="decimal"')+
    field("dueDate","Ngày đến hạn (có thể để trống)","date","")+
    field("annualInterestPercent","Lãi suất năm (%)","number","0",'min="0" max="100" step="0.01"');
+ }else if(kind==="editDebt"&&d){
+  name="Sửa thông tin công nợ · "+d.name;
+  body=field("name","Tên khoản nợ","text",d.name,'maxlength="160"')+
+   '<div class="notice">Nợ gốc và tiền đã thanh toán không thay đổi. Sửa hạn trả hoặc lãi suất sẽ cập nhật kế hoạch và tư vấn.</div>'+
+   field("annualInterestPercent","Lãi suất năm (%)","number",number(val(d.annual_interest_rate)*100,2),'min="0" max="100" step="0.01"')+
+   field("dueDate","Ngày đến hạn","date",d.due_date||"");
  }else if(kind==="goal"){
   name="Thêm mục tiêu";
   body=field("name","Tên mục tiêu","text","",'maxlength="160"')+
@@ -489,6 +501,12 @@ function open(kind,id=""){
 }
 function updateEstimate(){
  const kind=form.dataset.kind,values=Object.fromEntries(new FormData(form));
+ if(kind==="plan"){
+  const fs=$("#finance-plan-debt-fields"),enabled=values.kind==="debt";
+  if(fs){fs.hidden=!enabled;fs.disabled=!enabled;}
+  const amountLabel=fields.querySelector('[name="originalAmount"]')?.closest("label");
+  if(amountLabel){amountLabel.firstChild.textContent=enabled?"Số tiền dự kiến dành trả nợ tháng này":"Số tiền";}
+ }
  const note=$("#finance-fx-preview");if(!note)return;
  let code=values.currencyCode||"TWD",amount=values.originalAmount||values.amount||"0";
  if(["fundDebt","fundGoal"].includes(kind)){
@@ -519,7 +537,14 @@ async function submit(event){
  const type=form.dataset.kind,id=form.dataset.id,b=Object.fromEntries(new FormData(form));
  let path="",body={},method="POST";
  try{
-  if(type==="plan"||type==="editPlan"){
+  if(type==="plan"&&b.kind==="debt"){
+   if(!b.debtDueDate)throw new Error("Cần chọn ngày bắt buộc trả nợ.");
+   body={month:state.month,name:b.label,currencyCode:b.currencyCode,
+    principalOriginal:amountInput(b.principalOriginal,b.currencyCode),
+    plannedAmount:amountInput(b.originalAmount,b.currencyCode),
+    annualInterestPercent:b.annualInterestPercent||"0",dueDate:b.debtDueDate};
+   path="/debt-plans";method="POST";
+  }else if(type==="plan"||type==="editPlan"){
    body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,originalAmount:amountInput(b.originalAmount,b.currencyCode),dueDay:+b.dueDay||null,memo:b.memo||""};
    path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
   }else if(type==="transaction"){
@@ -536,6 +561,9 @@ async function submit(event){
   }else if(type==="debt"){
    body={name:b.name,currencyCode:b.currencyCode,principalOriginal:amountInput(b.principalOriginal,b.currencyCode),
     annualInterestPercent:b.annualInterestPercent||"0",dueDate:b.dueDate||null};path="/debts";
+  }else if(type==="editDebt"){
+   body={name:b.name,annualInterestPercent:b.annualInterestPercent||"0",dueDate:b.dueDate||null};
+   path="/debts/"+id;method="PUT";
   }else if(type==="goal"){
    body={name:b.name,currencyCode:b.currencyCode,targetAmount:amountInput(b.targetAmount,b.currencyCode),targetDate:b.targetDate||null};path="/goals";
   }else if(type==="fundDebt"||type==="fundGoal"){
@@ -607,8 +635,18 @@ async function act(action,id){
  }
  if(action==="newPlan")return open("plan");
  if(action==="editPlan")return open("editPlan",id);
+ if(action==="suggestDebtFund"){
+  const node=document.querySelector('[data-action="suggestDebtFund"][data-id="'+id+'"]');
+  const x=state.payoff?.suggestions?.find(v=>v.debtId===id&&v.month===node?.dataset.month);
+  if(!x)return notify("Đề xuất đã thay đổi. Hãy tải lại.");
+  if(state.month!==x.month){state.month=x.month;await refresh();}
+  open("fundDebt",id);
+  const input=fields.querySelector('[name="plannedAmount"]');
+  if(input){input.value=x.suggestedTotalNative;updateEstimate();}
+  return;
+ }
  if(action==="deletePlan")return deletePlan(id);
- if(["transaction","account","reconcile","debt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
+ if(["transaction","account","reconcile","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
 }
 document.body.addEventListener("click",async event=>{
  const tab=event.target.closest("[data-tab]");if(tab){nav(tab.dataset.tab);return;}
