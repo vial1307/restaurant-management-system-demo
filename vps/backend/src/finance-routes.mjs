@@ -332,7 +332,7 @@ export async function registerFinanceRoutes(app) {
       // If the owner chooses automatic valuation, resolve the current private
       // Finance quote on the server; never trust a browser-supplied "auto" rate.
       const automaticFx=["income","expense"].includes(kind)&&b.fxRateMode==="estimate";
-      const estimatedFx=automaticFx?await getFinanceFxSnapshot(ctx.pool):null;
+      const estimatedFx=automaticFx&&b.currencyCode!=="TWD"?await getFinanceFxSnapshot(ctx.pool):null;
       const result=await financeTransaction(async(client)=>{
         const lockedAccounts=new Map();
         // Lock all owned wallets in the same order to avoid deadlocks when simultaneous
