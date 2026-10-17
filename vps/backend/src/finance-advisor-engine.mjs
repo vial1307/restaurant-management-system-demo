@@ -1,3 +1,4 @@
+import {summarizeForeignFunding} from "./finance-funding-engine.mjs";
 import {buildCycleAlerts} from "./finance-paycycle-alerts.mjs";
 // Pure Finance OS forward cash planner. Amounts use signed BigInt micro-TWD,
 // so any threshold comparison is exact (never IEEE754 currency math).
@@ -48,13 +49,9 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     if(amount===0n)return;
     entries.push({date,kind,label,amountTwd:twdText(amount),source,sourceId:id||"",estimatedDate});
   };
-  for(const item of cashItems){
-    const m=monthOf(item);
-    if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m))continue;
-    const when=dated(m,item.due_day,null);
-    const amt=twdUnits(item.amount_twd);
-    push(when.date,item.kind,item.label,item.kind==="income"?amt:-amt,"cashflow",item.id,when.estimatedDate);
-  }
+  const funding=summarizeForeignFunding({asOf,through,items:cashItems,wallets});
+  for(const e of funding.events)push(e.date,e.kind,e.label,twdUnits(e.amountTwd),e.source,e.id,e.estimatedDate);
+  for(const message of funding.warnings)warnings.push({code:"FX_FUNDING",message});
   // A posted debt payment is already reflected in real wallets. Remove it from
   // remaining planned monthly debt funding so the projection never debits twice.
   const settled=new Map();
@@ -129,7 +126,7 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     projectedEndingTwd:twdText(balance),minimumBalanceTwd:twdText(minimum),minimumDate,
     earliestRisk,totals:Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,twdText(v)])),
     totalOutflowTwd:twdText(totals.expense+totals.debt+totals.goal+totals.remittance),
-    entries,warnings,recommendations,foreignWallets,excludedFxPlans,
+    entries,warnings,recommendations,foreignWallets,excludedFxPlans,foreignFunding:funding.fundingRequirements,foreignShortfalls:funding.foreignShortfalls,
     metadata:{currency:"TWD",timeZone:"Asia/Taipei",countedWallets:wallets.length-foreignWallets.length,source:"finance_postgresql",readOnly:true}
   };
 }
