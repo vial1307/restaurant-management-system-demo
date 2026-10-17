@@ -66,6 +66,8 @@ jobs:
         run: node tests/finance-fx-valuation-regression.mjs
       - name: Scenario finance simulation regression
         run: node tests/finance-scenario-engine-regression.mjs
+      - name: Monthly debt allocation and priority regression
+        run: node tests/finance-debt-strategy-regression.mjs
       - name: Create separate test database
         run: createdb personal_finance_test
       - name: Apply schema twice to verify migration idempotency
@@ -80,6 +82,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/004_finance_scenario_workbooks.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/005_finance_estimated_fx_cashflow.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/005_finance_estimated_fx_cashflow.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/006_finance_debt_goal_notes.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/006_finance_debt_goal_notes.sql
       - name: Validate core constraints and kitchen DB isolation
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test <<'SQL'
@@ -113,6 +117,7 @@ jobs:
           node --check vps/backend/src/finance-advisor-engine.mjs
           node --check vps/backend/src/finance-advisor-routes.mjs
           node --check vps/backend/src/finance-scenario-engine.mjs
+          node --check vps/backend/src/finance-debt-strategy.mjs
           node --check vps/backend/src/finance-scenario-routes.mjs
           node --check vps/backend/scripts/finance-api-regression.mjs
           node --check src/personal-finance.js
