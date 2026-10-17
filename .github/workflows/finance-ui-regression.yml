@@ -5,6 +5,9 @@ on:
     paths:
       - "finance.html"
       - "src/personal-finance.js"
+      - "src/finance-visuals.js"
+      - "vps/Caddyfile"
+      - "tests/finance-caddy-module-contract.mjs"
       - "src/personal-finance.css"
       - "tests/personal-finance-browser-regression.mjs"
       - ".github/workflows/finance-ui-regression.yml"
@@ -28,6 +31,8 @@ jobs:
           node-version: "22"
       - name: Install browser test runner
         run: npm ci --prefix tests
+      - name: Check Finance-origin Caddy allowlist for JavaScript imports
+        run: node tests/finance-caddy-module-contract.mjs
       - name: Start isolated static frontend
         run: |
           node tests/web-server.mjs >/tmp/finance-web.log 2>&1 &
