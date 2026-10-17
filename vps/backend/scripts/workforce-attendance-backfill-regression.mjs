@@ -23,7 +23,10 @@ assert.match(productionWorkflow, /github\.event\.workflow_run\.head_branch == 'm
 assert.match(productionWorkflow, /github\.event\.workflow_run\.head_sha/, "automatic verification must pin deployed SHA");
 assert.match(productionWorkflow, /LOCAL_SCRIPT_SHA/, "production workflow must verify local script checksum");
 assert.match(productionWorkflow, /REMOTE_SCRIPT_SHA/, "production workflow must verify remote script checksum");
-assert.match(productionWorkflow, /Creating mandatory pre-backfill database backup/, "apply must create a backup first");
+const sealedVerifier=fs.readFileSync("vps/scripts/production-postdeploy-verify.sh","utf8");
+assert(sealedVerifier.includes("bash /opt/kitchen-os/repo/vps/scripts/backup.sh"),"manual apply must make a database backup");
+assert(sealedVerifier.includes('args+=("--apply")'),"privileged manual runner must explicitly invoke write mode");
+assert(productionWorkflow.includes('TASK="workforce-attendance-apply"'),"manual Apply must select attendance task");
 assert.match(productionWorkflow, /GITHUB_EVENT_NAME.*workflow_dispatch/, "automatic runs must remain verify-only");
 
 function runBackfill(args = [], { expectSuccess = true } = {}) {
