@@ -84,13 +84,20 @@ export function calculateDebtStrategy({projection,debts=[],funds=[],payments=[],
    pastDue:d.dueDate&&d.dueDate.slice(0,7)<=start&&d.remainingNative>ZERO
   }));
   const urgent=remaining.filter(d=>d.pastDue);
+  // Proposal only: if a due debt is still uncovered, optional savings
+  // allocation could be reconsidered. Do not automatically move that amount,
+  // assume savings are liquid before the due date, or reduce the debt balance.
+  const dueShortfall=urgent.reduce((n,d)=>n+units(d.remainingTwd),ZERO);
+  const redirectSavings=min(max(ZERO,units(m.goalTwd||"0")),dueShortfall);
+  if(redirectSavings>ZERO)notices.push("Tháng "+start+": có thể xem xét điều chỉnh "+plain(redirectSavings)+
+   " TWD từ quỹ tiết kiệm sang trả nợ đến hạn, nếu tiền thật sẵn có trước ngày trả. Đề xuất chưa áp dụng và số dư nợ chưa giảm.");
   if(urgent.length)notices.push("Sau "+start+" còn "+urgent.map(d=>d.name+" ("+d.remainingNative+" "+d.currency+")").join(", ")+
    " chưa có nguồn trả đủ theo hạn. Cần xác minh lịch trả góp, điều chỉnh kỳ trả hoặc tăng nguồn thu.");
   months.push({
    month:start,incomeTwd:m.incomeTwd,costTwd:m.costTwd,goalTwd:m.goalTwd,
    baselineEndingTwd:m.endingTwd,scheduledDebtTwd:plain(reserved),
    proposedExtraDebtTwd:plain(added.reduce((n,a)=>n+units(a.extraTwd),ZERO)),
-   proposedExtraAllocations:added,remainingDebts:remaining,
+   proposedExtraAllocations:added,proposedSavingsRedirectTwd:plain(redirectSavings),remainingDebts:remaining,
    afterProposalEndingTwd:plain(units(m.endingTwd)-suggestedExtra),
    reserveProtectedTwd:plain(buffer),hasRisk:!!urgent.length
   });
