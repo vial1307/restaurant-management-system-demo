@@ -237,7 +237,7 @@ function financePlanRows(){
  const cf=state.cashflow||{},items=cf.items||[],funds=cf.debtFunds||[],goals=cf.goalFunds||[];
  const rows=items.map(i=>({id:i.id,kind:i.kind,title:i.label,category:i.kind==="income"?"Thu nhập":"Chi tiêu",
   due:i.due_day?state.month+"-"+String(Math.min(Number(i.due_day),Number(fMonthEnd(state.month).slice(-2)))).padStart(2,"0"):fMonthEnd(state.month),
-  guessed:!i.due_day,value:Number(i.amount_twd)||0,source:"plan",memo:i.memo||"",priority:i.kind==="income"?"Thường":"Cần kiểm tra"}));
+  guessed:!i.due_day,value:Number(i.amount_twd)||0,source:"plan",memo:(i.original_currency&&i.original_currency!=="TWD"?(i.original_amount+" "+i.original_currency+" · quy đổi theo tỷ giá "+(i.fx_rate_provider||"lưu tại thời điểm lập"))+" · ":"")+(i.memo||""),priority:i.kind==="income"?"Thường":"Cần kiểm tra"}));
  for(const x of funds)rows.push({id:x.id,kind:"debt",title:x.debt_name||"Quỹ nợ",category:"Công nợ",
   due:x.due_date?.startsWith(state.month)?x.due_date:fMonthEnd(state.month),
   guessed:!x.due_date?.startsWith(state.month),value:Number(x.planned_amount)*Number(x.fx_rate_to_twd||0),
@@ -998,7 +998,7 @@ function showForm(kind,selectedId=null){
    selectField("planKind","Mục đích",[{value:"remittance",label:"Gửi tiền / chuyển ra ngoài"},{value:"fx",label:"Đổi ngoại tệ"}])+
    selectField("fromCurrency","Tiền gửi",currencyChoices())+selectField("toCurrency","Tiền nhận",currencyChoices())+
    input("sourceAmount","Số tiền dự kiến đổi","text","","10000")+
-   input("expectedRate","Tỷ giá dự kiến (không bắt buộc)","text","","Ví dụ: 785",false)+
+   input("expectedRate","Tỷ giá dự kiến (1 tiền nguồn = ? tiền đích)","text","","Tự động điền khi có tỷ giá",false)+
    input("expectedFee","Phí dự kiến trong đơn vị tiền gửi","text","0")+
    input("memo","Ghi chú","text","","Dự kiến chuyển tiền tháng này",false)+
    note("Lịch đổi tiền không làm thay đổi số dư ví. Đây không phải lệnh chuyển tiền ngân hàng.");
@@ -1033,10 +1033,13 @@ function showForm(kind,selectedId=null){
   title=existing?"Sửa dòng tiền dự kiến":kind==="cashIncome"?"Thêm thu nhập dự kiến":"Thêm chi tiêu dự kiến";
   fields=selectField("kind","Loại dự kiến",[{value:"income",label:"Thu nhập"},{value:"expense",label:"Chi tiêu"}])+
    input("label","Tên khoản thu/chi","text",existing?.label||"","Lương / tiền thuê nhà")+
-   input("amountTwd","Số tiền TWD","text",existing?.amount_twd||"","10000")+
+   selectField("currencyCode","Ngoại tệ của khoản dự kiến",currencyChoices())+
+   input("originalAmount","Số tiền gốc","text",existing?.original_amount||existing?.amount_twd||"","Nhập số tiền theo ngoại tệ đã chọn")+
+   '<p class="fin-balance-diff" data-fx-form-estimate>Quy đổi dự kiến sang TWD sẽ được tính tự động.</p>'+
+   input("fxRateToTwd","Tỷ giá thủ công khi nguồn tự động chưa có","text","","Bỏ trống nếu đã có tỷ giá tự động",false)+
    input("dueDay","Ngày nhận / ngày phải trả (1–31)","number",existing?.due_day||"","1–31",false)+
    input("memo","Ghi chú","text",existing?.memo||"","",false)+
-   note("Nhập đúng ngày nhận lương hoặc ngày chi trả. Bỏ trống ngày sẽ bị tạm xếp cuối tháng và cảnh báo có thể trễ. Đây chỉ là dự kiến, chưa ghi tiền thật; cần lập cho từng tháng.");
+   note("Giữ nguyên số tiền gốc; server sẽ tự tính TWD bằng tỷ giá tham chiếu mới nhất đang có. Nếu nguồn lỗi có thể nhập tỷ giá thủ công để ước tính. Đây là kế hoạch, không phải giao dịch thật.");
  }else if(kind==="goalFund"){
   const goal=(state.data.goals||[]).find(g=>g.id===selectedId);if(!goal)return;
   form.dataset.goalId=goal.id;
@@ -1044,7 +1047,7 @@ function showForm(kind,selectedId=null){
   title="Quỹ mục tiêu · "+goal.name+" · "+monthText(state.month);
   fields=input("plannedAmount","Dự kiến dành ("+goal.currency_code+")","text",existing?.planned_amount||"0")+
    input("earmarkedAmount","Đánh dấu đã dành ("+goal.currency_code+")","text",existing?.earmarked_amount||"0")+
-   (goal.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+goal.currency_code+" = ? TWD","text",existing?.fx_rate_to_twd||"","Bắt buộc"))+
+   (goal.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+goal.currency_code+" = ? TWD","text",fxReference(goal.currency_code)?.rateToTwd||existing?.fx_rate_to_twd||"","Nhập nếu chưa có tỷ giá"))+
    note("Khoản dự kiến sẽ trừ trong dòng tiền kế hoạch tháng/năm. Đánh dấu đã dành chỉ để theo dõi, không đổi ví, dư nợ hoặc tiến độ tích lũy.");
  }else if(kind==="debtFund"){
   const debt=(state.data.debts||[]).find(d=>d.id===selectedId);if(!debt)return;
@@ -1053,7 +1056,7 @@ function showForm(kind,selectedId=null){
   title="Quỹ trả nợ · "+debt.name;
   fields=input("plannedAmount","Dự kiến dành ("+debt.currency_code+")","text",existing?.planned_amount||"0")+
    input("earmarkedAmount","Đánh dấu đã dành ("+debt.currency_code+")","text",existing?.earmarked_amount||"0")+
-   (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+debt.currency_code+" = ? TWD","text",existing?.fx_rate_to_twd||"","Bắt buộc"))+
+   (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+debt.currency_code+" = ? TWD","text",fxReference(debt.currency_code)?.rateToTwd||existing?.fx_rate_to_twd||"","Nhập nếu chưa có tỷ giá"))+
    note("Đánh dấu đã dành không chuyển tiền giữa các ví, không thanh toán khoản nợ, không trừ số dư.");
  }else if(kind==="debtPayment"){
   const debt=(state.data.debts||[]).find(d=>d.id===selectedId);if(!debt)return;
@@ -1097,6 +1100,9 @@ function showForm(kind,selectedId=null){
  fieldRoot.innerHTML=fields;form.reset();
  if(kind==="goalProgress")fieldRoot.querySelector('[name="status"]').value=state.data.goals.find(g=>g.id===selectedId)?.status||"active";
  if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="kind"]').value=kind==="cashIncome"?"income":kind==="cashExpense"?"expense":(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.kind||"expense";
+ if(["cashIncome","cashExpense","cashEdit"].includes(kind))fieldRoot.querySelector('[name="currencyCode"]').value=kind==="cashEdit"?(state.cashflow?.items||[]).find(x=>x.id===selectedId)?.original_currency||"TWD":"TWD";
+ if(kind==="fxPlan"){const a=fieldRoot.querySelector('[name="fromCurrency"]'),b=fieldRoot.querySelector('[name="toCurrency"]');if(a&&b){a.value="TWD";b.value="VND";}}
+ updateFinanceFormFx();
  // Restore prepopulated values after reset; reset defaults are retained by browser.
  dialog.showModal();
  fieldRoot.querySelector("input,select")?.focus();
@@ -1271,7 +1277,33 @@ root.addEventListener("click",async event=>{
 root.addEventListener("toggle",event=>{
  if(event.target.matches?.("[data-fin-methodology]"))workbookState.methodologyOpen=event.target.open;
 },true);
+function updateFinanceFormFx(){
+ const kind=dialog.dataset.formKind;
+ if(kind==="cashIncome"||kind==="cashExpense"||kind==="cashEdit"){
+  const code=fieldRoot.querySelector('[name="currencyCode"]')?.value;
+  const amount=fieldRoot.querySelector('[name="originalAmount"]')?.value||"";
+  const manual=fieldRoot.querySelector('[name="fxRateToTwd"]')?.value||"";
+  const quote=fxReference(code);
+  const rate=quote?.rateToTwd||manual;
+  const target=fieldRoot.querySelector("[data-fx-form-estimate]");
+  const amountTwd=Number(amount)*Number(rate);
+  if(target)target.textContent=code==="TWD"?
+   "Khoản TWD: "+(amount||"0")+" TWD":
+   rate&&Number.isFinite(amountTwd)?"Giá trị ước tính: "+Math.round(amountTwd).toLocaleString("vi-VN")+" TWD · "+(quote?"tự động":"tỷ giá nhập tay")+" · "+quoteLabel(code):
+   "Chưa có tỷ giá mới: cần nhập tỷ giá tham khảo để ước tính.";
+ }
+ if(kind==="fxPlan"){
+  const from=fieldRoot.querySelector('[name="fromCurrency"]')?.value,to=fieldRoot.querySelector('[name="toCurrency"]')?.value;
+  const a=fxReference(from),b=fxReference(to);
+  const expected=fieldRoot.querySelector('[name="expectedRate"]');
+  if(expected&&a&&b&&Number(b.rateToTwd)>0){
+   expected.value=(Number(a.rateToTwd)/Number(b.rateToTwd)).toFixed(10).replace(/0+$/,"").replace(/\.$/,"");
+  }
+ }
+}
+fieldRoot.addEventListener("change",event=>{if(event.target.matches('[name="currencyCode"],[name="fromCurrency"],[name="toCurrency"]'))updateFinanceFormFx();});
 fieldRoot.addEventListener("input",event=>{
+ if(event.target.matches('[name="originalAmount"],[name="fxRateToTwd"]'))updateFinanceFormFx();
  if(!event.target.matches('[name="targetBalance"]')||dialog.dataset.formKind!=="balanceReconcile")return;
  const before=String(fieldRoot.querySelector('[name="expectedBalance"]')?.value||"0");
  const after=String(event.target.value).trim();
