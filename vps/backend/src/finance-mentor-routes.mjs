@@ -200,7 +200,7 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
    }
    const count=await ctx.pool.query(
     "SELECT COUNT(*)::int AS n FROM finance.mentor_messages WHERE owner_user_id=$1 "+
-    "AND role='user' AND created_at >= (now() AT TIME ZONE 'Asia/Taipei')::date AT TIME ZONE 'Asia/Taipei'",
+    "AND role='user' AND created_at >= (date_trunc('day',now() AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei')",
     [ctx.owner]);
    if(count.rows[0].n>=Math.max(1,Math.min(100,Number(process.env.FINANCE_AI_DAILY_LIMIT||35))))
     return fail(reply,"AI_MENTOR_DAILY_LIMIT",429);
