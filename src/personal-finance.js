@@ -38,7 +38,7 @@ function btn(name,action,css="soft",attrs=""){return '<button type="button" clas
 function card(t,body,extra="",subtitle=""){return '<section class="card"><div class="section-title"><div><h2>'+safe(t)+'</h2>'+(subtitle?'<p class="section-sub">'+safe(subtitle)+'</p>':"")+'</div>'+extra+'</div>'+body+'</section>';}
 function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Mục tiêu"}[kind]||"Khác")+'</span>';}
 function empty(t){return '<div class="empty">'+safe(t)+'</div>';}
-function nav(tab){state.tab=tab;state.preview=null;render();window.scrollTo(0,0);}
+function nav(tab){state.tab=tab;render();window.scrollTo(0,0);}
 function quoteCards(){
  const used=[...new Set([...(state.data?.accounts||[]).map(x=>x.currency_code),...(state.data?.debts||[]).map(x=>x.currency_code),...(state.data?.goals||[]).map(x=>x.currency_code),"VND","USD"])].filter(c=>c!=="TWD");
  const html=used.map(c=>{const q=quote(c);return '<span class="rate-pill"><b>'+safe(c)+'</b> · '+(q?number(q.rateToTwd,10)+" TWD":"Chưa có tỷ giá")+'</span>';}).join("");
@@ -281,10 +281,34 @@ function render(){
  root.innerHTML=({overview,plan:planning,commitments,reports:reporting,simulator:scenario,settings})[state.tab]();
  if(state.partial.length){root.insertAdjacentHTML("afterbegin",'<div class="notice warn" style="margin-bottom:14px">Một số dữ liệu tham chiếu chưa tải được: '+safe(state.partial.join(", "))+'. Dữ liệu đã lưu không bị xóa.</div>');}
 }
+
+function advisorHorizon(){
+ const days=Math.ceil((Date.parse(lastDay(state.month)+"T00:00:00Z")-Date.parse(nowDate()+"T00:00:00Z"))/86400000)+1;
+ return days<=30?30:days<=60?60:days<=90?90:365;
+}
+async function loadLinkedAnalysis(version){
+ // Always recompute from the persisted cashflow and fund allocations. No fake
+ // salary row, no inferred loan, and no silent reuse of a stale projection.
+ state.baselineBusy=true;state.baselineError=null;render();
+ try{
+  const scenario={name:"Dự báo theo kế hoạch đã lưu",months:forecastMonths(),salaryDay:10,
+    bufferTwd:state.buffer,monthlyExtraIncomeTwd:"0",rows:[]};
+  const r=await api("/workbench/preview",{scenario},"POST");
+  if(version!==state.analysisVersion)return;
+  state.baseline=r.projection;
+ }catch(e){
+  if(version!==state.analysisVersion)return;
+  state.baselineError=errorText(e);state.baseline=null;
+ }finally{
+  if(version===state.analysisVersion){state.baselineBusy=false;render();}
+ }
+}
 async function refresh(){
+ const version=++state.analysisVersion;
+ state.baseline=null;state.preview=null;state.baselineError=null;state.baselineBusy=false;
  state.ready=false;state.error=null;render();
  const year=+state.month.slice(0,4);
- const specs=[["data","/bootstrap"],["overview","/overview?month="+state.month],["cashflow","/cashflow?month="+state.month],["year","/year?year="+year],["fx","/fx/estimates"],["advice","/advisor?days="+state.days+"&bufferTwd="+encodeURIComponent(state.buffer)],["scenarioData","/workbench"]];
+ const specs=[["data","/bootstrap"],["overview","/overview?month="+state.month],["cashflow","/cashflow?month="+state.month],["year","/year?year="+year],["fx","/fx/estimates"],["advice","/advisor?days="+advisorHorizon()+"&bufferTwd="+encodeURIComponent(state.buffer)],["scenarioData","/workbench"]];
  const res=await Promise.allSettled(specs.map(x=>api(x[1])));
  state.partial=[];
  for(let i=0;i<res.length;i++){const [k]=specs[i];if(res[i].status==="fulfilled"){if(k==="scenarioData")state.scenarioList=res[i].value.scenarios||[];else state[k]=res[i].value;}else{
@@ -293,6 +317,7 @@ async function refresh(){
   state.partial.push(k);if(k==="advice")state.advice=null;
  }}
  state.ready=true;render();
+ if(!state.error)void loadLinkedAnalysis(version);
 }
 function showLogin(){state.ready=false;state.data=null;state.error=null;$("#finance-layout").hidden=true;$("#finance-login").hidden=false;}
 async function initialize(){
