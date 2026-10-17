@@ -546,8 +546,31 @@ async function submit(event){
  let path="",body={},method="POST";
  try{
   if(type==="plan"||type==="editPlan"){
-   body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,originalAmount:amountInput(b.originalAmount,b.currencyCode),dueDay:+b.dueDay||null,memo:b.memo||""};
-   path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
+   if(b.kind==="debt"&&type==="plan"){
+     const debt=(state.data?.debts||[]).find(x=>x.id===b.debtPick);
+     body={name:b.debtName,currencyCode:b.debtCurrencyCode,
+       principalOriginal:amountInput(b.debtPrincipalOriginal,b.debtCurrencyCode),
+       annualInterestPercent:String(b.debtInterestPercent||"0"),
+       dueDate:b.debtDueDate,month:state.month,
+       plannedAmount:amountInput(b.debtPlannedAmount||"0",b.debtCurrencyCode),
+       earmarkedAmount:amt(findFund("debt",debt?.id)?.earmarked_amount||"0"),
+       memo:b.debtMemo||"",fromPlanning:true};
+     if(!b.debtDueDate)throw new Error("Khoản công nợ lập từ Kế hoạch cần có ngày phải trả.");
+     path=debt?"/linked-debts/"+debt.id:"/linked-debts";method=debt?"PUT":"POST";
+   }else if(b.kind==="goal"&&type==="plan"){
+     const g=(state.data?.goals||[]).find(x=>x.id===b.goalPick);
+     if(!g)throw new Error("Bạn cần tạo mục tiêu tiết kiệm ở phần Công nợ & mục tiêu trước.");
+     if(!quote(g.currency_code))throw new Error("Chưa có tỷ giá hợp lệ cho quỹ "+g.currency_code+".");
+     body={month:state.month,goalId:g.id,
+       plannedAmount:amountInput(b.goalPlannedAmount,g.currency_code),
+       earmarkedAmount:amt(findFund("goal",g.id)?.earmarked_amount||"0")};
+     path="/goal-funds";method="PUT";
+   }else{
+     body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,
+       originalAmount:amountInput(b.originalAmount,b.currencyCode),
+       dueDay:+b.dueDay||null,memo:b.memo||""};
+     path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
+   }
   }else if(type==="transaction"){
    if(!quote(b.currencyCode))throw new Error("Chưa có tỷ giá tham chiếu hợp lệ. Hãy cập nhật trước khi ghi sổ.");
    if(!b.accountId||!b.categoryId)throw new Error("Cần tạo ví và danh mục cùng ngoại tệ trước khi ghi giao dịch thực.");
@@ -559,11 +582,18 @@ async function submit(event){
   }else if(type==="reconcile"){
    const account=getAccount(id);body={targetBalance:amountInput(b.targetBalance,account.currency_code),
     expectedBalance:amt(b.expectedBalance),reason:b.reason,idempotencyKey:form.dataset.key};path="/accounts/"+id+"/reconcile";
-  }else if(type==="debt"){
-   body={name:b.name,currencyCode:b.currencyCode,principalOriginal:amountInput(b.principalOriginal,b.currencyCode),
-    annualInterestPercent:b.annualInterestPercent||"0",dueDate:b.dueDate||null};path="/debts";
+  }else if(type==="debt"||type==="editLinkedDebt"){
+   const target=(state.data?.debts||[]).find(x=>x.id===id);
+   body={name:b.Name,currencyCode:b.CurrencyCode,
+    principalOriginal:amountInput(b.PrincipalOriginal,b.CurrencyCode),
+    annualInterestPercent:String(b.InterestPercent||"0"),dueDate:b.DueDate||null,
+    memo:b.Memo||"",month:state.month,
+    plannedAmount:amountInput(b.PlannedAmount||"0",b.CurrencyCode),
+    earmarkedAmount:amt(findFund("debt",target?.id)?.earmarked_amount||"0"),
+    fromPlanning:false};
+   path=target?"/linked-debts/"+target.id:"/linked-debts";method=target?"PUT":"POST";
   }else if(type==="goal"){
-   body={name:b.name,currencyCode:b.currencyCode,targetAmount:amountInput(b.targetAmount,b.currencyCode),targetDate:b.targetDate||null};path="/goals";
+   body={name:b.name,currencyCode:b.currencyCode,targetAmount:amountInput(b.targetAmount,b.currencyCode),targetDate:b.targetDate||null,memo:b.memo||""};path="/goals";
   }else if(type==="fundDebt"||type==="fundGoal"){
    const obj=(type==="fundDebt"?state.data.debts:state.data.goals).find(x=>x.id===id);
    const base={month:state.month,plannedAmount:amountInput(b.plannedAmount,obj.currency_code),
@@ -581,7 +611,9 @@ async function submit(event){
     feePaid:amountInput(b.feePaid,d.currency_code),fxRateToTwd:q.rateToTwd||"1",
     memo:"Thanh toán đã thực hiện",idempotencyKey:form.dataset.key};path="/debt-payments";
   }else if(type==="editGoal"){
-   const g=state.data.goals.find(x=>x.id===id);body={currentAmount:amountInput(b.currentAmount,g.currency_code),status:b.status};
+   const g=state.data.goals.find(x=>x.id===id);body={currentAmount:amountInput(b.currentAmount,g.currency_code),status:b.status,
+    name:b.name,targetAmount:amountInput(b.targetAmount,g.currency_code),
+    targetDate:b.targetDate||null,memo:b.memo||""};
    path="/goals/"+id;method="PUT";
   }else if(type==="category"){
    body={name:b.name,kind:b.kind};path="/categories";
@@ -634,7 +666,7 @@ async function act(action,id){
  if(action==="newPlan")return open("plan");
  if(action==="editPlan")return open("editPlan",id);
  if(action==="deletePlan")return deletePlan(id);
- if(["transaction","account","reconcile","debt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
+ if(["transaction","account","reconcile","debt","editLinkedDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
 }
 document.body.addEventListener("click",async event=>{
  const tab=event.target.closest("[data-tab]");if(tab){nav(tab.dataset.tab);return;}
@@ -647,7 +679,10 @@ $("#finance-dialog-close").addEventListener("click",()=>dlg.close());
 $("#finance-dialog-cancel").addEventListener("click",()=>dlg.close());
 dlg.addEventListener("click",event=>{if(event.target===dlg)dlg.close();});
 fields.addEventListener("input",updateEstimate);
-fields.addEventListener("change",updateEstimate);
+fields.addEventListener("change",e=>{
+ if(e.target.matches('[name="kind"],[name="debtPick"]'))kindPanel();
+ updateEstimate();
+});
 form.addEventListener("submit",submit);
 $("#finance-login-form").addEventListener("submit",async event=>{
  event.preventDefault();const b=Object.fromEntries(new FormData(event.target));
