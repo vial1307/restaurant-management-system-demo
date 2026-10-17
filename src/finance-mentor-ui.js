@@ -1,7 +1,7 @@
 // Finance Mentor is intentionally a separate UI module. No Kitchen data or localStorage.
 export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange,getBuffer}){
  const state={loaded:false,loading:false,status:null,digest:null,conversations:[],
-   conversationId:null,messages:[],sending:false,error:null,horizonDays:90};
+   conversationId:null,messages:[],sending:false,error:null,horizonDays:90,analysis:null,analysisBusy:false,analysisError:null};
  const s=value=>safe(String(value??""));
  const command=(label,action,id="",className="soft")=>
   '<button type="button" class="btn '+className+' small" data-mentor-action="'+s(action)+
@@ -48,22 +48,78 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
    (m.role==="user"?"Bạn":"AI Mentor")+'</strong><p>'+s(m.content)+'</p></div>').join("")+
    (state.sending?'<div class="mentor-bubble advisor">Đang kiểm tra dữ liệu và phân tích…</div>':"")+'</div>';
  }
+
+ function reportPanel(){
+  const busy=state.analysisBusy;
+  const button=busy?'<button class="btn primary small" type="button" disabled>Đang phân tích...</button>':
+    command("Phân tích dòng tiền ngay","analyze","","primary");
+  if(!state.analysis){
+   return card("Cố vấn dòng tiền · Không cần OpenAI",
+    '<div class="mentor-report-intro"><strong>Phân tích trực tiếp từ Finance Database</strong>'+
+    '<p>Kiểm tra số dư trước kỳ thu tiếp theo, nghĩa vụ có ngày cam kết và quỹ nợ chưa đủ trước hạn. Thời gian được tính liên tục qua các tháng.</p>'+
+    (state.analysisError?'<div class="notice warn">'+s(state.analysisError)+'</div>':"")+'</div>',button,
+    "Chỉ đọc · Không chuyển tiền · Không sửa khoản nợ");
+  }
+  const a=state.analysis;
+  const metric=(label,value,emphasis="")=>'<div class="mentor-metric '+emphasis+'"><small>'+s(label)+
+   '</small><strong>'+s(value)+'</strong></div>';
+  const gap=Number(a.conservativeUnfundedRiskBeforeIncomeTwd||0);
+  const baseline=Number(a.shortageToReserveBeforeNextIncomeTwd||0);
+  const cards='<div class="mentor-metrics">'+
+   metric("Số dư dự kiến thấp nhất",money(a.minimumBalanceTwd,"TWD"))+
+   metric("Thấp nhất trước khoản thu tới",money(a.minBeforeNextIncomeTwd,"TWD"),baseline>0?"warning":"")+
+   metric("Thu nhập dự kiến tiếp theo",a.nextIncome?
+     s(a.nextIncome.date)+" · "+money(a.nextIncome.amountTwd,"TWD"):"Chưa có lịch thu")+
+   metric("Rủi ro nếu trả đúng cam kết",money(a.conservativeUnfundedRiskBeforeIncomeTwd,"TWD"),gap>0?"danger":"")+'</div>';
+  const explanation='<div class="notice">'+
+   'Mức dự phòng: <strong>'+s(money(a.reserveTwd,"TWD"))+'</strong>. Khoảng thiếu dự kiến trước lương theo lịch đã lập: '+
+    '<strong>'+s(money(a.shortageToReserveBeforeNextIncomeTwd,"TWD"))+'</strong>. '+
+    'Mức rủi ro khi cộng các nghĩa vụ TWD chưa được xếp đủ quỹ là kịch bản thận trọng, không phải giao dịch đã phát sinh.</div>';
+  const flags=(a.flags||[]).slice(0,5).map(x=>
+    '<div class="mentor-analysis-alert"><strong>'+s(x.date||"Cần chú ý")+' · '+s(x.title)+
+    '</strong><p>'+s(x.detail)+'</p></div>').join("");
+  const actions=(a.actions||[]).slice(0,8).map(x=>
+   '<div class="mentor-action"><div><small>'+s(x.date||"Chưa rõ hạn")+'</small><strong>'+
+   s(x.title)+'</strong><p>'+s(x.detail)+'</p></div></div>').join("");
+  const empty='<div class="notice">Chưa phát hiện nghĩa vụ cần bổ sung trong phạm vi đã chọn; vẫn cần đối chiếu các khoản chưa nhập.</div>';
+  const warnings=(a.forecastWarnings||[]).slice(0,4).map(w=>'<p>• '+s(w.message)+'</p>').join("");
+  const last='<details class="mentor-assumptions"><summary>Các giả định và dữ liệu còn thiếu</summary>'+
+   (a.limitations||[]).map(x=>'<p>• '+s(x)+'</p>').join("")+warnings+'</details>';
+  return card("Cố vấn dòng tiền · Phân tích theo ngày",cards+explanation+(flags||"")+
+     '<h3 class="mentor-subtitle">Nghĩa vụ cần xử lý theo thứ tự thời gian</h3>'+
+     (actions||empty)+last+(state.analysisError?'<div class="notice warn">'+s(state.analysisError)+'</div>':""),
+     button,'Kỳ dự báo '+s(a.asOf)+" → "+s(a.through)+" · Tất cả số liệu đọc từ PostgreSQL");
+ }
+ async function analyze(){
+  if(state.analysisBusy)return;
+  state.analysisBusy=true;state.analysisError=null;onChange();
+  try{
+   const days=state.horizonDays,buffer=String(getBuffer?.()??"0");
+   const x=await api("/mentor/analysis?days="+days+"&bufferTwd="+encodeURIComponent(buffer));
+   if(!x?.readOnly||!x.analysis||x.analysis.aiGenerated!==false)
+    throw new Error("Phản hồi phân tích không đúng định dạng chỉ đọc.");
+   state.analysis=x.analysis;
+  }catch(e){state.analysisError=e?.message||"Không tải được báo cáo dòng tiền.";}
+  finally{state.analysisBusy=false;onChange();}
+ }
+
  function render(){
   const enabled=!!state.status?.configured;
-  const config=enabled?'<div class="notice">AI được cấu hình · Chỉ gửi dữ liệu tới OpenAI khi bạn bấm Phân tích.</div>':
-   '<div class="notice warn">AI chưa kích hoạt trên VPS. Để trò chuyện cần cấu hình OpenAI API key riêng trên server; phần công nợ vẫn hoạt động.</div>';
+  const config=enabled?'<div class="notice">AI đã được cấu hình · Chỉ gửi dữ liệu tới OpenAI khi bạn chủ động gửi câu hỏi.</div>':
+   ' <div class="notice warn">Chat AI chưa kích hoạt trên VPS. **Phân tích dòng tiền theo ngày vẫn dùng được** bằng nút phía trên; không yêu cầu OpenAI API key.</div>'.trim();
   const prompts=["Lịch trả nợ nào có nguy cơ thiếu tiền trước kỳ lương tới?",
     "Khoản nào là nghĩa vụ bắt buộc? Khoản người quen nào cần xác nhận?",
     "Nếu thu nhập giảm, 90 ngày tới tôi nên phân bổ ra sao?"];
   return title("AI Financial Mentor","Đọc dữ liệu có thật, phân tích theo từng ngày và phản biện khi kế hoạch thiếu an toàn.")+
    '<div class="mentor-controls"><label>Phạm vi <select id="mentor-horizon">'+[30,60,90,365].map(n=>'<option value="'+n+'"'+(n===state.horizonDays?' selected':'')+'>'+n+' ngày</option>').join('')+'</select></label></div>'+ 
    '<div class="layout-2 mentor-layout"><div class="stack">'+
-   card("Trò chuyện với Mentor",config+chat()+
+   reportPanel()+
+   card("Trò chuyện AI theo yêu cầu",config+chat()+
     '<div class="mentor-prompts">'+prompts.map((q,i)=>command(q,"example",i)).join("")+'</div>'+
     '<div class="mentor-compose"><textarea id="mentor-query" rows="3" maxlength="2000" placeholder="Nhập câu hỏi về dòng tiền, công nợ, kỳ lương..." '+
     (state.sending?"disabled":"")+'></textarea>'+
-    (enabled?command(state.sending?"Đang phân tích":"Phân tích","send","","primary"):
-    '<button class="btn primary small" disabled>Chưa cấu hình AI</button>')+'</div>'+
+    (enabled?command(state.sending?"Đang phản hồi":"Gửi cho AI","send","","primary"):
+    '<button class="btn small soft" type="button" data-mentor-action="analyze">Xem báo cáo thay thế</button>')+'</div>'+
     '<div class="notice">Bản trả lời sử dụng dữ liệu PostgreSQL đã nhập, không tự chuyển tiền hay thay đổi hợp đồng. Hội thoại được lưu riêng trong Finance Database và có thể xóa.</div>',
     command("Hội thoại mới","new"))+
    card("Lịch sử trò chuyện",historyList())+
@@ -150,6 +206,7 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
  async function handle(action,id){
   if(action==="terms"){const d=state.digest?.debts?.find(x=>x.id===id);if(d)dialogFor(d);return;}
   if(action==="close"){document.getElementById("mentor-terms-dialog")?.close();return;}
+  if(action==="analyze"){await analyze();return;}
   if(action==="reload"){await load({force:true});return;}
   if(action==="new"){state.conversationId=null;state.messages=[];onChange();return;}
   if(action==="example"){
@@ -172,10 +229,10 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
    }catch(e){notify(e.message||"Không xóa được.");}return;
   }
  }
- document.body.addEventListener("change",e=>{if(e.target.id==="mentor-horizon")state.horizonDays=Number(e.target.value);},true);
+ document.body.addEventListener("change",e=>{if(e.target.id==="mentor-horizon"){state.horizonDays=Number(e.target.value);state.analysis=null;state.analysisError=null;onChange();}},true);
  document.body.addEventListener("click",e=>{
   const button=e.target.closest("[data-mentor-action]");
   if(button){e.preventDefault();e.stopImmediatePropagation();void handle(button.dataset.mentorAction,button.dataset.id||"");}
  },true);
- return {load,render,brief,reset:()=>{state.loaded=false;state.digest=null;state.status=null;state.messages=[];state.conversations=[];state.conversationId=null;}};
+ return {load,render,brief,reset:()=>{state.loaded=false;state.digest=null;state.status=null;state.messages=[];state.conversations=[];state.conversationId=null;state.analysis=null;state.analysisError=null;}};
 }
