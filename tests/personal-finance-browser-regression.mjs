@@ -17,14 +17,14 @@ try{
   const goals=[{id:goalId,name:"Học phí",currency_code:"TWD",target_amount:"50000",current_amount:"15000",status:"active",target_date:"2027-02-15"}];
   const items=[];const funds=[{id:uuid(7),debt_id:debtId,debt_name:"Thẻ tín dụng",currency_code:"VND",month_date:"2026-10-01",due_date:"2026-11-03",planned_amount:"10000000",earmarked_amount:"0",fx_rate_to_twd:"0.00125",planned_twd:"12500"}];
   const goalFunds=[],history=[],scenarioBooks=[];
-  let num=1000,wroteLedger=0;
+  let num=1000,wroteLedger=0,aiConfigured=true;
   const next=()=>uuid(num++);
   const counts={};
   const respond=(route,value,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(value)});
   await page.route("**/api/finance/**",async route=>{
    const req=route.request(),url=new URL(req.url()),p=url.pathname.slice("/api/finance".length),m=req.method(),b=m!=="GET"?req.postDataJSON()||{}:{};
    counts[m+" "+p]=(counts[m+" "+p]||0)+1;
-   if(p==="/mentor/status")return respond(route,{configured:true,mode:"user_initiated_only"});
+   if(p==="/mentor/status")return respond(route,{configured:aiConfigured,mode:"user_initiated_only"});
    if(p==="/mentor/obligations"){
     return respond(route,{asOf:"2026-10-18",
       debts:debts.map(d=>({
@@ -36,6 +36,20 @@ try{
        friend_family:"Người quen / gia đình",installment_provider:"Trả góp"},
       obligationLabels:{fixed:"Đã cam kết đúng hạn",agreed_flexible:"Lịch linh hoạt đã thỏa thuận",unconfirmed:"Chưa xác nhận lịch trả"},
       automaticRemindersActive:false});
+   }
+   if(p==="/mentor/analysis"&&m==="GET"){
+    return respond(route,{configuredAi:aiConfigured,readOnly:true,source:"finance_postgresql",
+     analysis:{aiGenerated:false,readOnly:true,asOf:"2026-11-27",through:"2027-02-24",
+      reserveTwd:"3000",minimumBalanceTwd:"2000",minimumDate:"2026-11-30",
+      minBeforeNextIncomeTwd:"2000",shortageToReserveBeforeNextIncomeTwd:"1000",
+      conservativeUnfundedRiskBeforeIncomeTwd:"13000",
+      nextIncome:{date:"2026-12-03",amountTwd:"58000",label:"Lương"},
+      flags:[{date:"2026-12-02",title:"Thiếu tiền trước kỳ lương",
+       detail:"Nợ người quen đã cam kết; lương về 03/12 không cứu khoản 02/12."}],
+      actions:[{date:"2026-12-02",title:"Nợ người quen",
+       detail:"Chưa phân bổ đủ 12000 TWD trước hạn, không tự hoãn."}],
+      forecastWarnings:[],limitations:["Khoản kế hoạch không phải giao dịch đã trả."]}
+    });
    }
    if(p==="/mentor/conversations"&&m==="GET")return respond(route,{conversations:[]});
    if(p==="/mentor/messages"&&m==="POST")
@@ -288,6 +302,17 @@ try{
   await page.locator('[data-mentor-action="send"]').click();
   await page.getByText("Cần thanh toán theo ngày đã cam kết",{exact:false}).waitFor();
   assert.equal(wroteLedger,oldPosted,"AI Mentor must not write any posted ledger transaction");
+  aiConfigured=false;
+  await page.locator('[data-mentor-action="reload"]').click();
+  await page.getByText("Chat AI chưa kích hoạt",{exact:false}).waitFor();
+  await page.locator('[data-mentor-action="analyze"]').first().click();
+  await page.getByText("Rủi ro nếu trả đúng cam kết").waitFor();
+  await page.locator(".mentor-analysis-alert strong").filter({hasText:"Thiếu tiền trước kỳ lương"}).first().waitFor();
+  assert.match(await page.locator("#finance-content").innerText(),/12\.000|12000/);
+  assert((counts["GET /mentor/analysis"]||0)>=1,"No-key Mentor report must call the owner-only readonly API");
+  assert.equal(counts["POST /mentor/messages"],1,"No background OpenAI call may occur when key is absent");
+  assert.equal(wroteLedger,oldPosted,"Offline Mentor briefing cannot post a ledger transaction");
+
 
   await page.locator("#finance-settings").click();
   assert.match(await page.locator("#finance-content").innerText(),/Tài khoản & cài đặt/);

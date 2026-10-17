@@ -231,6 +231,17 @@ assert.equal((await request("/finance/mentor/obligations",{cookie:stranger})).st
 const mentorStatus=await request("/finance/mentor/status",{cookie:owner});
 assert.equal(mentorStatus.status,200);
 assert.equal(mentorStatus.data.configured,false,"AI must be disabled without a VPS API key");
+assert.equal((await request("/finance/mentor/analysis")).status,401,"Anonymous visitors cannot read Finance mentor data");
+assert.equal((await request("/finance/mentor/analysis?days=90",{cookie:stranger})).status,403,"Other users cannot read owner's Mentor");
+assert.equal((await request("/finance/mentor/analysis?days=31",{cookie:owner})).status,400,"Reject unsupported time horizons");
+const mentorWithoutKey=await request("/finance/mentor/analysis?days=90&bufferTwd=3000",{cookie:owner});
+assert.equal(mentorWithoutKey.status,200,JSON.stringify(mentorWithoutKey.data));
+assert.equal(mentorWithoutKey.data.readOnly,true);
+assert.equal(mentorWithoutKey.data.analysis.aiGenerated,false);
+assert.equal(mentorWithoutKey.data.analysis.source,"finance_postgresql");
+assert.equal(mentorWithoutKey.data.analysis.asOf.length,10);
+assert(Array.isArray(mentorWithoutKey.data.analysis.actions));
+assert(Array.isArray(mentorWithoutKey.data.analysis.needsConfirmation));
 const termsBody={creditorType:"friend_family",obligationType:"fixed",minimumDueAmount:"1000000",
  relationshipPriority:"high",negotiationStatus:"none",nextContactDate:null,remindersEnabled:true,
  memo:"Ngày đã hứa trả; cần đối chiếu với chủ nợ."};
