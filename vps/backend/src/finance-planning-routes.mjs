@@ -1,3 +1,6 @@
+import {financeScenarioSources} from "./finance-scenario-routes.mjs";
+import {simulateScenario} from "./finance-scenario-engine.mjs";
+import {planDebtPayoff} from "./finance-debt-payoff-engine.mjs";
 import {priceFinanceFund,summarizeFinanceFundValues,missingFinanceFundQuotes} from "./finance-fund-valuation.mjs";
 import {getFinanceFxSnapshot,convertToTwd} from "./finance-fx-valuation.mjs";
 // Owner-only Finance OS planning & debt-fund endpoints, backed by the *separate* finance PostgreSQL.
@@ -71,6 +74,42 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
        summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
     return {month:m,items:items.rows,debtFunds:liveDebts,goalFunds:liveGoals,debtPayments:payments.rows,unconvertedFunds:unconverted,summary:{...summary,...net[0],fx_estimate_incomplete:unconverted.length>0}};
   };
+  app.get("/api/finance/debt-payoff-plan",async(req,reply)=>{
+    const ctx=await authorized(req,reply);if(!ctx)return;
+    const months=Number(req.query?.months||12),bufferText=String(req.query?.bufferTwd??"0");
+    if(![3,6,12].includes(months)||!money(bufferText,0))
+      return fail(reply,"INVALID_PAYOFF_QUERY");
+    const today=new Intl.DateTimeFormat("sv-SE",{
+      timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"
+    }).format(new Date());
+    const through=new Date(Date.UTC(Number(today.slice(0,4)),
+      Number(today.slice(5,7))-1+months,0)).toISOString().slice(0,10);
+    try{
+      const [source,result,fx]=await Promise.all([
+       financeScenarioSources(ctx.pool,ctx.owner,today,through),
+       ctx.pool.query(
+        "SELECT d.id,d.name,d.currency_code,d.annual_interest_rate::text,d.due_date::text,"+
+        "(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount "+
+        "FROM finance.debts d LEFT JOIN finance.debt_payments p "+
+        "ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
+        "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
+       getFinanceFxSnapshot(ctx.pool)
+      ]);
+      const {rows:funds}=await ctx.pool.query(
+       "SELECT debt_id,month_date::text,planned_amount::text FROM finance.debt_fund_allocations "+
+       "WHERE owner_user_id=$1 AND month_date>=$2::date AND month_date<=$3::date",
+       [ctx.owner,today.slice(0,7)+"-01",through.slice(0,7)+"-01"]);
+      const baseline=simulateScenario({asOf:today,source,scenario:{
+       name:"Tự phân bổ nợ theo kế hoạch",months,salaryDay:10,
+       bufferTwd:bufferText,monthlyExtraIncomeTwd:"0",rows:[]}});
+      const advice=planDebtPayoff({asOf:today,baseline,debts:result.rows,funds,
+       quotes:fx.quotes,bufferTwd:bufferText});
+      reply.header("Cache-Control","private, no-store");
+      return {...advice,baseline:{through:baseline.through,minimumTwd:baseline.minimumTwd,
+       earliestRisk:baseline.earliestRisk},fxObservedAt:Object.fromEntries(
+         Object.entries(fx.quotes).map(([code,q])=>[code,q.observedAt||null]))};
+    }catch(error){return databaseError(req,reply,error);}
+  });
   // One owner-only action from "Công nợ" in the monthly planner. Debt master
   // and its monthly planned allocation are created together, never duplicated
   // as an ordinary expense. No wallet or posted repayment is touched.
