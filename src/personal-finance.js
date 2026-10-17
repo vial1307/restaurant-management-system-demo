@@ -12,7 +12,7 @@ const fieldRoot=document.querySelector("#finance-fields");
 const form=document.querySelector("#finance-form");
 const tabs=[...document.querySelectorAll(".fin-nav [data-tab]")];
 const nowMonth=new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit"}).format(new Date()).slice(0,7);
-const state={tab:"budget",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0};
+const state={tab:"budget",month:nowMonth,period:"month",data:null,overview:null,cashflow:null,year:null,yearCashflow:null,loading:true,problem:null,busy:false,advisor:null,advisorBusy:false,advisorError:null,advisorDays:30,advisorBuffer:"0",advisorRequestId:0,fx:null,fxBusy:false,fxError:null};
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=(v,dec=0)=>Number(v||0).toLocaleString("vi-VN",{minimumFractionDigits:0,maximumFractionDigits:Math.max(0,Math.min(6,dec))});
 const moneyLabel=(v,c="TWD")=>(c==="TWD"?"NT$":c+" ")+num(v,c==="USD"||c==="EUR"||c==="CNY"?2:0);
@@ -84,9 +84,55 @@ async function refresh(){
   const [data,overview,cashflow]=await Promise.all([api("/bootstrap"),api("/overview?month="+encodeURIComponent(state.month)),api("/cashflow?month="+encodeURIComponent(state.month))]);
   state.data=data;state.overview=overview;state.cashflow=cashflow;state.problem=null;state.loading=false;
   state.advisor=null;state.advisorError=null;render();
+  if(!state.fx&&!state.fxBusy)void loadFxEstimates();
   void loadAdvice();
   if(state.tab==="workbench"&&workbookState.loaded)void loadWorkbench();
   if(["budget","report"].includes(state.tab)&&state.year?.year!==Number(state.month.slice(0,4)))void loadYear();
+}
+async function loadFxEstimates(){
+ if(state.fxBusy)return;
+ state.fxBusy=true;state.fxError=null;
+ try{
+  const result=await api("/fx/estimates");
+  state.fx=result;
+ }catch(error){state.fxError=error;}
+ finally{
+  state.fxBusy=false;
+  if(state.data&&["budget","report","workbench"].includes(state.tab)&&!dialog.open)render();
+ }
+}
+function fxReference(code){
+ if(code==="TWD")return {rateToTwd:"1",status:"base"};
+ const quote=state.fx?.quotes?.[code];
+ return quote?.status==="fresh"&&quote.rateToTwd?quote:null;
+}
+function quoteLabel(code){
+ const quote=fxReference(code);
+ return quote?("1 "+code+" ≈ "+Number(quote.rateToTwd).toLocaleString("vi-VN",{maximumFractionDigits:10})+" TWD"):"Chưa có tỷ giá mới cho "+code;
+}
+function fxAsTwd(nativeAmount,currency){
+ const q=fxReference(currency);
+ if(!q||!Number.isFinite(Number(nativeAmount)))return null;
+ const value=Number(nativeAmount)*Number(q.rateToTwd);
+ return Number.isFinite(value)?value:null;
+}
+function renderFxSummary(){
+ const entries=Object.entries(state.fx?.quotes||{}).filter(([code])=>code!=="TWD");
+ const cards=entries.map(([code,q])=>'<div class="fin-rate-chip"><strong>'+esc(code)+'</strong><span>'+
+   (q.status==="fresh"?esc(quoteLabel(code)):'Không có giá trị tham chiếu mới')+'</span></div>').join("");
+ const quotes=entries.filter(([,q])=>q.status==="fresh");
+ const foreign=(state.data?.accounts||[]).filter(a=>a.currency_code!=="TWD");
+ const valued=foreign.filter(a=>fxReference(a.currency_code)).reduce((sum,a)=>sum+(fxAsTwd(a.balance,a.currency_code)||0),0);
+ const incomplete=foreign.filter(a=>!fxReference(a.currency_code)).length;
+ return '<div class="fin-fx-summary"><div class="fin-fx-summary-head"><strong>Tỷ giá tham chiếu tự động · Quy đổi về TWD</strong>'+
+  '<button class="fin-btn secondary" type="button" data-fin-fx-reload>↻ Cập nhật</button></div>'+
+  (state.fxBusy?'<p class="fin-note">Đang kiểm tra tỷ giá theo nguồn đã xác minh...</p>':
+   cards||'<p class="fin-note">Chưa có tỷ giá tham chiếu. Không tự tạo tỷ giá giả.</p>')+
+  (foreign.length?'<p class="fin-note">Giá trị tham khảo của ví ngoại tệ đã có tỷ giá: <strong>'+
+   esc(moneyLabel(valued))+'</strong> · '+esc(String(incomplete))+' ví chưa quy đổi. Đây không phải tiền TWD chi được ngay.</p>':'')+
+  '<p class="fin-note">Chỉ dùng để dự báo. Tỷ giá giao dịch của ngân hàng và phí thực tế có thể khác. '+
+  '<a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a>'+
+  ' · Cập nhật khoảng mỗi ngày. '+(state.fxError?'Nguồn không truy cập được.':'')+'</p></div>';
 }
 function heading(title,subtitle,extra=""){
   return '<div class="fin-title-row"><div><h1>'+esc(title)+'</h1><p class="fin-sub">'+esc(subtitle)+'</p></div>'+extra+'</div>';
@@ -309,6 +355,7 @@ function renderBudget(){
    finMetric("Chi dự kiến + quỹ nợ",moneyLabel(Number(s.planned_expense_twd||0)+debt),"orange","Chưa gồm quỹ mục tiêu")+
    finMetric("Còn phân bổ theo kế hoạch",moneyLabel(planned),"purple","Thu - Chi - Nợ - Mục tiêu")+'</div>'+
   panel("Tài khoản & số dư thực tế",renderAccountManagement(),"Chỉnh số dư của từng ví; số dư TWD và ngoại tệ được quản lý riêng.")+
+  renderFxSummary()+
   '<div class="fin-dash-layout">'+
    '<div class="fin-dash-main">'+
     panel("Bảng kế hoạch theo tháng",renderFinancePlanTable(),"Có thể sửa các ô kế hoạch; các khoản công nợ & mục tiêu điều chỉnh từ mục tương ứng.")+
@@ -433,6 +480,7 @@ function renderReport(){
     panel("Điểm cần chú ý",notice)+
    '</div>'+
    panel("Tài khoản & chỉnh số dư",renderAccountManagement(),"Số dư hiện tại lấy từ Finance Database.")+
+   renderFxSummary()+
    renderFinanceAdvancedTools()+
    panel("Giao dịch chi tiết đã ghi",'<div class="fin-table-scroll"><table class="fin-data-table"><thead><tr>'+
      '<th>Ngày</th><th>Nội dung</th><th>Loại</th><th>Tiền vào TWD</th><th>Tiền ra TWD</th><th>Ghi chú</th></tr></thead><tbody>'+
@@ -1126,6 +1174,7 @@ tabs.forEach(b=>b.addEventListener("click",()=>{state.tab=b.dataset.tab;document
 root.addEventListener("click",async event=>{
  const reconcileButton=event.target.closest("[data-balance-reconcile]");
  if(reconcileButton){showForm("balanceReconcile",reconcileButton.dataset.balanceReconcile);return;}
+ if(event.target.closest("[data-fin-fx-reload]")){state.fx=null;await loadFxEstimates();return;}
  const range=event.target.closest("[data-fin-forecast-days]");
  if(range){
    const nextDays=Number(range.dataset.finForecastDays);
