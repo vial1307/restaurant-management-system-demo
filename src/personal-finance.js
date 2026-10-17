@@ -177,12 +177,12 @@ function overview(){
  return title("Tổng quan tài chính","Tất cả dòng tiền, nghĩa vụ và kế hoạch trong một nơi.",btn("+ Thu / chi thật","transaction","primary")+btn("+ Kế hoạch","newPlan","soft"))+
  metrics()+'<div class="layout-2"><div class="stack">'+
  card("Kế hoạch dòng tiền theo ngày",planTable(18),btn("Xem tất cả →","goPlan","small soft"),"Số tiền kế hoạch bằng ngoại tệ được quy đổi theo tỷ giá tham chiếu.")+
- card("Dòng tiền 30–90 ngày tới",'<div class="chart-box">'+financeLiquidityForecast(state.advice)+'</div>',btn("Xem tư vấn","goSim","small soft"))+
+ card("Dòng tiền 90 ngày tới",'<div class="chart-box">'+financeLiquidityForecast(state.advice)+'</div>',btn("Xem tư vấn","goSim","small soft"))+
  '</div><div class="stack">'+
  card("Cảnh báo quan trọng",warningList(4))+
  card("Phân bổ chi tiêu tháng này",reportDonut())+
  '</div></div>'+
- '<div class="layout-2 equal">'+card("Gợi ý hành động",(state.advice?.recommendations||[]).slice(0,3).map((r,i)=>
+ '<div class="layout-2 equal">'+card("Gợi ý hành động",linkedInsights()+(state.advice?.recommendations||[]).slice(0,2).map((r,i)=>
  '<div class="rowitem"><div><strong>'+(i+1)+". "+safe(r.title)+'</strong><p>'+safe(r.detail)+'</p></div></div>').join("")||empty("Đang phân tích dòng tiền theo ngày."))+
  card("Mục tiêu tài chính của bạn",goalList(4),btn("Quản lý mục tiêu →","goCommit","small soft"))+'</div>'+
  card("Tài khoản và số dư",walletList(),btn("+ Thêm ví","account","small soft"));
@@ -193,6 +193,8 @@ function planning(){
  '<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(sum.income)+'</strong></div><div><small>Chi & quỹ dự kiến</small><strong class="negative">'+money(sum.expenses)+'</strong></div><div><small>Chênh lệch trong tháng</small><strong>'+money(sum.net)+'</strong></div></div><div style="height:14px"></div>'+
  (incomplete?'<div class="notice warn">Có khoản ngoại tệ thiếu tỷ giá cập nhật; tổng TWD phía trên chưa bao gồm những khoản đó.</div><div style="height:12px"></div>':"")+
  card("Bảng kế hoạch theo tháng",planTable(),btn("+ Thêm dòng","newPlan","small primary"),"Chọn “Sửa” để thay đổi kế hoạch. Công nợ và mục tiêu được sửa từ chính khoản tương ứng.")+
+ card("Phân tích dòng tiền theo tháng đã chọn",linkedInsights(),btn("Xem mô phỏng đầy đủ","goSim","small soft"))+
+ card("Lịch số dư sau từng khoản",linkedCashTable(),btn("Mô phỏng thêm","goSim","small soft"),"Đọc trực tiếp kế hoạch đang lưu; chưa ghi chi tiêu thực tế.")+
  '<div class="layout-2 equal">'+card("Số dư và các ví",walletList(),btn("Tạo ví","account","small soft"))+
  card("Tỷ giá đang sử dụng",quoteCards(),btn("Cập nhật","reloadFx","small soft"))+'</div>';
 }
@@ -220,11 +222,15 @@ function reportRows(){
  }).join("")+'</tbody></table></div>';
 }
 function reporting(){
- const year=state.year?.months||[];const inc=actualIncome(),out=actualExpense();
+ const year=state.year?.months||[];const inc=actualIncome(),out=actualExpense(),planned=planSummary();
  const categories=(state.overview?.budget||[]).filter(x=>x.kind==="expense");
- return title("Dòng tiền & báo cáo","Giao dịch thực tế, ngân sách và xu hướng cả năm.",btn("+ Thu / chi","transaction","primary")+btn("Xuất CSV","export","ghost"))+
+ return title("Dòng tiền & báo cáo","Kế hoạch và phát sinh thực được đối chiếu riêng theo "+fmtMonth(state.month)+".",btn("+ Thu / chi","transaction","primary")+btn("Xuất CSV","export","ghost"))+
  '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Dòng tiền thực",value:money(inc-out)},{color:"purple",label:"Số giao dịch",value:String(state.overview?.events?.length||0)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
- '<div class="layout-2">'+card("Xu hướng thu/chi theo tháng",'<div class="chart-box">'+financeMonthlyTrend(year)+'</div>')+
+ card("Dòng tiền dự kiến từ Kế hoạch tài chính",'<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(planned.income)+'</strong></div><div><small>Chi và quỹ dự kiến</small><strong class="negative">'+money(planned.expenses)+'</strong></div><div><small>Chênh lệch dự kiến</small><strong>'+money(planned.net)+'</strong></div></div><div style="height:10px"></div>'+
+   '<div class="notice">Kế hoạch ≠ phát sinh thực tế. Các khoản đã nhập ở tab Kế hoạch được tự đồng bộ vào đây, không yêu cầu nhập lại. Tránh cộng hai cột thành một số dư.</div>',btn("Xem kế hoạch","goPlan","small soft"))+
+ '<div class="layout-2 equal">'+card("Số dư dự báo & hành động",linkedInsights())+
+ card("Lịch tiền theo ngày",linkedCashTable(22))+"</div>"+
+ '<div class="layout-2">'+card("Xu hướng thu/chi thực theo tháng",'<div class="chart-box">'+financeMonthlyTrend(year)+'</div>')+
  card("Phân bổ chi tiêu",reportDonut())+'</div>'+
  '<div class="layout-2 equal">'+card("Ngân sách theo danh mục",categories.length?categories.map(c=>
  '<div class="rowitem"><div><strong>'+safe(c.name)+'</strong><p>Đã dùng '+money(c.actual_twd)+' / '+money(c.budget_twd)+'</p><div class="progress"><i style="width:'+Math.min(100,val(c.actual_twd)/Math.max(1,val(c.budget_twd))*100)+'%"></i></div></div>'+btn("Đặt mức","budget","small soft",'data-id="'+safe(c.category_id)+'"')+'</div>').join(""):empty("Thêm danh mục chi tiêu trước khi đặt ngân sách."),btn("+ Danh mục","category","small soft"))+
@@ -232,10 +238,10 @@ function reporting(){
  card("Lịch sử giao dịch trong tháng",reportRows(),btn("Xuất CSV","export","small ghost"));
 }
 function scenario(){
- const s=state.sim,p=state.preview;
- const preview=p?'<div class="mini-list"><div><small>Cuối kỳ dự báo</small><strong>'+money(p.endingTwd)+'</strong></div><div><small>Đáy số dư</small><strong>'+money(p.minimumTwd)+'</strong></div><div><small>Thu nhập cần thêm/kỳ lương</small><strong>'+(!p.minimumAdditionalIncomePerPaydayTwd?"Cần đổi lịch":money(p.minimumAdditionalIncomePerPaydayTwd))+'</strong></div></div>'+
+ const s=state.sim,p=state.preview||state.baseline;
+ const preview=p?'<p class="section-sub" style="margin-bottom:10px">'+(state.preview?'Kịch bản bạn vừa phân tích':'Tự phân tích từ số liệu Kế hoạch tài chính đã lưu')+'</p><div class="mini-list"><div><small>Cuối kỳ dự báo</small><strong>'+money(p.endingTwd)+'</strong></div><div><small>Đáy số dư</small><strong>'+money(p.minimumTwd)+'</strong></div><div><small>Thu nhập cần thêm/kỳ lương</small><strong>'+(!p.minimumAdditionalIncomePerPaydayTwd?"Cần đổi lịch":money(p.minimumAdditionalIncomePerPaydayTwd))+'</strong></div></div>'+
   '<div style="height:12px"></div>'+(p.earliestRisk?'<div class="notice warn">Cần kiểm tra nguy cơ thiếu tiền từ '+safe(p.earliestRisk.date)+'</div>':'<div class="notice">Chưa phát hiện hụt so với mức dự trữ theo dữ liệu và giả định đã nhập.</div>')+
-  '<div class="stack" style="margin-top:12px">'+(p.warnings||[]).slice(0,6).map(w=>'<div class="notice warn">'+safe(w)+'</div>').join("")+'</div>':empty("Nhập giả định rồi chọn “Phân tích dòng tiền” để xem kết quả.");
+  '<div class="stack" style="margin-top:12px">'+(p.warnings||[]).slice(0,6).map(w=>'<div class="notice warn">'+safe(w)+'</div>').join("")+'</div>':(state.baselineBusy?empty("Đang tự đọc kế hoạch, quỹ nợ và dòng tiền để phân tích…"):empty("Chưa thể phân tích. "+(state.baselineError||"Kiểm tra kế hoạch và kết nối Finance Database.")));
  const row=s.rows?.[0]||{kind:"expense",date:nowDate(),amountTwd:"0",label:"Chi phát sinh"};
  return title("Mô phỏng & tư vấn","Thử phương án trước khi quyết định. Mô phỏng không làm thay đổi số dư hay công nợ.")+
  '<div class="layout-2"><div class="stack">'+card("Tạo kịch bản của bạn",'<form class="form-grid" id="scenario-fields">'+
@@ -250,10 +256,14 @@ function scenario(){
  '<label>Số tiền thay đổi (TWD)<input name="rowAmount" value="'+safe(row.amountTwd)+'"></label></form>'+
  '<div class="page-actions" style="margin-top:14px">'+btn("Phân tích dòng tiền","simulate","primary")+btn("Lưu kịch bản","saveScenario","soft")+btn("Kịch bản mới","newScenario","ghost")+'</div>',
  "", "Chỉ một khoản giả định mỗi lần, dễ hiểu, có thể thay thế để so sánh các phương án.")+
+ card("Các khoản nguồn từ Database",planTable(16),btn("Sửa kế hoạch","goPlan","small soft"),"Thu/chi, công nợ và mục tiêu trong "+fmtMonth(state.month)+" đã được đưa vào mô phỏng.")+
  card("Cách hệ thống tư vấn",'<div class="rowitem"><div><strong>1. Dòng tiền thực</strong><p>Lấy số dư ví TWD và các lịch thu/chi, quỹ nợ đã nhập từ Finance Database.</p></div></div>'+
  '<div class="rowitem"><div><strong>2. Ngày phát sinh</strong><p>Kiểm tra ngày hụt trước khi lương đến; số tiền nhận sau đó không thể trả một khoản đã quá hạn.</p></div></div>'+
  '<div class="rowitem"><div><strong>3. Mô phỏng an toàn</strong><p>So với mức dự trữ và giả định tăng/giảm thu nhập. Không tạo giao dịch thật.</p></div></div>')+'</div>'+
  '<div class="stack">'+card("Kết quả dự báo",preview)+
+ card("Tư vấn tự động theo tháng đã chọn",linkedInsights())+
+ card("Lịch thu/chi và số dư dự kiến",linkedCashTable(24))+
+ 
  card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div>'+btn("Mở","openScenario","small soft",'data-id="'+safe(x.id)+'"')+'</div>').join(""):empty("Chưa lưu kịch bản nào."))+
  '</div></div>';
 }
