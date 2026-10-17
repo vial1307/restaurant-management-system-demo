@@ -434,3 +434,15 @@ html{scroll-padding-top:92px;scroll-padding-bottom:130px}
  .fin-nav-tools[open]>button:nth-of-type(5){bottom:88px!important}
  .fin-nav-tools[open]>button span{font-size:16px!important;margin-right:8px}
 }
+
+/* Indicative FX valuation: separate forecast values from liquid TWD wallets. */
+.fin-fx-summary{border:1px solid #d5e4f8;border-radius:12px;background:linear-gradient(135deg,#f8fbff,#eef5ff);padding:15px 17px;margin:12px 0}
+.fin-fx-summary-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:10px}
+.fin-fx-summary-head strong{font-size:13px;color:#193c64}
+.fin-fx-summary-head .fin-btn{font-size:11px;padding:7px 9px}
+.fin-rate-chip{display:inline-flex;align-items:center;gap:9px;background:#fff;border:1px solid #dbe7f5;border-radius:9px;padding:9px 11px;margin:4px;font-size:11px}
+.fin-rate-chip strong{color:#1f67ba;font-size:12px}
+.fin-rate-chip span{color:#566f90}
+.fin-fx-summary .fin-note{font-size:10px;color:#637b98;line-height:1.6;margin:8px 0 2px}
+.fin-fx-summary a{color:#2169c6;text-decoration:underline}
+@media(max-width:570px){.fin-fx-summary-head{flex-wrap:wrap}.fin-rate-chip{width:100%;margin:3px 0}.fin-fx-summary{padding:12px 11px}}
