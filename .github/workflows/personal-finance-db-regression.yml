@@ -8,6 +8,7 @@ on:
       - "tests/personal-finance-schema-contract-regression.mjs"
       - "tests/finance-advisor-engine-regression.mjs"
       - "tests/finance-scenario-engine-regression.mjs"
+      - "tests/finance-debt-repayment-advisor-regression.mjs"
       - "tests/finance-fx-valuation-regression.mjs"
       - "vps/backend/src/finance-*.mjs"
       - "vps/backend/src/server.mjs"
@@ -62,6 +63,8 @@ jobs:
         run: node tests/personal-finance-schema-contract-regression.mjs
       - name: Deterministic cashflow advisor engine regression
         run: node tests/finance-advisor-engine-regression.mjs
+      - name: Debt priority and salary-based allocation regression
+        run: node tests/finance-debt-repayment-advisor-regression.mjs
       - name: Exchange rate valuation and stale-rate safety regression
         run: node tests/finance-fx-valuation-regression.mjs
       - name: Scenario finance simulation regression
@@ -80,6 +83,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/004_finance_scenario_workbooks.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/005_finance_estimated_fx_cashflow.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/005_finance_estimated_fx_cashflow.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/006_finance_debt_payment_priority.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/006_finance_debt_payment_priority.sql
       - name: Validate core constraints and kitchen DB isolation
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test <<'SQL'
@@ -106,6 +111,7 @@ jobs:
           echo "FINANCE_OWNER_USER_ID=$OWNER" >> "$GITHUB_ENV"
       - name: Start private API with both test DBs
         run: |
+          node --check vps/backend/src/finance-debt-repayment-advisor.mjs
           node --check vps/backend/src/finance-fx-valuation.mjs
           node --check vps/backend/src/finance-db.mjs
           node --check vps/backend/src/finance-routes.mjs

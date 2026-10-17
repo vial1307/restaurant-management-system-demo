@@ -95,7 +95,7 @@ export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[]
  for(const row of debtFunds){
    const month=String(row.month_date).slice(0,7);
    const debtDate=dateOk(row.due_date)&&row.due_date.slice(0,7)===month?row.due_date:null;
-   const when=debtDate?{date:debtDate,estimatedDate:false}:dateFor(month,null);
+   const when=row.payment_day?dateFor(month,row.payment_day):debtDate?{date:debtDate,estimatedDate:false}:dateFor(month,null);
    if(when.estimatedDate)warnings.push("Một số quỹ trả nợ chưa có ngày đến hạn đúng tháng; mốc cuối tháng chỉ là ước tính.");
    const due=units(row.planned_twd)-(posted.get(row.debt_id+"|"+month)||0n);
    include({date:when.date,kind:"debt",label:"Quỹ nợ: "+row.debt_name,

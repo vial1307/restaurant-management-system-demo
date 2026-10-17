@@ -31,7 +31,7 @@ try{
      budget:[{id:expense,category_id:expense,name:"Ăn uống",kind:"expense",budget_twd:"15000",actual_twd:"12000"}],events:history});
    if(p==="/cashflow")return respond(route,{month:url.searchParams.get("month"),
      items:items.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),
-     debtFunds:funds,goalFunds,summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
+     debtFunds:funds.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),goalFunds:goalFunds.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
    if(p==="/year")return respond(route,{year:+url.searchParams.get("year"),months:[{month:"2026-10",income_twd:"50000",expense_twd:"12000"}]});
    if(p==="/cashflow/year"){
     const year=+url.searchParams.get("year");
@@ -66,7 +66,14 @@ try{
       if(current<0&&!firstGap)firstGap={date:x.date,gapTwd:String(-current),label:x.label};
       return {...x,balanceTwd:String(current)};
     });
-    return respond(route,{projection:{asOf:"2026-10-17",through:endMonth+"-30",
+    const repaymentAdvice={priority:["debt","expense","goal"],months:[{month:"2026-11",incomeTwd:"58000",essentialTwd:"100000",
+      scheduledDebtTwd:String(funds.reduce((n,x)=>n+Number(x.planned_twd),0)),suggestedAdditionalDebtTwd:"0",
+      projectedAfterSuggestionsTwd:String(current),payday:"2026-11-03",details:debts.map(d=>({
+        debtId:d.id,name:d.name,remainingPrincipalEstimateTwd:String(Math.round(Number(d.outstanding_amount)*(d.currency_code==="VND"?0.00125:1)))})
+      )}],debtBalances:debts.map(d=>({name:d.name,currency:d.currency_code,dueDate:d.due_date,
+      remainingPrincipalEstimatedTwd:String(Math.round(Number(d.outstanding_amount)*(d.currency_code==="VND"?0.00125:1)))})),
+      warnings:[]};
+    return respond(route,{repaymentAdvice,projection:{asOf:"2026-10-17",through:endMonth+"-30",
       startingBalanceTwd:accounts.find(a=>a.id===T).balance,
       endingTwd:String(current),minimumTwd:String(min),bufferTwd:"0",
       minimumAdditionalIncomePerPaydayTwd:"0",warnings:[],earliestRisk:firstGap,timeline},scenario:b.scenario});
@@ -88,8 +95,42 @@ try{
    if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="DELETE"){
     items.splice(items.findIndex(x=>x.id===p.split("/").at(-1)),1);return respond(route,{deleted:true});
    }
+   if(p==="/debt-plans"&&m==="POST"){
+    const d={id:next(),name:b.name,currency_code:b.currencyCode,principal_original:b.principalOriginal,
+      annual_interest_rate:String(Number(b.annualInterestPercent)/100),due_date:b.dueDate,
+      outstanding_amount:b.principalOriginal};
+    debts.push(d);
+    let fund=null;
+    if(Number(b.plannedAmount)>0){fund={id:next(),debt_id:d.id,debt_name:d.name,currency_code:d.currency_code,
+      month_date:b.month+"-01",due_date:d.due_date,payment_day:b.paymentDay,
+      planned_amount:b.plannedAmount,earmarked_amount:"0",planned_twd:String(Math.round(Number(b.plannedAmount)*(b.currencyCode==="VND"?0.00125:1)))};
+      funds.push(fund);}
+    return respond(route,{debt:d,fund},201);
+   }
+   if(/^\/debts\/[^/]+\/terms$/.test(p)&&m==="PUT"){
+    const d=debts.find(x=>x.id===p.split("/")[2]);
+    Object.assign(d,{name:b.name,principal_original:b.principalOriginal,annual_interest_rate:String(Number(b.annualInterestPercent)/100),
+      due_date:b.dueDate,outstanding_amount:b.principalOriginal});
+    if(b.month){let fund=funds.find(x=>x.debt_id===d.id&&x.month_date.startsWith(b.month));
+      if(!fund){fund={id:next(),debt_id:d.id,month_date:b.month+"-01",earmarked_amount:"0"};funds.push(fund);}
+      Object.assign(fund,{debt_name:d.name,currency_code:d.currency_code,due_date:d.due_date,
+        planned_amount:b.plannedAmount,planned_twd:String(Math.round(Number(b.plannedAmount)*(d.currency_code==="VND"?0.00125:1))),
+        payment_day:b.paymentDay});}
+    return respond(route,{debt:d});
+   }
+   if(p==="/goal-plans"&&m==="POST"){
+    const g={id:next(),name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,current_amount:"0",
+      target_date:b.targetDate,status:"active"};
+    goals.push(g);
+    const fund={id:next(),goal_id:g.id,goal_name:g.name,month_date:b.month+"-01",
+      target_date:g.target_date,currency_code:g.currency_code,
+      planned_amount:b.plannedAmount,earmarked_amount:"0",
+      planned_twd:String(Math.round(Number(b.plannedAmount)*(b.currencyCode==="VND"?0.00125:1)))};
+    if(Number(b.plannedAmount)>0)goalFunds.push(fund);
+    return respond(route,{goal:g,fund},201);
+   }
    if(p==="/debt-funds"&&m==="PUT"){const d=funds.find(x=>x.debt_id===b.debtId);
-    Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,planned_twd:String(Math.round(+b.plannedAmount*.00125)),fx_rate_to_twd:"0.00125"});
+    Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,payment_day:b.paymentDay||d.payment_day,planned_twd:String(Math.round(+b.plannedAmount*.00125)),fx_rate_to_twd:"0.00125"});
     return respond(route,{fund:d});}
    if(p==="/goal-funds"&&m==="PUT"){const f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount};goalFunds.push(f);return respond(route,{fund:f});}
    if(p==="/transactions"&&m==="POST"){const a=accounts.find(a=>a.id===b.accountId);a.balance=String(+a.balance+Number(b.amount)*(b.kind==="income"?1:-1));
@@ -97,7 +138,7 @@ try{
    if(p==="/categories"&&m==="POST"){categories.push({id:next(),name:b.name,kind:b.kind});return respond(route,{category:categories.at(-1)},201);}
    if(p==="/debts"&&m==="POST"){debts.push({id:next(),name:b.name,currency_code:b.currencyCode,outstanding_amount:b.principalOriginal});return respond(route,{debt:debts.at(-1)},201);}
    if(p==="/goals"&&m==="POST"){goals.push({id:next(),name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,current_amount:"0",status:"active"});return respond(route,{goal:goals.at(-1)},201);}
-   if(/^\/goals\/[^/]+$/.test(p)&&m==="PUT"){const g=goals.find(x=>x.id===p.split("/").at(-1));g.status=b.status;g.current_amount=b.currentAmount;return respond(route,{goal:g});}
+   if(/^\/goals\/[^/]+$/.test(p)&&m==="PUT"){const g=goals.find(x=>x.id===p.split("/").at(-1));Object.assign(g,{status:b.status,current_amount:b.currentAmount,name:b.name||g.name,target_amount:b.targetAmount||g.target_amount,target_date:b.targetDate||g.target_date});return respond(route,{goal:g});}
    if(p==="/budgets"&&m==="PUT")return respond(route,{budget:b});
    if(p==="/debt-payments"&&m==="POST")return respond(route,{payment:{id:next()}},201);
    return respond(route,{error:"MOCK_ROUTE_UNIMPLEMENTED",path:p,method:m},404);
@@ -151,6 +192,51 @@ try{
   await page.locator('#finance-fields [name="originalAmount"]').fill("100000");
   await page.locator('#finance-fields [name="dueDay"]').fill("15");
   await page.locator("#finance-submit").click();
+  // One debt entered in the PLAN creates one linked liability and one plan
+  // allocation, not another "expense" row or any actual wallet mutation.
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("debt");
+  await page.locator('#finance-fields [name="label"]').fill("Vay học phí");
+  await page.locator('#finance-fields [name="currencyCode"]').selectOption("VND");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("2000000");
+  await page.locator('#finance-fields [name="principalOriginal"]').fill("12000000");
+  await page.locator('#finance-fields [name="annualInterestPercent"]').fill("9.5");
+  await page.locator('#finance-fields [name="dueDate"]').fill("2026-11-18");
+  await page.locator('#finance-fields [name="dueDay"]').fill("18");
+  assert.equal(await page.locator('[data-plan-extra="debt"] input:disabled').count(),0);
+  await page.locator("#finance-submit").click();
+  const addedDebt=debts.find(d=>d.name==="Vay học phí");
+  assert(addedDebt,"Entering debt in the monthly plan must create a linked debt");
+  assert.equal(addedDebt.annual_interest_rate,"0.095");
+  assert.equal(items.length,4,"Liability must not be duplicated as a cashflow expense");
+  assert.equal(funds.filter(x=>x.debt_id===addedDebt.id&&x.month_date.startsWith("2026-11")).length,1);
+  assert.equal(wroteLedger,1,"Drafting a debt never posts actual payment or income");
+  await page.getByText("Vay học phí",{exact:true}).waitFor();
+  assert.match(await page.locator("#finance-content").innerText(),/1 · Cao nhất/);
+  await page.locator('.main-nav [data-tab="commitments"]').click();
+  const editDebt=page.locator('[data-action="editDebt"][data-id="'+addedDebt.id+'"]');
+  await editDebt.first().click();
+  await page.locator('#finance-fields [name="annualInterestPercent"]').fill("12");
+  await page.locator('#finance-fields [name="plannedAmount"]').fill("3000000");
+  await page.locator('#finance-fields [name="paymentDay"]').fill("20");
+  await page.locator("#finance-submit").click();
+  assert.equal(addedDebt.annual_interest_rate,"0.12");
+  assert.equal(funds.find(x=>x.debt_id===addedDebt.id).payment_day,20);
+  assert.equal(Number(funds.find(x=>x.debt_id===addedDebt.id).planned_twd),3750);
+  await page.locator('.main-nav [data-tab="plan"]').click();
+  assert.match(await page.locator("#finance-content").innerText(),/3\.750/);
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="kind"]').selectOption("goal");
+  await page.locator('#finance-fields [name="label"]').fill("Quỹ dự phòng");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("1000");
+  await page.locator('#finance-fields [name="targetAmount"]').fill("20000");
+  await page.locator('#finance-fields [name="targetDate"]').fill("2026-12-31");
+  await page.locator("#finance-submit").click();
+  assert(goals.some(g=>g.name==="Quỹ dự phòng"));
+  assert(goalFunds.some(g=>g.goal_name==="Quỹ dự phòng"));
+  assert.equal(items.length,4,"Savings goals must not be duplicate expense entries");
+  await page.getByText("Quỹ dự phòng",{exact:true}).waitFor();
+  assert.match(await page.locator("#finance-content").innerText(),/3 · Sau cùng/);
   await page.locator('.main-nav [data-tab="reports"]').click();
   assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
   await page.getByText("Dòng tiền dự kiến từ Kế hoạch tài chính").waitFor();
@@ -163,6 +249,8 @@ try{
   await page.locator('.main-nav [data-tab="simulator"]').click();
   await page.getByText("Cuối kỳ dự báo").waitFor();
   await page.getByText("Tự phân tích từ số liệu Kế hoạch tài chính đã lưu").waitFor();
+  await page.getByText("Kế hoạch trả nợ từ lương và dòng tiền mới").waitFor();
+  await page.getByText("Quỹ dự phòng").first().waitFor();
   await page.getByText("Tiền nhà tháng 11").first().waitFor();
   assert.match(await page.locator("#finance-content").innerText(),/19\.500|65\.000|42\.000|7\.000/,
    "Forecast should reflect saved plans and the real wallet balance; not stale demo numbers.");

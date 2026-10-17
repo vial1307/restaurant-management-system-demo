@@ -468,5 +468,54 @@ try{
  assert.equal(fxTransfers[0].n,0,"Automatic valuation cannot post an FX trade");
 }finally{await actualExchangeCheck.end();}
 
+
+// A single owner action creates a debt in the ledger metadata plus ONE
+// linked month allocation, visible through both debt and planning APIs.
+const linked=await post("/debt-plans",{
+ name:"Linked VND credit",currencyCode:"VND",principalOriginal:"12000000",
+ annualInterestPercent:"9.5",dueDate:monthly+"-25",month:monthly,
+ plannedAmount:"2000000",paymentDay:20
+});
+assert(linked.debt.id&&linked.fund.id);
+assert.equal(linked.fund.payment_day,20);
+const linkedList=await request("/finance/bootstrap",{cookie:owner});
+assert(linkedList.data.debts.some(x=>x.id===linked.debt.id));
+assert.equal(Number(linkedList.data.debts.find(x=>x.id===linked.debt.id).annual_interest_rate),.095);
+const linkedMonthly=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+const linkedFund=linkedMonthly.data.debtFunds.find(x=>x.debt_id===linked.debt.id);
+assert.equal(Number(linkedFund.planned_amount),2000000);
+assert.equal(Number(linkedFund.planned_twd),2500);
+assert.equal(linkedFund.payment_day,20);
+assert.equal(linkedMonthly.data.items.some(x=>x.label==="Linked VND credit"),false,
+ "Debt allocation must not also be stored as a cashflow expense");
+const linkedEdit=await request("/finance/debts/"+linked.debt.id+"/terms",{
+ method:"PUT",cookie:owner,body:{name:"Linked VND credit updated",principalOriginal:"12000000",
+ annualInterestPercent:"12.5",dueDate:monthly+"-26",month:monthly,plannedAmount:"3000000",paymentDay:21}
+});
+assert.equal(linkedEdit.status,200,JSON.stringify(linkedEdit.data));
+const afterTerms=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(Number(afterTerms.data.debtFunds.find(x=>x.debt_id===linked.debt.id).planned_twd),3750);
+assert.equal(afterTerms.data.debtFunds.find(x=>x.debt_id===linked.debt.id).payment_day,21);
+assert.equal((await request("/finance/debts/"+linked.debt.id+"/terms",{
+ method:"PUT",cookie:stranger,body:{name:"Illegal edit",principalOriginal:"100",annualInterestPercent:"0",dueDate:monthly+"-26"}
+})).status,403);
+const addedSavings=await post("/goal-plans",{
+ name:"Emergency reserve plan",currencyCode:"TWD",targetAmount:"20000",
+ targetDate:monthly+"-28",month:monthly,plannedAmount:"1000"
+});
+assert(addedSavings.goal.id&&addedSavings.fund.id);
+const savingsList=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(savingsList.data.goalFunds.filter(x=>x.goal_id===addedSavings.goal.id).length,1);
+assert.equal(savingsList.data.items.some(x=>x.label==="Emergency reserve plan"),false);
+const goalChanged=await request("/finance/goals/"+addedSavings.goal.id,{
+ method:"PUT",cookie:owner,body:{name:"Reserve updated",targetDate:monthly+"-28",
+ targetAmount:"25000",currentAmount:"3000",status:"active"}
+});
+assert.equal(goalChanged.status,200,JSON.stringify(goalChanged.data));
+assert.equal(goalChanged.data.goal.name,"Reserve updated");
+const balancesUnchanged=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(balancesUnchanged.data.accounts.find(a=>a.id===bank.id).balance),40250,
+ "Budgeting debt and savings must never spend actual cash");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
