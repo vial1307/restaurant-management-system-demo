@@ -1,4 +1,5 @@
 import {getFinanceFxSnapshot} from "./finance-fx-valuation.mjs";
+import {calculateDebtStrategy} from "./finance-debt-strategy.mjs";
 import {priceFinanceFund,missingFinanceFundQuotes} from "./finance-fund-valuation.mjs";
 import {addDays,sourceEvents,simulateScenario,validateScenario,dateOk} from "./finance-scenario-engine.mjs";
 
@@ -31,6 +32,8 @@ async function sources(pool,owner,asOf,through){
    fxPlans:fxPlans.rows,debts:debts.rows});
  source.warnings.push(...missing.map(x=>"Quỹ "+x.name+" ("+x.currency+") đang thiếu tỷ giá tham chiếu; không tính vào TWD dự báo."));
  source.unconvertedFunds=missing;
+ source.debtStrategySources={debts:debts.rows,funds:pricedDebt.filter(x=>x.planned_twd!==null),payments:debtPayments.rows,
+   quotes:Object.fromEntries(Object.entries(fx.quotes||{}).filter(([code,q])=>code==="TWD"||q.status==="fresh"))};
  return source;
 }
 export function registerFinanceScenarioRoutes(app,{authorized,fail,databaseError,auditedWrite,id}){
@@ -51,6 +54,7 @@ export function registerFinanceScenarioRoutes(app,{authorized,fail,databaseError
   try{
    const source=await sources(ctx.pool,ctx.owner,asOf,through);
    const projection=simulateScenario({asOf,source,scenario});
+   projection.debtStrategy=calculateDebtStrategy({projection,...source.debtStrategySources});
    reply.header("Cache-Control","private, no-store");
    return {projection,scenario,sourceTag:"finance_postgresql",saved:false};
   }catch(error){
