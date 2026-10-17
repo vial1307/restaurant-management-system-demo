@@ -7,7 +7,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   async function plannedAmount(ctx,b){
     const code=String(b.currencyCode||"TWD");
     if(!/^[A-Z]{3}$/.test(code))return {error:"INVALID_PLAN_CURRENCY"};
-    const orig=String(b.originalAmount??b.amountTwd??"");
+    const orig=String(b.originalAmount??b.amountTwd??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
     const {rows}=await ctx.pool.query(
       "SELECT code,minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[code]);
     if(!rows[0]||!positive(orig,Number(rows[0].minor_units)))return {error:"INVALID_PLAN_NATIVE_AMOUNT"};
