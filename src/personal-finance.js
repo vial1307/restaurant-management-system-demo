@@ -705,6 +705,18 @@ function renderWorkbenchMethodology(){
    '</details>';
 }
 
+function renderWorkbenchFxHelper(){
+ const cs=(state.data?.currencies||[]).filter(c=>["TWD",...Object.keys(state.fx?.quotes||{})].includes(c.code));
+ return '<div class="fin-wb-fx-helper"><div class="fin-wb-fx-grid">'+
+  '<label><span>Đơn vị tiền gốc</span><select data-wb-fx-input="currency">'+cs.map(c=>
+  '<option value="'+esc(c.code)+'"'+(c.code==="VND"?' selected':'')+'>'+esc(c.code)+'</option>').join("")+'</select></label>'+
+  '<label><span>Số tiền gốc</span><input data-wb-fx-input="amount" type="text" inputmode="decimal" placeholder="Nhập số tiền"></label>'+
+  '<label><span>Loại kịch bản</span><select data-wb-fx-input="kind">'+
+  '<option value="expense">Chi phát sinh</option><option value="income">Thu nhập</option>'+
+  '<option value="debt">Trả nợ thêm</option><option value="goal">Để dành mục tiêu</option></select></label>'+
+  '<button type="button" class="fin-btn secondary" data-wb-fx-add>Quy đổi & thêm dòng</button></div>'+
+  '<p class="fin-note">Bảng mô phỏng tính theo TWD. Nhập số ngoại tệ ở đây để tự tạo dòng TWD xấp xỉ, ghi tên ngoại tệ/tỷ giá vào nhãn, không biến thành giao dịch thật. Khi tỷ giá đổi, xem lại các dòng cũ để chủ động cập nhật.</p></div>';
+}
 function renderWorkbench(){
  const b=workbookState,book=b.book||newWorkbook();
  const head=heading("Mô phỏng & Tư vấn","Thử các biến động thu nhập, khoản nợ, kế hoạch chi và mục tiêu theo lịch dòng tiền. Mỗi đề xuất đều có điều kiện và giới hạn rõ ràng.");
@@ -823,6 +835,7 @@ function renderWorkbench(){
    panel("Phân bổ tiền dư để giảm nợ",recommended)+
    panel("Gợi ý hành động có điều kiện",actionOptions,"Chọn thử sẽ chỉ thay đổi kịch bản, không tự thanh toán hoặc vay tiền.")+
    panel("Bảng tháng (giống spreadsheet)",summary)+
+   panel("Quy đổi ngoại tệ để thử kịch bản",renderWorkbenchFxHelper(),"Cùng một tỷ giá tham chiếu theo ngày, không tính ngoại tệ đang có như tiền TWD chi được.")+
    panel("Dòng điều chỉnh / kịch bản",items+add+
     '<p class="fin-note">Dòng vay và hoàn trả phải đi theo một cặp, nhập đầy đủ số tiền nhận và tổng tiền trả gồm lãi/phí. Khoản vay chỉ là giả định; không tự ghi nhận là thu nhập.</p>')+
    panel("Mục tiêu cần tiền trước ngày cụ thể",goalUi)+
@@ -1181,6 +1194,25 @@ root.addEventListener("click",async event=>{
  const reconcileButton=event.target.closest("[data-balance-reconcile]");
  if(reconcileButton){showForm("balanceReconcile",reconcileButton.dataset.balanceReconcile);return;}
  if(event.target.closest("[data-fin-fx-reload]")){state.fx=null;await loadFxEstimates();return;}
+ const fxScenario=event.target.closest("[data-wb-fx-add]");
+ if(fxScenario){
+  const code=root.querySelector('[data-wb-fx-input="currency"]')?.value||"TWD";
+  const amount=String(root.querySelector('[data-wb-fx-input="amount"]')?.value||"");
+  const kind=root.querySelector('[data-wb-fx-input="kind"]')?.value||"expense";
+  const minor=Number((state.data?.currencies||[]).find(c=>c.code===code)?.minor_units??0);
+  const valid=/^(?:0|[1-9]\d{0,15})(?:\.\d{1,6})?$/.test(amount) &&
+    (!amount.includes(".")||amount.split(".")[1].length<=minor);
+  const quote=fxReference(code),twd=fxAsTwd(amount,code);
+  if(!valid||Number(amount)<=0||!quote||!Number.isFinite(twd)||twd<1||twd>1e12){
+   flash("Số tiền hoặc tỷ giá chưa hợp lệ. Cần tỷ giá mới được xác nhận; không tự đoán.");return;
+  }
+  if(!workbookState.book||workbookState.book.rows.length>=120){flash("Đã đầy bảng kịch bản.");return;}
+  workbookState.book.rows.push({key:crypto.randomUUID(),kind,date:wbDate(0),
+    amountTwd:String(Math.round(twd)),label:"Quy đổi "+amount+" "+code+
+     " · 1 "+code+" ≈ "+quote.rateToTwd+" TWD"+(quote.observedAt?" · "+quote.observedAt.slice(0,10):""),linkId:""});
+  workbookState.preview=null;render();
+  flash("Đã thêm dòng TWD ước tính từ "+code+"; chọn Tính lại để xem dự báo.");return;
+ }
  const range=event.target.closest("[data-fin-forecast-days]");
  if(range){
    const nextDays=Number(range.dataset.finForecastDays);
