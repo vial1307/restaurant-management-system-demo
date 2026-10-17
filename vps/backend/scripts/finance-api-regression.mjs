@@ -359,7 +359,7 @@ try{
   "SELECT metadata FROM finance.audit_events WHERE owner_user_id=$1 AND action='finance.account.balance_reconciled' AND entity_id=$2",
   [process.env.FINANCE_OWNER_USER_ID,reconciliationEvent.rows[0].id]);
  assert.equal(audited.rows.length,1);
- assert.equal(audited.rows[0].metadata.difference,"-650");
+ assert.equal(Number(audited.rows[0].metadata.difference),-650);
  let immutableCorrection=false;
  try{await verify.query("DELETE FROM finance.events WHERE id=$1",[reconciliationEvent.rows[0].id]);}
  catch(error){immutableCorrection=error.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
