@@ -132,6 +132,7 @@ export function createFinanceMentorUI({api,safe,card,title,money,notify,onChange
  }
  async function load({force=false}={}){
   if(state.loading||state.loaded&&!force)return;
+  if(force){state.analysis=null;state.analysisError=null;}
   state.loading=true;
   try{
    const results=await Promise.allSettled([api("/mentor/status"),api("/mentor/obligations"),api("/mentor/conversations")]);
