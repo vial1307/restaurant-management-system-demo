@@ -468,7 +468,18 @@ jobs:
           test "$KITCHEN_STATUS" = "404" || { echo "FINANCE_API_BOUNDARY_FAILURE status=$KITCHEN_STATUS"; exit 1; }
           ROOT_PAGE="$(curl --max-time 12 -fsS "$URL/")"
           [[ "$ROOT_PAGE" == *'id="finance-login-form"'* ]] || { echo FINANCE_ROOT_HTML_EMPTY; exit 1; }
-          curl --max-time 12 -fsS "$URL/src/finance-visuals.js" | grep -q 'financeMonthlyTrend' || { echo FINANCE_ESM_ASSET_UNAVAILABLE; exit 1; }
+          # Avoid curl | grep -q under pipefail: grep can exit on the first
+          # matching chunk and SIGPIPE a still-streaming curl (false failure).
+          FINANCE_ASSET="$(mktemp)"
+          trap 'rm -f "$FINANCE_ASSET"' EXIT
+          FINANCE_ASSET_STATUS="$(curl --max-time 12 -sS -L -o "$FINANCE_ASSET" -w '%{http_code}' "$URL/src/finance-visuals.js")"
+          test "$FINANCE_ASSET_STATUS" = "200" || {
+            echo "FINANCE_ESM_ASSET_HTTP_FAILURE status=$FINANCE_ASSET_STATUS"; exit 1;
+          }
+          grep -Fq 'financeMonthlyTrend' "$FINANCE_ASSET" || {
+            echo "FINANCE_ESM_ASSET_CONTENT_FAILURE bytes=$(wc -c < "$FINANCE_ASSET")"; exit 1;
+          }
+          echo "FINANCE_ESM_ASSET_OK bytes=$(wc -c < "$FINANCE_ASSET")"
           echo FINANCE_HTTPS_SEPARATE_SITE_AND_OWNER_AUTH_PASS
 
       - name: Verify actual desktop and mobile browser renders Finance login
