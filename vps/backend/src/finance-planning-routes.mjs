@@ -71,6 +71,46 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
        summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
     return {month:m,items:items.rows,debtFunds:liveDebts,goalFunds:liveGoals,debtPayments:payments.rows,unconvertedFunds:unconverted,summary:{...summary,...net[0],fx_estimate_incomplete:unconverted.length>0}};
   };
+  // One owner-only action from "Công nợ" in the monthly planner. Debt master
+  // and its monthly planned allocation are created together, never duplicated
+  // as an ordinary expense. No wallet or posted repayment is touched.
+  app.post("/api/finance/debt-plans",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{};
+    if(!monthKey(b.month)||!trim(b.name)||!/^[A-Z]{3}$/.test(String(b.currencyCode||""))||
+       !positive(String(b.principalOriginal||""),6)||
+       !money(String(b.plannedAmount??"0"),6)||
+       !money(String(b.annualInterestPercent??"0"),6)||
+       Number(b.annualInterestPercent??0)>100||
+       !b.dueDate||!isDate(b.dueDate)||
+       typeof b.plannedAmount!=="string")
+      return fail(reply,"INVALID_DEBT_PLAN");
+    try{
+      const c=(await ctx.pool.query(
+       "SELECT minor_units FROM finance.currencies WHERE code=$1 AND enabled=true",[b.currencyCode])).rows[0];
+      if(!c||!positive(b.principalOriginal,Number(c.minor_units))||
+         !money(b.plannedAmount,Number(c.minor_units)))
+        return fail(reply,"INVALID_DEBT_PLAN_AMOUNT");
+      const snap=b.currencyCode==="TWD"?null:await getFinanceFxSnapshot(ctx.pool);
+      const rate=b.currencyCode==="TWD"?"1":snap?.quotes?.[b.currencyCode]?.rateToTwd;
+      if(!positiveRate(rate))return fail(reply,"FX_RATE_UNAVAILABLE");
+      const saved=await auditedWrite(ctx,"finance.debt_plan.create","finance_debt",async db=>{
+        const {rows:debts}=await db.query(
+         "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) "+
+         "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) "+
+         "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
+         [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,String(b.annualInterestPercent||"0"),b.dueDate]);
+        const debt=debts[0];
+        const {rows:funds}=await db.query(
+         "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+         "VALUES($1,$2,$3::date,$4::numeric,0,$5::numeric) "+
+         "RETURNING id,debt_id,month_date::text,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
+         [ctx.owner,debt.id,startMonth(b.month),b.plannedAmount,rate]);
+        return {debt,fund:funds[0]};
+      });
+      return reply.code(201).send(saved);
+    }catch(error){return databaseError(req,reply,error);}
+  });
   app.get("/api/finance/cashflow",async(req,reply)=>{
     const ctx=await authorized(req,reply);if(!ctx)return;
     const month=monthKey(req.query?.month);
