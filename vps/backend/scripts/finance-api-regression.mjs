@@ -133,13 +133,25 @@ assert.equal(updated.status,200);
 const foreignAttempt=await request("/finance/cashflow/items/"+cfIncome.id,{method:"PUT",cookie:stranger,body:{kind:"income",label:"tampered",amountTwd:"1"}});
 assert.equal(foreignAttempt.status,403);
 const reserve=await request("/finance/debt-funds",{method:"PUT",cookie:owner,body:{
-  debtId:debt.id,month:monthly,plannedAmount:"1500000",earmarkedAmount:"500000",fxRateToTwd:"0.0013"
+  debtId:debt.id,month:monthly,plannedAmount:"1500000",earmarkedAmount:"500000",fxRateToTwd:"810"
 }});
 assert.equal(reserve.status,200,JSON.stringify(reserve.data));
 const noRate=await request("/finance/debt-funds",{method:"PUT",cookie:owner,body:{
   debtId:debt.id,month:monthly,plannedAmount:"1500000",earmarkedAmount:"500000"
 }});
 assert.equal(noRate.status,400,"Debt fund foreign rate must be explicit");
+// Historical fund rate was entered in the reverse direction (810 VND per TWD).
+// Without a recent quote, the API must not manufacture a huge TWD valuation.
+const missingRate=await request("/finance/cashflow?month="+monthly,{cookie:owner});
+assert.equal(missingRate.data.debtFunds[0].planned_twd,null);
+assert.equal(missingRate.data.summary.fx_estimate_incomplete,true);
+const rateDb=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),
+ database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
+await rateDb.connect();
+try{
+ await rateDb.query(
+  "INSERT INTO finance.fx_rates(base_currency,quote_currency,rate,provider,observed_at) VALUES('VND','TWD',0.0013,'exchangerate-api-open',now())");
+}finally{await rateDb.end();}
 // Creating a goal must not fabricate a monthly installment until the owner allocates it.
 const emptyBeforeGoalFunding=await request("/finance/cashflow?month="+monthly,{cookie:owner});
 assert.equal(Number(emptyBeforeGoalFunding.data.summary.planned_goal_fund_twd),0);
@@ -373,7 +385,7 @@ assert.equal((await request("/finance/fx/estimates",{cookie:stranger})).status,4
 const fxBefore=await request("/finance/fx/estimates",{cookie:owner});
 assert.equal(fxBefore.status,200);
 assert.equal(fxBefore.data.automaticCurrencyExchange,false);
-assert.equal(fxBefore.data.quotes.VND.rateToTwd,null,"Never guess exchange rate without a quote");
+assert.equal(Number(fxBefore.data.quotes.VND.rateToTwd),0.0013,"The current Finance quote must replace the previously inverted manual fund quote");
 const fxSeedDb=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),
  database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
 await fxSeedDb.connect();

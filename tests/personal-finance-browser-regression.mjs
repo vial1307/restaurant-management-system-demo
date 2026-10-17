@@ -1,594 +1,118 @@
 import assert from "node:assert/strict";
-import { chromium } from "playwright";
-
+import {chromium} from "playwright";
 const BASE=process.env.TEST_WEB_BASE||"http://127.0.0.1:3000";
+const uuid=n=>"00000000-0000-4000-8000-"+String(n).padStart(12,"0");
+const T=uuid(1),V=uuid(2),expense=uuid(3),income=uuid(4),debtId=uuid(5),goalId=uuid(6);
 const browser=await chromium.launch({headless:true});
-const currencies=["TWD","VND","USD","JPY","EUR","CNY"].map(code=>({code,name_vi:code,symbol:code,minor_units:["USD","EUR","CNY"].includes(code)?2:0}));
-const account=(id,name,code,balance)=>({id,name,currency_code:code,balance,kind:"bank"});
-async function openFinancePage(page,tab){
- if(["budget","report","workbench"].includes(tab)){
-   await page.locator(`.fin-nav [data-tab="${tab}"]`).click();
- }else{
-   // Real user pathway: expand "Công cụ bổ sung", select a legacy tool.
-   await page.locator(".fin-nav-tools summary").click();
-   await page.locator('.fin-nav-tools [data-tab="'+tab+'"]').click();
+const cookie="__host-finance-test";
+try{
+ for(const viewport of [{width:1440,height:900},{width:390,height:844},{width:320,height:700}]){
+  const ctx=await browser.newContext({viewport});
+  const page=await ctx.newPage(),errors=[];
+  page.on("pageerror",e=>errors.push(e.message));
+  const accounts=[{id:T,name:"Ví TWD",kind:"bank",currency_code:"TWD",balance:"30000"},{id:V,name:"Ví VND",kind:"bank",currency_code:"VND",balance:"2000000"}];
+  const currencies=["TWD","VND","USD","JPY","EUR","CNY"].map(code=>({code,name_vi:code,minor_units:["USD","CNY","EUR"].includes(code)?2:0}));
+  const categories=[{id:expense,name:"Ăn uống",kind:"expense"},{id:income,name:"Lương",kind:"income"}];
+  const debts=[{id:debtId,name:"Thẻ tín dụng",currency_code:"VND",principal_original:"22000000",outstanding_amount:"22000000",due_date:"2026-11-03"}];
+  const goals=[{id:goalId,name:"Học phí",currency_code:"TWD",target_amount:"50000",current_amount:"15000",status:"active",target_date:"2027-02-15"}];
+  const items=[];const funds=[{id:uuid(7),debt_id:debtId,debt_name:"Thẻ tín dụng",currency_code:"VND",month_date:"2026-10-01",due_date:"2026-11-03",planned_amount:"10000000",earmarked_amount:"0",fx_rate_to_twd:"0.00125",planned_twd:"12500"}];
+  const goalFunds=[],history=[],scenarioBooks=[];
+  let num=1000,wroteLedger=0;
+  const next=()=>uuid(num++);
+  const counts={};
+  const respond=(route,value,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(value)});
+  await page.route("**/api/finance/**",async route=>{
+   const req=route.request(),url=new URL(req.url()),p=url.pathname.slice("/api/finance".length),m=req.method(),b=m!=="GET"?req.postDataJSON()||{}:{};
+   counts[m+" "+p]=(counts[m+" "+p]||0)+1;
+   if(p==="/access")return respond(route,{allowed:true});
+   if(p==="/bootstrap")return respond(route,{currencies,accounts,categories,budgets:[],debts,goals,reportCurrency:"TWD",plans:[]});
+   if(p==="/fx/estimates")return respond(route,{baseCurrency:"TWD",quotes:{TWD:{rateToTwd:"1",status:"base"},VND:{rateToTwd:"0.001250000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"},USD:{rateToTwd:"31.500000000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"}},source:{attribution:"Rates By Exchange Rate API"},readOnlyValuation:true,automaticCurrencyExchange:false});
+   if(p==="/overview")return respond(route,{flow:[{kind:"income",total_twd:"50000"},{kind:"expense",total_twd:"12000"}],
+     budget:[{id:expense,category_id:expense,name:"Ăn uống",kind:"expense",budget_twd:"15000",actual_twd:"12000"}],events:history});
+   if(p==="/cashflow")return respond(route,{month:url.searchParams.get("month"),
+     items:items.filter(x=>x.month_date.startsWith(url.searchParams.get("month"))),
+     debtFunds:funds,goalFunds,summary:{planned_income_twd:"0",planned_expense_twd:"0",planned_debt_fund_twd:"12500"},unconvertedFunds:[]});
+   if(p==="/year")return respond(route,{year:+url.searchParams.get("year"),months:[{month:"2026-10",income_twd:"50000",expense_twd:"12000"}]});
+   if(p==="/advisor")return respond(route,{asOf:"2026-10-17",through:"2026-11-15",days:30,startingBalanceTwd:"30000",
+     entries:[{date:"2026-10-30",kind:"income",source:"cashflow",label:"Lương",amountTwd:"50000",projectedBalanceTwd:"80000"}],recommendations:[{title:"Giữ quỹ dự phòng",detail:"Đối chiếu tiền lương và khoản chi trước khi cam kết."}],warnings:[],bufferTwd:"0"});
+   if(p==="/workbench"&&m==="GET")return respond(route,{scenarios:scenarioBooks,asOf:"2026-10-17"});
+   if(p==="/workbench/preview"&&m==="POST")return respond(route,{projection:{endingTwd:"40000",minimumTwd:"28000",minimumAdditionalIncomePerPaydayTwd:"0",warnings:[],earliestRisk:null},scenario:b.scenario});
+   if(p==="/workbench/scenarios"&&m==="POST"){scenarioBooks.push({id:next(),name:b.scenario.name,settings:b.scenario,updated_at:"2026-10-17"});return respond(route,{scenario:scenarioBooks.at(-1)},201);}
+   if(p==="/accounts"&&m==="POST"){const a={id:next(),name:b.name,kind:b.kind,currency_code:b.currencyCode,balance:"0"};accounts.push(a);return respond(route,{account:a},201);}
+   if(/^\/accounts\/[^/]+\/reconcile$/.test(p)&&m==="POST"){
+    const a=accounts.find(x=>x.id===p.split("/")[2]);if(!a||Number(a.balance)!==Number(b.expectedBalance))return respond(route,{error:"BALANCE_CHANGED_RELOAD"},409);
+    a.balance=b.targetBalance;wroteLedger++;history.push({id:next(),kind:"adjustment",description:"Đối soát số dư · "+b.reason,occurred_at:"2026-10-17",entries:[{accountId:a.id,amount:b.targetBalance,currency:a.currency_code}]});return respond(route,{reconciliation:{newBalance:a.balance}},201);
+   }
+   if(p==="/cashflow/items"&&m==="POST"){
+    const q=b.currencyCode==="VND"?0.00125:1,a={id:next(),kind:b.kind,label:b.label,amount_twd:String(Math.round(Number(b.originalAmount)*q)),
+     original_amount:b.originalAmount,original_currency:b.currencyCode,month_date:b.month+"-01",due_day:b.dueDay,memo:b.memo||"",fx_rate_to_twd:String(q)};
+    items.push(a);return respond(route,{item:a},201);
+   }
+   if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="PUT"){
+    const a=items.find(x=>x.id===p.split("/").at(-1));Object.assign(a,{kind:b.kind,label:b.label,original_amount:b.originalAmount,original_currency:b.currencyCode,amount_twd:String(Math.round(Number(b.originalAmount)*(b.currencyCode==="VND"?0.00125:1))),due_day:b.dueDay,memo:b.memo});return respond(route,{item:a});
+   }
+   if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="DELETE"){
+    items.splice(items.findIndex(x=>x.id===p.split("/").at(-1)),1);return respond(route,{deleted:true});
+   }
+   if(p==="/debt-funds"&&m==="PUT"){const d=funds.find(x=>x.debt_id===b.debtId);
+    Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,planned_twd:String(Math.round(+b.plannedAmount*.00125)),fx_rate_to_twd:"0.00125"});
+    return respond(route,{fund:d});}
+   if(p==="/goal-funds"&&m==="PUT"){const f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount};goalFunds.push(f);return respond(route,{fund:f});}
+   if(p==="/transactions"&&m==="POST"){const a=accounts.find(a=>a.id===b.accountId);a.balance=String(+a.balance+Number(b.amount)*(b.kind==="income"?1:-1));
+     wroteLedger++;return respond(route,{event:{id:next(),kind:b.kind}},201);}
+   if(p==="/categories"&&m==="POST"){categories.push({id:next(),name:b.name,kind:b.kind});return respond(route,{category:categories.at(-1)},201);}
+   if(p==="/debts"&&m==="POST"){debts.push({id:next(),name:b.name,currency_code:b.currencyCode,outstanding_amount:b.principalOriginal});return respond(route,{debt:debts.at(-1)},201);}
+   if(p==="/goals"&&m==="POST"){goals.push({id:next(),name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,current_amount:"0",status:"active"});return respond(route,{goal:goals.at(-1)},201);}
+   if(/^\/goals\/[^/]+$/.test(p)&&m==="PUT"){const g=goals.find(x=>x.id===p.split("/").at(-1));g.status=b.status;g.current_amount=b.currentAmount;return respond(route,{goal:g});}
+   if(p==="/budgets"&&m==="PUT")return respond(route,{budget:b});
+   if(p==="/debt-payments"&&m==="POST")return respond(route,{payment:{id:next()}},201);
+   return respond(route,{error:"MOCK_ROUTE_UNIMPLEMENTED",path:p,method:m},404);
+  });
+  await page.goto(BASE+"/finance.html",{waitUntil:"domcontentloaded"});
+  await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor({timeout:12000});
+  assert.equal(await page.locator(".main-nav [data-tab]").count(),5,"Only five clean finance sections should be visible");
+  assert.equal(await page.locator(".fin-nav-tools").count(),0,"Legacy finance drawer must be removed");
+  assert(await page.locator(".metric").count()===4);
+  await page.locator('.main-nav [data-tab="plan"]').click();
+  assert.match(await page.locator("#finance-content").innerText(),/Thẻ tín dụng/);
+  assert.match(await page.locator("#finance-content").innerText(),/12\.500/,"10 million VND planned debt fund becomes ~12500 TWD");
+  assert.doesNotMatch(await page.locator("#finance-content").innerText(),/8\.100\.000\.000/);
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="label"]').fill("Lương nhà hàng");
+  await page.locator('#finance-fields [name="kind"]').selectOption("income");
+  await page.locator('#finance-fields [name="currencyCode"]').selectOption("TWD");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("50000");
+  await page.locator("#finance-submit").click();
+  await page.locator('[data-action="editPlan"]').first().waitFor();
+  assert.equal(items.length,1);
+  await page.locator('[data-action="newPlan"]').first().click();
+  await page.locator('#finance-fields [name="currencyCode"]').selectOption("VND");
+  await page.locator('#finance-fields [name="label"]').fill("Chi tiền Việt");
+  await page.locator('#finance-fields [name="originalAmount"]').fill("1000000");
+  await page.locator("#finance-submit").click();
+  assert.equal(items.length,2);assert.equal(Number(items[1].amount_twd),1250);
+  await page.reload({waitUntil:"domcontentloaded"});
+  await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+  await page.locator('[data-action="reconcile"]').first().click();
+  await page.locator('#finance-fields [name="targetBalance"]').fill("35000");
+  await page.locator("#finance-submit").click();
+  assert.equal(Number(accounts[0].balance),35000);assert.equal(wroteLedger,1);
+  await page.locator('.main-nav [data-tab="commitments"]').click();
+  await page.locator('[data-action="fundDebt"]').first().click();
+  await page.locator('#finance-fields [name="plannedAmount"]').fill("10000000");
+  await page.locator("#finance-submit").click();
+  assert.equal(Number(funds[0].planned_twd),12500);
+  await page.locator('.main-nav [data-tab="reports"]').click();
+  assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
+  await page.locator('.main-nav [data-tab="simulator"]').click();
+  await page.locator('[data-action="simulate"]').click();
+  await page.getByText("Cuối kỳ dự báo").waitFor();
+  await page.locator("#finance-settings").click();
+  assert.match(await page.locator("#finance-content").innerText(),/Tài khoản & cài đặt/);
+  const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,view:innerWidth}));
+  assert(size.doc<=size.view+1,"Finance v2 overflows screen: "+JSON.stringify({viewport,size}));
+  assert.deepEqual(errors,[],"Unexpected JS errors at viewport "+viewport.width);
+  await ctx.close();
+  console.log("PASS Finance v2 "+viewport.width+"px: fresh clean nav, native FX, debt repricing, plan edits, wallet reconciliation, reports & simulator");
  }
-}
-const initialAccounts=[
- account("00000000-0000-4000-8000-000000000001","Ngân hàng Đài","TWD","0"),
- account("00000000-0000-4000-8000-000000000002","Ngân hàng VN","VND","0")
-];
-try {
-  for(const viewport of [{width:1440,height:900},{width:390,height:844},{width:320,height:700}]){
-    const context=await browser.newContext({viewport});
-    const page=await context.newPage();
-    const pageErrors=[];
-    let accounts=structuredClone(initialAccounts);
-    let plans=[];
-    let goals=[];
-    let debts=[];
-    let cashItems=[];
-    let debtFunds=[];
-    let goalFunds=[];
-    let debtPayments=[];
-    const attemptedTransactionKeys=[];
-    const advisorCalls=[];
-    let scenarioBooks=[];
-    const scenarioPreviews=[];
-
-    page.on("pageerror",error=>pageErrors.push(error.message));
-    await page.route("**/api/finance/**",async route=>{
-      const url=new URL(route.request().url()),pathname=url.pathname;
-      const method=route.request().method();
-      let data={},status=200;
-      if(method==="GET"&&pathname.endsWith("/bootstrap")){
-        data={currencies,accounts,categories:[],budgets:[],plans,goals,debts,reportCurrency:"TWD"};
-      }else if(method==="GET"&&pathname.endsWith("/fx/estimates")){
-        data={baseCurrency:"TWD",readOnlyValuation:true,automaticCurrencyExchange:false,
-         quotes:{TWD:{rateToTwd:"1",status:"base"},VND:{rateToTwd:"0.001250000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"},
-          USD:{rateToTwd:"31.250000000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"},
-          JPY:{rateToTwd:"0.220000000000",status:"fresh",observedAt:"2026-10-17T01:00:00Z",provider:"exchangerate-api-open"}},
-         source:{attribution:"Rates By Exchange Rate API",url:"https://www.exchangerate-api.com"},warnings:[]};
-      }else if(method==="GET"&&pathname.endsWith("/overview")){
-        data={month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
-      }else if(method==="GET"&&pathname.endsWith("/advisor")){
-        const days=url.searchParams.get("days"),buffer=url.searchParams.get("bufferTwd");
-        advisorCalls.push({days,buffer});
-        data={asOf:"2026-10-17",through:days==="90"?"2027-01-14":"2026-11-15",days:Number(days),bufferTwd:buffer,
-          startingBalanceTwd:"1000",projectedEndingTwd:"-500",minimumBalanceTwd:"-500",minimumDate:"2026-10-22",
-          earliestRisk:{date:"2026-10-22",balanceTwd:"-500",gapTwd:"500",label:"Chi phí",source:"cashflow"},
-          totals:{income:"1000",expense:"1500",debt:"0",goal:"0",remittance:"0"},totalOutflowTwd:"1500",
-          entries:[{date:"2026-10-20",kind:"income",label:"Lương",amountTwd:"1000",projectedBalanceTwd:"2000",source:"cashflow",estimatedDate:false},
-            {date:"2026-10-22",kind:"expense",label:"Chi phí",amountTwd:"-1500",projectedBalanceTwd:"500",source:"cashflow",estimatedDate:false}],
-          cycles:[{startDate:"2026-10-17",endDate:"2026-10-19",nextIncomeDate:"2026-10-20",incomeTwd:"0",
-            obligationsTwd:"0",goalAllocationsTwd:"0",minimumBalanceTwd:"1000",reserveGapTwd:"500",
-            endingBalanceTwd:"1000"},{startDate:"2026-10-20",endDate:"2026-11-15",nextIncomeDate:null,
-            incomeTwd:"1000",obligationsTwd:"1500",goalAllocationsTwd:"0",minimumBalanceTwd:"-500",
-            reserveGapTwd:"500",endingBalanceTwd:"-500"}],
-          alerts:[{code:"LIQUIDITY_GAP",severity:"danger",date:"2026-10-22",
-            title:"Thiếu mức dự trữ trước kỳ thu tiếp theo",message:"Cần bù 500 TWD vào ngày 2026-10-22."}],
-          warnings:[{code:"ESTIMATED_DATES",message:"Kiểm tra ngày thanh toán dự kiến."}],
-          recommendations:[{kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt",detail:"Kiểm tra dòng tiền theo ngày, không tự chuyển tiền."}],
-          foreignWallets:[{name:"Ví VND",currency:"VND",balance:"100000"}],metadata:{currency:"TWD",countedWallets:1,readOnly:true}};
-      }else if(method==="GET"&&pathname.endsWith("/workbench")){
-        data={asOf:"2026-10-17",scenarios:scenarioBooks,source:"finance_postgresql"};
-      }else if(method==="POST"&&pathname.endsWith("/workbench/preview")){
-        const settings=route.request().postDataJSON().scenario;
-        scenarioPreviews.push(settings);
-        data={projection:{
-          name:settings.name,asOf:"2026-10-17",through:"2027-01-16",
-          startingBalanceTwd:"0",bufferTwd:settings.bufferTwd,minimumTwd:"0",endingTwd:"0",
-          safeExtraDebtTwd:"0",minimumAdditionalIncomePerPaydayTwd:"0",earliestRisk:null,
-          firstPayday:"2026-11-10",warnings:[],loans:[],timeline:[],
-          months:[{month:"2026-10",incomeTwd:"0",costTwd:"0",goalTwd:"0",borrowedTwd:"0",
-            repaymentTwd:"0",endingTwd:"0",minimumTwd:"0",surplusTwd:"0"}]
-        }};
-      }else if(method==="POST"&&pathname.endsWith("/workbench/scenarios")){
-        const settings=route.request().postDataJSON().scenario;
-        const b={id:"00000000-0000-4000-8000-000000000099",name:settings.name,settings};
-        scenarioBooks=[b];data={scenario:b};status=201;
-      }else if(method==="PUT"&&pathname.includes("/workbench/scenarios/")){
-        const settings=route.request().postDataJSON().scenario;
-        const b={id:scenarioBooks[0].id,name:settings.name,settings};
-        scenarioBooks=[b];data={scenario:b};
-      }else if(method==="DELETE"&&pathname.includes("/workbench/scenarios/")){
-        scenarioBooks=[];data={deleted:true};
-      }else if(method==="GET"&&pathname.endsWith("/cashflow")){
-        const inc=cashItems.filter(i=>i.kind==="income").reduce((sum,i)=>sum+Number(i.amount_twd),0);
-        const exp=cashItems.filter(i=>i.kind==="expense").reduce((sum,i)=>sum+Number(i.amount_twd),0);
-        const reserve=debtFunds.reduce((sum,i)=>sum+Number(i.planned_twd),0);
-        const earmarked=debtFunds.reduce((sum,i)=>sum+Number(i.earmarked_twd),0);
-        const currentMonth=url.searchParams.get("month");
-        const visibleGoalFunds=goalFunds.filter(f=>f.month===currentMonth);
-        const goalsReserved=visibleGoalFunds.reduce((sum,i)=>sum+Number(i.planned_twd),0);
-        const goalsEarmarked=visibleGoalFunds.reduce((sum,i)=>sum+Number(i.earmarked_twd),0);
-        const paid=debtPayments.reduce((sum,i)=>sum+Number(i.base_amount_twd),0);
-        data={month:currentMonth,items:cashItems,debtFunds,goalFunds:visibleGoalFunds,debtPayments,summary:{
-          planned_income_twd:String(inc),planned_expense_twd:String(exp),planned_debt_fund_twd:String(reserve),
-          earmarked_debt_fund_twd:String(earmarked),planned_goal_fund_twd:String(goalsReserved),earmarked_goal_fund_twd:String(goalsEarmarked),planned_net_twd:String(inc-exp-reserve-goalsReserved),
-          actual_income_twd:"0",actual_expense_twd:"0",actual_debt_paid_twd:String(paid),actual_net_twd:String(-paid)
-        }};
-      }else if(method==="GET"&&pathname.endsWith("/cashflow/year")){
-        const year=Number(url.searchParams.get("year"));
-        data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),
-         planned_income_twd:"0",planned_expense_twd:"0",debt_fund_twd:"0",
-         goal_fund_twd:String(goalFunds.filter(f=>f.month===year+"-"+String(i+1).padStart(2,"0")).reduce((a,f)=>a+Number(f.planned_twd),0)),debt_paid_twd:"0"}))};
-      }else if(method==="GET"&&pathname.endsWith("/year")){
-        const year=Number(url.searchParams.get("year"));
-        data={year,months:Array.from({length:12},(_,i)=>({month:year+"-"+String(i+1).padStart(2,"0"),budget_twd:"0",income_twd:"0",expense_twd:"0"}))};
-      }else if(method==="POST"&&/\/accounts\/[^/]+\/reconcile$/.test(pathname)){
-        const b=route.request().postDataJSON();
-        assert.equal(route.request().headers()["x-finance-write"],"1");
-        const id=pathname.split("/").at(-2);
-        const owned=accounts.find(a=>a.id===id);
-        assert(owned,"Reconciliation account should be owned");
-        if(String(owned.balance)!==String(b.expectedBalance)){data={error:"BALANCE_CHANGED_RELOAD"};status=409;}
-        else{
-         assert(b.reason.length>=8);
-         const prev=Number(owned.balance),next=Number(b.targetBalance);
-         owned.balance=String(next);
-         data={reconciliation:{id:"00000000-0000-4000-8000-000000000088",accountId:id,
-           previousBalance:String(prev),newBalance:String(next),delta:String(next-prev)}};status=201;
-        }
-      }else if(method==="POST"&&pathname.endsWith("/accounts")){
-        const b=route.request().postDataJSON();
-        assert.equal(route.request().headers()["x-finance-write"],"1");
-        const a=account("00000000-0000-4000-8000-000000000003",b.name,b.currencyCode,"0");
-        accounts.push(a);data={account:a};status=201;
-      }else if(method==="POST"&&pathname.endsWith("/fx-plans")){
-        const b=route.request().postDataJSON();
-        assert.equal(route.request().headers()["x-finance-write"],"1");
-        const p={id:"00000000-0000-4000-8000-000000000004",
-          plan_date:b.planDate,plan_kind:b.planKind,from_currency:b.fromCurrency,to_currency:b.toCurrency,
-          source_amount:b.sourceAmount,expected_rate:b.expectedRate,expected_fee:b.expectedFee,status:"planned",memo:b.memo};
-        plans.push(p);data={plan:p};status=201;
-      }else if(method==="POST"&&pathname.endsWith("/goals")){
-        const b=route.request().postDataJSON();
-        const g={id:"00000000-0000-4000-8000-000000000011",name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,current_amount:"0",status:"active",target_date:b.targetDate||null};
-        goals.push(g);data={goal:g};status=201;
-      }else if(method==="PUT"&&pathname.includes("/goals/")){
-        const b=route.request().postDataJSON();
-        const goal=goals.find(g=>pathname.endsWith(g.id));
-        assert.ok(goal,"Must update existing goal");
-        goal.current_amount=b.currentAmount;goal.status=b.status;
-        data={goal:{id:goal.id,current_amount:b.currentAmount,status:b.status}};
-      }else if(method==="POST"&&pathname.endsWith("/debts")){
-        const b=route.request().postDataJSON();
-        const d={id:"00000000-0000-4000-8000-000000000012",name:b.name,currency_code:b.currencyCode,principal_original:b.principalOriginal,outstanding_amount:b.principalOriginal,annual_interest_rate:"0.05",due_date:b.dueDate||null};
-        debts.push(d);data={debt:d};status=201;
-      }else if(method==="POST"&&pathname.includes("/fx-plans/")&&pathname.endsWith("/cancel")){
-        const id=pathname.split("/")[4];
-        const plan=plans.find(p=>p.id===id);
-        assert.ok(plan && plan.status==="planned","Expected planned FX");
-        plan.status="cancelled";data={plan:{id,status:"cancelled"}};
-      }else if(method==="POST"&&pathname.endsWith("/cashflow/items")){
-        const b=route.request().postDataJSON();
-        const i={id:"00000000-0000-4000-8000-"+String(cashItems.length+21).padStart(12,"0"),kind:b.kind,label:b.label,month_date:b.month+"-01",
-          amount_twd:b.currencyCode==="VND"?String(Math.round(Number(b.originalAmount)*0.00125)):b.originalAmount||b.amountTwd,
-          original_currency:b.currencyCode||"TWD",original_amount:b.originalAmount||b.amountTwd,
-          fx_rate_to_twd:b.currencyCode==="VND"?"0.001250000000":"1",
-          due_day:b.dueDay||null,memo:b.memo||""};
-        cashItems.push(i);data={item:i};status=201;
-      }else if(method==="PUT"&&pathname.includes("/cashflow/items/")){
-        const b=route.request().postDataJSON();
-        const item=cashItems.find(i=>pathname.endsWith(i.id));assert.ok(item);
-        Object.assign(item,{kind:b.kind,label:b.label,
-          amount_twd:b.currencyCode==="VND"?String(Math.round(Number(b.originalAmount)*0.00125)):b.originalAmount||b.amountTwd,
-          original_currency:b.currencyCode||"TWD",original_amount:b.originalAmount||b.amountTwd,
-          fx_rate_to_twd:b.currencyCode==="VND"?"0.001250000000":"1",
-          due_day:b.dueDay||null,memo:b.memo||""});
-        data={item};
-      }else if(method==="DELETE"&&pathname.includes("/cashflow/items/")){
-        cashItems=cashItems.filter(i=>!pathname.endsWith(i.id));data={deleted:true};
-      }else if(method==="PUT"&&pathname.endsWith("/goal-funds")){
-        const b=route.request().postDataJSON();
-        assert.equal(route.request().headers()["x-finance-write"],"1");
-        const goal=goals.find(g=>g.id===b.goalId);assert.ok(goal,"Goal ID must refer to real owned goal");
-        const rate=goal.currency_code==="TWD"?1:Number(b.fxRateToTwd);
-        const fund={id:"00000000-0000-4000-8000-000000000024",goal_id:goal.id,goal_name:goal.name,
-          currency_code:goal.currency_code,month:b.month,planned_amount:b.plannedAmount,
-          earmarked_amount:b.earmarkedAmount,planned_twd:String(Number(b.plannedAmount)*rate),
-          earmarked_twd:String(Number(b.earmarkedAmount)*rate),fx_rate_to_twd:String(rate)};
-        goalFunds=goalFunds.filter(f=>!(f.goal_id===goal.id&&f.month===b.month)).concat(fund);
-        data={fund};
-      }else if(method==="PUT"&&pathname.endsWith("/debt-funds")){
-        const b=route.request().postDataJSON();
-        const debt=debts.find(d=>d.id===b.debtId);assert.ok(debt);
-        const rate=debt.currency_code==="TWD"?1:Number(b.fxRateToTwd);
-        const fund={id:"00000000-0000-4000-8000-000000000022",debt_id:b.debtId,debt_name:debt.name,
-          currency_code:debt.currency_code,planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,
-          planned_twd:String(Number(b.plannedAmount)*rate),earmarked_twd:String(Number(b.earmarkedAmount)*rate),
-          fx_rate_to_twd:String(rate)};
-        debtFunds=debtFunds.filter(f=>f.debt_id!==b.debtId).concat(fund);
-        data={fund};
-      }else if(method==="POST"&&pathname.endsWith("/debt-payments")){
-        const b=route.request().postDataJSON();
-        const debt=debts.find(d=>d.id===b.debtId);assert.ok(debt);
-        const wallet=accounts.find(a=>a.id===b.accountId);
-        const total=Number(b.principalPaid)+Number(b.interestPaid)+Number(b.feePaid);
-        assert(wallet && Number(wallet.balance)>=total,"Test payment requires actual wallet funds");
-        wallet.balance=String(Number(wallet.balance)-total);
-        debt.outstanding_amount=String(Number(debt.outstanding_amount)-Number(b.principalPaid));
-        const payment={id:"00000000-0000-4000-8000-000000000023",debt_id:debt.id,debt_name:debt.name,
-          currency_code:debt.currency_code,payment_date:b.paymentDate,principal_paid:b.principalPaid,
-          interest_paid:b.interestPaid,fee_paid:b.feePaid,base_amount_twd:String(total*Number(b.fxRateToTwd||1))};
-        debtPayments.push(payment);data={payment};status=201;
-      }else if(method==="POST"&&pathname.endsWith("/transactions")){
-        attemptedTransactionKeys.push(route.request().postDataJSON().idempotencyKey);
-        data={error:"FINANCE_DATABASE_UNAVAILABLE"};status=503;
-      }else{data={error:"NOT_FOUND"};status=404;}
-      await route.fulfill({status,contentType:"application/json",body:JSON.stringify(data)});
-    });
-    await page.goto(BASE+"/finance.html",{waitUntil:"domcontentloaded"});
-    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor({timeout:12000});
-    assert.equal(await page.locator('.fin-nav > button[data-tab]').count(),3,
-      "Only the three approved dashboard areas are in primary navigation");
-    assert.equal(await page.locator('.fin-nav-tools:not([open])').count(),1,
-      "Legacy data tools must be collapsed, not deleted");
-    assert.equal(await page.locator("[data-balance-reconcile]").count(),2,
-      "Both owned wallets must be editable from the new primary plan");
-    await openFinancePage(page,"overview");
-    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
-    assert((await page.locator(".fin-kpi-value").allTextContents()).every(t=>t.includes("0")),
-      "No invented money values can appear before actual postings");
-    await page.locator(".fin-control-summary").waitFor();
-    assert((await page.locator(".fin-alert-line.danger").first().textContent()).includes("2026-10-22"),
-      "Overview must show a readable day-specific liquidity alert from the advisor API");
-    assert.equal(await page.locator('.fin-howto summary').count(),1,"Getting-started guide is available on all viewports");
-    // A dedicated advisory tab must read protected API and permit 30/60/90d controls.
-    await openFinancePage(page,"advisor");
-    await page.locator("h1").filter({hasText:"Tư vấn dòng tiền"}).waitFor();
-    await page.getByText("Ưu tiên xử lý thiếu hụt").waitFor();
-    assert.equal(advisorCalls.length,1);
-    assert.equal(advisorCalls[0].days,"30");
-    assert.equal(advisorCalls[0].buffer,"0");
-    await page.locator("#fin-advice-days").selectOption("90");
-    await page.locator("#fin-advice-buffer").fill("3000");
-    await page.locator('[data-advice-refresh]').click();
-    await page.waitForFunction(()=>document.querySelector("#fin-advice-days")?.value==="90"
-      &&!!document.querySelector(".fin-advice-event"));
-    assert.equal(advisorCalls.at(-1).days,"90");
-    assert.equal(advisorCalls.at(-1).buffer,"3000");
-    await page.locator('[data-go-finance-tab="budget"]').click();
-    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-    assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
-    // New finance plan is backed by the existing cashflow API, not a static screenshot.
-    await openFinancePage(page,"budget");
-    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-    await page.locator(".fin-plan-table").waitFor();
-    await page.getByText("Tỷ giá tham chiếu tự động · Quy đổi về TWD").waitFor();
-    assert.match(await page.locator(".fin-fx-summary").innerText(),/1 VND.*TWD/);
-
-    assert.equal(await page.locator(".fin-metrics-4 .fin-metric").count(),4,
-      "Reference design four real-data metrics must be present");
-    assert.equal(await page.locator("[data-open='cashIncome']").count()>0,true,
-      "Planning income button must stay functional");
-    await page.locator("[data-fin-table-filter]").fill("không tồn tại trên bảng");
-    assert.equal(await page.locator(".fin-plan-table tbody tr:not([hidden])").count(),0,
-      "Spreadsheet search should filter by user-entered terms");
-    await page.locator("[data-fin-table-filter]").fill("");
-    await openFinancePage(page,"report");
-    await page.locator("h1").filter({hasText:"Dòng tiền & Báo cáo"}).waitFor();
-    assert.equal(await page.locator(".fin-report-charts").count(),1,
-      "Trends and category chart must be rendered in reports");
-    assert.equal(await page.locator("[data-report-export='csv']").count(),1);
-    assert.equal(await page.locator("[data-report-print='1']").count(),1);
-    await openFinancePage(page,"overview");
-
-    await openFinancePage(page,"overview");
-
-    // 12-month scenario workbench is a spreadsheet, not a second real ledger.
-    await openFinancePage(page,"workbench");
-    await page.locator("h1").filter({hasText:"Mô phỏng & Tư vấn"}).waitFor();
-    assert.match(await page.locator('.fin-nav [data-tab="workbench"]').innerText(),/Mô phỏng.*Tư vấn/,
-      "The navigation must describe the combined simulation and advisory capability");
-    await page.locator(".fin-wb-metrics").waitFor();
-    const method=page.locator("[data-fin-methodology]");
-    assert.equal(await method.count(),1,"Financial logic disclosure must be visible on desktop and mobile");
-    assert.equal(await method.getAttribute("open"),null,"Long methodology should default to compact mode");
-    await method.locator("summary").click();
-    assert.equal(await method.locator(".fin-wb-methodology-item").count(),7,
-      "The user can inspect the seven actual calculation assumptions and limits");
-    assert.match(await method.innerText(),/trước ngày nhận lương.*không được coi là giải pháp/s);
-    assert.match(await method.innerText(),/Chọn chia đều hoặc phân bổ linh hoạt/);
-    assert.match(await method.innerText(),/chưa có cảnh báo nền tự động/);
-    assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
-    const horizonRequest=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
-      String(resp.request().postDataJSON()?.scenario?.months)==="3",{timeout:10000});
-    await page.locator('[data-wb-field="months"]').selectOption("3");
-    await horizonRequest;
-    assert.equal(String(scenarioPreviews.at(-1).months),"3");
-    assert.equal(await method.getAttribute("open"),"",
-      "Methodology expansion must survive a scenario preview refresh");
-    await page.locator('[data-wb-action="add-expense"]').click();
-    await page.locator('[data-wb-row="0"][data-wb-prop="label"]').fill("Chi đi chơi");
-    await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').fill("2000");
-    const changed=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
-      resp.request().postDataJSON()?.scenario?.rows?.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000"),{timeout:10000});
-    await page.locator('[data-wb-action="preview"]').click();
-    await changed;
-    assert(scenarioPreviews.some(x=>x.rows.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000")));
-    await page.locator('.fin-wb-add [data-wb-action="loan"]').click();
-    assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
-      "Borrowing must create a pair of borrow and dated repayment, never just free cash");
-    await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').fill("4000");
-    await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').press("Tab");
-    await page.locator('[data-wb-row="2"][data-wb-prop="amountTwd"]').fill("4200");
-    await page.locator('[data-wb-row="2"][data-wb-prop="amountTwd"]').press("Tab");
-    await page.locator('[data-wb-action="save"]').click();
-    await page.locator("#fin-wb-saved").waitFor();
-    assert.equal(scenarioBooks.length,1);
-    assert.equal(scenarioBooks[0].settings.rows[1].linkId,scenarioBooks[0].settings.rows[2].linkId);
-    assert.equal(accounts[0].balance,"0","Scenario borrowing must never post cash");
-    await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-    await openFinancePage(page,"workbench");
-    await page.locator(".fin-wb-editor tbody tr").first().waitFor();
-    assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
-      "Saved scenario must survive F5 through Finance DB readback");
-    await openFinancePage(page,"overview");
-    await page.locator('[data-open="account"]').click();
-    await page.locator('#finance-dialog [name="name"]').fill("Ví VN thêm");
-    await page.locator('#finance-dialog [name="kind"]').selectOption("bank");
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
-    await page.locator("#finance-submit").click();
-    await page.locator('.fin-row').filter({hasText:"Ví VN thêm"}).waitFor();
-    await openFinancePage(page,"fx");
-    await page.locator('[data-open="fxPlan"]').click();
-    await page.locator('#finance-dialog [name="planDate"]').fill("2026-10-25");
-    await page.locator('#finance-dialog [name="planKind"]').selectOption("remittance");
-    await page.locator('#finance-dialog [name="fromCurrency"]').selectOption("TWD");
-    await page.locator('#finance-dialog [name="toCurrency"]').selectOption("VND");
-    await page.locator('#finance-dialog [name="sourceAmount"]').fill("10000");
-    await page.locator('#finance-dialog [name="expectedRate"]').fill("785");
-    await page.locator('#finance-dialog [name="expectedFee"]').fill("100");
-    await page.locator("#finance-submit").click();
-    await page.locator('.fin-row').filter({hasText:"10.000"}).waitFor();
-    assert.equal(plans.length,1,"Plan must be confirmed by API");
-    assert.equal(accounts[0].balance,"0","Plan must not silently debit TWD");
-    await page.locator('[data-open="fxPost"]').click();
-    await page.locator('#finance-dialog [name="accountId"]').selectOption(initialAccounts[0].id);
-    await page.locator('#finance-dialog [name="targetAccountId"]').selectOption(initialAccounts[1].id);
-    await page.locator('#finance-dialog [name="amount"]').fill("10000");
-    await page.locator('#finance-dialog [name="receivedAmount"]').fill("7850000");
-    await page.locator("#finance-submit").click();
-    await page.waitForFunction(()=>!document.querySelector("#finance-toast").hidden);
-    assert.equal(await page.locator("#finance-dialog").evaluate(el=>el.open),true,"Failed server write must leave form open");
-    await page.locator("#finance-submit").click();
-    await page.waitForFunction(()=>document.querySelector("#finance-submit")?.disabled===false);
-    assert.equal(attemptedTransactionKeys.length,2,"Retry must reach API twice");
-    assert.equal(attemptedTransactionKeys[0],attemptedTransactionKeys[1],"Retry must reuse the idempotency key, never mint a second posting");
-    assert.equal(accounts[0].balance,"0");
-    await page.locator("#finance-dialog-close").click();
-    // Persisted plan must not create any account movement; cancel survives F5.
-    page.on("dialog",async d=>{await d.accept();});
-    await page.locator('[data-cancel-plan]').click();
-    assert.equal(plans[0].status,"cancelled");
-    await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator('h1').filter({hasText:"Kế hoạch tài chính"}).waitFor();
-    await openFinancePage(page,"fx");
-    assert(await page.getByText("Đã cancelled").count()===1,"Reload preserves canceled FX plan");
-    assert.equal(accounts[0].balance,"0");
-    await openFinancePage(page,"goals");
-    await page.locator('[data-open="goal"]').click();
-    await page.locator('#finance-dialog [name="name"]').fill("Học phí");
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("TWD");
-    await page.locator('#finance-dialog [name="targetAmount"]').fill("50000");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Học phí").first().waitFor();
-    await page.locator('[data-goal-update]').click();
-    await page.locator('#finance-dialog [name="currentAmount"]').fill("15000");
-    await page.locator('#finance-dialog [name="status"]').selectOption("active");
-    await page.locator("#finance-submit").click();
-    await page.getByText("15.000").first().waitFor();
-    await page.locator('[data-open="debt"]').click();
-    await page.locator('#finance-dialog [name="name"]').fill("Thẻ tín dụng");
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
-    await page.locator('#finance-dialog [name="principalOriginal"]').fill("12000000");
-    await page.locator('#finance-dialog [name="annualInterestPercent"]').fill("5");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Thẻ tín dụng").first().waitFor();
-    await page.reload({waitUntil:"domcontentloaded"});
-    await openFinancePage(page,"goals");
-    assert(await page.getByText("15.000").count()>0,"Saved goal survives F5");
-    assert(await page.getByText("Thẻ tín dụng").count()>0,"Saved debt survives F5");
-    assert.equal(accounts[0].balance,"0","Debt and goal planning do not move wallet funds");
-    // Goal created without allocation is visible as unallocated, not silently counted as spending.
-    await page.getByText("Chưa phân bổ quỹ tháng này").first().waitFor();
-    await page.locator('[data-goal-fund]').first().click();
-    await page.locator('#finance-dialog [name="plannedAmount"]').fill("8000");
-    await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("2500");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Phân bổ tháng: NT$8.000").waitFor();
-    assert.equal(accounts[0].balance,"0","Goal allocation must not debit wallet");
-    await openFinancePage(page,"budget");
-    await page.getByText("Quỹ mục tiêu dự kiến").waitFor();
-    await page.getByText("Quỹ mục tiêu dự kiến").locator("..").getByText("NT$8.000").waitFor();
-    // The allocation button on Planning edits the same row, never creates a second copy.
-    await page.locator('[data-goal-fund]').first().click();
-    await page.locator('#finance-dialog [name="plannedAmount"]').fill("9000");
-    await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("4000");
-    await page.locator("#finance-submit").click();
-    assert.equal(goalFunds.length,1,"Goal allocation upsert must not double-count one goal/month");
-    await page.getByText("Quỹ mục tiêu dự kiến").locator("..").getByText("NT$9.000").waitFor();
-    await page.reload({waitUntil:"domcontentloaded"});
-    await openFinancePage(page,"goals");
-    await page.getByText("Phân bổ tháng: NT$9.000").waitFor();
-    assert.equal(Number(goals[0].current_amount),15000,"Manual savings progress remains independent of monthly allocation");
-    assert.equal(accounts[0].balance,"0","Goal funding never moves wallet balance");
-
-    await page.locator('[data-fund-debt]').click();
-    await page.locator('#finance-dialog [name="plannedAmount"]').fill("1500000");
-    await page.locator('#finance-dialog [name="earmarkedAmount"]').fill("500000");
-    await page.locator('#finance-dialog [name="fxRateToTwd"]').fill("0.0013");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Đánh dấu đã dành, chưa chuyển ví").waitFor();
-    assert.equal(accounts[1].balance,"0","Debt reserve must not alter a wallet");
-    // A real wallet balance can only come from an actual posted ledger event.
-    // Inject server-owned test fixture balance, then verify posting decrements it.
-    accounts[1].balance="2000000";
-    await page.reload({waitUntil:"domcontentloaded"});
-    await openFinancePage(page,"goals");
-    await page.locator('[data-pay-debt]').click();
-    await page.locator('#finance-dialog [name="accountId"]').selectOption(initialAccounts[1].id);
-    await page.locator('#finance-dialog [name="principalPaid"]').fill("1000000");
-    await page.locator('#finance-dialog [name="fxRateToTwd"]').fill("0.0013");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Các khoản trả nợ đã ghi sổ").waitFor();
-    assert.equal(accounts[1].balance,"1000000","Posted payment must debit wallet exactly once");
-    assert.equal(debts[0].outstanding_amount,"11000000","Posted principal reduces debt");
-    await openFinancePage(page,"budget");
-    await page.locator('[data-open="cashIncome"]').click();
-    await page.locator('#finance-dialog [name="label"]').fill("Lương dự kiến");
-    await page.locator('#finance-dialog [name="originalAmount"]').fill("60000");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Lương dự kiến").waitFor();
-    await page.locator('[data-open="cashExpense"]').click();
-    await page.locator('#finance-dialog [name="label"]').fill("Sinh hoạt");
-    await page.locator('#finance-dialog [name="originalAmount"]').fill("10000");
-    await page.locator("#finance-submit").click();
-    await page.getByText("Sinh hoạt").waitFor();
-    await page.locator('[data-edit-cashflow]').first().click();
-    await page.locator('#finance-dialog [name="originalAmount"]').fill("12000");
-    await page.locator("#finance-submit").click();
-    await page.reload({waitUntil:"domcontentloaded"});
-    await openFinancePage(page,"budget");
-    await page.getByText("Lương dự kiến").waitFor();
-    assert.equal(cashItems.length,2,"Forecast data persists over refresh");
-    assert.equal(Number(cashItems[0].amount_twd),12000,"Edited amount persists after F5");
-    // The existing global dialog handler accepts confirmations for this test.
-    await page.locator('[data-delete-cashflow]').first().click();
-    await page.waitForFunction(()=>document.querySelectorAll("[data-delete-cashflow]").length===1);
-    assert.equal(cashItems.length,1,"Deleting a forecast item persists");
-    await openFinancePage(page,"budget");
-    await page.locator('[data-period="year"]').click();
-    await page.locator('h2').filter({hasText:"Tổng hợp năm"}).waitFor();
-    const size=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,view:innerWidth}));
-    if(size.doc>size.view+1){
-      const overflowing=await page.evaluate(()=>
-        [...document.body.querySelectorAll("*")]
-          .filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&(r.right>innerWidth+1||r.left< -1);})
-          .map(el=>({tag:el.tagName,cls:String(el.className).slice(0,120),text:(el.innerText||"").slice(0,65),rect:({left:Math.round(el.getBoundingClientRect().left),right:Math.round(el.getBoundingClientRect().right),width:Math.round(el.getBoundingClientRect().width)})}))
-          .slice(0,25)
-      );
-      const metrics=await page.evaluate(()=>{
-        const a=document.activeElement;
-        const before={bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth,
-          bodyClient:document.body.clientWidth,htmlClient:document.documentElement.clientWidth,
-          viewport:window.visualViewport?.width,
-          active:a?{tag:a.tagName,cls:String(a.className),outline:getComputedStyle(a).outline,
-            rect:{left:a.getBoundingClientRect().left,right:a.getBoundingClientRect().right}}:null};
-        if(a instanceof HTMLElement)a.blur();
-        return {...before,afterBlur:{bodyScroll:document.body.scrollWidth,htmlScroll:document.documentElement.scrollWidth},
-          overflowingContent:[...document.querySelectorAll("*")]
-            .filter(el=>el.scrollWidth>el.clientWidth+1 && el.clientWidth>0)
-            .map(el=>({tag:el.tagName,cls:String(el.className).slice(0,100),client:el.clientWidth,scroll:el.scrollWidth,
-             rect:{l:Math.round(el.getBoundingClientRect().left),r:Math.round(el.getBoundingClientRect().right)},
-             text:(el.innerText||"").slice(0,42)})).slice(0,30)};
-
-      });
-      console.error("FINANCE_LAYOUT_OVERFLOW_OFFENDERS",JSON.stringify({viewport,size,overflowing,metrics}));
-    }
-    // Balance edit is a real change to a wallet, never an income/expense or a fabricated new balance.
-    await openFinancePage(page,"budget");
-    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-    const firstWallet=accounts[0],prior=Number(firstWallet.balance);
-    await page.locator('[data-balance-reconcile="'+firstWallet.id+'"]').click();
-    await page.locator('#finance-dialog [name="expectedBalance"]').waitFor();
-    assert.equal(await page.locator('#finance-dialog [name="expectedBalance"]').inputValue(),String(prior));
-    await page.locator('#finance-dialog [name="targetBalance"]').fill(String(prior+275));
-    await page.locator('#finance-dialog [name="reason"]').fill("Đối soát số dư thực tế");
-    assert.match(await page.locator("[data-fin-balance-diff]").innerText(),/Cộng 275 TWD/);
-    await page.locator("#finance-submit").click();
-    await page.locator('.fin-wallet-value').first().getByText("NT$275",{exact:false}).count().catch(()=>{});
-    assert.equal(Number(accounts[0].balance),prior+275);
-    await page.reload({waitUntil:"domcontentloaded"});
-    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-    assert.equal(Number(accounts[0].balance),prior+275,"Wallet reconciliation survives F5");
-    await openFinancePage(page,"budget");
-    if(await page.locator('[data-period="month"]').count())await page.locator('[data-period="month"]').click();
-    // Actual receipts/spending: one currency picker selects the matching
-    // wallet and the existing Finance FX quote supplies the TWD estimate.
-    await page.locator('[data-open="expense"]').first().click();
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
-    await page.locator('#finance-dialog [name="amount"]').fill("1000000");
-    assert.equal(await page.locator('#finance-dialog [name="accountId"]').inputValue(),
-      initialAccounts[1].id,"VND expense must select the VND wallet, not deduct TWD");
-    assert.match(await page.locator('[data-fx-real-estimate]').innerText(),/1\.250/);
-    assert.equal(await page.locator('#finance-dialog [name="toTwdRate"]').count(),0,
-      "Normal income and expense forms should not require manual exchange-rate input");
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("TWD");
-    assert.equal(await page.locator('#finance-dialog [name="accountId"]').inputValue(),
-      initialAccounts[0].id,"Changing back to TWD selects a TWD account");
-    await page.locator("#finance-dialog-cancel").click();
-    await page.locator('[data-open="income"]').first().click();
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
-    await page.locator('#finance-dialog [name="amount"]').fill("250000");
-    assert.match(await page.locator('[data-fx-real-estimate]').innerText(),/NT\$/);
-    await page.locator("#finance-dialog-cancel").click();
-    await page.locator('[data-open="cashExpense"]').click();
-    await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
-    assert.equal(await page.locator('#finance-dialog [name="fxRateToTwd"]').count(),0,
-      "Plan form should auto-convert using the Finance FX rate instead of requiring manual FX input");
-    await page.locator('#finance-dialog [name="label"]').fill("Chi phí gửi về Việt Nam");
-    await page.locator('#finance-dialog [name="originalAmount"]').fill("1000000");
-    assert.match(await page.locator("[data-fx-form-estimate]").innerText(),/1.250 TWD/);
-    await page.locator("#finance-submit").click();
-    assert(cashItems.some(x=>x.original_currency==="VND"&&Number(x.amount_twd)===1250),
-      "Foreign plan should store native currency and unified estimated TWD");
-    await openFinancePage(page,"workbench");
-    await page.locator('[data-wb-fx-input="currency"]').selectOption("VND");
-    await page.locator('[data-wb-fx-input="amount"]').fill("1000000");
-    await page.locator('[data-wb-fx-input="kind"]').selectOption("expense");
-    await page.locator('[data-wb-fx-add]').click();
-    const mostRecent=page.locator(".fin-wb-editor tbody tr").last();
-    await mostRecent.locator('[data-wb-prop="amountTwd"]').waitFor();
-    assert.equal(await mostRecent.locator('[data-wb-prop="amountTwd"]').inputValue(),"1250");
-    assert.match(await mostRecent.locator('[data-wb-prop="label"]').inputValue(),/1000000 VND/);
-    assert.equal(await page.locator('.fin-nav > button[data-tab]').count(),3);
-
-    assert(size.doc<=size.view+1,"Finance mobile horizontal overflow "+JSON.stringify({viewport,size}));
-    assert.deepEqual(pageErrors,[],"Page JavaScript errors "+JSON.stringify({viewport,pageErrors}));
-    await context.close();
-  }
-  // Permission / login / logout must be interactive on its own Finance origin.
-  const authContext=await browser.newContext({viewport:{width:390,height:844}});
-  const authPage=await authContext.newPage();
-  let hasOwnerSession=false;
-  const authErrors=[];
-  authPage.on("pageerror",e=>authErrors.push(e.message));
-  await authPage.route("**/api/finance/**",async route=>{
-    const url=new URL(route.request().url());
-    if(!hasOwnerSession)return route.fulfill({status:401,contentType:"application/json",body:JSON.stringify({error:"AUTH_REQUIRED"})});
-    const data=url.pathname.endsWith("/bootstrap")
-      ? {currencies,accounts:[],categories:[],budgets:[],plans:[],goals:[],debts:[],reportCurrency:"TWD"}
-      : {month:url.searchParams.get("month"),flow:[],budget:[],events:[]};
-    await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(data)});
-  });
-  await authPage.route("**/api/auth/login",async route=>{
-    const user=route.request().postDataJSON().username;
-    if(user==="owner")hasOwnerSession=true;
-    await route.fulfill({status:user==="owner"?200:403,contentType:"application/json",body:JSON.stringify(user==="owner"?{ok:true}:{error:"FINANCE_OWNER_REQUIRED"})});
-  });
-  await authPage.route("**/api/auth/logout",async route=>{
-    hasOwnerSession=false;
-    await route.fulfill({status:200,contentType:"application/json",body:'{"ok":true}'});
-  });
-  await authPage.goto(BASE+"/finance.html",{waitUntil:"domcontentloaded"});
-  await authPage.locator("#finance-login-form").waitFor({state:"visible"});
-  await authPage.locator('#finance-login-form [name="username"]').fill("other");
-  await authPage.locator('#finance-login-form [name="password"]').fill("test");
-  await authPage.locator('#finance-login-form button[type="submit"]').click();
-  await authPage.getByText("Tài khoản này chưa được cấp quyền Finance OS.").waitFor();
-  await authPage.locator('#finance-login-form [name="username"]').fill("owner");
-  await authPage.locator('#finance-login-form [name="password"]').fill("test");
-  await authPage.locator('#finance-login-form button[type="submit"]').click();
-  await authPage.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-  await authPage.reload({waitUntil:"domcontentloaded"});
-  await authPage.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
-  await authPage.locator("#finance-logout").click();
-  await authPage.locator("#finance-login-form").waitFor({state:"visible"});
-  assert.deepEqual(authErrors,[],"Authenticated Finance browser has no uncaught page errors");
-  await authContext.close();
-  console.log("PASS private finance responsive mobile/desktop navigation, DB-confirmed writes, FX planning and error handling");
 }finally{await browser.close();}

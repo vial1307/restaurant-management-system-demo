@@ -1,46 +1,47 @@
 <!doctype html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#10273e">
-  <meta name="robots" content="noindex,nofollow">
-  <title>Finance OS · Kế hoạch tài chính cá nhân</title>
-  <link rel="stylesheet" href="./src/personal-finance.css">
-</head>
-<body class="finance-app">
-  <header class="fin-header">
-    <span class="fin-back" aria-hidden="true">◈</span>
-    <div><span class="fin-brand">FINANCE OS</span><small>Kế hoạch tài chính cá nhân</small></div>
-    <span class="fin-private" aria-label="Dữ liệu riêng tư">🔒 Riêng tư</span><button type="button" class="fin-logout" id="finance-logout" hidden>Đăng xuất</button>
+<html lang="vi"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#f6f8fc">
+<title>Finance OS · Tài chính cá nhân</title>
+<link rel="stylesheet" href="/src/personal-finance.css">
+</head><body>
+<section id="finance-login" class="login-screen" hidden>
+ <form id="finance-login-form" class="login-card">
+  <div class="brand-icon">◈</div><h1>Finance OS</h1><p>Không gian tài chính cá nhân</p>
+  <label>Tài khoản<input name="username" autocomplete="username" required></label>
+  <label>Mật khẩu<input name="password" type="password" autocomplete="current-password" required></label>
+  <div id="finance-login-error" class="error" role="alert" hidden></div>
+  <button type="submit" class="btn primary">Đăng nhập</button><small>Chỉ tài khoản chủ sở hữu được phép truy cập.</small>
+ </form>
+</section>
+<div id="finance-layout" class="app-shell" hidden>
+ <aside class="sidebar">
+  <div class="brand"><span class="brand-icon">◈</span><div><strong>Finance OS</strong><small>Plan · Track · Grow</small></div></div>
+  <p class="nav-label">QUẢN LÝ CÁ NHÂN</p>
+  <nav class="main-nav" aria-label="Điều hướng">
+   <button data-tab="overview" class="selected"><span>▦</span>Tổng quan</button>
+   <button data-tab="plan"><span>▤</span>Kế hoạch tài chính</button>
+   <button data-tab="commitments"><span>◎</span>Công nợ & mục tiêu</button>
+   <button data-tab="reports"><span>▥</span>Dòng tiền & báo cáo</button>
+   <button data-tab="simulator"><span>◷</span>Mô phỏng & tư vấn</button>
+  </nav>
+  <div class="sidebar-end"><button data-tab="settings"><span>⚙</span>Tài khoản & cài đặt</button>
+  <p>Finance OS · Chỉ dành cho bạn</p></div>
+ </aside>
+ <div class="main-shell">
+  <header class="topbar"><div class="topbar-title"><span class="mobile-brand">◈ Finance OS</span><small>Không gian tài chính của bạn</small></div>
+    <div class="topbar-tools"><label>Tháng <input id="finance-month" type="month"></label><button id="finance-reload" title="Đồng bộ dữ liệu" aria-label="Đồng bộ dữ liệu">↻</button><button id="finance-settings" title="Tài khoản & cài đặt" aria-label="Tài khoản & cài đặt">⚙</button>
+    <button id="finance-logout" title="Đăng xuất">Đăng xuất</button></div>
   </header>
-  <section class="fin-login-wrap" id="finance-login" hidden><form class="fin-login-card" id="finance-login-form"><span class="fin-login-icon">◈</span><h1>Finance OS</h1><p class="fin-sub">Đăng nhập tài khoản được cấp quyền quản lý tài chính riêng</p><label>Tài khoản<input type="text" name="username" autocomplete="username" maxlength="120" required></label><label>Mật khẩu<input type="password" name="password" autocomplete="current-password" required></label><p id="finance-login-error" class="fin-error" role="alert" hidden></p><button class="fin-btn" type="submit">Đăng nhập bảo mật</button><p class="fin-note">Tài khoản phải được xác nhận là chủ sở hữu Finance OS. Dữ liệu không chia sẻ với nhân viên nhà hàng.</p></form></section>
-  <div class="fin-layout" id="finance-layout">
-    <nav class="fin-nav" aria-label="Điều hướng tài chính">
-      <button type="button" data-tab="budget" class="active"><span>▦</span> Kế hoạch tài chính</button>
-      <button type="button" data-tab="report"><span>▥</span> Dòng tiền &amp; Báo cáo</button>
-      <button type="button" data-tab="workbench"><span>▤</span> Mô phỏng &amp; Tư vấn</button>
-      <details class="fin-nav-tools" id="fin-advanced">
-        <summary><span>⚙</span> Công cụ bổ sung</summary>
-        <button type="button" data-tab="overview"><span>◫</span> Tổng quan cũ</button>
-        <button type="button" data-tab="goals"><span>◎</span> Mục tiêu &amp; Nợ</button>
-        <button type="button" data-tab="fx"><span>⇄</span> Ngoại tệ</button>
-        <button type="button" data-tab="ledger"><span>≡</span> Giao dịch</button>
-        <button type="button" data-tab="advisor"><span>◷</span> Lịch &amp; cảnh báo</button>
-      </details>
-    </nav>
-    <main id="finance-content" class="fin-content" aria-live="polite">
-      <div class="fin-state"><div class="fin-spinner" aria-hidden="true"></div>Đang xác thực quyền truy cập...</div>
-    </main>
-  </div>
-  <div id="finance-toast" class="fin-toast" role="status" aria-live="polite" hidden></div>
-  <dialog id="finance-dialog" class="fin-dialog" aria-labelledby="finance-dialog-title">
-    <div class="fin-dialog-head"><h2 id="finance-dialog-title"></h2><button type="button" id="finance-dialog-close" aria-label="Đóng">×</button></div>
-    <form id="finance-form" class="fin-form">
-      <div id="finance-fields"></div>
-      <div class="fin-actions"><button type="button" class="fin-secondary" id="finance-dialog-cancel">Hủy</button><button type="submit" id="finance-submit">Lưu vào Database</button></div>
-    </form>
-  </dialog>
-  <script type="module" src="./src/personal-finance.js"></script>
-</body>
-</html>
+  <main id="finance-content" class="page" aria-live="polite"><p>Đang tải dữ liệu Finance...</p></main>
+ </div>
+</div>
+<dialog id="finance-dialog" class="editor">
+ <div class="editor-header"><h2 id="finance-dialog-title">Nhập dữ liệu</h2><button id="finance-dialog-close" type="button" aria-label="Đóng">×</button></div>
+ <form id="finance-form"><div id="finance-fields"></div>
+  <div class="editor-actions"><button id="finance-dialog-cancel" type="button" class="btn ghost">Hủy</button><button id="finance-submit" type="submit" class="btn primary">Lưu thay đổi</button></div>
+ </form>
+</dialog>
+<div id="finance-toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script type="module" src="/src/personal-finance.js"></script>
+</body></html>
