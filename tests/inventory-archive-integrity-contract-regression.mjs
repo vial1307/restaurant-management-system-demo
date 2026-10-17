@@ -61,8 +61,18 @@ assert.match(
 );
 assert.match(
   auditWorkflow,
-  /if: github\.event_name == 'workflow_run'/,
-  "hidden-stock enforcement must wait for the successful deploy-triggered audit"
+  /github\.event\.workflow_run\.conclusion == 'success'/,
+  "hidden-stock audit requires successful production deployment"
+);
+assert.doesNotMatch(
+  auditWorkflow,
+  /\n  push:/,
+  "hidden-stock audit must not start on a push before deployment"
+);
+assert(
+  auditWorkflow.indexOf("Verify production release before database audit") <
+  auditWorkflow.indexOf("Enforce zero hidden inventory after deploy"),
+  "release identity must be checked before hidden-stock enforcement"
 );
 
 console.log("INVENTORY_ARCHIVE_INTEGRITY_CONTRACT_OK");
