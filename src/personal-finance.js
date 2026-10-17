@@ -380,15 +380,27 @@ function open(kind,id=""){
  const account=getAccount(id),i=(state.cashflow?.items||[]).find(x=>x.id===id),d=(state.data?.debts||[]).find(x=>x.id===id),g=(state.data?.goals||[]).find(x=>x.id===id);
  let name="Nhập dữ liệu",body="";
  if(kind==="plan"||kind==="editPlan"){
-  name=kind==="plan"?"Thêm thu / chi dự kiến":"Sửa khoản dự kiến";
-  body=select("kind","Loại",escOption("expense","Chi dự kiến",i?.kind!=="income")+escOption("income","Thu dự kiến",i?.kind==="income"))+
+  name=kind==="plan"?"Thêm khoản kế hoạch":"Sửa khoản thu / chi dự kiến";
+  body=select("kind","Loại",
+    escOption("expense","Chi thiết yếu",i?.kind!=="income")+
+    escOption("income","Thu nhập",i?.kind==="income")+
+    (kind==="plan"?escOption("debt","Công nợ — Ưu tiên 1")+escOption("goal","Tiết kiệm — Ưu tiên 3"):""))+
    field("label","Nội dung","text",i?.label||"",'maxlength="140"')+
    select("currencyCode","Ngoại tệ",currOpts(i?.original_currency||"TWD"))+
-   field("originalAmount","Số tiền","text",amt(i?.original_amount||i?.amount_twd||""),'inputmode="decimal"')+
-   '<div class="preview" id="finance-fx-preview">Quy đổi TWD tự động theo tỷ giá hiện có.</div>'+
-   field("dueDay","Ngày trong tháng (1–31)","number",i?.due_day||10,'min="1" max="31"')+
+   field("originalAmount","Số tiền dự kiến trong tháng","text",amt(i?.original_amount||i?.amount_twd||""),'inputmode="decimal"')+
+   '<div class="preview" id="finance-fx-preview">Quy đổi sang TWD theo tỷ giá hiện tại.</div>'+
+   field("dueDay","Ngày dự định thu / chi trong tháng (1–31)","number",i?.due_day||10,'min="1" max="31"')+
+   '<div data-plan-extra="debt">'+
+      field("principalOriginal","Tổng số nợ / dư gốc","text","",'inputmode="decimal"')+
+      field("annualInterestPercent","Lãi suất theo năm (%)","number","0",'min="0" max="100" step="0.01"')+
+      field("dueDate","Hạn bắt buộc phải trả","date",lastDay(state.month))+
+    '</div>'+
+   '<div data-plan-extra="goal">'+
+      field("targetAmount","Tổng số tiền mục tiêu","text","",'inputmode="decimal"')+
+      field("targetDate","Ngày muốn hoàn thành mục tiêu","date",lastDay(state.month))+
+    '</div>'+
    '<label>Ghi chú <small>(không bắt buộc)</small><textarea name="memo" maxlength="250">'+safe(i?.memo||"")+'</textarea></label>'+
-   '<div class="notice">Khoản này là kế hoạch, không tự cộng/trừ ví tiền thật.</div>';
+   '<div class="notice">Công nợ và Tiết kiệm sẽ tạo hồ sơ liên kết tại “Công nợ & mục tiêu”, không cộng thêm dòng chi tiêu thứ hai. Chưa ghi thanh toán thực tế.</div>';
  }else if(kind==="transaction"){
   name="Ghi thu / chi thực tế";
   body=select("kind","Loại",escOption("expense","Chi tiêu")+escOption("income","Thu nhập"))+
@@ -410,25 +422,33 @@ function open(kind,id=""){
    field("expectedBalance","Số dư đang ghi ("+account.currency_code+")","text",amt(account.balance),'readonly')+
    field("targetBalance","Số dư đúng ("+account.currency_code+")","text",amt(account.balance),'inputmode="decimal"')+
    field("reason","Lý do đối soát (ít nhất 8 ký tự)","text","Đối chiếu số dư thực tế",'minlength="8" maxlength="250"');
- }else if(kind==="debt"){
-  name="Thêm khoản nợ";
-  body=field("name","Tên khoản nợ","text","",'maxlength="160"')+
-   select("currencyCode","Ngoại tệ",currOpts())+
-   field("principalOriginal","Số tiền gốc","text","",'inputmode="decimal"')+
-   field("dueDate","Ngày đến hạn (có thể để trống)","date","")+
-   field("annualInterestPercent","Lãi suất năm (%)","number","0",'min="0" max="100" step="0.01"');
+ }else if(kind==="debt"||kind==="editDebt"){
+  const creating=kind==="debt",f=d?findFund("debt",id):null;
+  name=(creating?"Thêm khoản nợ":"Sửa khoản nợ")+(d?" · "+d.name:"");
+  body=field("name","Tên khoản nợ","text",d?.name||"",'maxlength="160"')+
+   (creating?select("currencyCode","Ngoại tệ",currOpts()):'<div class="notice">Ngoại tệ: '+safe(d.currency_code)+' · không thay đổi đồng tiền sau khi ghi nợ.</div>')+
+   field("principalOriginal","Tổng dư nợ gốc","text",amt(d?.principal_original||""),'inputmode="decimal"')+
+   field("annualInterestPercent","Lãi suất năm (%)","number",d?String(val(d.annual_interest_rate)*100):"0",'min="0" max="100" step="0.01"')+
+   field("dueDate","Hạn bắt buộc phải trả","date",d?.due_date||lastDay(state.month))+
+   field("plannedAmount","Dự kiến trả tháng "+state.month+(d?" ("+d.currency_code+")":""),"text",amt(f?.planned_amount||"0"),'inputmode="decimal"')+
+   field("paymentDay","Ngày dự định trả trong tháng","number",f?.payment_day||d?.due_date?.slice(-2)||10,'min="1" max="31"')+
+   '<div id="finance-fx-preview" class="preview"></div>'+
+   '<div class="notice">Gốc và lãi suất là điều khoản công nợ. Khoản “dự kiến trả” chỉ dành quỹ trong kế hoạch, chưa trừ tiền ví hoặc giảm dư nợ thật.</div>';
  }else if(kind==="goal"){
-  name="Thêm mục tiêu";
+  name="Thêm mục tiêu tiết kiệm";
   body=field("name","Tên mục tiêu","text","",'maxlength="160"')+
    select("currencyCode","Ngoại tệ",currOpts())+
-   field("targetAmount","Số tiền muốn đạt","text","",'inputmode="decimal"')+
-   field("targetDate","Hạn mục tiêu (có thể để trống)","date","");
+   field("targetAmount","Tổng số tiền muốn đạt","text","",'inputmode="decimal"')+
+   field("targetDate","Ngày mục tiêu","date",lastDay(state.month))+
+   field("plannedAmount","Dự kiến tiết kiệm tháng này","text","0",'inputmode="decimal"')+
+   '<div id="finance-fx-preview" class="preview"></div>';
  }else if((kind==="fundDebt"&&d)||(kind==="fundGoal"&&g)){
   const obj=d||g,existing=findFund(d?"debt":"goal",id);
   name=(d?"Quỹ trả nợ · ":"Quỹ mục tiêu · ")+obj.name;
   body='<div class="notice">Bạn nhập số '+obj.currency_code+'. Giá trị quy đổi TWD được tính tự động; không trừ ví thật.</div>'+
    field("plannedAmount","Dự kiến dành ("+obj.currency_code+")","text",amt(existing?.planned_amount||"0"),'inputmode="decimal"')+
    field("earmarkedAmount","Đã dành để theo dõi ("+obj.currency_code+")","text",amt(existing?.earmarked_amount||"0"),'inputmode="decimal"')+
+   (kind==="fundDebt"?field("paymentDay","Ngày dự định trả (1–31)","number",existing?.payment_day||obj.due_date?.slice(-2)||10,'min="1" max="31"'):"")+
    '<div id="finance-fx-preview" class="preview"></div>';
  }else if(kind==="payDebt"&&d){
   name="Xác nhận đã trả nợ · "+d.name;
@@ -440,7 +460,10 @@ function open(kind,id=""){
    '<div class="notice">Chỉ lưu khi tiền đã thật sự thanh toán. Gốc sẽ giảm dư nợ; tiền được trừ ở ví đã chọn.</div>';
  }else if(kind==="editGoal"&&g){
   name="Cập nhật mục tiêu · "+g.name;
-  body=field("currentAmount","Đã tích lũy ("+g.currency_code+")","text",amt(g.current_amount),'inputmode="decimal"')+
+  body=field("name","Tên mục tiêu","text",g.name,'maxlength="160"')+
+   field("targetAmount","Tổng mục tiêu ("+g.currency_code+")","text",amt(g.target_amount),'inputmode="decimal"')+
+   field("targetDate","Hạn mục tiêu","date",g.target_date||lastDay(state.month))+
+   field("currentAmount","Đã tích lũy ("+g.currency_code+")","text",amt(g.current_amount),'inputmode="decimal"')+
    select("status","Trạng thái",["active","achieved","archived"].map(k=>escOption(k,{active:"Đang thực hiện",achieved:"Đã hoàn thành",archived:"Lưu trữ"}[k],g.status===k)).join(""));
  }else if(kind==="category"){
   name="Thêm danh mục";
