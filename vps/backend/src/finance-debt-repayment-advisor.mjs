@@ -60,7 +60,7 @@ export function buildDebtRepaymentAdvice({projection,debts=[],debtFunds=[],quote
   const extra=details.reduce((n,d)=>n+d.suggestedExtraTwd,0);
   monthPlans.push({month:m.month,incomeTwd:String(m.incomeTwd||"0"),
     essentialTwd:String(m.costTwd||"0"),savingsTwd:String(m.goalTwd||"0"),
-    scheduledDebtTwd:String(m.repaymentTwd||scheduled),
+    scheduledDebtTwd:String(money(scheduled+Math.max(0,Number(m.repaymentTwd)||0))),
     suggestedAdditionalDebtTwd:String(extra),
     projectedAfterSuggestionsTwd:String(money(Number(m.endingTwd)-extraCommitted)),
     estimatedInterestTwd:String(money(details.reduce((n,d)=>n+d.interestEstimateTwd,0))),
