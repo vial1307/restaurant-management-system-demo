@@ -37,3 +37,54 @@
  .mentor-debt .btn{white-space:normal}
  .mentor-prompts{display:grid;grid-template-columns:1fr}
 }
+
+
+/* Finance Mentor report: responsive day-by-day funding, displayed with AI disabled. */
+.topbar{background:#fff;box-shadow:0 1px 2px #1837590a}
+.mentor-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.mentor-controls label{display:inline-flex;align-items:center;gap:9px;color:#60738f;font-size:12px;font-weight:650}
+.mentor-controls select{height:34px;border:1px solid #dce6f3;border-radius:9px;background:#fff;color:#24446d;padding:4px 9px}
+.mentor-report-intro{padding:11px 0 4px;color:#486080}
+.mentor-report-intro strong{font-size:14px;color:#183857;display:block;margin-bottom:8px}
+.mentor-report-intro p{font-size:12px;line-height:1.8}
+.mentor-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:14px}
+.mentor-metric{padding:13px 14px;border:1px solid #e4ecf7;border-radius:10px;background:#f8faff;min-width:0}
+.mentor-metric small{font-size:11px;display:block;color:#6782a3;line-height:1.45}
+.mentor-metric strong{font-size:16px;font-variant-numeric:tabular-nums;display:block;overflow-wrap:anywhere;margin-top:7px;color:#284875}
+.mentor-metric.warning{background:#fff7ea;border-color:#f6dfb7}
+.mentor-metric.warning strong{color:#a86e28}
+.mentor-metric.danger{background:#fff2f0;border-color:#f6d8d7}
+.mentor-metric.danger strong{color:#b7474d}
+.mentor-subtitle{font-size:12px;margin:15px 0 7px}
+.mentor-analysis-alert{background:#fff8ed;border-left:3px solid #e8a847;padding:11px 12px;margin-top:9px;border-radius:5px}
+.mentor-analysis-alert strong{color:#92672e;font-size:12px}
+.mentor-analysis-alert p{font-size:12px;color:#956f46;line-height:1.65;margin-top:4px;white-space:pre-wrap}
+.mentor-action{padding:10px 0;border-bottom:1px solid #edf2f9}
+.mentor-action:last-of-type{border-bottom:0}
+.mentor-action>div{min-width:0}
+.mentor-action small{display:block;font-size:10px}
+.mentor-action strong{font-size:12px;display:block;margin-top:3px;color:#294267}
+.mentor-action p{font-size:11px;line-height:1.75;margin-top:4px;color:#5d728f}
+.mentor-assumptions{margin-top:12px;background:#f5f8fd;border-radius:9px;padding:12px;color:#59708e}
+.mentor-assumptions summary{font-size:12px;font-weight:700;cursor:pointer}
+.mentor-assumptions p{font-size:11px;margin-top:8px;line-height:1.6}
+.mentor-chat{min-height:145px;max-height:330px}
+.mentor-layout .card{min-width:0}
+.mentor-layout .notice{overflow-wrap:anywhere}
+.mentor-debt p{font-size:12px;line-height:1.65}
+.mentor-debt strong{font-size:13px}
+.mentor-debt{padding:13px 0}
+@media(max-width:800px){
+ .mentor-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mentor-chat{min-height:135px;max-height:320px}
+}
+@media(max-width:520px){
+ .mentor-metrics{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px}
+ .mentor-metric{padding:11px}
+ .mentor-metric strong{font-size:14px}
+ .mentor-metric small{font-size:10px}
+ .mentor-controls{margin-bottom:12px}
+ .mentor-chat{min-height:120px;max-height:275px}
+ .mentor-layout .section-title{flex-wrap:wrap}
+ .mentor-layout .section-title .btn{white-space:normal}
+}
