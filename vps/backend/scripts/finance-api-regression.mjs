@@ -225,6 +225,35 @@ const deleteItem=await request("/finance/cashflow/items/"+cfExpense.id,{method:"
 assert.equal(deleteItem.status,200);
 assert.equal((await request("/finance/cashflow?month="+monthly,{cookie:owner})).data.items.length,1,
  "Deleting a forecast item must persist without touching actual ledger");
+// Mentor: bank vs person is explicit, and due terms remain owner-scoped.
+assert.equal((await request("/finance/mentor/status")).status,401);
+assert.equal((await request("/finance/mentor/obligations",{cookie:stranger})).status,403);
+const mentorStatus=await request("/finance/mentor/status",{cookie:owner});
+assert.equal(mentorStatus.status,200);
+assert.equal(mentorStatus.data.configured,false,"AI must be disabled without a VPS API key");
+const termsBody={creditorType:"friend_family",obligationType:"fixed",minimumDueAmount:"1000000",
+ relationshipPriority:"high",negotiationStatus:"none",nextContactDate:null,remindersEnabled:true,
+ memo:"Ngày đã hứa trả; cần đối chiếu với chủ nợ."};
+const termsUrl="/finance/mentor/debts/"+debt.id+"/terms";
+assert.equal((await request(termsUrl,{method:"PUT",cookie:stranger,body:termsBody})).status,403);
+assert.equal((await request(termsUrl,{method:"PUT",cookie:owner,body:termsBody,write:false})).status,403);
+const invalidFlex={...termsBody,obligationType:"agreed_flexible",negotiationStatus:"requested"};
+assert.equal((await request(termsUrl,{method:"PUT",cookie:owner,body:invalidFlex})).status,400,
+ "No treating a requested reschedule as confirmed agreement");
+const savedTerms=await request(termsUrl,{method:"PUT",cookie:owner,body:termsBody});
+assert.equal(savedTerms.status,200,JSON.stringify(savedTerms.data));
+const obligations=await request("/finance/mentor/obligations",{cookie:owner});
+assert.equal(obligations.status,200,JSON.stringify(obligations.data));
+const annotated=obligations.data.debts.find(d=>d.id===debt.id);
+assert.equal(annotated.creditor_type,"friend_family");
+assert.equal(annotated.obligation_type,"fixed");
+assert.equal(annotated.minimum_due_amount,"1000000.000000");
+assert.equal(annotated.reminders_enabled,true);
+assert.equal((await request("/finance/mentor/conversations",{cookie:owner})).status,200);
+assert.equal((await request("/finance/mentor/messages",{method:"POST",cookie:owner,body:{
+ message:"Tôi nên ưu tiên trả nợ thế nào?",horizonDays:90,bufferTwd:"3000"}})).status,503,
+ "Missing OpenAI configuration must fail closed with no provider request");
+
 // Read-only liquidity advisor derives current TWD wallets from the same ledger used in bootstrap.
 const advisor=await request("/finance/advisor?days=30&bufferTwd=2000",{cookie:owner});
 assert.equal(advisor.status,200,JSON.stringify(advisor.data));
