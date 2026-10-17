@@ -119,17 +119,23 @@ function fxAsTwd(nativeAmount,currency){
 function renderFxSummary(){
  const entries=Object.entries(state.fx?.quotes||{}).filter(([code])=>code!=="TWD");
  const cards=entries.map(([code,q])=>'<div class="fin-rate-chip"><strong>'+esc(code)+'</strong><span>'+
-   (q.status==="fresh"?esc(quoteLabel(code)):'Không có giá trị tham chiếu mới')+'</span></div>').join("");
+   (q.status==="fresh"?esc(quoteLabel(code))+" · ngày "+esc(q.observedAt?.slice(0,10)||"không rõ"):'Không có giá trị tham chiếu mới')+'</span></div>').join("");
  const quotes=entries.filter(([,q])=>q.status==="fresh");
  const foreign=(state.data?.accounts||[]).filter(a=>a.currency_code!=="TWD");
  const valued=foreign.filter(a=>fxReference(a.currency_code)).reduce((sum,a)=>sum+(fxAsTwd(a.balance,a.currency_code)||0),0);
  const incomplete=foreign.filter(a=>!fxReference(a.currency_code)).length;
+ const foreignDebts=(state.data?.debts||[]).filter(d=>d.currency_code!=="TWD");
+ const estimableDebts=foreignDebts.filter(d=>fxReference(d.currency_code));
+ const debtEstimated=estimableDebts.reduce((sum,d)=>sum+(fxAsTwd(d.outstanding_amount,d.currency_code)||0),0);
+ const omittedDebtCount=foreignDebts.length-estimableDebts.length;
  return '<div class="fin-fx-summary"><div class="fin-fx-summary-head"><strong>Tỷ giá tham chiếu tự động · Quy đổi về TWD</strong>'+
   '<button class="fin-btn secondary" type="button" data-fin-fx-reload>↻ Cập nhật</button></div>'+
   (state.fxBusy?'<p class="fin-note">Đang kiểm tra tỷ giá theo nguồn đã xác minh...</p>':
    cards||'<p class="fin-note">Chưa có tỷ giá tham chiếu. Không tự tạo tỷ giá giả.</p>')+
   (foreign.length?'<p class="fin-note">Giá trị tham khảo của ví ngoại tệ đã có tỷ giá: <strong>'+
    esc(moneyLabel(valued))+'</strong> · '+esc(String(incomplete))+' ví chưa quy đổi. Đây không phải tiền TWD chi được ngay.</p>':'')+
+  (foreignDebts.length?'<p class="fin-note">Dư nợ ngoại tệ tham chiếu: <strong>'+esc(moneyLabel(debtEstimated))+
+  '</strong> · '+esc(String(omittedDebtCount))+' khoản nợ chưa quy đổi. Đây không phải lịch trả nợ tháng và không tự tạo nghĩa vụ.</p>':'')+
   '<p class="fin-note">Chỉ dùng để dự báo. Tỷ giá giao dịch của ngân hàng và phí thực tế có thể khác. '+
   '<a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a>'+
   ' · Cập nhật khoảng mỗi ngày. '+(state.fxError?'Nguồn không truy cập được.':'')+'</p></div>';
