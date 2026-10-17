@@ -491,7 +491,7 @@ const createdGoalPlan=await post("/goal-plans",{
 const syncedPlan=await request("/finance/cashflow?month="+monthly,{cookie:owner});
 assert(syncedPlan.data.debtFunds.some(x=>x.debt_id===createdDebtPlan.debt.id&&Number(x.planned_twd)===2500));
 assert(syncedPlan.data.goalFunds.some(x=>x.goal_id===createdGoalPlan.goal.id&&Number(x.planned_twd)===1000));
-assert.equal((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance,startBank.toString(),
+assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance),startBank,
  "Linking a debt reserve and savings goal must not debit real bank money");
 const updateInterest=await request("/finance/debts/"+createdDebtPlan.debt.id,{method:"PUT",cookie:owner,
  body:{name:"Vay mẹ · mới",annualInterestPercent:"7",dueDate:monthly+"-30"}});
@@ -505,7 +505,7 @@ assert.equal(payoff.data.readOnly,true);
 assert.deepEqual(payoff.data.priority,["debt","essential_expense","saving"]);
 assert(payoff.data.months.length>=1);
 assert(payoff.data.remaining.some(x=>x.debtId===createdDebtPlan.debt.id));
-assert.equal((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance,startBank.toString(),
+assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance),startBank,
  "Payoff recommendations must not automatically move cash");
 
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
