@@ -506,7 +506,7 @@ try {
     await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     assert.equal(Number(accounts[0].balance),prior+275,"Wallet reconciliation survives F5");
     await openFinancePage(page,"budget");
-    await page.locator('[data-period="month"]').click().catch(()=>{});
+    if(await page.locator('[data-period="month"]').count())await page.locator('[data-period="month"]').click();
     await page.locator('[data-open="cashExpense"]').click();
     await page.locator('#finance-dialog [name="currencyCode"]').selectOption("VND");
     await page.locator('#finance-dialog [name="label"]').fill("Chi phí gửi về Việt Nam");
