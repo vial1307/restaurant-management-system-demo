@@ -286,7 +286,9 @@ try{
   try{await db.query("UPDATE finance.debt_payments SET principal_paid=0 WHERE id=$1",[payments.rows[0].id]);}
   catch(error){immutable=error.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
   assert.equal(immutable,true,"Actual paid debt cannot be edited or deleted in place");
-  assert.equal(aud.rows[0].count,28,"Goal fund save/edit add two owner-scoped audited planning changes");
+  assert.equal(aud.rows[0].count,29,"Mentor debt terms write must add an owner-scoped audit event without changing posted entries");
+  const mentorAudit=await db.query("SELECT COUNT(*)::int AS count FROM finance.audit_events WHERE owner_user_id=$1 AND action='finance.mentor.debt_terms.update'",[process.env.FINANCE_OWNER_USER_ID]);
+  assert.equal(mentorAudit.rows[0].count,1,"Mentor terms change must remain auditable");
   let blocked=false;
   try{await db.query("UPDATE finance.events SET description='tampered' WHERE owner_user_id=$1",[process.env.FINANCE_OWNER_USER_ID]);}
   catch(e){blocked=e.message.includes("POSTED_FINANCE_EVENTS_ARE_IMMUTABLE");}
