@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "verify reads production only; apply creates a DB backup then writes relational staff identity rows"
+        description: "Verify is read-only; manual apply requires an encrypted pre-write backup"
         required: true
         default: verify
         type: choice
@@ -98,32 +98,13 @@ jobs:
             exit 64
           fi
 
-          SITE_ARG=""
-          if [[ "$SITE" != "all" ]]; then
-            SITE_ARG="--site=$SITE"
-          fi
-
-          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
-            "MODE='$MODE' SITE_ARG='$SITE_ARG' bash -s" <<'REMOTE'
-          set -euo pipefail
-          APP_DIR=/opt/kitchen-os
-          cd "$APP_DIR"
-
-          test -f repo/vps/backend/scripts/workforce-staff-backfill.mjs
-          docker compose --env-file .env ps app db
-
+          TASK="workforce-staff"
           if [[ "$MODE" == "apply" ]]; then
-            echo "Creating mandatory pre-backfill database backup..."
-            bash repo/vps/scripts/backup.sh
-            echo "Applying transactional staff identity backfill..."
-            docker compose --env-file .env exec -T app \
-              node scripts/workforce-staff-backfill.mjs --apply ${SITE_ARG:+"$SITE_ARG"}
-          else
-            echo "Running read-only production backfill verification..."
-            docker compose --env-file .env exec -T app \
-              node scripts/workforce-staff-backfill.mjs ${SITE_ARG:+"$SITE_ARG"}
+            [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] || exit 64
+            TASK="workforce-staff-apply"
           fi
-          REMOTE
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "sudo -n /usr/local/sbin/kitchen-os-verify $TASK '$SITE'"
 
       - name: Verify production remains healthy
         run: |

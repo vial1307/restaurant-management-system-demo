@@ -325,7 +325,7 @@ assert.doesNotMatch(inventoryDatabaseSource, /crossSiteWorkArea/,
 assert.match(inventoryDatabaseSource, /\/api\/admin\/super\/inventory-catalog-audit/,
   "Super Admin Database integrity view must keep loading the catalog audit");
 
-const productionAuditSource = fs.readFileSync(new URL("../.github/workflows/inventory-site-production-audit.yml", import.meta.url), "utf8");
+const productionAuditSource = fs.readFileSync(new URL("../vps/scripts/inventory-audit/inventory-1.sql", import.meta.url), "utf8");
 assert.match(productionAuditSource, /cross_site_work_area_variants/,
   "production audit must report cross-site Work Area variants informationally");
 assert.match(productionAuditSource, /detail_cross_site_work_area_variant/,

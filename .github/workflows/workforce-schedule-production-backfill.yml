@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "verify reads production only; apply creates a DB backup then writes relational schedule rows"
+        description: "Verify is read-only; manual apply requires an encrypted pre-write backup"
         required: true
         default: verify
         type: choice
@@ -98,24 +98,13 @@ jobs:
             exit 64
           fi
 
-          SITE_ARG=""
-          if [[ "$SITE" != "all" ]]; then
-            SITE_ARG="--site=$SITE"
-          fi
-
-          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
-          APP_DIR=/opt/kitchen-os
-          "${SSH[@]}" "cd '$APP_DIR' && test -f repo/vps/backend/scripts/workforce-schedule-backfill.mjs && docker compose --env-file .env ps app db </dev/null"
-
+          TASK="workforce-schedule"
           if [[ "$MODE" == "apply" ]]; then
-            echo "Creating mandatory pre-backfill database backup..."
-            "${SSH[@]}" "cd '$APP_DIR' && bash repo/vps/scripts/backup.sh </dev/null"
-            echo "Applying transactional schedule backfill..."
-            "${SSH[@]}" "cd '$APP_DIR' && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs --apply $SITE_ARG </dev/null"
-          else
-            echo "Running read-only production schedule backfill verification..."
-            "${SSH[@]}" "cd '$APP_DIR' && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs $SITE_ARG </dev/null"
+            [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] || exit 64
+            TASK="workforce-schedule-apply"
           fi
+          ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185 \
+            "sudo -n /usr/local/sbin/kitchen-os-verify $TASK '$SITE'"
 
       - name: Verify production remains healthy
         run: |

@@ -146,6 +146,9 @@ jobs:
       - name: Enforce exact Finance asset allowlist
         run: node tests/finance-caddy-module-contract.mjs
 
+      - name: Verify sealed post-deployment audit commands
+        run: node tests/production-postdeploy-verifier-contract.mjs
+
       - name: Validate Caddy configuration
         run: |
           docker run --rm -v "$PWD/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile

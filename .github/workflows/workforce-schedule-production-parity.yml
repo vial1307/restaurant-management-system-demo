@@ -78,7 +78,7 @@ jobs:
           set -euo pipefail
           SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
           APP_DIR=/opt/kitchen-os
-          "${SSH[@]}" "cd '$APP_DIR' && docker compose --env-file .env exec -T app node scripts/workforce-schedule-backfill.mjs --parity </dev/null"
+          "${SSH[@]}" "sudo -n /usr/local/sbin/kitchen-os-verify workforce-parity"
 
       - name: Verify production remains healthy
         run: |
