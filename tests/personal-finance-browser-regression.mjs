@@ -172,7 +172,11 @@ try {
       }else if(method==="PUT"&&pathname.includes("/cashflow/items/")){
         const b=route.request().postDataJSON();
         const item=cashItems.find(i=>pathname.endsWith(i.id));assert.ok(item);
-        Object.assign(item,{kind:b.kind,label:b.label,amount_twd:b.amountTwd,due_day:b.dueDay||null,memo:b.memo||""});
+        Object.assign(item,{kind:b.kind,label:b.label,
+          amount_twd:b.currencyCode==="VND"?String(Math.round(Number(b.originalAmount)*0.00125)):b.originalAmount||b.amountTwd,
+          original_currency:b.currencyCode||"TWD",original_amount:b.originalAmount||b.amountTwd,
+          fx_rate_to_twd:b.currencyCode==="VND"?"0.001250000000":"1",
+          due_day:b.dueDay||null,memo:b.memo||""});
         data={item};
       }else if(method==="DELETE"&&pathname.includes("/cashflow/items/")){
         cashItems=cashItems.filter(i=>!pathname.endsWith(i.id));data={deleted:true};
