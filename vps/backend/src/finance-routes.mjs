@@ -329,6 +329,10 @@ export async function registerFinanceRoutes(app) {
     if(typeof occurredAt!=="string"||Number.isNaN(Date.parse(occurredAt))||!/[zZ]|[+-]\d\d:\d\d$/.test(occurredAt))return fail(reply,"INVALID_FINANCE_TIMESTAMP");
     const description=trim(b.description,250);
     try {
+      // If the owner chooses automatic valuation, resolve the current private
+      // Finance quote on the server; never trust a browser-supplied "auto" rate.
+      const automaticFx=["income","expense"].includes(kind)&&b.fxRateMode==="estimate";
+      const estimatedFx=automaticFx?await getFinanceFxSnapshot(ctx.pool):null;
       const result=await financeTransaction(async(client)=>{
         const lockedAccounts=new Map();
         // Lock all owned wallets in the same order to avoid deadlocks when simultaneous
@@ -361,9 +365,14 @@ export async function registerFinanceRoutes(app) {
           const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3",[b.categoryId,ctx.owner,kind]);
           if(!check.rows[0])return {error:"CATEGORY_NOT_FOUND"};
           categoryId=b.categoryId;
-          // Never report converted non-TWD spending without an explicitly supplied actual/manual FX snapshot.
-          toTwdRate=primary.currency_code==="TWD"?"1":b.toTwdRate;
-          if(!positiveRate(toTwdRate))return {error:"TWD_RATE_REQUIRED"};
+          // The source account always remains in its original currency.
+          if(b.currencyCode&&b.currencyCode!==primary.currency_code)
+            return {error:"TRANSACTION_CURRENCY_ACCOUNT_MISMATCH"};
+          // Exchange-rate estimates affect reporting only, not account transfers.
+          toTwdRate=primary.currency_code==="TWD"?"1":
+            automaticFx?estimatedFx?.quotes?.[primary.currency_code]?.rateToTwd:b.toTwdRate;
+          if(!positiveRate(toTwdRate))
+            return {error:automaticFx?"FX_RATE_UNAVAILABLE":"TWD_RATE_REQUIRED"};
         }
         const eventId=await createEvent(client,ctx.owner,kind,description,occurredAt,key);
         if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
@@ -378,7 +387,16 @@ export async function registerFinanceRoutes(app) {
             [eventId,ctx.owner,primary.currency_code,secondary.currency_code,b.amount,b.receivedAmount,b.feeAmount||"0"]
           );
         }
-        await audit(client,ctx.owner,"finance."+kind,eventId,{kind});
+        await audit(client,ctx.owner,"finance."+kind,eventId,{
+          kind,...(["income","expense"].includes(kind)?{
+            currency:primary.currency_code,toTwdRate,
+            valuation:automaticFx?"indicative_reference":"recorded_rate",
+            ...(automaticFx&&primary.currency_code!=="TWD"?{
+              fxProvider:estimatedFx?.quotes?.[primary.currency_code]?.provider||null,
+              fxObservedAt:estimatedFx?.quotes?.[primary.currency_code]?.observedAt||null
+            }:{}),
+          }:{})
+        });
         return {id:eventId,kind};
       });
       if(result.error)return fail(reply,result.error,result.status||400);
