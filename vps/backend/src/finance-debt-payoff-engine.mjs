@@ -44,7 +44,9 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],quotes={},buffer
    if(debt.rate===null||debt.remainingNative<=0)continue;
    const interest=debt.remainingNative*debt.apr/12,scheduled=byMonth.get(month+"|"+debt.id)||0;
    const principalPay=Math.max(0,Math.min(debt.remainingNative,scheduled-interest));
-   debt.remainingNative=Math.max(0,debt.remainingNative-principalPay);
+   // Unpaid estimated interest is carried conservatively into the next month.
+   // This is a forecast only and never changes recorded principal/posted payments.
+   debt.remainingNative=Math.max(0,debt.remainingNative+interest-scheduled);
    if(scheduled>0)alreadyPlanned.push({debtId:debt.id,name:debt.name,
      amountNative:fmt(scheduled),estimatedInterestNative:fmt(interest),
      principalReductionNative:fmt(principalPay),currency:debt.currency_code});
