@@ -160,7 +160,7 @@ export async function registerFinanceRoutes(app) {
         const wallet=await account(client,ctx.owner,accountId);
         if(!wallet)return {error:"ACCOUNT_NOT_FOUND",status:404};
         const minor=Number(wallet.minor_units);
-        const valid=value=>!value.includes(".")||value.split(".")[1].length<=minor;
+        const valid=value=>!value.includes(".")||value.split(".")[1].slice(minor).replace(/0/g,"")==="";
         if(!valid(b.targetBalance)||!valid(b.expectedBalance))return {error:"INVALID_CURRENCY_PRECISION"};
         const {rows}=await client.query(
           "SELECT COALESCE(SUM(amount),0)::text AS actual FROM finance.entries WHERE account_id=$1 AND owner_user_id=$2",
