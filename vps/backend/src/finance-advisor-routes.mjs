@@ -57,10 +57,11 @@ export function registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError}
       const unconverted=missingFinanceFundQuotes(liveDebts,liveGoals);
       reply.header("Cache-Control","private, no-store");
       const advice=calculateFinanceAdvice({asOf,days:Number(daysText),bufferTwd,
-        wallets:wallets.rows,cashItems:cashItems.rows,debtFunds:liveDebts,
-        goalFunds:liveGoals,debtPayments:debtPayments.rows,fxPlans:fxPlans.rows,
+        wallets:wallets.rows,cashItems:cashItems.rows,debtFunds:liveDebts.filter(x=>x.planned_twd!==null),
+        goalFunds:liveGoals.filter(x=>x.planned_twd!==null),debtPayments:debtPayments.rows,fxPlans:fxPlans.rows,
         goals:goals.rows,debts:debts.rows});
       return {...advice,unconvertedFunds:unconverted,
+        warnings:[...advice.warnings,...unconverted.map(x=>({code:"FX_RATE_UNAVAILABLE",message:"Quỹ "+x.name+" ("+x.currency+") thiếu tỷ giá hiện tại và chưa được tính vào TWD."}))],
         fxEstimateIncomplete:unconverted.length>0};
     }catch(error){return databaseError(request,reply,error);}
   });
