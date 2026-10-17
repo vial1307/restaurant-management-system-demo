@@ -3,6 +3,7 @@ import { requireUser } from "./auth.mjs";
 import { financeConfigured, getFinancePool, financeTransaction } from "./finance-db.mjs";
 import { registerFinancePlanningRoutes } from "./finance-planning-routes.mjs";
 import { registerFinanceAdvisorRoutes } from "./finance-advisor-routes.mjs";
+import { registerFinanceScenarioRoutes } from "./finance-scenario-routes.mjs";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO=/^[A-Z]{3}$/;
@@ -334,4 +335,5 @@ export async function registerFinanceRoutes(app) {
   });
   registerFinancePlanningRoutes(app,{authorized,fail,databaseError,id,money,positive,positiveRate,monthKey,isDate,trim,auditedWrite,financeTransaction,account,createEvent,entry,audit});
   registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError});
+  registerFinanceScenarioRoutes(app,{authorized,fail,databaseError,auditedWrite,id});
 }

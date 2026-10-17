@@ -260,5 +260,51 @@ assert.deepEqual(opposite.map(x=>x.status),[201,201],"Opposite direction transfe
 const afterConcurrency=await request("/finance/bootstrap",{cookie:owner});
 assert.equal(Number(afterConcurrency.data.accounts.find(a=>a.id===bank.id).balance),40900);
 assert.equal(Number(afterConcurrency.data.accounts.find(a=>a.id===cash.id).balance),1000);
+
+// Saved scenarios are owner-only hypothetical documents; preview cannot mint or pay money.
+assert.equal((await request("/finance/workbench")).status,401);
+assert.equal((await request("/finance/workbench",{cookie:stranger})).status,403);
+assert.equal((await request("/finance/workbench/scenarios",{method:"POST",cookie:stranger,body:{}})).status,403);
+const wb=await request("/finance/workbench",{cookie:owner});
+assert.equal(wb.status,200);
+assert(Array.isArray(wb.data.scenarios));
+const day=wb.data.asOf;
+const nextMonthDate=new Date(Date.parse(day+"T00:00:00Z")+30*86400000).toISOString().slice(0,10);
+const simulated={name:"Emergency bridge",months:3,salaryDay:10,bufferTwd:"2000",
+ monthlyExtraIncomeTwd:"0",rows:[
+  {kind:"borrow",linkId:"bridge-1",date:day,label:"Temporary third-party loan",amountTwd:"1000"},
+  {kind:"repay",linkId:"bridge-1",date:nextMonthDate,label:"Repay temporary loan",amountTwd:"1020"}
+ ],goal:null};
+assert.equal((await request("/finance/workbench/preview",{method:"POST",cookie:stranger,body:{scenario:simulated}})).status,403);
+assert.equal((await request("/finance/workbench/preview",{method:"POST",cookie:owner,body:{scenario:simulated},write:false})).status,403);
+const preview=await request("/finance/workbench/preview",{method:"POST",cookie:owner,body:{scenario:simulated}});
+assert.equal(preview.status,200,JSON.stringify(preview.data));
+assert.equal(preview.data.sourceTag,"finance_postgresql");
+assert.equal(preview.data.projection.loans[0].financingCostTwd,"20");
+assert.equal(preview.data.projection.startingBalanceTwd,"41900");
+assert(preview.data.projection.months.length===3);
+const invalidPair=await request("/finance/workbench/preview",{method:"POST",cookie:owner,
+ body:{scenario:{...simulated,rows:[simulated.rows[0]]}}});
+assert.equal(invalidPair.status,400,"Never model debt refinancing as money with no repayment");
+const created=await request("/finance/workbench/scenarios",{method:"POST",cookie:owner,body:{scenario:simulated}});
+assert.equal(created.status,201,JSON.stringify(created.data));
+const scenarioId=created.data.scenario.id;
+let savedBooks=await request("/finance/workbench",{cookie:owner});
+assert(savedBooks.data.scenarios.some(x=>x.id===scenarioId));
+const scenarioUpdated=await request("/finance/workbench/scenarios/"+scenarioId,{method:"PUT",cookie:owner,
+ body:{scenario:{...simulated,name:"Updated plan",monthlyExtraIncomeTwd:"2000"}}});
+assert.equal(scenarioUpdated.status,200);
+savedBooks=await request("/finance/workbench",{cookie:owner});
+assert.equal(savedBooks.data.scenarios.find(x=>x.id===scenarioId)?.settings?.monthlyExtraIncomeTwd,"2000");
+assert.equal((await request("/finance/workbench/scenarios/"+scenarioId,{method:"DELETE",cookie:stranger,body:{}})).status,403);
+assert.equal((await request("/finance/workbench/scenarios/"+scenarioId,{method:"DELETE",cookie:owner,body:{}})).status,200);
+savedBooks=await request("/finance/workbench",{cookie:owner});
+assert(!savedBooks.data.scenarios.some(x=>x.id===scenarioId));
+const afterSimulation=await request("/finance/bootstrap",{cookie:owner});
+assert.equal(Number(afterSimulation.data.accounts.find(x=>x.id===bank.id).balance),40900);
+assert.equal(Number(afterSimulation.data.debts.find(x=>x.id===debt.id).outstanding_amount),
+  Number(afterConcurrency.data.debts.find(x=>x.id===debt.id).outstanding_amount),
+  "Scenario borrowing and repayment cannot change existing actual debt principal");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 

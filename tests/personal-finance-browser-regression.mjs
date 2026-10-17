@@ -24,6 +24,9 @@ try {
     let debtPayments=[];
     const attemptedTransactionKeys=[];
     const advisorCalls=[];
+    let scenarioBooks=[];
+    const scenarioPreviews=[];
+
     page.on("pageerror",error=>pageErrors.push(error.message));
     await page.route("**/api/finance/**",async route=>{
       const url=new URL(route.request().url()),pathname=url.pathname;
@@ -42,9 +45,39 @@ try {
           totals:{income:"1000",expense:"1500",debt:"0",goal:"0",remittance:"0"},totalOutflowTwd:"1500",
           entries:[{date:"2026-10-20",kind:"income",label:"Lương",amountTwd:"1000",projectedBalanceTwd:"2000",source:"cashflow",estimatedDate:false},
             {date:"2026-10-22",kind:"expense",label:"Chi phí",amountTwd:"-1500",projectedBalanceTwd:"500",source:"cashflow",estimatedDate:false}],
+          cycles:[{startDate:"2026-10-17",endDate:"2026-10-19",nextIncomeDate:"2026-10-20",incomeTwd:"0",
+            obligationsTwd:"0",goalAllocationsTwd:"0",minimumBalanceTwd:"1000",reserveGapTwd:"500",
+            endingBalanceTwd:"1000"},{startDate:"2026-10-20",endDate:"2026-11-15",nextIncomeDate:null,
+            incomeTwd:"1000",obligationsTwd:"1500",goalAllocationsTwd:"0",minimumBalanceTwd:"-500",
+            reserveGapTwd:"500",endingBalanceTwd:"-500"}],
+          alerts:[{code:"LIQUIDITY_GAP",severity:"danger",date:"2026-10-22",
+            title:"Thiếu mức dự trữ trước kỳ thu tiếp theo",message:"Cần bù 500 TWD vào ngày 2026-10-22."}],
           warnings:[{code:"ESTIMATED_DATES",message:"Kiểm tra ngày thanh toán dự kiến."}],
           recommendations:[{kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt",detail:"Kiểm tra dòng tiền theo ngày, không tự chuyển tiền."}],
           foreignWallets:[{name:"Ví VND",currency:"VND",balance:"100000"}],metadata:{currency:"TWD",countedWallets:1,readOnly:true}};
+      }else if(method==="GET"&&pathname.endsWith("/workbench")){
+        data={asOf:"2026-10-17",scenarios:scenarioBooks,source:"finance_postgresql"};
+      }else if(method==="POST"&&pathname.endsWith("/workbench/preview")){
+        const settings=route.request().postDataJSON().scenario;
+        scenarioPreviews.push(settings);
+        data={projection:{
+          name:settings.name,asOf:"2026-10-17",through:"2027-01-16",
+          startingBalanceTwd:"0",bufferTwd:settings.bufferTwd,minimumTwd:"0",endingTwd:"0",
+          safeExtraDebtTwd:"0",minimumAdditionalIncomePerPaydayTwd:"0",earliestRisk:null,
+          firstPayday:"2026-11-10",warnings:[],loans:[],timeline:[],
+          months:[{month:"2026-10",incomeTwd:"0",costTwd:"0",goalTwd:"0",borrowedTwd:"0",
+            repaymentTwd:"0",endingTwd:"0",minimumTwd:"0",surplusTwd:"0"}]
+        }};
+      }else if(method==="POST"&&pathname.endsWith("/workbench/scenarios")){
+        const settings=route.request().postDataJSON().scenario;
+        const b={id:"00000000-0000-4000-8000-000000000099",name:settings.name,settings};
+        scenarioBooks=[b];data={scenario:b};status=201;
+      }else if(method==="PUT"&&pathname.includes("/workbench/scenarios/")){
+        const settings=route.request().postDataJSON().scenario;
+        const b={id:scenarioBooks[0].id,name:settings.name,settings};
+        scenarioBooks=[b];data={scenario:b};
+      }else if(method==="DELETE"&&pathname.includes("/workbench/scenarios/")){
+        scenarioBooks=[];data={deleted:true};
       }else if(method==="GET"&&pathname.endsWith("/cashflow")){
         const inc=cashItems.filter(i=>i.kind==="income").reduce((sum,i)=>sum+Number(i.amount_twd),0);
         const exp=cashItems.filter(i=>i.kind==="expense").reduce((sum,i)=>sum+Number(i.amount_twd),0);
@@ -154,6 +187,10 @@ try {
     await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor({timeout:12000});
     assert((await page.locator(".fin-kpi-value").allTextContents()).every(t=>t.includes("0")),
       "No invented money values can appear before actual postings");
+    await page.locator(".fin-control-summary").waitFor();
+    assert((await page.locator(".fin-alert-line.danger").first().textContent()).includes("2026-10-22"),
+      "Overview must show a readable day-specific liquidity alert from the advisor API");
+    assert.equal(await page.locator('.fin-howto summary').count(),1,"Getting-started guide is available on all viewports");
     // A dedicated advisory tab must read protected API and permit 30/60/90d controls.
     await page.locator('.fin-nav [data-tab="advisor"]').click();
     await page.locator("h1").filter({hasText:"Tư vấn dòng tiền"}).waitFor();
@@ -169,10 +206,80 @@ try {
     assert.equal(advisorCalls.at(-1).days,"90");
     assert.equal(advisorCalls.at(-1).buffer,"3000");
     await page.locator('[data-go-finance-tab="budget"]').click();
-    await page.locator("h1").filter({hasText:"Kế hoạch tháng / năm"}).waitFor();
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
     assert.equal(await page.locator(".fin-nav [data-tab='advisor']").count(),1,"Adviser link never missing on mobile");
+    // New finance plan is backed by the existing cashflow API, not a static screenshot.
+    await page.locator('.fin-nav [data-tab="budget"]').click();
+    await page.locator("h1").filter({hasText:"Kế hoạch tài chính"}).waitFor();
+    await page.locator(".fin-plan-table").waitFor();
+    assert.equal(await page.locator(".fin-metrics-4 .fin-metric").count(),4,
+      "Reference design four real-data metrics must be present");
+    assert.equal(await page.locator("[data-open='cashIncome']").count()>0,true,
+      "Planning income button must stay functional");
+    await page.locator("[data-fin-table-filter]").fill("không tồn tại trên bảng");
+    assert.equal(await page.locator(".fin-plan-table tbody tr:not([hidden])").count(),0,
+      "Spreadsheet search should filter by user-entered terms");
+    await page.locator("[data-fin-table-filter]").fill("");
+    await page.locator('.fin-nav [data-tab="report"]').click();
+    await page.locator("h1").filter({hasText:"Dòng tiền & Báo cáo"}).waitFor();
+    assert.equal(await page.locator(".fin-report-charts").count(),1,
+      "Trends and category chart must be rendered in reports");
+    assert.equal(await page.locator("[data-report-export='csv']").count(),1);
+    assert.equal(await page.locator("[data-report-print='1']").count(),1);
     await page.locator('.fin-nav [data-tab="overview"]').click();
 
+    await page.locator('.fin-nav [data-tab="overview"]').click();
+
+    // 12-month scenario workbench is a spreadsheet, not a second real ledger.
+    await page.locator('.fin-nav [data-tab="workbench"]').click();
+    await page.locator("h1").filter({hasText:"Mô phỏng & Tư vấn"}).waitFor();
+    assert.match(await page.locator('.fin-nav [data-tab="workbench"]').innerText(),/Mô phỏng.*Tư vấn/,
+      "The navigation must describe the combined simulation and advisory capability");
+    await page.locator(".fin-wb-metrics").waitFor();
+    const method=page.locator("[data-fin-methodology]");
+    assert.equal(await method.count(),1,"Financial logic disclosure must be visible on desktop and mobile");
+    assert.equal(await method.getAttribute("open"),null,"Long methodology should default to compact mode");
+    await method.locator("summary").click();
+    assert.equal(await method.locator(".fin-wb-methodology-item").count(),7,
+      "The user can inspect the seven actual calculation assumptions and limits");
+    assert.match(await method.innerText(),/trước ngày nhận lương.*không được coi là giải pháp/s);
+    assert.match(await method.innerText(),/Chọn chia đều hoặc phân bổ linh hoạt/);
+    assert.match(await method.innerText(),/chưa có cảnh báo nền tự động/);
+    assert.equal(scenarioPreviews.length,1,"Initial preview must use protected Finance API");
+    const horizonRequest=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
+      String(resp.request().postDataJSON()?.scenario?.months)==="3",{timeout:10000});
+    await page.locator('[data-wb-field="months"]').selectOption("3");
+    await horizonRequest;
+    assert.equal(String(scenarioPreviews.at(-1).months),"3");
+    assert.equal(await method.getAttribute("open"),"",
+      "Methodology expansion must survive a scenario preview refresh");
+    await page.locator('[data-wb-action="add-expense"]').click();
+    await page.locator('[data-wb-row="0"][data-wb-prop="label"]').fill("Chi đi chơi");
+    await page.locator('[data-wb-row="0"][data-wb-prop="amountTwd"]').fill("2000");
+    const changed=page.waitForResponse(resp=>resp.url().endsWith("/workbench/preview") &&
+      resp.request().postDataJSON()?.scenario?.rows?.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000"),{timeout:10000});
+    await page.locator('[data-wb-action="preview"]').click();
+    await changed;
+    assert(scenarioPreviews.some(x=>x.rows.some(r=>r.label==="Chi đi chơi"&&r.amountTwd==="2000")));
+    await page.locator('.fin-wb-add [data-wb-action="loan"]').click();
+    assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
+      "Borrowing must create a pair of borrow and dated repayment, never just free cash");
+    await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').fill("4000");
+    await page.locator('[data-wb-row="1"][data-wb-prop="amountTwd"]').press("Tab");
+    await page.locator('[data-wb-row="2"][data-wb-prop="amountTwd"]').fill("4200");
+    await page.locator('[data-wb-row="2"][data-wb-prop="amountTwd"]').press("Tab");
+    await page.locator('[data-wb-action="save"]').click();
+    await page.locator("#fin-wb-saved").waitFor();
+    assert.equal(scenarioBooks.length,1);
+    assert.equal(scenarioBooks[0].settings.rows[1].linkId,scenarioBooks[0].settings.rows[2].linkId);
+    assert.equal(accounts[0].balance,"0","Scenario borrowing must never post cash");
+    await page.reload({waitUntil:"domcontentloaded"});
+    await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+    await page.locator('.fin-nav [data-tab="workbench"]').click();
+    await page.locator(".fin-wb-editor tbody tr").first().waitFor();
+    assert.equal(await page.locator(".fin-wb-editor tbody tr").count(),3,
+      "Saved scenario must survive F5 through Finance DB readback");
+    await page.locator('.fin-nav [data-tab="overview"]').click();
     await page.locator('[data-open="account"]').click();
     await page.locator('#finance-dialog [name="name"]').fill("Ví VN thêm");
     await page.locator('#finance-dialog [name="kind"]').selectOption("bank");
