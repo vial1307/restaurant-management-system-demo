@@ -459,6 +459,20 @@ function kindPanel(){
    }
    picked.dataset.lastValue=picked.value;
  }
+ const chosen=fields.querySelector('[name="goalPick"]');
+ if(value==="goal"&&chosen){
+   const g=(state.data?.goals||[]).find(x=>x.id===chosen.value);
+   if(g&&chosen.dataset.lastValue!==g.id){
+     for(const [name,v] of Object.entries({
+       goalName:g.name,goalCurrencyCode:g.currency_code,goalTargetAmount:amt(g.target_amount),
+       goalTargetDate:g.target_date||"",goalMemo:g.memo||"",
+       goalPlannedAmount:amt(findFund("goal",g.id)?.planned_amount||"0")
+     })){
+       const el=fields.querySelector('[name="'+name+'"]');if(el)el.value=v;
+     }
+   }
+   chosen.dataset.lastValue=chosen.value;
+ }
 }
 function open(kind,id=""){
  state.editing={kind,id};form.dataset.kind=kind;form.dataset.id=id;form.dataset.key=uuid();
@@ -484,11 +498,16 @@ function open(kind,id=""){
      escOption("","Tạo khoản nợ mới",true)+options(debts,"id",d=>d.name+" · "+d.currency_code))+
    linkedDebtFields({},"debt")+'</div>'+
    '<div data-plan-type="goal" hidden>'+
-   (goals.length?select("goalPick","Chọn mục tiêu tiết kiệm",options(goals,"id",g=>g.name+" · "+g.currency_code)):
-    '<div class="notice warn">Chưa có mục tiêu. Hãy tạo mục tiêu ở “Công nợ & mục tiêu” trước, rồi chọn phân bổ trong Kế hoạch.</div>')+
-   field("goalPlannedAmount","Để dành trong tháng (ngoại tệ mục tiêu)","text","0",'inputmode="decimal"')+
- '<div class="preview" data-goal-currency-preview>Giá trị quỹ sẽ được quy đổi TWD tự động.</div>'+
-   '<div class="notice">Mục tiêu và ngày đạt được lấy từ mục Công nợ & mục tiêu. Không tự trừ ví thật.</div>'+
+   select("goalPick","Mục tiêu tiết kiệm",escOption("","Tạo mục tiêu mới",!goals.length)+
+     options(goals,"id",g=>g.name+" · "+g.currency_code,goals[0]?.id))+
+   field("goalName","Tên mục tiêu","text",goals[0]?.name||"",'maxlength="160"')+
+   select("goalCurrencyCode","Ngoại tệ mục tiêu",currOpts(goals[0]?.currency_code||"TWD"))+
+   field("goalTargetAmount","Tổng số tiền muốn đạt","text",amt(goals[0]?.target_amount||""),'inputmode="decimal"')+
+   field("goalTargetDate","Ngày cần đạt (có thể để trống)","date",goals[0]?.target_date||"")+
+   field("goalPlannedAmount","Để dành trong tháng","text",amt(findFund("goal",goals[0]?.id)?.planned_amount||"0"),'inputmode="decimal"')+
+   '<div class="preview" data-goal-currency-preview>Giá trị quỹ sẽ được quy đổi TWD tự động.</div>'+
+   '<label>Ghi chú mục tiêu<textarea name="goalMemo" maxlength="600">'+safe(goals[0]?.memo||"")+'</textarea></label>'+
+   '<div class="notice">Tạo hoặc sửa trực tiếp mục tiêu đã liên kết. Quỹ kế hoạch không tự trừ ví thật.</div>'+
    '</div>';
  }else if(kind==="transaction"){
   name="Ghi thu / chi thực tế";
@@ -568,7 +587,7 @@ function updateEstimate(){
  }
  const goalPreview=fields.querySelector("[data-goal-currency-preview]");
  if(goalPreview){
-   const g=(state.data?.goals||[]).find(x=>x.id===values.goalPick),code=g?.currency_code||"TWD";
+   const g=(state.data?.goals||[]).find(x=>x.id===values.goalPick),code=values.goalCurrencyCode||g?.currency_code||"TWD";
    const v=estimate(values.goalPlannedAmount||"0",code);
    goalPreview.textContent=v===null?"Chưa có tỷ giá cập nhật cho "+code:
      "Quỹ tiết kiệm ≈ "+money(v)+" (tham khảo).";
@@ -617,12 +636,14 @@ async function submit(event){
      path=debt?"/linked-debts/"+debt.id:"/linked-debts";method=debt?"PUT":"POST";
    }else if(b.kind==="goal"&&type==="plan"){
      const g=(state.data?.goals||[]).find(x=>x.id===b.goalPick);
-     if(!g)throw new Error("Bạn cần tạo mục tiêu tiết kiệm ở phần Công nợ & mục tiêu trước.");
-     if(!quote(g.currency_code))throw new Error("Chưa có tỷ giá hợp lệ cho quỹ "+g.currency_code+".");
-     body={month:state.month,goalId:g.id,
-       plannedAmount:amountInput(b.goalPlannedAmount,g.currency_code),
-       earmarkedAmount:amt(findFund("goal",g.id)?.earmarked_amount||"0")};
-     path="/goal-funds";method="PUT";
+     const code=b.goalCurrencyCode;
+     if(!quote(code))throw new Error("Chưa có tỷ giá hợp lệ cho mục tiêu "+code+".");
+     body={name:b.goalName,currencyCode:code,
+       targetAmount:amountInput(b.goalTargetAmount,code),targetDate:b.goalTargetDate||null,
+       plannedAmount:amountInput(b.goalPlannedAmount,code),
+       earmarkedAmount:amt(findFund("goal",g?.id)?.earmarked_amount||"0"),
+       memo:b.goalMemo||"",month:state.month};
+     path=g?"/linked-goals/"+g.id:"/linked-goals";method=g?"PUT":"POST";
    }else{
      body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,
        originalAmount:amountInput(b.originalAmount,b.currencyCode),
@@ -738,7 +759,7 @@ $("#finance-dialog-cancel").addEventListener("click",()=>dlg.close());
 dlg.addEventListener("click",event=>{if(event.target===dlg)dlg.close();});
 fields.addEventListener("input",updateEstimate);
 fields.addEventListener("change",e=>{
- if(e.target.matches('[name="kind"],[name="debtPick"]'))kindPanel();
+ if(e.target.matches('[name="kind"],[name="debtPick"],[name="goalPick"]'))kindPanel();
  updateEstimate();
 });
 form.addEventListener("submit",submit);
