@@ -155,7 +155,7 @@ try{
   assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
   await page.getByText("Dòng tiền dự kiến từ Kế hoạch tài chính").waitFor();
   await page.getByText("So sánh kế hoạch 12 tháng").waitFor();
-  await page.getByText("Tiền nhà tháng 11").waitFor();
+  await page.getByText("Tiền nhà tháng 11",{exact:true}).waitFor();
   assert.match(await page.locator("#finance-content").innerText(),/Thu dự kiến/);
   assert.match(await page.locator("#finance-content").innerText(),/58\.000/);
   assert.match(await page.locator("#finance-content").innerText(),/100\.000/);
