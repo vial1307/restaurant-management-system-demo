@@ -6,11 +6,6 @@ on:
       - "Deploy Kitchen OS to VPS"
     types:
       - completed
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/inventory-site-production-audit.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,7 +19,6 @@ jobs:
   audit:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
@@ -45,6 +39,20 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
           chmod 600 "$HOME/.ssh/kitchen_actions"
           ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts"
+
+      - name: Verify production release before database audit
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
+          actual="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          repo_head="$("${SSH[@]}" 'git -C /opt/kitchen-os/repo rev-parse --short HEAD')"
+          echo "Running release: $actual; checked out on VPS: $repo_head"
+          test "$actual" = "$repo_head"
+          if [[ -n "$DEPLOYED_HEAD_SHA" ]]; then
+            expected="${DEPLOYED_HEAD_SHA:0:7}"
+            echo "Required deployed SHA: $expected"
+            test "$actual" = "$expected"
+          fi
 
       - name: Audit inventory site isolation
         run: |
@@ -71,7 +79,6 @@ jobs:
           test "$result" = "0"
 
       - name: Enforce branch legacy catalog materialization
-        if: github.event_name == 'workflow_run'
         run: |
           set -euo pipefail
           SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
@@ -81,7 +88,6 @@ jobs:
           test "$result" = "0"
 
       - name: Enforce zero hidden inventory after deploy
-        if: github.event_name == 'workflow_run'
         run: |
           set -euo pipefail
           SSH=(ssh -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 deploy@82.47.180.185)
@@ -90,11 +96,3 @@ jobs:
           echo "inventory_hidden_integrity_violations=${result}"
           test "$result" = "0"
 
-      - name: Verify deployed release when triggered by deploy
-        if: github.event_name == 'workflow_run'
-        run: |
-          set -euo pipefail
-          actual="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
-          expected="${DEPLOYED_HEAD_SHA:0:7}"
-          echo "actual=${actual} expected=${expected}"
-          test "$actual" = "$expected"
