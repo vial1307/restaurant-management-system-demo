@@ -981,6 +981,7 @@ function input(name,label,type="text",value="",placeholder="",required=true){
 }
 const choices=list=>list.map(x=>({value:x.id,label:accountName(x)}));
 const currencyChoices=()=>state.data.currencies.map(c=>({value:c.code,label:c.code+" · "+c.name_vi}));
+const financeMoneyInput=value=>String(value??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
 function showForm(kind,selectedId=null){
  if(!state.data){return;}
  const accounts=state.data.accounts,categories=state.data.categories;
@@ -1053,7 +1054,7 @@ function showForm(kind,selectedId=null){
   fields=selectField("kind","Loại dự kiến",[{value:"income",label:"Thu nhập"},{value:"expense",label:"Chi tiêu"}])+
    input("label","Tên khoản thu/chi","text",existing?.label||"","Lương / tiền thuê nhà")+
    selectField("currencyCode","Ngoại tệ của khoản dự kiến",currencyChoices())+
-   input("originalAmount","Số tiền gốc","text",existing?.original_amount||existing?.amount_twd||"","Nhập số tiền theo ngoại tệ đã chọn")+
+   input("originalAmount","Số tiền gốc","text",financeMoneyInput(existing?.original_amount||existing?.amount_twd||""),"Nhập số tiền theo ngoại tệ đã chọn")+
    '<p class="fin-balance-diff" data-fx-form-estimate>Quy đổi dự kiến sang TWD sẽ được tính tự động.</p>'+
    input("fxRateToTwd","Tỷ giá thủ công khi nguồn tự động chưa có","text","","Bỏ trống nếu đã có tỷ giá tự động",false)+
    input("dueDay","Ngày nhận / ngày phải trả (1–31)","number",existing?.due_day||"","1–31",false)+
@@ -1064,8 +1065,8 @@ function showForm(kind,selectedId=null){
   form.dataset.goalId=goal.id;
   const existing=(state.cashflow?.goalFunds||[]).find(f=>f.goal_id===goal.id);
   title="Quỹ mục tiêu · "+goal.name+" · "+monthText(state.month);
-  fields=input("plannedAmount","Dự kiến dành ("+goal.currency_code+")","text",existing?.planned_amount||"0")+
-   input("earmarkedAmount","Đánh dấu đã dành ("+goal.currency_code+")","text",existing?.earmarked_amount||"0")+
+  fields=input("plannedAmount","Dự kiến dành ("+goal.currency_code+")","text",financeMoneyInput(existing?.planned_amount||"0"))+
+   input("earmarkedAmount","Đánh dấu đã dành ("+goal.currency_code+")","text",financeMoneyInput(existing?.earmarked_amount||"0"))+
    (goal.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+goal.currency_code+" = ? TWD","text",fxReference(goal.currency_code)?.rateToTwd||existing?.fx_rate_to_twd||"","Nhập nếu chưa có tỷ giá"))+
    note("Khoản dự kiến sẽ trừ trong dòng tiền kế hoạch tháng/năm. Đánh dấu đã dành chỉ để theo dõi, không đổi ví, dư nợ hoặc tiến độ tích lũy.");
  }else if(kind==="debtFund"){
@@ -1073,8 +1074,8 @@ function showForm(kind,selectedId=null){
   form.dataset.debtId=debt.id;
   const existing=(state.cashflow?.debtFunds||[]).find(f=>f.debt_id===debt.id);
   title="Quỹ trả nợ · "+debt.name;
-  fields=input("plannedAmount","Dự kiến dành ("+debt.currency_code+")","text",existing?.planned_amount||"0")+
-   input("earmarkedAmount","Đánh dấu đã dành ("+debt.currency_code+")","text",existing?.earmarked_amount||"0")+
+  fields=input("plannedAmount","Dự kiến dành ("+debt.currency_code+")","text",financeMoneyInput(existing?.planned_amount||"0"))+
+   input("earmarkedAmount","Đánh dấu đã dành ("+debt.currency_code+")","text",financeMoneyInput(existing?.earmarked_amount||"0"))+
    (debt.currency_code==="TWD"?"":input("fxRateToTwd","Tỷ giá giả định: 1 "+debt.currency_code+" = ? TWD","text",fxReference(debt.currency_code)?.rateToTwd||existing?.fx_rate_to_twd||"","Nhập nếu chưa có tỷ giá"))+
    note("Đánh dấu đã dành không chuyển tiền giữa các ví, không thanh toán khoản nợ, không trừ số dư.");
  }else if(kind==="debtPayment"){
