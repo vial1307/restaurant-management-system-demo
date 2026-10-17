@@ -279,7 +279,7 @@ function renderBudget(){
   return heading("Kế hoạch tài chính · Theo năm","Đối chiếu tổng ngân sách thực chi và phân bổ quỹ từng tháng từ dữ liệu đã ghi.",periodInput())+
     '<div class="fin-toolbar fin-page-toolbar"><button class="fin-btn secondary" type="button" data-period="month">← Về kế hoạch tháng</button>'+
     button("+ Ngân sách","budget")+button("+ Danh mục","category",true)+'</div>'+
-    renderYearBudget()+renderYearCashflow();
+    panel("Tài khoản & chỉnh số dư",renderAccountManagement(),"Giữ nguyên lịch sử giao dịch khi đối soát số dư thực tế.")+renderYearBudget()+renderYearCashflow();
  }
  const s=state.cashflow?.summary||{},planned=Number(s.planned_net_twd)||0;
  const debt=Number(s.planned_debt_fund_twd)||0,goal=Number(s.planned_goal_fund_twd)||0;
