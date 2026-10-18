@@ -356,6 +356,48 @@ try{
   // Spreadsheet editor saves several native-currency rows in one DB transaction.
   await page.locator('.main-nav [data-tab="plan"]').click();
   await page.locator('.finance-sheet').waitFor();
+  // Canonical Super Admin breakpoints: same actions and edit semantics on all
+  // sizes, no 900px horizontal scroll needed to reach save/delete on phones.
+  if(viewport.width===1440){
+   for(const size of [
+    {width:320,height:700},{width:360,height:740},{width:390,height:844},
+    {width:430,height:860},{width:600,height:800},{width:760,height:800},
+    {width:740,height:390},{width:1024,height:768},{width:1440,height:900}
+   ]){
+    await page.setViewportSize(size);
+    const geometry=await page.evaluate(()=>{
+      const container=document.querySelector(".finance-sheet");
+      const scroller=container.querySelector(".sheet-scroller");
+      const row=container.querySelector(".sheet-table tbody tr");
+      const btns=[...container.querySelectorAll(".sheet-tool-main button")];
+      const styles=getComputedStyle(row);
+      const controls=btns.map(n=>({action:n.dataset.sheetAction,
+       left:n.getBoundingClientRect().left,right:n.getBoundingClientRect().right,
+       height:n.getBoundingClientRect().height,visible:getComputedStyle(n).display!=="none"}));
+      const fields=[...row.querySelectorAll("td")].map(n=>({label:n.dataset.label,
+       right:n.getBoundingClientRect().right,left:n.getBoundingClientRect().left}));
+      return {viewport:innerWidth,card:styles.display==="grid",
+       hasMobileSelect:getComputedStyle(container.querySelector(".sheet-select-mobile")).display!=="none",
+       sheetLeft:container.getBoundingClientRect().left,
+       sheetRight:container.getBoundingClientRect().right,
+       scrollerWidth:scroller.scrollWidth,scrollerClient:scroller.clientWidth,
+       controls,fields};
+    });
+    assert(geometry.sheetLeft>=-1&&geometry.sheetRight<=size.width+1,
+      "Sheet must fit device width: "+JSON.stringify({size,geometry}));
+    assert(geometry.controls.every(n=>n.visible&&n.left>=-1&&n.right<=size.width+1),
+      "All sheet action buttons must be reachable: "+JSON.stringify({size,controls:geometry.controls}));
+    assert(geometry.fields.every(n=>n.label&&n.left>=-1),
+      "Every finance edit cell needs readable mobile label: "+JSON.stringify({size,fields:geometry.fields}));
+    if(size.width<=760){
+      assert(geometry.card&&geometry.hasMobileSelect,"Mobile must be editable cards with select all: "+size.width);
+      assert(geometry.controls.every(n=>n.height>=43.5),"Touch actions must be at least 44px high: "+size.width);
+      assert(geometry.scrollerWidth<=geometry.scrollerClient+2,
+        "Mobile cards must not require 900px horizontal grid: "+JSON.stringify({size,geometry}));
+    }else assert(!geometry.card,"Desktop keeps full spreadsheet table: "+size.width);
+   }
+   await page.setViewportSize(viewport);
+  }
   await page.locator('[data-sheet-action="add"]').click();
   await page.locator('.sheet-new [data-sheet-field="label"]').fill("Mua sắm theo bảng");
   await page.locator('.sheet-new [data-sheet-field="amount"]').fill("900");
@@ -384,10 +426,16 @@ try{
   assert.match(await unfundedRow.innerText(),/Chưa lập quỹ/);
   assert.doesNotMatch(await unfundedRow.innerText(),/Chưa có tỷ giá/,
     "Missing allocation and missing FX rate must not be conflated");
-  await page.locator("#sheet-select-all").check();
+  const sheetSelectAll=page.locator(viewport.width<=760?"#sheet-select-visible":"#sheet-select-all");
+  await sheetSelectAll.check();
   assert(!(await unfundedRow.locator('input.sheet-row-check').isChecked()),
     "Select all must skip master records that have no monthly fund");
-  await page.locator("#sheet-select-all").uncheck();
+  assert.match(await page.locator(".sheet-selection-summary").innerText(),/dòng được chọn/);
+  if(viewport.width<=760){
+   assert(await page.locator("#sheet-select-visible").isVisible(),"Mobile select all must not be hidden");
+   assert.equal(await unfundedRow.locator('td.sheet-amount').getAttribute("data-label"),"Số tiền gốc");
+  }
+  await sheetSelectAll.uncheck();
   await unfundedRow.getByRole("button",{name:"Lập quỹ"}).click();
   await page.locator('#finance-fields [name="plannedAmount"]').waitFor();
   await page.locator("#finance-dialog-cancel").click();

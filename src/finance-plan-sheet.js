@@ -44,27 +44,34 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
     '" maxlength="'+(column==="label"?"140":column==="memo"?"250":"50")+'">';
  }
  function oneRow(r,idx){
-  const k=key(r),d=draft(r),isDeleted=state.deleted.has(k),isFund=r.source!=="item";
-  const linked=r.unallocated;
-  const nativeView=editable(r)?editor(r,"amount",s(r.native)):'<span class="sheet-readonly" title="Dư nợ/mục tiêu tham khảo, chưa phải số tiền phân bổ tháng này">'+s(showNativeAmount(r.native))+" "+s(r.code)+"</span>";
-  const labelView=r.source==="item"?editor(r,"label",s(r.name)):
-   '<strong>'+s(r.name)+'</strong>'+(isFund?'<small class="sheet-linked">'+(linked?"Nợ/mục tiêu gốc · Chưa lập quỹ":"Liên kết công nợ/mục tiêu")+'</small>':"");
-  const actions=r.source==="item"?'<button type="button" class="btn small ghost" data-action="editPlan" data-id="'+s(r.id)+'">Chi tiết</button>':
+  const k=key(r),isDeleted=state.deleted.has(k),linked=!!r.unallocated,isFund=r.source!=="item";
+  const td=(label,body,cls="")=>'<td data-label="'+s(label)+'" class="'+cls+'">'+body+'</td>';
+  const original=editable(r)?editor(r,"amount",s(r.native)):
+   '<span class="sheet-readonly" title="Dư nợ/mục tiêu tham khảo, chưa phải số tiền phân bổ tháng này">'+
+    s(showNativeAmount(r.native))+" "+s(r.code)+"</span>";
+  const label=r.source==="item"?editor(r,"label",s(r.name)):
+   '<strong>'+s(r.name)+'</strong>'+(isFund?'<small class="sheet-linked">'+
+     (linked?"Nợ/mục tiêu gốc · Chưa lập quỹ":"Liên kết công nợ/mục tiêu")+'</small>':"");
+  const actions=r.source==="item"?
+   '<button type="button" class="btn small ghost" data-action="editPlan" data-id="'+s(r.id)+'">Chi tiết / Sửa</button>':
    '<button type="button" class="btn small ghost" data-sheet-action="linked" data-sheet-key="'+s(k)+'">'+
     (linked?"Lập quỹ":"Điều khoản")+'</button>';
-  return '<tr data-sheet-key="'+s(k)+'" class="'+(isDeleted?"sheet-deleted ":"")+(idx%2?"sheet-alt":"")+'">'+
-    '<td class="sheet-selector">'+selectionHtml(r)+'</td>'+
-    '<td class="sheet-date">'+(r.source==="item"?editor(r,"day",s(day(r))):
-        '<span>'+s(r.date)+'</span>')+'</td>'+
-    '<td>'+editor(r,"kind",s(kindName[r.kind]),"",r.source!=="item")+'</td>'+
-    '<td class="sheet-label">'+labelView+'</td>'+
-    '<td>'+nativeView+'</td>'+
-    '<td>'+editor(r,"currency",s(r.code),"",r.source!=="item")+'</td>'+
-    '<td class="num">'+(r.unallocated?'<span class="sheet-missing-allocation">Chưa lập quỹ</span>':r.twd===null?"Chưa có tỷ giá":s(r.twd?.toLocaleString?.("vi-VN")||r.twd))+'</td>'+
-    '<td class="sheet-memo">'+(r.source==="item"?editor(r,"memo",s(r.detail)):
-      '<span class="sheet-readonly">'+s(r.detail||"Quỹ được đồng bộ với Công nợ / Mục tiêu")+'</span>')+'</td>'+
-    '<td>'+actions+'</td></tr>';
+  const converted=linked?'<span class="sheet-missing-allocation">Chưa lập quỹ</span>':
+    r.twd===null?"Chưa có tỷ giá":s(r.twd?.toLocaleString?.("vi-VN")||r.twd);
+  return '<tr data-sheet-key="'+s(k)+'" class="'+(isDeleted?"sheet-deleted ":"")+
+    (linked?"sheet-reference ":"")+(state.selected.has(k)?"sheet-selected ":"")+(idx%2?"sheet-alt":"")+'">'+
+    td("Chọn dòng",selectionHtml(r),"sheet-selector")+
+    td("Ngày",r.source==="item"?editor(r,"day",s(day(r))):'<span>'+s(r.date)+'</span>',"sheet-date")+
+    td("Loại",editor(r,"kind",s(kindName[r.kind]),"",r.source!=="item"),"sheet-kind")+
+    td("Nội dung",label,"sheet-label")+
+    td("Số tiền gốc",original,"sheet-amount")+
+    td("Tiền tệ",editor(r,"currency",s(r.code),"",r.source!=="item"),"sheet-currency")+
+    td("Quy đổi TWD",converted,"sheet-base num")+
+    td("Ghi chú",r.source==="item"?editor(r,"memo",s(r.detail)):
+      '<span class="sheet-readonly">'+s(r.detail||"Quỹ được đồng bộ với Công nợ / Mục tiêu")+'</span>',"sheet-memo")+
+    td("Thao tác",actions,"sheet-actions")+'</tr>';
  }
+
  function getAllRows(){
   const original=getRows();
   const q=state.query.trim().toLocaleLowerCase("vi-VN");
@@ -93,6 +100,14 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
      ["date","Ngày"],["name","Tên A–Z"],["amount","Số tiền giảm dần"]].map(([v,t])=>
       '<option value="'+v+'"'+(state.sort===v?" selected":"")+'>'+t+'</option>').join("")+'</select>'+
    '</div></div>';
+  const selectable=all.filter(r=>!r.unallocated);
+  const selectBar='<div class="sheet-selection-bar"><label class="sheet-select-mobile">'+
+   '<input type="checkbox" id="sheet-select-visible" aria-label="Chọn các dòng có thể chỉnh hoặc xóa đang hiển thị">'+
+   '<span>Chọn dòng đang hiển thị</span></label><span class="sheet-selection-summary" aria-live="polite">'+
+    state.selected.size+' dòng được chọn · '+selectable.length+' dòng có thể chỉnh/xóa</span></div>';
+  const guide='<div class="sheet-intro"><div><strong>Chỉnh sửa trực tiếp · Tất cả khoản trong tháng</strong>'+
+    '<p>Chọn ô để sửa · chỉ các khoản phân bổ đã lưu mới có thể xóa. Công nợ chưa lập quỹ chỉ để tham khảo.</p></div>'+
+    '<span>Đồng bộ qua Finance PostgreSQL sau khi lưu</span></div>';
   const paste=state.paste?'<div class="sheet-paste"><label>Dán các dòng Excel/Sheets (cột: Ngày, Loại, Nội dung, Số tiền, Ngoại tệ, Ghi chú)</label>'+
     '<textarea id="sheet-paste-area" rows="4" placeholder="10\tChi\tTiền nhà\t6000\tTWD\tTiền nhà tháng này"></textarea>'+
     '<div class="tools"><button type="button" class="btn small primary" data-sheet-action="paste">Thêm các dòng vào bảng</button>'+
@@ -103,18 +118,18 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    '<th class="num">Quy đổi TWD</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody>';
   const rendered=all.map(oneRow).join("");
   const added=state.added.map((a,i)=>'<tr class="sheet-new" data-sheet-key="'+s(a.key)+'">'+
-   '<td>+</td><td><input type="number" min="1" max="31" value="'+s(a.day)+'" data-sheet-field="day" data-sheet-key="'+s(a.key)+'"></td>'+
-   '<td><select data-sheet-field="kind" data-sheet-key="'+s(a.key)+'">'+["expense","income"].map(k=>
+   '<td class="sheet-selector" data-label="Dòng mới">+</td><td class="sheet-date" data-label="Ngày"><input type="number" min="1" max="31" value="'+s(a.day)+'" data-sheet-field="day" data-sheet-key="'+s(a.key)+'"></td>'+
+   '<td class="sheet-kind" data-label="Loại"><select data-sheet-field="kind" data-sheet-key="'+s(a.key)+'">'+["expense","income"].map(k=>
     '<option value="'+k+'"'+(a.kind===k?" selected":"")+'>'+kindName[k]+'</option>').join("")+'</select></td>'+
-   '<td><input data-sheet-field="label" data-sheet-key="'+s(a.key)+'" value="'+s(a.label)+'" placeholder="Nhập nội dung" maxlength="140"></td>'+
-   '<td><input data-sheet-field="amount" data-sheet-key="'+s(a.key)+'" value="'+s(a.amount)+'" placeholder="Số tiền"></td>'+
-   '<td><select data-sheet-field="currency" data-sheet-key="'+s(a.key)+'">'+getCurrencies().map(c=>
+   '<td class="sheet-label" data-label="Nội dung"><input data-sheet-field="label" data-sheet-key="'+s(a.key)+'" value="'+s(a.label)+'" placeholder="Nhập nội dung" maxlength="140"></td>'+
+   '<td class="sheet-amount" data-label="Số tiền gốc"><input data-sheet-field="amount" data-sheet-key="'+s(a.key)+'" value="'+s(a.amount)+'" placeholder="Số tiền"></td>'+
+   '<td class="sheet-currency" data-label="Tiền tệ"><select data-sheet-field="currency" data-sheet-key="'+s(a.key)+'">'+getCurrencies().map(c=>
     '<option value="'+s(c.code)+'"'+(a.currency===c.code?" selected":"")+'>'+s(c.code)+'</option>').join("")+'</select></td>'+
-   '<td class="sheet-readonly num">Tự tính sau lưu</td><td><input data-sheet-field="memo" data-sheet-key="'+s(a.key)+'" value="'+s(a.memo)+'" maxlength="250"></td>'+
-   '<td><button type="button" class="btn small ghost" data-sheet-action="dropNew" data-sheet-key="'+s(a.key)+'">Bỏ dòng</button></td></tr>').join("");
+   '<td class="sheet-base sheet-readonly num" data-label="Quy đổi TWD">Tự tính sau lưu</td><td class="sheet-memo" data-label="Ghi chú"><input data-sheet-field="memo" data-sheet-key="'+s(a.key)+'" value="'+s(a.memo)+'" maxlength="250"></td>'+
+   '<td class="sheet-actions" data-label="Thao tác"><button type="button" class="btn small ghost" data-sheet-action="dropNew" data-sheet-key="'+s(a.key)+'">Bỏ dòng</button></td></tr>').join("");
   const footer='</tbody></table></div><div class="sheet-status"><span>Đang xem '+all.length+' dòng đã lưu · '+
     state.added.length+' dòng mới</span><span>'+pending+' chỉnh sửa chưa lưu · Ctrl/Cmd+S để lưu · Enter/Tab để di chuyển</span></div>';
-  return '<div class="finance-sheet">'+toolbar+paste+hdr+(rendered+added||'<tr><td colspan="9" class="empty">Chưa có dữ liệu. Chọn “Thêm dòng”.</td></tr>')+
+  return '<div class="finance-sheet">'+guide+toolbar+selectBar+paste+hdr+(rendered+added||'<tr><td colspan="9" class="empty">Chưa có dữ liệu. Chọn “Thêm dòng”.</td></tr>')+
     footer+(state.error?'<div class="notice warn">'+s(state.error)+'</div>':"")+
     '<div class="notice">Chỉ sửa kế hoạch, không sửa số dư ví hoặc lịch sử đã thanh toán. Xóa “Quỹ nợ/Mục tiêu” chỉ xóa phần phân bổ trong tháng, không xóa khoản nợ/mục tiêu gốc.</div></div>';
  }
@@ -257,6 +272,17 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
     selectAll.indeterminate=checked>0&&checked<rows.length;
     selectAll.disabled=!rows.length;
   }
+  const mobile=host.querySelector("#sheet-select-visible");
+  if(mobile){
+    const checked=rows.filter(r=>state.selected.has(key(r))).length;
+    mobile.checked=!!rows.length&&checked===rows.length;
+    mobile.indeterminate=checked>0&&checked<rows.length;
+    mobile.disabled=!rows.length;
+  }
+  const summary=host.querySelector(".sheet-selection-summary");
+  if(summary)summary.textContent=state.selected.size+" dòng được chọn · "+rows.length+" dòng có thể chỉnh/xóa";
+  for(const tr of host.querySelectorAll(".sheet-table tbody tr[data-sheet-key]"))
+    tr.classList.toggle("sheet-selected",state.selected.has(tr.dataset.sheetKey));
   const remove=host.querySelector('[data-sheet-action="remove"]');
   if(remove)remove.disabled=state.selected.size===0;
  }
@@ -280,7 +306,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    if(e.target.checked)state.selected.add(k);else state.selected.delete(k);
    syncSelection();return;
   }
-  if(e.target.id==="sheet-select-all"){
+  if(e.target.id==="sheet-select-all"||e.target.id==="sheet-select-visible"){
    const checked=e.target.checked;
    for(const r of getAllRows()){if(r.unallocated)continue;if(checked)state.selected.add(key(r));else state.selected.delete(key(r));}
    syncSelection();return;
