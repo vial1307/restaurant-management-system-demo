@@ -122,9 +122,9 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    {op:r.source==="item"?"deleteItem":"deleteFund",id:r.id,version:versionOf(r),
     ...(r.source==="item"?{}:{fundType:r.kind})});}
   for(const [k,d] of state.drafts){if(state.deleted.has(k))continue;const r=getRow(k);if(!r||r.unallocated)continue;
-   if(r.source==="item")ops.push(buildItem(r,d,"updateItem"));
+   if(r.source==="item")ops.push({...buildItem(r,d,"updateItem"),version:d._version||r.version});
    else if(r.source==="debt"||r.source==="goal")ops.push({op:"updateFund",fundType:r.source,
-    id:r.id,version:versionOf(r),plannedAmount:String(d.amount).trim()});
+    id:r.id,version:d._version||versionOf(r),plannedAmount:String(d.amount).trim()});
   }
   for(const n of state.added)ops.push(buildItem(null,n,"createItem"));
   return ops;
@@ -166,7 +166,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(added){added[field]=el.value;return;}
   const r=getRow(k);if(!r||!editable(r)||state.deleted.has(k))return;
   if(r.source!=="item"&&field!=="amount")return;
-  const d={...draft(r),[field]:el.value};
+  const d={...draft(r),[field]:el.value,_version:state.drafts.get(k)?._version||r.version};
   state.drafts.set(k,d);
  }
  function add(count=1,templates=[]){
@@ -186,6 +186,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    if(cells.length<4)throw Error("Mỗi dòng phải có các cột: Ngày, Loại, Nội dung, Số tiền.");
    const [rawDay,rawKind,label,amount,code="TWD",memo=""]=cells.map(s=>s.trim());
    if(["Ngày","Date"].includes(rawDay))continue;
+   if(/^\d{4}-\d{2}-\d{2}$/.test(rawDay)&&rawDay.slice(0,7)!==getMonth())throw Error("Không thể dán ngày thuộc tháng khác vào bảng kế hoạch đang xem.");
    const day=/^\d{4}-\d{2}-\d{2}$/.test(rawDay)?Number(rawDay.slice(-2)):Number(rawDay);
    const kind=({Thu:"income",Chi:"expense",income:"income",expense:"expense"})[rawKind];
    if(!kind||!Number.isInteger(day)||day<1||day>31||!label||!getCurrencies().some(x=>x.code===code))
@@ -210,7 +211,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(action==="cancel"){if(!hasChanges()||confirm("Hủy tất cả thay đổi chưa lưu?")){reset();render();}return;}
   if(action==="copy")return copy();
   if(action==="togglePaste"){state.paste=!state.paste;render();return;}
-  if(action==="paste"){try{add(0);const templates=parsePaste(document.querySelector("#sheet-paste-area")?.value);
+  if(action==="paste"){try{const templates=parsePaste(document.querySelector("#sheet-paste-area")?.value);
     state.paste=false;add(templates.length,templates);
    }catch(e){notify(e.message);}return;}
   if(action==="remove"){
