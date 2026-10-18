@@ -360,7 +360,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           if(!["income","expense"].includes(op.kind)||typeof op.label!=="string"||
              !trim(op.label)||trim(op.label,140)!==trim(op.label)||
              typeof op.memo!=="string"||op.memo.length>250||
-             !Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31)
+             (op.dueDay!==null&&(!Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31)))
              return fail(reply,"INVALID_SHEET_ITEM");
           const amount=await plannedAmount(ctx,{
             currencyCode:op.currencyCode,originalAmount:op.originalAmount
