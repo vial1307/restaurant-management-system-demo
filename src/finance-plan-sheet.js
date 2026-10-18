@@ -232,6 +232,14 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    return;
   }
  }
+ function syncToolbar(){
+  const host=document.querySelector(".finance-sheet");if(!host)return;
+  const amount=changes(),save=host.querySelector('[data-sheet-action="save"]'),cancel=host.querySelector('[data-sheet-action="cancel"]');
+  if(save){save.disabled=!amount||state.saving;save.textContent=state.saving?"Đang lưu…":"Lưu "+amount+" thay đổi";}
+  if(cancel)cancel.disabled=!amount;
+  const status=host.querySelector(".sheet-status span:last-child");
+  if(status)status.textContent=amount+" chỉnh sửa chưa lưu · Ctrl/Cmd+S để lưu · Enter/Tab để di chuyển";
+ }
  function render(){
   const host=document.querySelector(".finance-sheet");
   if(host)host.outerHTML=html();
@@ -242,10 +250,10 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(btn){e.preventDefault();void handle(btn.dataset.sheetAction,btn.dataset.sheetKey||"");}
  });
  targetRoot()?.addEventListener("input",e=>{
-  if(e.target.matches("[data-sheet-field]"))setField(e.target);
+  if(e.target.matches("[data-sheet-field]")){setField(e.target);syncToolbar();}
  });
  targetRoot()?.addEventListener("change",e=>{
-  if(e.target.matches("[data-sheet-field]")){setField(e.target);render();return;}
+  if(e.target.matches("[data-sheet-field]")){setField(e.target);syncToolbar();return;}
   if(e.target.matches("[data-sheet-key].sheet-row-check")){
    const k=e.target.dataset.sheetKey;
    if(e.target.checked)state.selected.add(k);else state.selected.delete(k);render();return;
