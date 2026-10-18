@@ -550,5 +550,43 @@ assert(payoff.data.remaining.some(x=>x.debtId===createdDebtPlan.debt.id));
 assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance),startBank,
  "Payoff recommendations must not automatically move cash");
 
+// Spreadsheet contract: atomic multirow edits, audit per mutation and real ledger unchanged.
+const sheetBefore=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+const fundForSheet=sheetBefore.debtFunds.find(x=>x.debt_id===createdDebtPlan.debt.id);
+const goalForSheet=sheetBefore.goalFunds.find(x=>x.goal_id===createdGoalPlan.goal.id);
+assert(fundForSheet.updated_at&&goalForSheet.updated_at,"Monthly allocations must expose concurrency versions");
+const itemToCreate={op:"createItem",kind:"expense",label:"Bảng tính kiểm thử",originalAmount:"1800",
+ currencyCode:"TWD",dueDay:21,memo:"Xác minh lưu theo lô"};
+const editFund={op:"updateFund",fundType:"debt",id:fundForSheet.id,version:fundForSheet.updated_at,plannedAmount:"3000"};
+assert.equal((await request("/finance/cashflow/sheet/batch",{method:"POST",body:{month:monthly,operations:[itemToCreate]}})).status,401);
+assert.equal((await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:stranger,body:{month:monthly,operations:[itemToCreate]}})).status,403);
+assert.equal((await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,write:false,body:{month:monthly,operations:[itemToCreate]}})).status,403);
+const incorrectVersion=await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,
+ body:{month:monthly,operations:[itemToCreate,{...editFund,version:"2020-01-01 00:00:00+00"}]}});
+assert.equal(incorrectVersion.status,409,"Stale versions fail the entire batch");
+const afterRollback=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+assert(!afterRollback.items.some(x=>x.label==="Bảng tính kiểm thử"),"Failed batch may not partially create rows");
+assert.equal(Number(afterRollback.debtFunds.find(x=>x.id===fundForSheet.id).planned_amount),2500,"Failed batch may not change debt reserve");
+const successfulSheet=await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,
+ body:{month:monthly,operations:[itemToCreate,editFund,
+  {op:"deleteFund",fundType:"goal",id:goalForSheet.id,version:goalForSheet.updated_at}]}});
+assert.equal(successfulSheet.status,200,JSON.stringify(successfulSheet.data));
+assert.equal(successfulSheet.data.saved,3);
+assert.equal(successfulSheet.data.ledgerPosted,false);
+const afterSheet=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+assert(afterSheet.items.some(x=>x.label==="Bảng tính kiểm thử"));
+assert.equal(Number(afterSheet.debtFunds.find(x=>x.id===fundForSheet.id).planned_amount),3000);
+assert(!afterSheet.goalFunds.some(x=>x.id===goalForSheet.id),"Deleting a goal allocation does not delete goal master");
+assert((await request("/finance/bootstrap",{cookie:owner})).data.goals.some(x=>x.id===createdGoalPlan.goal.id));
+assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance),startBank,
+ "Spreadsheet edits may not post or remove real transactions");
+const auditSheet=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(process.env.FINANCE_DB_PORT||5432),
+ database:process.env.FINANCE_DB_NAME,user:process.env.FINANCE_DB_USER,password:process.env.FINANCE_DB_PASSWORD});
+await auditSheet.connect();
+try{
+ const a=await auditSheet.query("SELECT count(*)::int AS n FROM finance.audit_events WHERE owner_user_id=$1 AND action LIKE 'finance.sheet.%'",[process.env.FINANCE_OWNER_USER_ID]);
+ assert.equal(a.rows[0].n,3,"Each successful spreadsheet change is audited once");
+}finally{await auditSheet.end();}
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 

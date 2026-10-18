@@ -32,8 +32,8 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   const roundTripQuery=async(ctx,m)=>{
     const date=startMonth(m);
     const [items,funds,payments,sums,goalFunds]=await Promise.all([
-      ctx.pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
-      ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.due_date::text FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
+      ctx.pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text,updated_at::text AS updated_at FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
+      ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.due_date::text,f.updated_at::text AS updated_at FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
       ctx.pool.query("SELECT p.id,p.debt_id,d.name AS debt_name,d.currency_code,p.payment_date::text,p.principal_paid::text,p.interest_paid::text,p.fee_paid::text,p.base_amount_twd::text,p.event_id FROM finance.debt_payments p JOIN finance.debts d ON d.id=p.debt_id AND d.owner_user_id=p.owner_user_id WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month') ORDER BY p.payment_date DESC,p.created_at DESC LIMIT 100",[ctx.owner,date]),
       ctx.pool.query(
         "SELECT "+
@@ -49,7 +49,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         [ctx.owner,date]
       ),
       ctx.pool.query(
-        "SELECT f.id,f.goal_id,g.name AS goal_name,g.currency_code,g.status,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,g.target_amount::text,g.current_amount::text,g.target_date::text FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY g.name,f.id",
+        "SELECT f.id,f.goal_id,g.name AS goal_name,g.currency_code,g.status,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,f.updated_at::text AS updated_at,g.target_amount::text,g.current_amount::text,g.target_date::text FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY g.name,f.id",
         [ctx.owner,date]
       )
     ]);
@@ -338,6 +338,106 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       return {fund:saved};
     }catch(error){return databaseError(req,reply,error);}
   });
+  // Spreadsheet edits only touch plans and allocations. Atomic, audited, owner scoped.
+  app.post("/api/finance/cashflow/sheet/batch",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{},month=monthKey(b.month),ops=b.operations;
+    if(!month||!Array.isArray(ops)||ops.length<1||ops.length>80)
+      return fail(reply,"INVALID_SHEET_BATCH");
+    const seen=new Set(),prepared=[];
+    try{
+      for(const op of ops){
+        if(!op||!["createItem","updateItem","deleteItem","updateFund","deleteFund"].includes(op.op))
+          return fail(reply,"INVALID_SHEET_OPERATION");
+        if(op.op!=="createItem"){
+          if(!id(op.id)||typeof op.version!=="string"||op.version.length>50)
+            return fail(reply,"INVALID_SHEET_ROW_VERSION");
+          const key=op.op.includes("Fund")?op.fundType+":"+op.id:"item:"+op.id;
+          if(seen.has(key))return fail(reply,"DUPLICATE_SHEET_ROW");
+          seen.add(key);
+        }
+        if(op.op.endsWith("Item")&&op.op!=="deleteItem"){
+          if(!["income","expense"].includes(op.kind)||typeof op.label!=="string"||
+             !trim(op.label)||trim(op.label,140)!==trim(op.label)||
+             typeof op.memo!=="string"||op.memo.length>250||
+             (op.dueDay!==null&&(!Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31)))
+             return fail(reply,"INVALID_SHEET_ITEM");
+          const amount=await plannedAmount(ctx,{
+            currencyCode:op.currencyCode,originalAmount:op.originalAmount
+          });
+          if(amount.error)return fail(reply,amount.error);
+          prepared.push({...op,converted:amount});
+        }else if(op.op==="updateFund"){
+          if(!["debt","goal"].includes(op.fundType)||
+              typeof op.plannedAmount!=="string"||!money(op.plannedAmount,6))
+            return fail(reply,"INVALID_SHEET_FUND");
+          prepared.push(op);
+        }else if(op.op==="deleteFund"){
+          if(!["debt","goal"].includes(op.fundType))
+            return fail(reply,"INVALID_SHEET_FUND");
+          prepared.push(op);
+        }else prepared.push(op);
+      }
+      const results=await financeTransaction(async db=>{
+        const saved=[];
+        for(const op of prepared){
+          let rows=[];
+          if(op.op==="createItem"){
+            const a=op.converted;
+            ({rows}=await db.query(
+              "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) "+
+              "VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id",
+              [ctx.owner,startMonth(month),op.kind,trim(op.label,140),a.amountTwd,op.dueDay,
+                op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider]));
+          }else if(op.op==="updateItem"){
+            const a=op.converted;
+            ({rows}=await db.query(
+              "UPDATE finance.cashflow_items SET kind=$4,label=$5,amount_twd=$6::numeric,due_day=$7,"+
+              "memo=$8,original_currency=$9,original_amount=$10::numeric,fx_rate_to_twd=$11::numeric,"+
+              "fx_rate_observed_at=$12::timestamptz,fx_rate_provider=$13,updated_at=clock_timestamp() "+
+              "WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 AND updated_at=$14::timestamptz RETURNING id",
+              [ctx.owner,startMonth(month),op.id,op.kind,trim(op.label,140),a.amountTwd,
+                op.dueDay,op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider,op.version]));
+          }else if(op.op==="deleteItem"){
+            ({rows}=await db.query(
+              "DELETE FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date "+
+              "AND id=$3 AND updated_at=$4::timestamptz RETURNING id",
+              [ctx.owner,startMonth(month),op.id,op.version]));
+          }else{
+            const table=op.fundType==="debt"?"finance.debt_fund_allocations":"finance.goal_fund_allocations";
+            if(op.op==="deleteFund"){
+              ({rows}=await db.query("DELETE FROM "+table+" WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 AND updated_at=$4::timestamptz RETURNING id",
+                [ctx.owner,startMonth(month),op.id,op.version]));
+            }else{
+              const master=op.fundType==="debt"?"finance.debts":"finance.goals";
+              const foreign=op.fundType==="debt"?"debt_id":"goal_id";
+              const {rows:valid}=await db.query(
+                "SELECT c.minor_units FROM "+table+" f JOIN "+master+" m ON m.id=f."+foreign+" AND m.owner_user_id=f.owner_user_id JOIN finance.currencies c ON c.code=m.currency_code WHERE f.owner_user_id=$1 AND f.month_date=$2::date AND f.id=$3",
+                [ctx.owner,startMonth(month),op.id]);
+              if(!valid[0]||!money(op.plannedAmount,Number(valid[0].minor_units))) {
+                const err=new Error("INVALID_SHEET_FUND_PRECISION");err.sheetCode="INVALID_SHEET_FUND_PRECISION";throw err;
+              }
+              ({rows}=await db.query("UPDATE "+table+" SET planned_amount=$5::numeric,updated_at=clock_timestamp() WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 AND updated_at=$4::timestamptz RETURNING id",
+                [ctx.owner,startMonth(month),op.id,op.version,op.plannedAmount]));
+            }
+          }
+          if(!rows[0]){
+            const err=new Error("SHEET_STALE_RELOAD");err.sheetCode="SHEET_STALE_RELOAD";throw err;
+          }
+          await audit(db,ctx.owner,"finance.sheet."+op.op,rows[0].id,
+            {month,source:op.fundType||"item"},"finance_planning_row");
+          saved.push({id:rows[0].id,op:op.op});
+        }
+        return saved;
+      });
+      reply.header("Cache-Control","private, no-store");
+      return {saved:results.length,rows:results,month,ledgerPosted:false};
+    }catch(error){
+      if(error.sheetCode)return fail(reply,error.sheetCode,error.sheetCode==="SHEET_STALE_RELOAD"?409:400);
+      return databaseError(req,reply,error);
+    }
+  });
+
   app.post("/api/finance/debt-payments",async(req,reply)=>{
     const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
     const b=req.body||{};
