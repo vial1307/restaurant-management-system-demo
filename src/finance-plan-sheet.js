@@ -11,7 +11,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  const writable=r=>r.source==="item"||r.source==="debt"||r.source==="goal";
  const editable=r=>r.source==="item"||(r.source==="debt"||r.source==="goal")&&!r.unallocated;
  const existing=()=>getRows().filter(r=>r.source!=="debt"||!r.unallocated); // include unallocated goals
- const fieldValues=r=>({kind:r.kind,label:r.name||"",day:String(Number(day(r))),
+ const fieldValues=r=>({kind:r.kind,label:r.name||"",day:r.source==="item"&&r.estimated?"":String(Number(day(r))),
   amount:String(r.native??""),currency:r.code||"TWD",memo:r.source==="item"?(r.detail||""):""});
  function draft(r){const k=key(r);return state.drafts.get(k)||fieldValues(r);}
  function changes(){return state.drafts.size+state.added.length+state.deleted.size;}
@@ -34,7 +34,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
     getCurrencies().map(t=>'<option value="'+s(t.code)+'"'+(d.currency===t.code?" selected":"")+'>'+s(t.code)+'</option>').join("")+'</select>';
   }
   return '<input data-sheet-field="'+s(column)+'" data-sheet-key="'+s(k)+'" type="'+
-    (column==="day"?"number":"text")+'" '+(column==="day"?'min="1" max="31" step="1"':"")+
+    (column==="day"?"number":"text")+'" '+(column==="day"?'min="1" max="31" step="1" placeholder="Chưa rõ"':"")+
     'value="'+s(d[column]??"")+'" aria-label="'+s(column)+" · "+s(r.name)+
     '" maxlength="'+(column==="label"?"140":column==="memo"?"250":"50")+'">';
  }
@@ -115,7 +115,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  }
  const getRow=k=>getRows().find(r=>key(r)===k);
  const buildItem=(r,d,op)=>({op,id:r?.id,version:r?.version,kind:d.kind,label:d.label,
-  originalAmount:String(d.amount).trim(),currencyCode:d.currency,dueDay:Number(d.day),memo:d.memo||""});
+  originalAmount:String(d.amount).trim(),currencyCode:d.currency,dueDay:String(d.day??"").trim()===""?null:Number(d.day),memo:d.memo||""});
  function collect(){
   const ops=[];
   for(const k of state.deleted){const r=getRow(k);if(!r||r.unallocated)continue;ops.push(
@@ -133,7 +133,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(ops.length>80)throw Error("Chỉ được lưu tối đa 80 thay đổi mỗi lần.");
   for(const op of ops){
    if(op.op==="createItem"||op.op==="updateItem"){
-    if(!op.label?.trim()||op.label.length>140||!Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31||
+    if(!op.label?.trim()||op.label.length>140||(op.dueDay!==null&&(!Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31))||
       !/^(?:0|[1-9]\d{0,14})(?:\.\d{1,6})?$/.test(op.originalAmount)||
       Number(op.originalAmount)<=0)throw Error("Dòng thu/chi cần nội dung, ngày 1–31 và số tiền dương hợp lệ.");
    }
