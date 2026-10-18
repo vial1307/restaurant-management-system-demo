@@ -1,5 +1,6 @@
 import {financeMonthlyTrend,financeLiquidityForecast,financeDonut} from "./finance-visuals.js";
 import {createFinanceMentorUI} from "./finance-mentor-ui.js";
+import {createFinancePlanSheet} from "./finance-plan-sheet.js";
 // Finance OS V2 is an entirely new, owner-only interface. All records remain in Finance PostgreSQL.
 const $=s=>document.querySelector(s);
 const root=$("#finance-content"),dlg=$("#finance-dialog"),form=$("#finance-form"),fields=$("#finance-fields");
@@ -40,7 +41,8 @@ function card(t,body,extra="",subtitle=""){return '<section class="card"><div cl
 function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Tiết kiệm"}[kind]||"Khác")+'</span>';}
 function empty(t){return '<div class="empty">'+safe(t)+'</div>';}
 const mentorUI=createFinanceMentorUI({api,safe,card,title,money,notify,onChange:()=>render(),getBuffer:()=>state.buffer});
-function nav(tab){state.tab=tab;render();window.scrollTo(0,0);if(tab==="mentor")void mentorUI.load();}
+const sheet=createFinancePlanSheet({api,safe,notify,refresh,getMonth:()=>state.month,getRows:planRows,getCurrencies:currencies,open});
+function nav(tab){if(state.tab==="plan"&&tab!=="plan"&&sheet.hasChanges()&&!confirm("Có thay đổi chưa lưu trong bảng kế hoạch. Chuyển trang và giữ bản nháp?"))return;state.tab=tab;render();window.scrollTo(0,0);if(tab==="mentor")void mentorUI.load();}
 function quoteCards(){
  const used=[...new Set([...(state.data?.accounts||[]).map(x=>x.currency_code),...(state.data?.debts||[]).map(x=>x.currency_code),...(state.data?.goals||[]).map(x=>x.currency_code),"VND","USD"])].filter(c=>c!=="TWD");
  const html=used.map(c=>{const q=quote(c);return '<span class="rate-pill"><b>'+safe(c)+'</b> · '+(q?number(q.rateToTwd,10)+" TWD":"Chưa có tỷ giá")+'</span>';}).join("");
@@ -50,7 +52,7 @@ function planRows(){
  const cf=state.cashflow||{};const rows=[];
  for(const i of cf.items||[])rows.push({id:i.id,kind:i.kind,name:i.label,date:i.due_day?dayOf(i.due_day):lastDay(state.month),
   estimated:!i.due_day,native:i.original_amount||i.amount_twd,code:i.original_currency||"TWD",twd:val(i.amount_twd),
-  rate:i.fx_rate_to_twd,detail:i.memo||"",source:"item"});
+  rate:i.fx_rate_to_twd,detail:i.memo||"",source:"item",version:i.updated_at});
  const addFund=(items,kind)=>{
   for(const x of items||[]){
    const code=x.currency_code||"TWD",q=quote(code);
@@ -58,7 +60,7 @@ function planRows(){
    rows.push({id:x.id,ref:kind==="debt"?x.debt_id:x.goal_id,kind,name:x.debt_name||x.goal_name||"Quỹ",
     date:due(kind==="debt"?x.due_date:x.target_date),estimated:!(kind==="debt"?x.due_date:x.target_date)?.startsWith(state.month),
     native:x.planned_amount,code,twd:twd===null?null:twd,
-    rate:q?.rateToTwd||null,detail:code!=="TWD"?"Quỹ "+number(x.planned_amount)+" "+code+" · tỷ giá tham chiếu":"",source:kind});
+    rate:q?.rateToTwd||null,detail:code!=="TWD"?"Quỹ "+number(x.planned_amount)+" "+code+" · tỷ giá tham chiếu":"",source:kind,version:x.updated_at});
   }
  };
  addFund(cf.debtFunds,"debt");addFund(cf.goalFunds,"goal");
@@ -243,7 +245,7 @@ function planning(){
  return title("Kế hoạch tài chính",fmtMonth(state.month)+" · Quy đổi TWD cho dự báo, giữ nguyên số tiền gốc.",btn("+ Thêm thu/chi dự kiến","newPlan","primary"))+
  '<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(sum.income)+'</strong></div><div><small>Chi & quỹ dự kiến</small><strong class="negative">'+money(sum.expenses)+'</strong></div><div><small>Chênh lệch trong tháng</small><strong>'+money(sum.net)+'</strong></div></div><div style="height:14px"></div>'+
  (incomplete?'<div class="notice warn">Có khoản ngoại tệ thiếu tỷ giá cập nhật; tổng TWD phía trên chưa bao gồm những khoản đó.</div><div style="height:12px"></div>':"")+
- priorityRibbon()+card("Bảng kế hoạch theo tháng",planTable(),btn("+ Thêm dòng","newPlan","small primary"),"Công nợ, chi tiêu và tiết kiệm cùng đọc từ một nguồn dữ liệu; không lập trùng khoản chi.")+
+ priorityRibbon()+card("Bảng kế hoạch theo tháng",sheet.html(),"","Nhập trực tiếp trên ô, chọn nhiều dòng, dán từ Excel/Google Sheets và lưu đồng bộ PostgreSQL.")+
  card("Phân tích dòng tiền theo tháng đã chọn",linkedInsights(),btn("Xem mô phỏng đầy đủ","goSim","small soft"))+
  card("Lịch số dư sau từng khoản",linkedCashTable(),btn("Mô phỏng thêm","goSim","small soft"),"Đọc trực tiếp kế hoạch đang lưu; chưa ghi chi tiêu thực tế.")+
  '<div class="layout-2 equal">'+card("Số dư và các ví",walletList(),btn("Tạo ví","account","small soft"))+
@@ -667,7 +669,7 @@ document.body.addEventListener("click",async event=>{
  const tab=event.target.closest("[data-tab]");if(tab){nav(tab.dataset.tab);return;}
  const action=event.target.closest("[data-action]");if(action)await act(action.dataset.action,action.dataset.id||"");
 });
-$("#finance-month").addEventListener("change",async event=>{if(/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)){state.month=event.target.value;await refresh();}});
+$("#finance-month").addEventListener("change",async event=>{if(/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)){if(sheet.hasChanges()&&!confirm("Bạn chưa lưu các ô vừa sửa. Đổi tháng sẽ bỏ bản nháp, tiếp tục?")){event.target.value=state.month;return;}sheet.reset();state.month=event.target.value;await refresh();}});
 $("#finance-reload").addEventListener("click",refresh);
 $("#finance-settings").addEventListener("click",()=>nav("settings"));
 $("#finance-dialog-close").addEventListener("click",()=>dlg.close());
