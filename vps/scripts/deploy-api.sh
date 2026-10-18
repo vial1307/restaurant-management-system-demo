@@ -91,6 +91,14 @@ EOF
 chmod 0440 /etc/sudoers.d/kitchen-finance-activate
 visudo -cf /etc/sudoers.d/kitchen-finance-activate >/dev/null
 
+echo "[2cc/12] Installing Finance OpenAI secret activation service..."
+install -o root -g root -m 0755 "$REPO_DIR/vps/finance/activate-mentor-ai.sh" /usr/local/sbin/kitchen-finance-ai-activate
+cat > /etc/sudoers.d/kitchen-finance-ai-activate <<'EOF'
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/kitchen-finance-ai-activate activate, /usr/local/sbin/kitchen-finance-ai-activate disable, /usr/local/sbin/kitchen-finance-ai-activate status
+EOF
+chmod 0440 /etc/sudoers.d/kitchen-finance-ai-activate
+visudo -cf /etc/sudoers.d/kitchen-finance-ai-activate >/dev/null
+
 echo "[2d/12] Installing sealed read-only production verification commands..."
 install -o root -g root -m 0755 "$REPO_DIR/vps/scripts/production-postdeploy-verify.sh" /usr/local/sbin/kitchen-os-verify
 install -d -o root -g root -m 0755 /usr/local/share/kitchen-os-inventory-audit
