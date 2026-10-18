@@ -17,6 +17,8 @@ assert.match(wf,/options:\n\s+- status\n\s+- activate\n\s+- disable/);
 assert(wf.includes("FINANCE_AI_OWNER_AUTH_BOUNDARY_FAILED"),"Verify unauthenticated Mentor status stays private");
 assert(runner.includes('MODE="${1:-}"'),"Bash mode input parsed normally");
 assert(runner.includes('IFS= read -r key'),"Secret never passed in argv");
+assert(runner.includes('APP_RELEASE="$(tr -d\x20\x27[:space:]\x27 < "$DIR/www/RELEASE")"'),"Manual API restart must preserve deployed APP_RELEASE");
+assert(runner.includes("export APP_RELEASE"),"Restart must not report vps-dev as the production build");
 assert(runner.includes("chmod 0600"),"Keep local private env files protected");
 assert(runner.includes("awk '!/^(OPENAI_API_KEY|FINANCE_AI_ENABLED|FINANCE_AI_MODEL)=/'"),"Preserve all other env keys");
 assert(runner.includes('trap rollback_and_clean EXIT'),"Rollback on error");
