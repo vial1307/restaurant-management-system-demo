@@ -9,13 +9,14 @@ try{
  for(const viewport of [{width:1440,height:900},{width:390,height:844},{width:320,height:700}]){
   const ctx=await browser.newContext({viewport});
   const page=await ctx.newPage(),errors=[];
+  page.on("dialog",d=>d.accept());
   page.on("pageerror",e=>errors.push(e.message));
   const accounts=[{id:T,name:"Ví TWD",kind:"bank",currency_code:"TWD",balance:"30000"},{id:V,name:"Ví VND",kind:"bank",currency_code:"VND",balance:"2000000"}];
   const currencies=["TWD","VND","USD","JPY","EUR","CNY"].map(code=>({code,name_vi:code,minor_units:["USD","CNY","EUR"].includes(code)?2:0}));
   const categories=[{id:expense,name:"Ăn uống",kind:"expense"},{id:income,name:"Lương",kind:"income"}];
   const debts=[{id:debtId,name:"Thẻ tín dụng",currency_code:"VND",principal_original:"22000000",outstanding_amount:"22000000",due_date:"2026-11-03"}];
   const goals=[{id:goalId,name:"Học phí",currency_code:"TWD",target_amount:"50000",current_amount:"15000",status:"active",target_date:"2027-02-15"}];
-  const items=[];const funds=[{id:uuid(7),debt_id:debtId,debt_name:"Thẻ tín dụng",currency_code:"VND",month_date:"2026-10-01",due_date:"2026-11-03",planned_amount:"10000000",earmarked_amount:"0",fx_rate_to_twd:"0.00125",planned_twd:"12500"}];
+  const items=[];const funds=[{id:uuid(7),debt_id:debtId,debt_name:"Thẻ tín dụng",currency_code:"VND",month_date:"2026-10-01",updated_at:"2026-10-17T02:00:00.000Z",due_date:"2026-11-03",planned_amount:"10000000",earmarked_amount:"0",fx_rate_to_twd:"0.00125",planned_twd:"12500"}];
   const goalFunds=[],history=[],scenarioBooks=[];
   let num=1000,wroteLedger=0,aiConfigured=true;
   const next=()=>uuid(num++);
@@ -126,13 +127,50 @@ try{
     const a=accounts.find(x=>x.id===p.split("/")[2]);if(!a||Number(a.balance)!==Number(b.expectedBalance))return respond(route,{error:"BALANCE_CHANGED_RELOAD"},409);
     a.balance=b.targetBalance;wroteLedger++;history.push({id:next(),kind:"adjustment",description:"Đối soát số dư · "+b.reason,occurred_at:"2026-10-17",entries:[{accountId:a.id,amount:b.targetBalance,currency:a.currency_code}]});return respond(route,{reconciliation:{newBalance:a.balance}},201);
    }
+   if(p==="/cashflow/sheet/batch"&&m==="POST"){
+    const modifiedItems=structuredClone(items),modifiedFunds=structuredClone(funds),modifiedGoals=structuredClone(goalFunds);
+    const targets={item:modifiedItems,debt:modifiedFunds,goal:modifiedGoals};
+    const results=[];
+    const mkVersion=()=>String(Date.now())+"+00";
+    for(const op of b.operations||[]){
+     const type=op.op==="createItem"?"item":op.op.endsWith("Item")?"item":op.fundType;
+     const records=targets[type];
+     const idx=records.findIndex(r=>r.id===op.id);
+     if(op.op!=="createItem"&&(!records[idx]||records[idx].updated_at!==op.version))
+      return respond(route,{error:"SHEET_STALE_RELOAD"},409);
+     if(op.op==="createItem"){
+      const fx=op.currencyCode==="VND"?.00125:1;
+      const created={id:next(),month_date:b.month+"-01",kind:op.kind,label:op.label,original_amount:op.originalAmount,
+       original_currency:op.currencyCode,amount_twd:String(Math.round(Number(op.originalAmount)*fx)),
+       due_day:op.dueDay,memo:op.memo,updated_at:mkVersion()};
+      records.push(created);results.push({id:created.id,op:op.op});
+     }else if(op.op==="updateItem"){
+      const fx=op.currencyCode==="VND"?.00125:1;
+      Object.assign(records[idx],{kind:op.kind,label:op.label,original_amount:op.originalAmount,
+       original_currency:op.currencyCode,amount_twd:String(Math.round(Number(op.originalAmount)*fx)),
+       due_day:op.dueDay,memo:op.memo,updated_at:mkVersion()});
+      results.push({id:op.id,op:op.op});
+     }else if(op.op==="deleteItem"||op.op==="deleteFund"){
+      records.splice(idx,1);results.push({id:op.id,op:op.op});
+     }else if(op.op==="updateFund"){
+      records[idx].planned_amount=op.plannedAmount;
+      records[idx].planned_twd=String(Math.round(Number(op.plannedAmount)*
+        (type==="debt"?Number(records[idx].fx_rate_to_twd||1):1)));
+      records[idx].updated_at=mkVersion();results.push({id:op.id,op:op.op});
+     }
+    }
+    items.splice(0,items.length,...modifiedItems);
+    funds.splice(0,funds.length,...modifiedFunds);
+    goalFunds.splice(0,goalFunds.length,...modifiedGoals);
+    return respond(route,{saved:results.length,rows:results,month:b.month,ledgerPosted:false});
+   }
    if(p==="/cashflow/items"&&m==="POST"){
     const q=b.currencyCode==="VND"?0.00125:1,a={id:next(),kind:b.kind,label:b.label,amount_twd:String(Math.round(Number(b.originalAmount)*q)),
-     original_amount:b.originalAmount,original_currency:b.currencyCode,month_date:b.month+"-01",due_day:b.dueDay,memo:b.memo||"",fx_rate_to_twd:String(q)};
+     original_amount:b.originalAmount,original_currency:b.currencyCode,month_date:b.month+"-01",due_day:b.dueDay,memo:b.memo||"",fx_rate_to_twd:String(q),updated_at:"2026-10-17T02:00:00.000Z"};
     items.push(a);return respond(route,{item:a},201);
    }
    if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="PUT"){
-    const a=items.find(x=>x.id===p.split("/").at(-1));Object.assign(a,{kind:b.kind,label:b.label,original_amount:b.originalAmount,original_currency:b.currencyCode,amount_twd:String(Math.round(Number(b.originalAmount)*(b.currencyCode==="VND"?0.00125:1))),due_day:b.dueDay,memo:b.memo});return respond(route,{item:a});
+    const a=items.find(x=>x.id===p.split("/").at(-1));Object.assign(a,{kind:b.kind,label:b.label,original_amount:b.originalAmount,original_currency:b.currencyCode,amount_twd:String(Math.round(Number(b.originalAmount)*(b.currencyCode==="VND"?0.00125:1))),due_day:b.dueDay,memo:b.memo,updated_at:"2026-10-17T02:00:01.000Z"});return respond(route,{item:a});
    }
    if(/^\/cashflow\/items\/[^/]+$/.test(p)&&m==="DELETE"){
     items.splice(items.findIndex(x=>x.id===p.split("/").at(-1)),1);return respond(route,{deleted:true});
@@ -141,9 +179,9 @@ try{
     const obj=debts.find(d=>d.id===b.debtId),conv=obj.currency_code==="VND"?.00125:1;
     const d=existing||{id:next(),debt_id:b.debtId,debt_name:obj.name,currency_code:obj.currency_code,due_date:obj.due_date,month_date:b.month+"-01"};
     Object.assign(d,{planned_amount:b.plannedAmount,earmarked_amount:b.earmarkedAmount,planned_twd:String(Math.round(+b.plannedAmount*conv)),fx_rate_to_twd:String(conv)});
-    if(!existing)funds.push(d);
+    if(!existing)funds.push(d);d.updated_at=d.updated_at||"2026-10-17T02:00:00.000Z";
     return respond(route,{fund:d});}
-   if(p==="/goal-funds"&&m==="PUT"){const f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount};goalFunds.push(f);return respond(route,{fund:f});}
+   if(p==="/goal-funds"&&m==="PUT"){const f={id:next(),goal_id:b.goalId,goal_name:"Học phí",currency_code:"TWD",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount,updated_at:"2026-10-17T02:00:00.000Z"};goalFunds.push(f);return respond(route,{fund:f});}
    if(p==="/transactions"&&m==="POST"){const a=accounts.find(a=>a.id===b.accountId);a.balance=String(+a.balance+Number(b.amount)*(b.kind==="income"?1:-1));
      wroteLedger++;return respond(route,{event:{id:next(),kind:b.kind}},201);}
    if(p==="/categories"&&m==="POST"){categories.push({id:next(),name:b.name,kind:b.kind});return respond(route,{category:categories.at(-1)},201);}
@@ -154,14 +192,14 @@ try{
     const f={id:next(),debt_id:d.id,debt_name:d.name,currency_code:d.currency_code,due_date:d.due_date,
       month_date:b.month+"-01",planned_amount:b.plannedAmount,earmarked_amount:"0",
       planned_twd:String(Math.round(Number(b.plannedAmount)*(d.currency_code==="VND"?.00125:1)))};
-    funds.push(f);return respond(route,{debt:d,fund:f},201);
+    f.updated_at="2026-10-17T02:00:00.000Z";funds.push(f);return respond(route,{debt:d,fund:f},201);
    }
    if(p==="/goal-plans"&&m==="POST"){
     const g={id:next(),name:b.name,currency_code:b.currencyCode,target_amount:b.targetAmount,
      current_amount:"0",status:"active",target_date:b.targetDate};goals.push(g);
     const f={id:next(),goal_id:g.id,goal_name:g.name,currency_code:g.currency_code,
       month_date:b.month+"-01",planned_amount:b.plannedAmount,planned_twd:b.plannedAmount,
-      earmarked_amount:"0"};goalFunds.push(f);return respond(route,{goal:g,fund:f},201);
+      earmarked_amount:"0",updated_at:"2026-10-17T02:00:00.000Z"};goalFunds.push(f);return respond(route,{goal:g,fund:f},201);
    }
    if(/^\/debts\/[^/]+$/.test(p)&&m==="PUT"){
     const d=debts.find(x=>x.id===p.split("/").at(-1));
@@ -313,6 +351,39 @@ try{
   assert.equal(counts["POST /mentor/messages"],1,"No background OpenAI call may occur when key is absent");
   assert.equal(wroteLedger,oldPosted,"Offline Mentor briefing cannot post a ledger transaction");
 
+
+  // Spreadsheet editor saves several native-currency rows in one DB transaction.
+  await page.locator('.main-nav [data-tab="plan"]').click();
+  await page.locator('.finance-sheet').waitFor();
+  await page.locator('[data-sheet-action="add"]').click();
+  await page.locator('.sheet-new [data-sheet-field="label"]').fill("Mua sắm theo bảng");
+  await page.locator('.sheet-new [data-sheet-field="amount"]').fill("900");
+  await page.locator('.sheet-new [data-sheet-field="day"]').fill("22");
+  await page.locator('[data-sheet-action="togglePaste"]').click();
+  await page.locator('#sheet-paste-area').fill("24\tChi\tTừ Excel\t1500\tTWD\tĐã dán");
+  await page.locator('[data-sheet-action="paste"]').click();
+  assert.equal(await page.locator('.sheet-new').count(),2);
+  await page.locator('[data-sheet-action="save"]').click();
+  await page.locator('.sheet-new').first().waitFor({state:"detached"});
+  assert(items.some(x=>x.label==="Mua sắm theo bảng"));
+  assert(items.some(x=>x.label==="Từ Excel"));
+  await page.reload({waitUntil:"domcontentloaded"});
+  await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
+  await page.locator("#finance-month").fill("2026-11");
+  await page.locator('.main-nav [data-tab="plan"]').click();
+  await page.locator(".finance-sheet input[value=\"Từ Excel\"]").waitFor();
+  const fromExcel=items.find(x=>x.label==="Từ Excel");
+  const key='item:'+fromExcel.id;
+  await page.locator('.finance-sheet [data-sheet-key="'+key+'"][data-sheet-field="amount"]').fill("2000");
+  await page.locator('.finance-sheet [data-sheet-key="'+key+'"][data-sheet-field="amount"]').press("Tab");
+  await page.locator('[data-sheet-action="save"]').click();
+  assert.equal(items.find(x=>x.id===fromExcel.id).original_amount,"2000");
+  await page.locator('.finance-sheet .sheet-row-check[data-sheet-key="'+key+'"]').check();
+  await page.locator('[data-sheet-action="remove"]').click();
+  await page.locator('[data-sheet-action="save"]').click();
+  assert(!items.some(x=>x.id===fromExcel.id),"Sheet deletion must persist");
+  assert.equal(wroteLedger,oldPosted,"Spreadsheet edits must never write posted ledger");
+  assert((counts["POST /cashflow/sheet/batch"]||0)>=3);
 
   await page.locator("#finance-settings").click();
   assert.match(await page.locator("#finance-content").innerText(),/Tài khoản & cài đặt/);
