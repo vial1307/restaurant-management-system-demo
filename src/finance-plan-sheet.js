@@ -8,11 +8,12 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  const key=r=>r.source+":"+r.id;
  const day=r=>r.date?.slice(8,10)||"10";
  const versionOf=r=>r.version||"";
+ const nativeAmount=v=>String(v??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
  const writable=r=>r.source==="item"||r.source==="debt"||r.source==="goal";
  const editable=r=>r.source==="item"||(r.source==="debt"||r.source==="goal")&&!r.unallocated;
  const existing=()=>getRows().filter(r=>r.source!=="debt"||!r.unallocated); // include unallocated goals
  const fieldValues=r=>({kind:r.kind,label:r.name||"",day:r.source==="item"&&r.estimated?"":String(Number(day(r))),
-  amount:String(r.native??""),currency:r.code||"TWD",memo:r.source==="item"?(r.detail||""):""});
+  amount:nativeAmount(r.native),currency:r.code||"TWD",memo:r.source==="item"?(r.detail||""):""});
  function draft(r){const k=key(r);return state.drafts.get(k)||fieldValues(r);}
  function changes(){return state.drafts.size+state.added.length+state.deleted.size;}
  function reset(){state.drafts.clear();state.added=[];state.deleted.clear();state.selected.clear();state.error=null;}
