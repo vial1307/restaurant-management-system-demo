@@ -138,3 +138,10 @@
  .sheet-status{line-height:1.7}
 }
 @media(max-width:400px){.sheet-tool-filter{grid-template-columns:minmax(0,1fr) 100px}.sheet-tool-filter #sheet-sort{grid-column:1/-1;max-width:none}.sheet-table{min-width:900px}}
+
+/* Unallocated master debts/goals are reference-only until a monthly fund is created. */
+.sheet-table tr:has(.sheet-row-check:disabled){background:#fffaf2}
+.sheet-table .sheet-row-check:disabled{opacity:.26;cursor:not-allowed}
+.sheet-table .sheet-missing-allocation{font-size:11px;color:#926528;font-weight:650;white-space:nowrap}
+.sheet-table .sheet-readonly[title*="tham khảo"]{color:#465c77;font-weight:650;font-variant-numeric:tabular-nums}
+.sheet-table .sheet-linked{overflow-wrap:anywhere}

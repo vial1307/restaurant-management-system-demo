@@ -9,6 +9,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  const day=r=>r.date?.slice(8,10)||"10";
  const versionOf=r=>r.version||"";
  const nativeAmount=v=>String(v??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
+ const showNativeAmount=v=>{const [whole,fraction]=nativeAmount(v).split(".");return whole.replace(/\B(?=(\d{3})+(?!\d))/g,".")+(fraction?","+fraction:"");};
  const writable=r=>r.source==="item"||r.source==="debt"||r.source==="goal";
  const editable=r=>r.source==="item"||(r.source==="debt"||r.source==="goal")&&!r.unallocated;
  const existing=()=>getRows().filter(r=>r.source!=="debt"||!r.unallocated); // include unallocated goals
@@ -22,7 +23,10 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(state.month!==m){reset();state.month=m;state.query="";state.type="all";state.paste=false;}
  }
  function hasChanges(){return changes()>0;}
- function selectionHtml(r){return '<input type="checkbox" class="sheet-row-check" data-sheet-key="'+s(key(r))+'" aria-label="Chọn '+s(r.name)+'"'+(state.selected.has(key(r))?" checked":"")+'>';}
+ function selectionHtml(r){
+  if(r.unallocated)return '<input type="checkbox" class="sheet-row-check" disabled aria-label="Chưa lập quỹ, không thể xóa tại bảng kế hoạch" title="Đây là công nợ/mục tiêu gốc chưa có phân bổ tháng. Hãy dùng Lập quỹ hoặc chỉnh ở Công nợ & mục tiêu.">';
+  return '<input type="checkbox" class="sheet-row-check" data-sheet-key="'+s(key(r))+'" aria-label="Chọn '+s(r.name)+'"'+(state.selected.has(key(r))?" checked":"")+'>';
+ }
  function editor(r,column,contents,cls="",readonly=false){
   const k=key(r),d=draft(r);
   if(readonly)return '<span class="sheet-readonly" title="Chỉnh sửa điều khoản tại Công nợ & mục tiêu">'+contents+'</span>';
@@ -42,9 +46,9 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  function oneRow(r,idx){
   const k=key(r),d=draft(r),isDeleted=state.deleted.has(k),isFund=r.source!=="item";
   const linked=r.unallocated;
-  const nativeView=editable(r)?editor(r,"amount",s(r.native)):"<span>"+s(r.native)+" "+s(r.code)+"</span>";
+  const nativeView=editable(r)?editor(r,"amount",s(r.native)):'<span class="sheet-readonly" title="Dư nợ/mục tiêu tham khảo, chưa phải số tiền phân bổ tháng này">'+s(showNativeAmount(r.native))+" "+s(r.code)+"</span>";
   const labelView=r.source==="item"?editor(r,"label",s(r.name)):
-   '<strong>'+s(r.name)+'</strong>'+(isFund?'<small class="sheet-linked">'+(linked?"Chưa tạo quỹ":"Liên kết công nợ/mục tiêu")+'</small>':"");
+   '<strong>'+s(r.name)+'</strong>'+(isFund?'<small class="sheet-linked">'+(linked?"Nợ/mục tiêu gốc · Chưa lập quỹ":"Liên kết công nợ/mục tiêu")+'</small>':"");
   const actions=r.source==="item"?'<button type="button" class="btn small ghost" data-action="editPlan" data-id="'+s(r.id)+'">Chi tiết</button>':
    '<button type="button" class="btn small ghost" data-sheet-action="linked" data-sheet-key="'+s(k)+'">'+
     (linked?"Lập quỹ":"Điều khoản")+'</button>';
@@ -56,7 +60,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
     '<td class="sheet-label">'+labelView+'</td>'+
     '<td>'+nativeView+'</td>'+
     '<td>'+editor(r,"currency",s(r.code),"",r.source!=="item")+'</td>'+
-    '<td class="num">'+(r.twd===null?"Chưa có tỷ giá":s(r.twd?.toLocaleString?.("vi-VN")||r.twd))+'</td>'+
+    '<td class="num">'+(r.unallocated?'<span class="sheet-missing-allocation">Chưa lập quỹ</span>':r.twd===null?"Chưa có tỷ giá":s(r.twd?.toLocaleString?.("vi-VN")||r.twd))+'</td>'+
     '<td class="sheet-memo">'+(r.source==="item"?editor(r,"memo",s(r.detail)):
       '<span class="sheet-readonly">'+s(r.detail||"Quỹ được đồng bộ với Công nợ / Mục tiêu")+'</span>')+'</td>'+
     '<td>'+actions+'</td></tr>';
@@ -202,7 +206,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   const chosen=getRows().filter(r=>state.selected.has(key(r)));
   const rows=chosen.length?chosen:getAllRows();
   const lines=rows.map(r=>[r.date,r.kind==="income"?"Thu":r.kind==="expense"?"Chi":kindName[r.kind],
-    r.name,r.native,r.code,r.detail||""].join("\t")).join("\n");
+    r.name,nativeAmount(r.native),r.code,r.detail||""].join("\t")).join("\n");
   try{await navigator.clipboard.writeText(lines);notify("Đã sao chép "+rows.length+" dòng để dán sang Excel/Sheets.");}
   catch{notify("Không thể truy cập Clipboard. Hãy kiểm tra quyền clipboard của trình duyệt.");}
  }
@@ -221,7 +225,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    for(const x of targets){
     if(x.startsWith("new:")){state.added=state.added.filter(a=>a.key!==x);continue;}
     const r=getRow(x);
-    if(r?.unallocated){notify("Dòng chưa lập quỹ không thể xóa ở đây; hãy chỉnh tại Công nợ & mục tiêu.");continue;}
+    if(r?.unallocated){notify("Đây là nghĩa vụ gốc chưa lập quỹ. Không thể xóa tại bảng kế hoạch; hãy dùng nút Lập quỹ hoặc mục Công nợ & mục tiêu.");continue;}
     if(state.deleted.has(x))state.deleted.delete(x);else{state.deleted.add(x);state.drafts.delete(x);}
    }
    state.selected.clear();render();return;
@@ -241,9 +245,24 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   const status=host.querySelector(".sheet-status span:last-child");
   if(status)status.textContent=amount+" chỉnh sửa chưa lưu · Ctrl/Cmd+S để lưu · Enter/Tab để di chuyển";
  }
+ function syncSelection(){
+  const host=document.querySelector(".finance-sheet");if(!host)return;
+  const rows=getAllRows().filter(r=>!r.unallocated);
+  for(const input of host.querySelectorAll(".sheet-row-check[data-sheet-key]"))
+    input.checked=state.selected.has(input.dataset.sheetKey);
+  const selectAll=host.querySelector("#sheet-select-all");
+  if(selectAll){
+    const checked=rows.filter(r=>state.selected.has(key(r))).length;
+    selectAll.checked=!!rows.length&&checked===rows.length;
+    selectAll.indeterminate=checked>0&&checked<rows.length;
+    selectAll.disabled=!rows.length;
+  }
+  const remove=host.querySelector('[data-sheet-action="remove"]');
+  if(remove)remove.disabled=state.selected.size===0;
+ }
  function render(){
   const host=document.querySelector(".finance-sheet");
-  if(host)host.outerHTML=html();
+  if(host){host.outerHTML=html();syncSelection();}
  }
  const targetRoot=()=>document.getElementById("finance-content");
  targetRoot()?.addEventListener("click",e=>{
@@ -256,12 +275,15 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  targetRoot()?.addEventListener("change",e=>{
   if(e.target.matches("[data-sheet-field]")){setField(e.target);syncToolbar();return;}
   if(e.target.matches("[data-sheet-key].sheet-row-check")){
+   if(e.target.disabled)return;
    const k=e.target.dataset.sheetKey;
-   if(e.target.checked)state.selected.add(k);else state.selected.delete(k);render();return;
+   if(e.target.checked)state.selected.add(k);else state.selected.delete(k);
+   syncSelection();return;
   }
   if(e.target.id==="sheet-select-all"){
-   for(const r of getAllRows()){if(e.target.checked)state.selected.add(key(r));else state.selected.delete(key(r));}
-   render();return;
+   const checked=e.target.checked;
+   for(const r of getAllRows()){if(r.unallocated)continue;if(checked)state.selected.add(key(r));else state.selected.delete(key(r));}
+   syncSelection();return;
   }
   if(e.target.id==="sheet-kind-filter"){state.type=e.target.value;render();return;}
   if(e.target.id==="sheet-sort"){state.sort=e.target.value;render();return;}

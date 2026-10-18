@@ -368,10 +368,30 @@ try{
   await page.locator('.sheet-new').first().waitFor({state:"detached"});
   assert(items.some(x=>x.label==="Mua sắm theo bảng"));
   assert(items.some(x=>x.label==="Từ Excel"));
+  const originalDebtsCount=debts.length;
+  const unfundedDebtId=uuid(155);
+  debts.push({id:unfundedDebtId,name:"Mẹ",currency_code:"VND",outstanding_amount:"10000000.000000",
+   principal_original:"10000000.000000",due_date:"2026-11-05",annual_interest_rate:"0"});
   await page.reload({waitUntil:"domcontentloaded"});
   await page.locator("h1").filter({hasText:"Tổng quan tài chính"}).waitFor();
   await page.locator("#finance-month").fill("2026-11");
   await page.locator('.main-nav [data-tab="plan"]').click();
+  const unfundedRow=page.locator('.sheet-table tr[data-sheet-key="debt:'+unfundedDebtId+'"]');
+  await unfundedRow.waitFor();
+  assert(await unfundedRow.locator('input.sheet-row-check').isDisabled(),
+    "Unallocated debt master must not look like deletable plan allocation");
+  assert.match(await unfundedRow.innerText(),/10\.000\.000 VND/,"VND principal must not show 000000 decimals");
+  assert.match(await unfundedRow.innerText(),/Chưa lập quỹ/);
+  assert.doesNotMatch(await unfundedRow.innerText(),/Chưa có tỷ giá/,
+    "Missing allocation and missing FX rate must not be conflated");
+  await page.locator("#sheet-select-all").check();
+  assert(!(await unfundedRow.locator('input.sheet-row-check').isChecked()),
+    "Select all must skip master records that have no monthly fund");
+  await page.locator("#sheet-select-all").uncheck();
+  await unfundedRow.getByRole("button",{name:"Lập quỹ"}).click();
+  await page.locator('#finance-fields [name="plannedAmount"]').waitFor();
+  await page.locator("#finance-dialog-cancel").click();
+  assert.equal(debts.length,originalDebtsCount+1,"Opening allocation form must not mutate debt master");
   await page.locator(".finance-sheet input[value=\"Từ Excel\"]").waitFor();
   const fromExcel=items.find(x=>x.label==="Từ Excel");
   const key='item:'+fromExcel.id;
