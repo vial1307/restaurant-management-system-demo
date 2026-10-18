@@ -8,7 +8,7 @@ DIR=/opt/kitchen-os
 ENV_FILE="$DIR/.env"
 COMPOSE="$DIR/docker-compose.yml"
 FINANCE_COMPOSE="$DIR/docker-compose.finance.yml"
-MODE="\${1:-}"
+MODE="${1:-}"
 if [[ "$EUID" -ne 0 || $# -ne 1 ]]; then
   echo FINANCE_AI_PRIVILEGED_USAGE >&2; exit 77
 fi
