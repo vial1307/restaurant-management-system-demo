@@ -311,3 +311,9 @@
  .finance-sheet .sheet-status{padding-bottom:12px}
 }
 @media(prefers-reduced-motion:reduce){.finance-sheet *, .finance-sheet *::before{scroll-behavior:auto!important;transition:none!important}}
+
+@media(max-width:760px){
+ .finance-sheet .sheet-table tbody tr.sheet-reference td.sheet-selector::before{content:"Nợ/mục tiêu gốc · Không thể xóa"}
+ .finance-sheet .sheet-table tbody tr.sheet-new td.sheet-selector::before{content:"Dòng mới · Chưa lưu"}
+ .finance-sheet .sheet-table tbody tr.sheet-new td.sheet-selector{color:#24714f;font-weight:750}
+}
