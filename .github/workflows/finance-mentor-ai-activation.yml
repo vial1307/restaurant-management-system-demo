@@ -1,0 +1,91 @@
+name: Finance Mentor AI Activation (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status = check; activate = use the repository secret; disable = shut AI chat off"
+        required: true
+        default: status
+        type: choice
+        options:
+          - status
+          - activate
+          - disable
+
+permissions:
+  contents: read
+concurrency:
+  group: finance-mentor-ai-maintenance
+  cancel-in-progress: false
+
+jobs:
+  finance-mentor-ai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require manually selected main branch and current production release
+        env:
+          SELECTED_ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$SELECTED_ACTION" == "status" || "$SELECTED_ACTION" == "activate" || "$SELECTED_ACTION" == "disable" ]]
+          LIVE="$(curl --fail --silent --show-error --retry 3 --retry-delay 2 http://82.47.180.185/RELEASE | tr -d '[:space:]')"
+          EXPECTED="${GITHUB_SHA:0:7}"
+          if [[ "$LIVE" != "$EXPECTED" ]]; then
+            echo "FINANCE_AI_REQUIRES_CURRENT_PRODUCTION_RELEASE: deploy main first"
+            exit 75
+          fi
+          echo "Finance AI maintenance release verified: $LIVE"
+
+      - name: Require the existing private VPS SSH key
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$VPS_SSH_KEY" ]] || { echo "VPS_SSH_KEY_NOT_CONFIGURED"; exit 67; }
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_KEY" > "$HOME/.ssh/kitchen_actions"
+          chmod 0600 "$HOME/.ssh/kitchen_actions"
+          ssh-keyscan -H 82.47.180.185 >> "$HOME/.ssh/known_hosts" 2>/dev/null
+          chmod 0600 "$HOME/.ssh/known_hosts"
+
+      - name: Verify live sealed activation script and non-secret status
+        run: |
+          set -euo pipefail
+          ssh -T -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 \
+            deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-finance-ai-activate status' </dev/null
+
+      - name: Activate OpenAI from repository Actions secret via SSH stdin only
+        if: ${{ inputs.action == 'activate' }}
+        env:
+          FINANCE_OPENAI_API_KEY: ${{ secrets.FINANCE_OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$FINANCE_OPENAI_API_KEY" ]] || {
+            echo "FINANCE_OPENAI_API_KEY_MISSING: add an Actions repository secret first"
+            exit 78
+          }
+          # Never echo, interpolate into SSH command args, or store the key in a file on runner.
+          printf '%s\n' "$FINANCE_OPENAI_API_KEY" |
+            ssh -T -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 \
+              deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-finance-ai-activate activate'
+
+      - name: Disable AI chat and remove VPS key without touching Finance Database
+        if: ${{ inputs.action == 'disable' }}
+        run: |
+          set -euo pipefail
+          ssh -T -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 \
+            deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-finance-ai-activate disable' </dev/null
+
+      - name: Verify final non-secret status and privacy boundary
+        run: |
+          set -euo pipefail
+          ssh -T -i "$HOME/.ssh/kitchen_actions" -o BatchMode=yes -o ConnectTimeout=15 \
+            deploy@82.47.180.185 'sudo -n /usr/local/sbin/kitchen-finance-ai-activate status' </dev/null
+          curl --fail --silent --show-error --max-time 12 \
+            https://finance.82.47.180.185.nip.io/finance.html >/dev/null
+          STATUS="$(curl --max-time 12 --silent --show-error -o /dev/null -w '%{http_code}' \
+            https://finance.82.47.180.185.nip.io/api/finance/mentor/status)"
+          [[ "$STATUS" == "401" ]] || { echo "FINANCE_AI_OWNER_AUTH_BOUNDARY_FAILED"; exit 76; }
+          echo "FINANCE_AI_MAINTENANCE_SUCCEEDED"
