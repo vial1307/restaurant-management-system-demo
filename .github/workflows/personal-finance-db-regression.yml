@@ -128,6 +128,7 @@ jobs:
           node --check vps/backend/src/finance-mentor-brief.mjs
           node --check vps/backend/src/finance-mentor-routes.mjs
           node --check src/finance-mentor-ui.js
+          node --check src/finance-plan-sheet.js
           node --check vps/backend/src/finance-scenario-engine.mjs
           node --check vps/backend/src/finance-scenario-routes.mjs
           node --check vps/backend/scripts/finance-api-regression.mjs
