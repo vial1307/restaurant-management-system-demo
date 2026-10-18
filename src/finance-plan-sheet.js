@@ -245,9 +245,24 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   const status=host.querySelector(".sheet-status span:last-child");
   if(status)status.textContent=amount+" chỉnh sửa chưa lưu · Ctrl/Cmd+S để lưu · Enter/Tab để di chuyển";
  }
+ function syncSelection(){
+  const host=document.querySelector(".finance-sheet");if(!host)return;
+  const rows=getAllRows().filter(r=>!r.unallocated);
+  for(const input of host.querySelectorAll(".sheet-row-check[data-sheet-key]"))
+    input.checked=state.selected.has(input.dataset.sheetKey);
+  const selectAll=host.querySelector("#sheet-select-all");
+  if(selectAll){
+    const checked=rows.filter(r=>state.selected.has(key(r))).length;
+    selectAll.checked=!!rows.length&&checked===rows.length;
+    selectAll.indeterminate=checked>0&&checked<rows.length;
+    selectAll.disabled=!rows.length;
+  }
+  const remove=host.querySelector('[data-sheet-action="remove"]');
+  if(remove)remove.disabled=state.selected.size===0;
+ }
  function render(){
   const host=document.querySelector(".finance-sheet");
-  if(host)host.outerHTML=html();
+  if(host){host.outerHTML=html();syncSelection();}
  }
  const targetRoot=()=>document.getElementById("finance-content");
  targetRoot()?.addEventListener("click",e=>{
@@ -262,11 +277,13 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(e.target.matches("[data-sheet-key].sheet-row-check")){
    if(e.target.disabled)return;
    const k=e.target.dataset.sheetKey;
-   if(e.target.checked)state.selected.add(k);else state.selected.delete(k);render();return;
+   if(e.target.checked)state.selected.add(k);else state.selected.delete(k);
+   syncSelection();return;
   }
   if(e.target.id==="sheet-select-all"){
-   for(const r of getAllRows()){if(r.unallocated)continue;if(e.target.checked)state.selected.add(key(r));else state.selected.delete(key(r));}
-   render();return;
+   const checked=e.target.checked;
+   for(const r of getAllRows()){if(r.unallocated)continue;if(checked)state.selected.add(key(r));else state.selected.delete(key(r));}
+   syncSelection();return;
   }
   if(e.target.id==="sheet-kind-filter"){state.type=e.target.value;render();return;}
   if(e.target.id==="sheet-sort"){state.sort=e.target.value;render();return;}
