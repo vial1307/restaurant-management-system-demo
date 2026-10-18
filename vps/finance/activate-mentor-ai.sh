@@ -16,6 +16,12 @@ case "$MODE" in activate|disable|status) ;; *) echo FINANCE_AI_MODE_INVALID >&2;
 if [[ ! -f "$ENV_FILE" || ! -f "$COMPOSE" || ! -f "$FINANCE_COMPOSE" ]]; then
   echo FINANCE_AI_PROVISIONING_INCOMPLETE >&2; exit 67
 fi
+# Match the exact served release; avoid silently resetting the backend release
+# marker to the compose development fallback when recreating only the API.
+[[ -f "$DIR/www/RELEASE" ]] || { echo FINANCE_AI_RELEASE_UNVERIFIED >&2; exit 75; }
+APP_RELEASE="$(tr -d '[:space:]' < "$DIR/www/RELEASE")"
+[[ "$APP_RELEASE" =~ ^[0-9a-f]{7,40}$ ]] || { echo FINANCE_AI_RELEASE_INVALID >&2; exit 75; }
+export APP_RELEASE
 if [[ "$MODE" == "status" ]]; then
   docker exec kitchen-os-api node -e '
     const active=process.env.FINANCE_AI_ENABLED==="true"&&!!process.env.OPENAI_API_KEY;
