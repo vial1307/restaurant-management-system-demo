@@ -264,6 +264,7 @@ try{
   await page.locator('#finance-fields [name="dueDay"]').fill("15");
   await page.locator("#finance-submit").click();
   await page.locator('.main-nav [data-tab="reports"]').click();
+  await page.getByRole("heading",{name:"Dòng tiền & báo cáo"}).waitFor();
   assert.match(await page.locator("#finance-content").innerText(),/Dòng tiền & báo cáo/);
   await page.getByText("Dòng tiền dự kiến từ Kế hoạch tài chính").waitFor();
   await page.getByText("So sánh kế hoạch 12 tháng").waitFor();
