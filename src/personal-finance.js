@@ -41,7 +41,7 @@ function card(t,body,extra="",subtitle=""){return '<section class="card"><div cl
 function tag(kind){return '<span class="tag '+safe(kind)+'">'+({income:"Thu",expense:"Chi",debt:"Công nợ",goal:"Tiết kiệm"}[kind]||"Khác")+'</span>';}
 function empty(t){return '<div class="empty">'+safe(t)+'</div>';}
 const mentorUI=createFinanceMentorUI({api,safe,card,title,money,notify,onChange:()=>render(),getBuffer:()=>state.buffer});
-const sheet=createFinancePlanSheet({api,safe,notify,refresh,getMonth:()=>state.month,getRows:planRows,getCurrencies:currencies,open});
+const sheet=createFinancePlanSheet({api,safe,notify,refresh,getMonth:()=>state.month,getRows:planRows,getCurrencies:currencies,getDebts:()=>state.data?.debts||[],getDebtFunds:()=>state.cashflow?.debtFunds||[],open});
 function nav(tab){if(state.tab==="plan"&&tab!=="plan"&&sheet.hasChanges()&&!confirm("Có thay đổi chưa lưu trong bảng kế hoạch. Chuyển trang và giữ bản nháp?"))return;state.tab=tab;render();window.scrollTo(0,0);if(tab==="mentor")void mentorUI.load();}
 function quoteCards(){
  const used=[...new Set([...(state.data?.accounts||[]).map(x=>x.currency_code),...(state.data?.debts||[]).map(x=>x.currency_code),...(state.data?.goals||[]).map(x=>x.currency_code),"VND","USD"])].filter(c=>c!=="TWD");
