@@ -1,11 +1,15 @@
 // Finance Sheet: an editable planning grid, never an editable accounting ledger.
 // Linked debt/goal rows represent monthly allocations; their master records stay intact.
-export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows,getCurrencies,open}){
+export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows,getCurrencies,getDebts,getDebtFunds,open}){
  const state={month:null,drafts:new Map(),added:[],deleted:new Set(),selected:new Set(),
   query:"",type:"all",sort:"date",paste:false,saving:false,error:null};
  const s=x=>safe(String(x??""));
  const kindName={income:"Thu",expense:"Chi",debt:"Quỹ nợ",goal:"Tiết kiệm"};
  const key=r=>r.source+":"+r.id;
+ const fundedDebts=()=>new Set((getDebtFunds()||[]).map(x=>String(x.debt_id)));
+ const availableDebts=()=>[...(getDebts()||[])].filter(x=>Number(x.outstanding_amount)>0)
+  .sort((a,b)=>String(a.due_date||"9999-12-31").localeCompare(String(b.due_date||"9999-12-31"))||a.name.localeCompare(b.name));
+ const selectedDebt=id=>availableDebts().find(d=>d.id===id)||null;
  const day=r=>r.date?.slice(8,10)||"10";
  const versionOf=r=>r.version||"";
  const nativeAmount=v=>String(v??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
@@ -149,7 +153,9 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    else if(r.source==="debt"||r.source==="goal")ops.push({op:"updateFund",fundType:r.source,
     id:r.id,version:d._version||versionOf(r),plannedAmount:String(d.amount).trim()});
   }
-  for(const n of state.added)ops.push(buildItem(null,n,"createItem"));
+  for(const n of state.added)ops.push(n.kind==="debt"?
+   {op:"createFund",fundType:"debt",debtId:n.debtId||"",plannedAmount:String(n.amount||"").trim()}:
+   buildItem(null,n,"createItem"));
   return ops;
  }
  function validate(ops){
@@ -160,9 +166,11 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
       !/^(?:0|[1-9]\d{0,14})(?:\.\d{1,6})?$/.test(op.originalAmount)||
       Number(op.originalAmount)<=0)throw Error("Dòng thu/chi cần nội dung, ngày 1–31 và số tiền dương hợp lệ.");
    }
-   if(op.op==="updateFund"&&!/^(?:0|[1-9]\d{0,14})(?:\.\d{1,6})?$/.test(op.plannedAmount))
+   if((op.op==="updateFund"||op.op==="createFund")&&!/^(?:0|[1-9]\d{0,14})(?:\.\d{1,6})?$/.test(op.plannedAmount))
       throw Error("Quỹ nợ/mục tiêu phải là số tiền hợp lệ, có thể bằng 0.");
-   if(op.op!=="createItem"&&!op.version)
+   if(op.op==="createFund"&&(!selectedDebt(op.debtId)||fundedDebts().has(op.debtId)))
+    throw Error("Chọn khoản nợ còn dư chưa có quỹ trong tháng này. Khoản đã lập quỹ cần sửa trực tiếp dòng cũ.");
+   if(op.op!=="createItem"&&op.op!=="createFund"&&!op.version)
       throw Error("Dữ liệu cũ thiếu phiên bản. Hãy tải lại trang trước khi chỉnh.");
   }
  }
@@ -186,7 +194,13 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   const k=el.dataset.sheetKey,field=el.dataset.sheetField;
   if(!k||!field)return;
   const added=state.added.find(x=>x.key===k);
-  if(added){added[field]=el.value;return;}
+  if(added){
+   if(field==="kind"&&added.kind!==el.value){
+    added.kind=el.value;added.debtId="";added.amount="";added.label="";added.memo="";
+   }else if(field==="debtId"){added.debtId=el.value;added.amount="";}
+   else added[field]=el.value;
+   return;
+  }
   const r=getRow(k);if(!r||!editable(r)||state.deleted.has(k))return;
   if(r.source!=="item"&&field!=="amount")return;
   const d={...draft(r),[field]:el.value,_version:state.drafts.get(k)?._version||r.version};
@@ -305,7 +319,13 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   if(e.target.matches("[data-sheet-field]")){setField(e.target);syncToolbar();}
  });
  targetRoot()?.addEventListener("change",e=>{
-  if(e.target.matches("[data-sheet-field]")){setField(e.target);syncToolbar();return;}
+  if(e.target.matches("[data-sheet-field]")){
+   const field=e.target.dataset.sheetField,isNew=!!e.target.closest(".sheet-new");
+   setField(e.target);
+   if(isNew&&(field==="kind"||field==="debtId"))render();
+   else syncToolbar();
+   return;
+  }
   if(e.target.matches("[data-sheet-key].sheet-row-check")){
    if(e.target.disabled)return;
    const k=e.target.dataset.sheetKey;
