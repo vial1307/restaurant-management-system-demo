@@ -439,7 +439,16 @@ try{
   await unfundedRow.getByRole("button",{name:"Lập quỹ"}).click();
   await page.locator('#finance-fields [name="plannedAmount"]').waitFor();
   await page.locator("#finance-dialog-cancel").click();
-  assert.equal(debts.length,originalDebtsCount+1,"Opening allocation form must not mutate debt master");
+  await unfundedRow.getByRole("button",{name:"Sửa nợ"}).click();
+  const debtMasterName=page.locator('#finance-fields [name="name"]');
+  await debtMasterName.waitFor();
+  assert.equal(await debtMasterName.inputValue(),"Mẹ","Inline edit action must target the original creditor");
+  assert.equal(await page.locator('#finance-fields [name="dueDate"]').inputValue(),"2026-11-05");
+  assert.equal(await page.locator('#finance-fields [name="annualInterestPercent"]').inputValue(),"0");
+  await page.locator("#finance-dialog-cancel").click();
+  assert.equal(debts.length,originalDebtsCount+1,"Opening fund/edit forms must not mutate debt master");
+  assert.equal(debts.find(x=>x.id===unfundedDebtId).outstanding_amount,"10000000.000000",
+   "Navigating from the plan row must never modify outstanding balance");
   await page.locator(".finance-sheet input[value=\"Từ Excel\"]").waitFor();
   const fromExcel=items.find(x=>x.label==="Từ Excel");
   const key='item:'+fromExcel.id;
