@@ -555,6 +555,9 @@ const sheetBefore=(await request("/finance/cashflow?month="+monthly,{cookie:owne
 const fundForSheet=sheetBefore.debtFunds.find(x=>x.debt_id===createdDebtPlan.debt.id);
 const goalForSheet=sheetBefore.goalFunds.find(x=>x.goal_id===createdGoalPlan.goal.id);
 assert(fundForSheet.updated_at&&goalForSheet.updated_at,"Monthly allocations must expose concurrency versions");
+const newUnfundedDebt=(await post("/debts",{name:"Nợ mẹ chưa lập quỹ",currencyCode:"TWD",
+ principalOriginal:"9200",annualInterestPercent:"0",dueDate:monthly+"-25"})).debt;
+const addExistingDebtFund={op:"createFund",fundType:"debt",debtId:newUnfundedDebt.id,plannedAmount:"3200"};
 const itemToCreate={op:"createItem",kind:"expense",label:"Bảng tính kiểm thử",originalAmount:"1800",
  currencyCode:"TWD",dueDay:21,memo:"Xác minh lưu theo lô"};
 const editFund={op:"updateFund",fundType:"debt",id:fundForSheet.id,version:fundForSheet.updated_at,plannedAmount:"3000"};
@@ -568,14 +571,28 @@ const afterRollback=(await request("/finance/cashflow?month="+monthly,{cookie:ow
 assert(!afterRollback.items.some(x=>x.label==="Bảng tính kiểm thử"),"Failed batch may not partially create rows");
 assert.equal(Number(afterRollback.debtFunds.find(x=>x.id===fundForSheet.id).planned_amount),2500,"Failed batch may not change debt reserve");
 const successfulSheet=await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,
- body:{month:monthly,operations:[itemToCreate,editFund,
+ body:{month:monthly,operations:[itemToCreate,editFund,addExistingDebtFund,
   {op:"deleteFund",fundType:"goal",id:goalForSheet.id,version:goalForSheet.updated_at}]}});
 assert.equal(successfulSheet.status,200,JSON.stringify(successfulSheet.data));
-assert.equal(successfulSheet.data.saved,3);
+assert.equal(successfulSheet.data.saved,4);
 assert.equal(successfulSheet.data.ledgerPosted,false);
 const afterSheet=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
 assert(afterSheet.items.some(x=>x.label==="Bảng tính kiểm thử"));
 assert.equal(Number(afterSheet.debtFunds.find(x=>x.id===fundForSheet.id).planned_amount),3000);
+const createdFund=afterSheet.debtFunds.find(x=>x.debt_id===newUnfundedDebt.id);
+assert(createdFund,"New monthly fund must link to an existing active debt");
+assert.equal(Number(createdFund.planned_amount),3200);
+const debtMaster=(await request("/finance/bootstrap",{cookie:owner})).data.debts.find(x=>x.id===newUnfundedDebt.id);
+assert.equal(Number(debtMaster.outstanding_amount),9200,"Creating monthly fund cannot modify debt principal");
+const duplicatedFund=await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,
+ body:{month:monthly,operations:[{...itemToCreate,label:"MUST ROLLBACK"},addExistingDebtFund]}});
+assert.equal(duplicatedFund.status,409,"Same creditor cannot get a second monthly allocation");
+const afterDuplicate=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+assert(!afterDuplicate.items.some(x=>x.label==="MUST ROLLBACK"),"A duplicate fund rolls back the entire batch");
+assert.equal(afterDuplicate.debtFunds.filter(x=>x.debt_id===newUnfundedDebt.id).length,1);
+const forgedFund=await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,
+ body:{month:monthly,operations:[{...addExistingDebtFund,debtId:crypto.randomUUID()}]}});
+assert.equal(forgedFund.status,400,"Cannot allocate a fund to another/nonexistent debt");
 assert(!afterSheet.goalFunds.some(x=>x.id===goalForSheet.id),"Deleting a goal allocation does not delete goal master");
 assert((await request("/finance/bootstrap",{cookie:owner})).data.goals.some(x=>x.id===createdGoalPlan.goal.id));
 assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id).balance),startBank,
@@ -585,7 +602,7 @@ const auditSheet=new pg.Client({host:process.env.FINANCE_DB_HOST,port:Number(pro
 await auditSheet.connect();
 try{
  const a=await auditSheet.query("SELECT count(*)::int AS n FROM finance.audit_events WHERE owner_user_id=$1 AND action LIKE 'finance.sheet.%'",[process.env.FINANCE_OWNER_USER_ID]);
- assert.equal(a.rows[0].n,3,"Each successful spreadsheet change is audited once");
+ assert.equal(a.rows[0].n,4,"Each successful spreadsheet change is audited once");
 }finally{await auditSheet.end();}
 
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");

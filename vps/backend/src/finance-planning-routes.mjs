@@ -347,16 +347,23 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     const seen=new Set(),prepared=[];
     try{
       for(const op of ops){
-        if(!op||!["createItem","updateItem","deleteItem","updateFund","deleteFund"].includes(op.op))
+        if(!op||!["createItem","updateItem","deleteItem","createFund","updateFund","deleteFund"].includes(op.op))
           return fail(reply,"INVALID_SHEET_OPERATION");
-        if(op.op!=="createItem"){
+        if(op.op!=="createItem"&&op.op!=="createFund"){
           if(!id(op.id)||typeof op.version!=="string"||op.version.length>50)
             return fail(reply,"INVALID_SHEET_ROW_VERSION");
           const key=op.op.includes("Fund")?op.fundType+":"+op.id:"item:"+op.id;
           if(seen.has(key))return fail(reply,"DUPLICATE_SHEET_ROW");
           seen.add(key);
         }
-        if(op.op.endsWith("Item")&&op.op!=="deleteItem"){
+        if(op.op==="createFund"){
+          if(op.fundType!=="debt"||!id(op.debtId)||
+             typeof op.plannedAmount!=="string"||!money(op.plannedAmount,6))
+            return fail(reply,"INVALID_SHEET_NEW_DEBT_FUND");
+          const key="new-debt:"+op.debtId;
+          if(seen.has(key))return fail(reply,"DUPLICATE_SHEET_DEBT_FUND");
+          seen.add(key);prepared.push(op);
+        }else if(op.op.endsWith("Item")&&op.op!=="deleteItem"){
           if(!["income","expense"].includes(op.kind)||typeof op.label!=="string"||
              !trim(op.label)||trim(op.label,140)!==trim(op.label)||
              typeof op.memo!=="string"||op.memo.length>250||
@@ -389,6 +396,30 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
               "VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id",
               [ctx.owner,startMonth(month),op.kind,trim(op.label,140),a.amountTwd,op.dueDay,
                 op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider]));
+          }else if(op.op==="createFund"){
+            const {rows:valid}=await db.query(
+              "SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code "+
+              "WHERE d.owner_user_id=$1 AND d.id=$2 AND d.principal_original > "+
+              "COALESCE((SELECT SUM(p.principal_paid) FROM finance.debt_payments p "+
+              "WHERE p.debt_id=d.id AND p.owner_user_id=d.owner_user_id),0)",
+              [ctx.owner,op.debtId]);
+            if(!valid[0]){const error=new Error("SHEET_DEBT_NOT_ACTIVE");error.sheetCode="SHEET_DEBT_NOT_ACTIVE";throw error;}
+            if(!money(op.plannedAmount,Number(valid[0].minor_units))){
+              const error=new Error("INVALID_SHEET_FUND_PRECISION");error.sheetCode="INVALID_SHEET_FUND_PRECISION";throw error;
+            }
+            const snap=valid[0].currency_code==="TWD"?null:await getFinanceFxSnapshot(ctx.pool);
+            const fx=valid[0].currency_code==="TWD"?"1":snap?.quotes?.[valid[0].currency_code]?.rateToTwd;
+            if(!positiveRate(fx)){
+              const error=new Error("SHEET_FUND_RATE_REQUIRED");error.sheetCode="SHEET_FUND_RATE_REQUIRED";throw error;
+            }
+            ({rows}=await db.query(
+              "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) "+
+              "VALUES($1,$2,$3::date,$4::numeric,0,$5::numeric) "+
+              "ON CONFLICT(owner_user_id,debt_id,month_date) DO NOTHING RETURNING id",
+              [ctx.owner,op.debtId,startMonth(month),op.plannedAmount,fx]));
+            if(!rows[0]){
+              const error=new Error("SHEET_FUND_ALREADY_EXISTS");error.sheetCode="SHEET_FUND_ALREADY_EXISTS";throw error;
+            }
           }else if(op.op==="updateItem"){
             const a=op.converted;
             ({rows}=await db.query(
@@ -433,7 +464,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       reply.header("Cache-Control","private, no-store");
       return {saved:results.length,rows:results,month,ledgerPosted:false};
     }catch(error){
-      if(error.sheetCode)return fail(reply,error.sheetCode,error.sheetCode==="SHEET_STALE_RELOAD"?409:400);
+      if(error.sheetCode)return fail(reply,error.sheetCode,["SHEET_STALE_RELOAD","SHEET_FUND_ALREADY_EXISTS"].includes(error.sheetCode)?409:400);
       return databaseError(req,reply,error);
     }
   });
