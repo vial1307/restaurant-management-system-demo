@@ -357,3 +357,13 @@
  .main-nav button{font-size:8.5px;padding-inline:1px}
  .main-nav button span{font-size:17px}
 }
+
+
+/* Differentiate monthly funding from the linked debt/goal master. */
+.finance-sheet .sheet-row-actions{display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-width:0}
+.finance-sheet .sheet-row-actions .btn{white-space:nowrap;min-height:30px}
+.finance-sheet .sheet-reference .sheet-row-actions .btn:last-child{border-color:#d2e0f8}
+@media(max-width:760px){
+ .finance-sheet .sheet-row-actions{gap:6px}
+ .finance-sheet .sheet-row-actions .btn{min-height:35px;flex:1 0 auto}
+}
