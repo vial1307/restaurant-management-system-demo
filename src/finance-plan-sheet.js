@@ -54,8 +54,11 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
      (linked?"Nợ/mục tiêu gốc · Chưa lập quỹ":"Liên kết công nợ/mục tiêu")+'</small>':"");
   const actions=r.source==="item"?
    '<button type="button" class="btn small ghost" data-action="editPlan" data-id="'+s(r.id)+'">Chi tiết / Sửa</button>':
-   '<button type="button" class="btn small ghost" data-sheet-action="linked" data-sheet-key="'+s(k)+'">'+
-    (linked?"Lập quỹ":"Điều khoản")+'</button>';
+   '<div class="sheet-row-actions">'+
+    '<button type="button" class="btn small ghost" data-sheet-action="linked" data-sheet-key="'+s(k)+'">'+
+     (linked?"Lập quỹ":"Chỉnh quỹ")+'</button>'+
+    '<button type="button" class="btn small soft" data-sheet-action="editMaster" data-sheet-key="'+s(k)+'">'+
+     (r.kind==="debt"?"Sửa nợ":"Sửa mục tiêu")+'</button></div>';
   const converted=linked?'<span class="sheet-missing-allocation">Chưa lập quỹ</span>':
     r.twd===null?"Chưa có tỷ giá":s(r.twd?.toLocaleString?.("vi-VN")||r.twd);
   return '<tr data-sheet-key="'+s(k)+'" class="'+(isDeleted?"sheet-deleted ":"")+
@@ -246,9 +249,12 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    state.selected.clear();render();return;
   }
   if(action==="dropNew"){state.added=state.added.filter(a=>a.key!==k);render();return;}
-  if(action==="linked"){
-   const r=getRow(k);if(!r)return;
-   open(r.kind==="debt"?"fundDebt":"fundGoal",r.ref);
+  if(action==="linked"||action==="editMaster"){
+   const r=getRow(k);if(!r||!["debt","goal"].includes(r.source))return;
+   // A due-date row without a monthly fund is a master record, not a deletable
+   // allocation. Explicitly route to either the allocation or its master.
+   open(action==="editMaster"?(r.kind==="debt"?"editDebt":"editGoal"):
+    (r.kind==="debt"?"fundDebt":"fundGoal"),r.ref);
    return;
   }
  }
