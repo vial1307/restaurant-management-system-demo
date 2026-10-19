@@ -399,7 +399,9 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           }else if(op.op==="createFund"){
             const {rows:valid}=await db.query(
               "SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code "+
-              "WHERE d.owner_user_id=$1 AND d.id=$2 AND d.outstanding_amount>0",
+              "WHERE d.owner_user_id=$1 AND d.id=$2 AND d.principal_original > "+
+              "COALESCE((SELECT SUM(p.principal_paid) FROM finance.debt_payments p "+
+              "WHERE p.debt_id=d.id AND p.owner_user_id=d.owner_user_id),0)",
               [ctx.owner,op.debtId]);
             if(!valid[0]){const error=new Error("SHEET_DEBT_NOT_ACTIVE");error.sheetCode="SHEET_DEBT_NOT_ACTIVE";throw error;}
             if(!money(op.plannedAmount,Number(valid[0].minor_units))){
