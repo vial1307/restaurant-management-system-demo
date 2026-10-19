@@ -136,9 +136,20 @@ try{
      const type=op.op==="createItem"?"item":op.op.endsWith("Item")?"item":op.fundType;
      const records=targets[type];
      const idx=records.findIndex(r=>r.id===op.id);
-     if(op.op!=="createItem"&&(!records[idx]||records[idx].updated_at!==op.version))
+     if(op.op!=="createItem"&&op.op!=="createFund"&&(!records[idx]||records[idx].updated_at!==op.version))
       return respond(route,{error:"SHEET_STALE_RELOAD"},409);
-     if(op.op==="createItem"){
+     if(op.op==="createFund"){
+      const d=debts.find(d=>d.id===op.debtId&&Number(d.outstanding_amount)>0);
+      if(!d)return respond(route,{error:"SHEET_DEBT_NOT_ACTIVE"},400);
+      if(records.some(r=>r.debt_id===d.id&&r.month_date.startsWith(b.month)))
+       return respond(route,{error:"SHEET_FUND_ALREADY_EXISTS"},409);
+      const fx=d.currency_code==="VND"?0.00125:1;
+      const newFund={id:next(),debt_id:d.id,debt_name:d.name,currency_code:d.currency_code,
+       due_date:d.due_date,month_date:b.month+"-01",planned_amount:op.plannedAmount,
+       earmarked_amount:"0",fx_rate_to_twd:String(fx),
+       planned_twd:String(Math.round(Number(op.plannedAmount)*fx)),updated_at:mkVersion()};
+      records.push(newFund);results.push({id:newFund.id,op:op.op});
+     }else if(op.op==="createItem"){
       const fx=op.currencyCode==="VND"?.00125:1;
       const created={id:next(),month_date:b.month+"-01",kind:op.kind,label:op.label,original_amount:op.originalAmount,
        original_currency:op.currencyCode,amount_twd:String(Math.round(Number(op.originalAmount)*fx)),
@@ -449,6 +460,32 @@ try{
   assert.equal(debts.length,originalDebtsCount+1,"Opening fund/edit forms must not mutate debt master");
   assert.equal(debts.find(x=>x.id===unfundedDebtId).outstanding_amount,"10000000.000000",
    "Navigating from the plan row must never modify outstanding balance");
+
+  // Choose an existing loan without creating a new master debt record.
+  await page.locator('[data-sheet-action="add"]').click();
+  await page.locator(".sheet-new").last().locator('[data-sheet-field="kind"]').selectOption("debt");
+  const debtPicker=page.locator('.sheet-new [data-sheet-field="debtId"]').last();
+  await debtPicker.waitFor();
+  assert.equal(await debtPicker.locator('option[value="'+unfundedDebtId+'"]').count(),1);
+  await debtPicker.selectOption(unfundedDebtId);
+  const debtRow=page.locator(".sheet-new").last();
+  assert.match(await debtRow.innerText(),/Mẹ/);
+  assert.match(await debtRow.innerText(),/10\.000\.000/);
+  assert.equal(await debtRow.locator(".sheet-currency").innerText(),"VND");
+  await debtRow.locator('[data-sheet-field="amount"]').fill("2000000");
+  await page.locator('[data-sheet-action="save"]').click();
+  const savedFund=funds.find(x=>x.debt_id===unfundedDebtId&&x.month_date==="2026-11-01");
+  assert(savedFund,"New fund must reference the original debt");
+  assert.equal(savedFund.planned_amount,"2000000");
+  assert.equal(debts.find(x=>x.id===unfundedDebtId).outstanding_amount,"10000000.000000");
+  assert.equal(debts.length,originalDebtsCount+1,"No duplicate debt master");
+  assert.equal(wroteLedger,oldPosted,"Fund planning never posts a real transaction");
+  await page.locator('[data-sheet-action="add"]').click();
+  await page.locator(".sheet-new").last().locator('[data-sheet-field="kind"]').selectOption("debt");
+  assert(await page.locator('.sheet-new [data-sheet-field="debtId"]').last()
+    .locator('option[value="'+unfundedDebtId+'"]').isDisabled(),"Existing monthly fund cannot be duplicated");
+  await page.locator('.sheet-new [data-sheet-action="dropNew"]').last().click();
+
   await page.locator(".finance-sheet input[value=\"Từ Excel\"]").waitFor();
   const fromExcel=items.find(x=>x.label==="Từ Excel");
   const key='item:'+fromExcel.id;
