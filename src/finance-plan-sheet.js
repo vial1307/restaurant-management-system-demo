@@ -124,16 +124,43 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    '<th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Số tiền gốc</th><th>Tiền tệ</th>'+
    '<th class="num">Quy đổi TWD</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody>';
   const rendered=all.map(oneRow).join("");
-  const added=state.added.map((a,i)=>'<tr class="sheet-new" data-sheet-key="'+s(a.key)+'">'+
-   '<td class="sheet-selector" data-label="Dòng mới">+</td><td class="sheet-date" data-label="Ngày"><input type="number" min="1" max="31" value="'+s(a.day)+'" data-sheet-field="day" data-sheet-key="'+s(a.key)+'"></td>'+
-   '<td class="sheet-kind" data-label="Loại"><select data-sheet-field="kind" data-sheet-key="'+s(a.key)+'">'+["expense","income"].map(k=>
-    '<option value="'+k+'"'+(a.kind===k?" selected":"")+'>'+kindName[k]+'</option>').join("")+'</select></td>'+
-   '<td class="sheet-label" data-label="Nội dung"><input data-sheet-field="label" data-sheet-key="'+s(a.key)+'" value="'+s(a.label)+'" placeholder="Nhập nội dung" maxlength="140"></td>'+
-   '<td class="sheet-amount" data-label="Số tiền gốc"><input data-sheet-field="amount" data-sheet-key="'+s(a.key)+'" value="'+s(a.amount)+'" placeholder="Số tiền"></td>'+
-   '<td class="sheet-currency" data-label="Tiền tệ"><select data-sheet-field="currency" data-sheet-key="'+s(a.key)+'">'+getCurrencies().map(c=>
-    '<option value="'+s(c.code)+'"'+(a.currency===c.code?" selected":"")+'>'+s(c.code)+'</option>').join("")+'</select></td>'+
-   '<td class="sheet-base sheet-readonly num" data-label="Quy đổi TWD">Tự tính sau lưu</td><td class="sheet-memo" data-label="Ghi chú"><input data-sheet-field="memo" data-sheet-key="'+s(a.key)+'" value="'+s(a.memo)+'" maxlength="250"></td>'+
-   '<td class="sheet-actions" data-label="Thao tác"><button type="button" class="btn small ghost" data-sheet-action="dropNew" data-sheet-key="'+s(a.key)+'">Bỏ dòng</button></td></tr>').join("");
+  const added=state.added.map((a,i)=>{
+   const isDebt=a.kind==="debt",debts=availableDebts(),debt=selectedDebt(a.debtId),taken=fundedDebts();
+   const kindSelect='<select data-sheet-field="kind" data-sheet-key="'+s(a.key)+'">'+
+    ["expense","income","debt"].map(k=>'<option value="'+k+'"'+(a.kind===k?" selected":"")+'>'+s(kindName[k])+'</option>').join("")+'</select>';
+   const debtPicker='<select data-sheet-field="debtId" data-sheet-key="'+s(a.key)+'" aria-label="Chọn khoản nợ hiện tại">'+
+    '<option value="">'+(debts.length?"Chọn khoản nợ hiện tại…":"Không có khoản nợ còn dư")+'</option>'+
+    debts.map(d=>'<option value="'+s(d.id)+'"'+(d.id===a.debtId?" selected":"")+
+     (taken.has(d.id)?" disabled":"")+'>'+s(d.name)+" · "+s(showNativeAmount(d.outstanding_amount))+
+     " "+s(d.currency_code)+(taken.has(d.id)?" (Đã có quỹ tháng này)":"")+'</option>').join("")+'</select>';
+   const amount=isDebt?'<div class="sheet-debt-amount">'+debtPicker+
+    (debt?'<small>Số dư nợ gốc: <strong>'+s(showNativeAmount(debt.outstanding_amount))+
+      ' '+s(debt.currency_code)+'</strong></small>':"")+
+    '<label>Quỹ dự kiến trả tháng này<input data-sheet-field="amount" data-sheet-key="'+s(a.key)+
+    '" inputmode="decimal" value="'+s(a.amount)+'" placeholder="Nhập tiền trả dự kiến"></label></div>':
+    '<input data-sheet-field="amount" data-sheet-key="'+s(a.key)+'" value="'+s(a.amount)+'" placeholder="Số tiền">';
+   const dayValue=isDebt?'<span class="sheet-readonly">'+s(debt?.due_date||"Chưa rõ hạn")+'</span>':
+    '<input type="number" min="1" max="31" value="'+s(a.day)+'" data-sheet-field="day" data-sheet-key="'+s(a.key)+'">';
+   const content=isDebt?'<strong>'+s(debt?.name||"Chọn nợ ở cột Số tiền gốc")+
+     '</strong><small class="sheet-linked">Liên kết công nợ có sẵn</small>':
+    '<input data-sheet-field="label" data-sheet-key="'+s(a.key)+'" value="'+s(a.label)+
+     '" placeholder="Nhập nội dung" maxlength="140">';
+   const currency=isDebt?'<span class="sheet-readonly">'+s(debt?.currency_code||"—")+'</span>':
+    '<select data-sheet-field="currency" data-sheet-key="'+s(a.key)+'">'+getCurrencies().map(x=>
+     '<option value="'+s(x.code)+'"'+(a.currency===x.code?" selected":"")+'>'+s(x.code)+'</option>').join("")+'</select>';
+   const note=isDebt?'<span class="sheet-readonly">Chỉ tạo quỹ trong tháng, không tăng nợ gốc</span>':
+    '<input data-sheet-field="memo" data-sheet-key="'+s(a.key)+'" value="'+s(a.memo)+'" maxlength="250">';
+   return '<tr class="sheet-new" data-sheet-key="'+s(a.key)+'">'+
+    '<td class="sheet-selector" data-label="Dòng mới">+</td>'+
+    '<td class="sheet-date" data-label="Ngày">'+dayValue+'</td>'+
+    '<td class="sheet-kind" data-label="Loại">'+kindSelect+'</td>'+
+    '<td class="sheet-label" data-label="Nội dung">'+content+'</td>'+
+    '<td class="sheet-amount" data-label="Số tiền gốc">'+amount+'</td>'+
+    '<td class="sheet-currency" data-label="Tiền tệ">'+currency+'</td>'+
+    '<td class="sheet-base sheet-readonly num" data-label="Quy đổi TWD">Tự tính sau lưu</td>'+
+    '<td class="sheet-memo" data-label="Ghi chú">'+note+'</td>'+
+    '<td class="sheet-actions" data-label="Thao tác"><button type="button" class="btn small ghost" data-sheet-action="dropNew" data-sheet-key="'+s(a.key)+'">Bỏ dòng</button></td></tr>';
+  }).join("");
   const footer='</tbody></table></div><div class="sheet-status"><span>Đang xem '+all.length+' dòng đã lưu · '+
     state.added.length+' dòng mới</span><span>'+pending+' chỉnh sửa chưa lưu · Ctrl/Cmd+S để lưu · Enter/Tab để di chuyển</span></div>';
   return '<div class="finance-sheet">'+guide+toolbar+selectBar+paste+hdr+(rendered+added||'<tr><td colspan="9" class="empty">Chưa có dữ liệu. Chọn “Thêm dòng”.</td></tr>')+
