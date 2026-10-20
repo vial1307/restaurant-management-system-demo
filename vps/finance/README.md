@@ -21,6 +21,17 @@ This is a separate HTTPS origin, static UI and PostgreSQL 16 database on the **e
 3. Confirm HTTPS `/finance.html` responds with 200; unauthenticated `/api/finance/access` responds 401; Finance-host `/api/inventory/central` responds 404; log in as the designated owner then exercise read/write/readback and confirm transactions persist after reload.
 4. Review Finance database backup/restore and protected owner credentials before using real financial records.
 
+## Loan receipt — finance source of truth
+
+- `+ Nhận tiền vay` is an **actual financing receipt**, not salary, ordinary income or a future plan. It creates a debt master, immutable journal credit to the selected same-currency wallet, debt disbursement mapping, owner-scoped audit event, and Mentor creditor metadata in one PostgreSQL transaction.
+- `+ Khoản nợ chưa giải ngân` and monthly `cashflow` debt-plan routes retain the previous contract: **no money is minted** merely by entering a debt or planned allocation. Historic debts are never automatically backfilled as cash.
+- On an actual loan receipt, original principal equals actual gross cash received. Cases with fees deducted at source or partial drawdowns require separate validation/workflow; do not falsify cash balance by entering a larger principal than the deposit.
+- The posted financing inflow is deliberately recorded under the existing immutable journal event kind `adjustment` and classified as `borrowing` **only through its unique `finance.debt_disbursements` mapping**. We do not alter the legacy CHECK enum or unconditionally reinterpret unrelated balance adjustments.
+- Actual monthly finance report: borrowing receipts are shown separately from earned income, and repayments include principal + recorded interest + fees. Outstanding debt decreases only by **principalPaid**, while the wallet decreases by the full paid amount.
+- Annual income/expense totals, budgets and savings priorities remain unchanged. Actual financing receipts already appear in wallet balances; advisor and simulator do not add historic receipts to a future forecast again. AI Mentor reads the shared debt and creditor classification but does not infer contractual minimum payments.
+- Idempotency keys, dedicated owner auth, immutable event/entry ledger, PostgreSQL transaction boundaries and audit history are preserved. Disbursed debts cannot be deleted even before repayment.
+- This is a **deterministic personal planning implementation** designed for this application; it is not an IFRS-compliant financial statement or a guarantee of debt affordability. Accounting distinction: [IAS 7 Financing activities](https://www.ifrs.org/issued-standards/list-of-standards/ias-7-statement-of-cash-flows.html) (borrowing receipts/repayments separate from operations); personal cashflow schedule concepts: [CFPB Your Money, Your Goals](https://www.consumerfinance.gov/consumer-tools/educator-tools/your-money-your-goals/toolkit/). The local priority `debt > essential expense > savings` is user-defined, **not mandated by those standards**.
+
 ## Safety
 - Do **not** use `docker compose down -v` or delete `finance_postgres_data` (permanent loss of finance database).
 - Separate hostname means login requires a **new session on Finance**; being logged in on restaurant hostname does not grant automatic access.
