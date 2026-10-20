@@ -336,7 +336,7 @@ export async function registerFinanceRoutes(app) {
       const original=await ctx.pool.query("SELECT g.name,g.target_amount::text,c.minor_units FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",[goalId,ctx.owner]);
       if(!original.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
       const g=original.rows[0],target=b.targetAmount??g.target_amount;
-      if(!money(b.currentAmount,Number(g.minor_units))||!positive(String(target),Number(g.minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
+      if(!money(b.currentAmount,Number(g.minor_units))||(b.targetAmount!==undefined&&!positive(b.targetAmount,Number(g.minor_units))))return fail(reply,"INVALID_GOAL_UPDATE");
       const saved=await auditedWrite(ctx,"finance.goal.update","finance_goal",async db=>{
         const {rows}=await db.query("UPDATE finance.goals SET name=$3,target_amount=$4::numeric,current_amount=$5::numeric,target_date=CASE WHEN $6::boolean THEN $7::date ELSE target_date END,status=$8,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,name,target_amount::text,current_amount::text,target_date::text,status",
           [goalId,ctx.owner,trim(b.name??g.name,160),String(target),b.currentAmount,b.targetDate!==undefined,b.targetDate||null,b.status]);return rows[0];
