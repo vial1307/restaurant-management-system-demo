@@ -156,6 +156,37 @@ export async function registerFinanceRoutes(app) {
       return reply.code(201).send({account:saved});
     }catch(error){return databaseError(request,reply,error);}
   });
+  // Wallet identity can be renamed; its currency and historical postings are immutable.
+  app.put("/api/finance/accounts/:accountId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const a=request.params?.accountId,b=request.body||{};
+    if(!id(a)||!trim(b.name)||!["cash","bank","ewallet","other"].includes(b.kind))return fail(reply,"INVALID_ACCOUNT_UPDATE");
+    try{
+      const saved=await auditedWrite(ctx,"finance.account.update","finance_account",async db=>{
+        const {rows}=await db.query("UPDATE finance.accounts SET name=$3,kind=$4 WHERE owner_user_id=$1 AND id=$2 AND active=true RETURNING id,name,kind,currency_code",
+          [ctx.owner,a,trim(b.name,120),b.kind]);return rows[0];
+      });
+      if(!saved)return fail(reply,"ACCOUNT_NOT_FOUND",404);
+      return {account:saved};
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.delete("/api/finance/accounts/:accountId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const a=request.params?.accountId;if(!id(a))return fail(reply,"INVALID_ACCOUNT");
+    try{
+      const result=await financeTransaction(async db=>{
+        const {rows}=await db.query("SELECT id FROM finance.accounts WHERE owner_user_id=$1 AND id=$2 AND active=true FOR UPDATE",[ctx.owner,a]);
+        if(!rows[0])return {error:"ACCOUNT_NOT_FOUND",status:404};
+        if((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,a])).rows[0])
+          return {error:"ACCOUNT_HAS_POSTED_TRANSACTIONS",status:409};
+        await db.query("DELETE FROM finance.accounts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,a]);
+        await audit(db,ctx.owner,"finance.account.delete",a,{},"finance_account");
+        return {deleted:true,id:a};
+      });
+      if(result.error)return fail(reply,result.error,result.status);
+      return result;
+    }catch(error){return databaseError(request,reply,error);}
+  });
   // Owner-only balance reconciliation. Never rewrite the immutable ledger:
   // insert one signed correcting entry after locking the owned account.
   app.post("/api/finance/accounts/:accountId/reconcile",async(request,reply)=>{
@@ -208,6 +239,37 @@ export async function registerFinanceRoutes(app) {
         return rows[0];
       });
       return reply.code(201).send({category:saved});
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.put("/api/finance/categories/:categoryId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const c=request.params?.categoryId,b=request.body||{};
+    if(!id(c)||!trim(b.name))return fail(reply,"INVALID_CATEGORY_UPDATE");
+    try{
+      const saved=await auditedWrite(ctx,"finance.category.update","finance_category",async db=>{
+        const {rows}=await db.query("UPDATE finance.categories SET name=$3 WHERE owner_user_id=$1 AND id=$2 RETURNING id,name,kind",
+          [ctx.owner,c,trim(b.name,100)]);return rows[0];
+      });
+      if(!saved)return fail(reply,"CATEGORY_NOT_FOUND",404);
+      return {category:saved};
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.delete("/api/finance/categories/:categoryId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const c=request.params?.categoryId;if(!id(c))return fail(reply,"INVALID_CATEGORY");
+    try{
+      const result=await financeTransaction(async db=>{
+        const {rows}=await db.query("SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,c]);
+        if(!rows[0])return {error:"CATEGORY_NOT_FOUND",status:404};
+        if((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND category_id=$2 LIMIT 1",[ctx.owner,c])).rows[0])
+          return {error:"CATEGORY_HAS_POSTED_TRANSACTIONS",status:409};
+        await db.query("DELETE FROM finance.monthly_budgets WHERE owner_user_id=$1 AND category_id=$2",[ctx.owner,c]);
+        await db.query("DELETE FROM finance.categories WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
+        await audit(db,ctx.owner,"finance.category.delete",c,{},"finance_category");
+        return {deleted:true,id:c};
+      });
+      if(result.error)return fail(reply,result.error,result.status);
+      return result;
     }catch(error){return databaseError(request,reply,error);}
   });
   app.put("/api/finance/budgets",async(request,reply)=>{
@@ -266,23 +328,38 @@ export async function registerFinanceRoutes(app) {
   app.put("/api/finance/goals/:goalId",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const goalId=request.params?.goalId,b=request.body||{};
-    if(!id(goalId)||!["active","achieved","archived"].includes(b.status)
-      ||typeof b.currentAmount!=="string")return fail(reply,"INVALID_GOAL_UPDATE");
+    if(!id(goalId)||!["active","achieved","archived"].includes(b.status)||
+      typeof b.currentAmount!=="string"||
+      (b.name!==undefined&&!trim(b.name))||
+      (b.targetDate&&!isDate(b.targetDate)))return fail(reply,"INVALID_GOAL_UPDATE");
     try{
-      const goal=await ctx.pool.query(
-        "SELECT c.minor_units FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",
-        [goalId,ctx.owner]
-      );
-      if(!goal.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
-      if(!money(b.currentAmount,Number(goal.rows[0].minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
+      const original=await ctx.pool.query("SELECT g.name,g.target_amount::text,c.minor_units FROM finance.goals g JOIN finance.currencies c ON c.code=g.currency_code WHERE g.id=$1 AND g.owner_user_id=$2",[goalId,ctx.owner]);
+      if(!original.rows[0])return fail(reply,"GOAL_NOT_FOUND",404);
+      const g=original.rows[0],target=b.targetAmount??g.target_amount;
+      if(!money(b.currentAmount,Number(g.minor_units))||!positive(String(target),Number(g.minor_units)))return fail(reply,"INVALID_GOAL_UPDATE");
       const saved=await auditedWrite(ctx,"finance.goal.update","finance_goal",async db=>{
-        const {rows}=await db.query(
-        "UPDATE finance.goals SET current_amount=$3::numeric,status=$4,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,current_amount::text,status",
-        [goalId,ctx.owner,b.currentAmount,b.status]
-      );
-        return rows[0];
+        const {rows}=await db.query("UPDATE finance.goals SET name=$3,target_amount=$4::numeric,current_amount=$5::numeric,target_date=CASE WHEN $6::boolean THEN $7::date ELSE target_date END,status=$8,updated_at=now() WHERE id=$1 AND owner_user_id=$2 RETURNING id,name,target_amount::text,current_amount::text,target_date::text,status",
+          [goalId,ctx.owner,trim(b.name??g.name,160),String(target),b.currentAmount,b.targetDate!==undefined,b.targetDate||null,b.status]);return rows[0];
       });
+      if(!saved)return fail(reply,"GOAL_NOT_FOUND",404);
       return {goal:saved};
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.delete("/api/finance/goals/:goalId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const g=request.params?.goalId;if(!id(g))return fail(reply,"INVALID_GOAL");
+    try{
+      const result=await financeTransaction(async db=>{
+        const {rows}=await db.query("SELECT id FROM finance.goals WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,g]);
+        if(!rows[0])return {error:"GOAL_NOT_FOUND",status:404};
+        // Only forecast allocations are removed; actual ledger entries are never touched.
+        const funds=await db.query("DELETE FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND goal_id=$2 RETURNING id",[ctx.owner,g]);
+        await db.query("DELETE FROM finance.goals WHERE owner_user_id=$1 AND id=$2",[ctx.owner,g]);
+        await audit(db,ctx.owner,"finance.goal.delete",g,{removedPlanAllocations:funds.rowCount},"finance_goal");
+        return {deleted:true,id:g,removedPlanAllocations:funds.rowCount};
+      });
+      if(result.error)return fail(reply,result.error,result.status);
+      return result;
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/debts",async(request,reply)=>{
@@ -327,6 +404,25 @@ export async function registerFinanceRoutes(app) {
       });
       if(!saved)return fail(reply,"DEBT_NOT_FOUND",404);
       return {debt:saved};
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.delete("/api/finance/debts/:debtId",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const d=request.params?.debtId;if(!id(d))return fail(reply,"INVALID_DEBT");
+    try{
+      const result=await financeTransaction(async db=>{
+        const {rows}=await db.query("SELECT id FROM finance.debts WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,d]);
+        if(!rows[0])return {error:"DEBT_NOT_FOUND",status:404};
+        if((await db.query("SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
+          return {error:"DEBT_HAS_POSTED_PAYMENTS",status:409};
+        const funds=await db.query("DELETE FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND debt_id=$2 RETURNING id",[ctx.owner,d]);
+        await db.query("DELETE FROM finance.debt_mentor_terms WHERE owner_user_id=$1 AND debt_id=$2",[ctx.owner,d]);
+        await db.query("DELETE FROM finance.debts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
+        await audit(db,ctx.owner,"finance.debt.delete",d,{removedPlanAllocations:funds.rowCount},"finance_debt");
+        return {deleted:true,id:d,removedPlanAllocations:funds.rowCount};
+      });
+      if(result.error)return fail(reply,result.error,result.status);
+      return result;
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/fx-plans/:planId/cancel",async(request,reply)=>{
