@@ -334,6 +334,7 @@ function scenario(){
   '<div style="height:12px"></div>'+(p.earliestRisk?'<div class="notice warn">Cần kiểm tra nguy cơ thiếu tiền từ '+safe(p.earliestRisk.date)+'</div>':'<div class="notice">Chưa phát hiện hụt so với mức dự trữ theo dữ liệu và giả định đã nhập.</div>')+
   '<div class="stack" style="margin-top:12px">'+(p.warnings||[]).slice(0,6).map(w=>'<div class="notice warn">'+safe(w)+'</div>').join("")+'</div>':(state.baselineBusy?empty("Đang tự đọc kế hoạch, quỹ nợ và dòng tiền để phân tích…"):empty("Chưa thể phân tích. "+(state.baselineError||"Kiểm tra kế hoạch và kết nối Finance Database.")));
  const row=s.rows?.[0]||{kind:"expense",date:nowDate(),amountTwd:"0",label:"Chi phát sinh"};
+ const repay=s.rows?.find(x=>x.kind==="repay"&&x.linkId&&x.linkId===row.linkId);
  return title("Mô phỏng & tư vấn","Thử phương án trước khi quyết định. Mô phỏng không làm thay đổi số dư hay công nợ.")+
  '<div class="layout-2"><div class="stack">'+card("Tạo kịch bản của bạn",'<form class="form-grid" id="scenario-fields">'+
  '<label>Đặt tên kịch bản<input name="name" value="'+safe(s.name)+'"></label>'+
@@ -341,16 +342,20 @@ function scenario(){
  '<label>Ngày nhận lương (1–31)<input name="salaryDay" type="number" min="1" max="31" value="'+safe(s.salaryDay)+'"></label>'+
  '<label>Số dư tối thiểu muốn giữ (TWD)<input name="bufferTwd" inputmode="decimal" value="'+safe(s.bufferTwd)+'"></label>'+
  '<label>Thu nhập tăng thêm mỗi tháng (TWD)<input name="monthlyExtraIncomeTwd" inputmode="decimal" value="'+safe(s.monthlyExtraIncomeTwd)+'"></label>'+
- '<label>Giả định thêm<select name="kind">'+["expense","income","income_loss","debt"].map(k=>escOption(k,{expense:"Chi phí phát sinh",income:"Thu thêm",income_loss:"Giảm thu nhập",debt:"Trả nợ thêm"}[k],k===row.kind)).join("")+'</select></label>'+
+ '<label>Giả định thêm<select name="kind">'+["expense","income","income_loss","debt","borrow"].map(k=>escOption(k,{expense:"Chi phí phát sinh",income:"Thu thêm",income_loss:"Giảm thu nhập",debt:"Trả nợ thêm",borrow:"Giả định vay → trả"}[k],k===row.kind)).join("")+'</select></label>'+
  '<label>Tên khoản thay đổi<input name="rowLabel" value="'+safe(row.label)+'"></label>'+
  '<label>Ngày phát sinh<input name="rowDate" type="date" value="'+safe(row.date)+'"></label>'+
- '<label>Số tiền thay đổi (TWD)<input name="rowAmount" value="'+safe(row.amountTwd)+'"></label></form>'+
+ '<label>Số tiền thay đổi (TWD)<input name="rowAmount" value="'+safe(row.amountTwd)+'"></label>'+
+ '<fieldset id="scenario-loan-fields" '+(row.kind==="borrow"?"":"hidden disabled")+'><label>Ngày hoàn trả khoản vay<input name="repayDate" type="date" value="'+safe(repay?.date||row.date||nowDate())+'" required></label>'+
+ '<label>Tổng gốc + lãi + phí phải trả (TWD)<input name="repayAmount" value="'+safe(repay?.amountTwd||row.amountTwd||"0")+'" required></label>'+
+ '<div class="notice">Đây chỉ là giả định: nguồn vay và số tiền trả được ghép cặp, không ghi vào ví hoặc công nợ. Đừng mô phỏng lại khoản đã thực nhận vì số dư ví đã tính khoản đó.</div></fieldset></form>'+
  '<div class="page-actions" style="margin-top:14px">'+btn("Phân tích dòng tiền","simulate","primary")+btn("Lưu kịch bản","saveScenario","soft")+btn("Kịch bản mới","newScenario","ghost")+'</div>',
  "", "Chỉ một khoản giả định mỗi lần, dễ hiểu, có thể thay thế để so sánh các phương án.")+
  card("Các khoản nguồn từ Database",planTable(16),btn("Sửa kế hoạch","goPlan","small soft"),"Thu/chi, công nợ và mục tiêu trong "+fmtMonth(state.month)+" đã được đưa vào mô phỏng.")+
  card("Cách hệ thống tư vấn",'<div class="rowitem"><div><strong>1. Dòng tiền thực</strong><p>Lấy số dư ví TWD và các lịch thu/chi, quỹ nợ đã nhập từ Finance Database.</p></div></div>'+
  '<div class="rowitem"><div><strong>2. Ngày phát sinh</strong><p>Kiểm tra ngày hụt trước khi lương đến; số tiền nhận sau đó không thể trả một khoản đã quá hạn.</p></div></div>'+
- '<div class="rowitem"><div><strong>3. Mô phỏng an toàn</strong><p>So với mức dự trữ và giả định tăng/giảm thu nhập. Không tạo giao dịch thật.</p></div></div>')+'</div>'+
+ '<div class="rowitem"><div><strong>3. Mô phỏng an toàn</strong><p>So với mức dự trữ và giả định tăng/giảm thu nhập. Không tạo giao dịch thật.</p></div></div>'+
+ '<div class="rowitem"><div><strong>4. Căn cứ phương pháp</strong><p>Tiền vay tách khỏi thu nhập theo nguyên tắc phân loại dòng tiền tài trợ của IAS 7; lập lịch thu/chi tham khảo cách tiếp cận của CFPB. Thứ tự Nợ &gt; Chi thiết yếu &gt; Tiết kiệm là quy tắc do bạn thiết lập cho Finance OS, không phải yêu cầu của IAS 7.</p></div></div>')+'</div>'+
  '<div class="stack">'+card("Kết quả dự báo",preview)+
  card("Dòng tiền theo từng tháng",monthBreakdown+compare)+
  card("Tư vấn tự động theo tháng đã chọn",linkedInsights())+
@@ -697,7 +702,11 @@ async function simulate(save=false){
  const el=$("#scenario-fields");if(el){const b=Object.fromEntries(new FormData(el));state.sim={
   name:b.name,months:+b.months,salaryDay:+b.salaryDay,bufferTwd:b.bufferTwd||"0",
   monthlyExtraIncomeTwd:b.monthlyExtraIncomeTwd||"0",
-  rows:+b.rowAmount>0?[{key:uuid(),date:b.rowDate,kind:b.kind,label:b.rowLabel||"Giả định",amountTwd:b.rowAmount}]:[]
+  rows:+b.rowAmount>0?(b.kind==="borrow"?(()=>{
+   const loanId=uuid();return [
+    {key:uuid(),date:b.rowDate,kind:"borrow",label:b.rowLabel||"Vay giả định",amountTwd:b.rowAmount,linkId:loanId},
+    {key:uuid(),date:b.repayDate,kind:"repay",label:"Trả "+(b.rowLabel||"khoản vay"),amountTwd:b.repayAmount,linkId:loanId}
+   ];})():[{key:uuid(),date:b.rowDate,kind:b.kind,label:b.rowLabel||"Giả định",amountTwd:b.rowAmount}]):[]
  };}
  try{
   if(save){await api(state.scenarioId?"/workbench/scenarios/"+state.scenarioId:"/workbench/scenarios",
@@ -765,6 +774,12 @@ $("#finance-dialog-cancel").addEventListener("click",()=>dlg.close());
 dlg.addEventListener("click",event=>{if(event.target===dlg)dlg.close();});
 fields.addEventListener("input",updateEstimate);
 fields.addEventListener("change",updateEstimate);
+document.body.addEventListener("change",event=>{
+ if(event.target.matches('#scenario-fields [name="kind"]')){
+  const section=$("#scenario-loan-fields"),loan=event.target.value==="borrow";
+  if(section){section.hidden=!loan;section.disabled=!loan;}
+ }
+});
 form.addEventListener("submit",submit);
 $("#finance-login-form").addEventListener("submit",async event=>{
  event.preventDefault();const b=Object.fromEntries(new FormData(event.target));
