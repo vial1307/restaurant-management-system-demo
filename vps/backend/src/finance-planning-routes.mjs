@@ -29,15 +29,30 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   }
 
   const startMonth=m=>m+"-01";
+  // A financing forecast is always linked to one loan; never a salary posting.
+  async function validateLoan(db,owner,debtId,amount){
+    const {rows}=await db.query(
+      "SELECT d.id,d.currency_code,d.principal_original::text AS principal,"+
+      "EXISTS(SELECT 1 FROM finance.debt_disbursements x WHERE x.owner_user_id=d.owner_user_id AND x.debt_id=d.id) AS received,"+
+      "EXISTS(SELECT 1 FROM finance.debt_payments p WHERE p.owner_user_id=d.owner_user_id AND p.debt_id=d.id) AS paid "+
+      "FROM finance.debts d WHERE d.owner_user_id=$1 AND d.id=$2 FOR UPDATE OF d",[owner,debtId]);
+    const loan=rows[0];
+    if(!loan)return "PLAN_DEBT_NOT_FOUND";
+    if(loan.currency_code!==amount.originalCurrency)return "PLAN_LOAN_CURRENCY_MISMATCH";
+    if(Number(loan.principal)!==Number(amount.originalAmount))return "PLAN_LOAN_PRINCIPAL_MISMATCH";
+    if(loan.received||loan.paid)return "PLAN_LOAN_ALREADY_RECEIVED";
+    return null;
+  }
   const roundTripQuery=async(ctx,m)=>{
     const date=startMonth(m);
     const [items,funds,payments,sums,goalFunds]=await Promise.all([
-      ctx.pool.query("SELECT id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text,updated_at::text AS updated_at FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
+      ctx.pool.query("SELECT id,kind,debt_id,label,amount_twd::text,EXISTS(SELECT 1 FROM finance.debt_disbursements ld WHERE ld.debt_id=finance.cashflow_items.debt_id AND ld.owner_user_id=finance.cashflow_items.owner_user_id) AS received,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text,updated_at::text AS updated_at FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
       ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.due_date::text,f.updated_at::text AS updated_at FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
       ctx.pool.query("SELECT p.id,p.debt_id,d.name AS debt_name,d.currency_code,p.payment_date::text,p.principal_paid::text,p.interest_paid::text,p.fee_paid::text,p.base_amount_twd::text,p.event_id FROM finance.debt_payments p JOIN finance.debts d ON d.id=p.debt_id AND d.owner_user_id=p.owner_user_id WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month') ORDER BY p.payment_date DESC,p.created_at DESC LIMIT 100",[ctx.owner,date]),
       ctx.pool.query(
         "SELECT "+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='income'),0)::text AS planned_income_twd,"+
+        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='borrowing' AND NOT EXISTS(SELECT 1 FROM finance.debt_disbursements ld WHERE ld.debt_id=finance.cashflow_items.debt_id AND ld.owner_user_id=finance.cashflow_items.owner_user_id)),0)::text AS planned_borrowing_twd,"+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS planned_debt_fund_twd,"+
         "COALESCE((SELECT SUM(earmarked_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=$2::date),0)::text AS earmarked_debt_fund_twd,"+
@@ -68,10 +83,10 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     };
     // Numeric projection is calculated by PostgreSQL for precision, never as optimistic UI state.
     const {rows:net}=await ctx.pool.query(
-      "SELECT ($1::numeric-$2::numeric-$3::numeric-$4::numeric)::text AS planned_net_twd,"+
+      "SELECT ($1::numeric+$8::numeric-$2::numeric-$3::numeric-$4::numeric)::text AS planned_net_twd,"+
       "($5::numeric-$6::numeric-$7::numeric)::text AS actual_net_twd",
       [summary.planned_income_twd,summary.planned_expense_twd,summary.planned_debt_fund_twd,summary.planned_goal_fund_twd,
-       summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd]);
+       summary.actual_income_twd,summary.actual_expense_twd,summary.actual_debt_paid_twd,summary.planned_borrowing_twd]);
     return {month:m,items:items.rows,debtFunds:liveDebts,goalFunds:liveGoals,debtPayments:payments.rows,unconvertedFunds:unconverted,summary:{...summary,...net[0],fx_estimate_incomplete:unconverted.length>0}};
   };
   // Equivalent bidirectional goal flow, no spending posted when planning.
@@ -204,6 +219,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "WITH months AS (SELECT generate_series(make_date($2,1,1),make_date($2,12,1),interval '1 month')::date AS dt) "+
         "SELECT to_char(m.dt,'YYYY-MM') AS month,"+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='income'),0)::text AS planned_income_twd,"+
+        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='borrowing' AND NOT EXISTS(SELECT 1 FROM finance.debt_disbursements ld WHERE ld.owner_user_id=finance.cashflow_items.owner_user_id AND ld.debt_id=finance.cashflow_items.debt_id)),0)::text AS planned_borrowing_twd,"+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS debt_fund_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS goal_fund_twd,"+
@@ -235,41 +251,88 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       return {year,months:rows};
     }catch(error){return databaseError(req,reply,error);}
   });
+  // Create a debt and an expected inflow together, without posting a wallet credit.
+  app.post("/api/finance/loan-plans",async(req,reply)=>{
+    const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
+    const b=req.body||{};
+    if(!monthKey(b.month)||!trim(b.name)||!isDate(b.dueDate)||
+       !Number.isInteger(Number(b.dueDay))||Number(b.dueDay)<1||Number(b.dueDay)>31||
+       !money(String(b.annualInterestPercent??"0"),6)||Number(b.annualInterestPercent??0)>100||
+       !["friend_family","bank_loan","credit_card","installment_provider","other"].includes(b.creditorType||"other"))
+      return fail(reply,"INVALID_LOAN_PLAN");
+    try{
+      const a=await plannedAmount(ctx,b);if(a.error)return fail(reply,a.error);
+      const saved=await financeTransaction(async db=>{
+        const {rows:debts}=await db.query(
+          "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) "+
+          "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) RETURNING id,name,currency_code,principal_original::text,due_date::text",
+          [ctx.owner,trim(b.name,160),a.originalCurrency,a.originalAmount,String(b.annualInterestPercent??"0"),b.dueDate]);
+        const debt=debts[0];
+        await db.query("INSERT INTO finance.debt_mentor_terms(owner_user_id,debt_id,creditor_type) VALUES($1,$2,$3)",
+          [ctx.owner,debt.id,b.creditorType||"other"]);
+        const {rows:items}=await db.query(
+          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,debt_id,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) "+
+          "VALUES($1,$2::date,'borrowing',$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) "+
+          "RETURNING id,kind,debt_id,month_date::text,amount_twd::text",
+          [ctx.owner,startMonth(b.month),debt.id,trim(b.name,140),a.amountTwd,Number(b.dueDay),
+           trim(b.memo,250),a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider]);
+        await audit(db,ctx.owner,"finance.loan_plan.create",items[0].id,{debtId:debt.id},"finance_cashflow_item");
+        return {debt,item:items[0],ledgerPosted:false};
+      });
+      return reply.code(201).send(saved);
+    }catch(error){return databaseError(req,reply,error);}
+  });
   app.post("/api/finance/cashflow/items",async(req,reply)=>{
     const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
     const b=req.body||{};
-    if(!monthKey(b.month)||!["income","expense"].includes(b.kind)||!trim(b.label)
+    if(!monthKey(b.month)||!["income","expense","borrowing"].includes(b.kind)||!trim(b.label)
       ||!(b.dueDay==null||b.dueDay===""||(Number.isInteger(Number(b.dueDay))&&Number(b.dueDay)>=1&&Number(b.dueDay)<=31)))
       return fail(reply,"INVALID_CASHFLOW_ITEM");
     try{
       const converted=await plannedAmount(ctx,b);
       if(converted.error)return fail(reply,converted.error);
       const saved=await auditedWrite(ctx,"finance.cashflow.create","finance_cashflow_item",async db=>{
+        if(b.kind==="borrowing"){
+          if(!id(b.debtId))return {error:"PLAN_LOAN_DEBT_REQUIRED"};
+          const err=await validateLoan(db,ctx.owner,b.debtId,converted);
+          if(err)return {error:err};
+        }
         const {rows}=await db.query(
-          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
-          [ctx.owner,startMonth(b.month),b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider]
+          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider,debt_id) VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12,$13) RETURNING id,kind,debt_id,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
+          [ctx.owner,startMonth(b.month),b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider,b.kind==="borrowing"?b.debtId:null]
         );
         return rows[0];
       });
+      if(saved.error)return fail(reply,saved.error,409);
       return reply.code(201).send({item:saved});
     }catch(error){return databaseError(req,reply,error);}
   });
   app.put("/api/finance/cashflow/items/:itemId",async(req,reply)=>{
     const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
     const b=req.body||{},itemId=req.params?.itemId;
-    if(!id(itemId)||!["income","expense"].includes(b.kind)||!trim(b.label)
+    if(!id(itemId)||!["income","expense","borrowing"].includes(b.kind)||!trim(b.label)
       ||!(b.dueDay==null||b.dueDay===""||(Number.isInteger(Number(b.dueDay))&&Number(b.dueDay)>=1&&Number(b.dueDay)<=31)))
       return fail(reply,"INVALID_CASHFLOW_ITEM");
     try{
       const converted=await plannedAmount(ctx,b);
       if(converted.error)return fail(reply,converted.error);
       const saved=await auditedWrite(ctx,"finance.cashflow.update","finance_cashflow_item",async db=>{
+        const {rows:old}=await db.query("SELECT kind,debt_id FROM finance.cashflow_items WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,itemId]);
+        if(!old[0])return null;
+        if((old[0].kind==="borrowing")!==(b.kind==="borrowing"))
+          return {error:"PLAN_LOAN_KIND_IMMUTABLE"};
+        if(b.kind==="borrowing"){
+          if(!id(b.debtId)||old[0].debt_id!==b.debtId)return {error:"PLAN_LOAN_DEBT_IMMUTABLE"};
+          const err=await validateLoan(db,ctx.owner,b.debtId,converted);
+          if(err)return {error:err};
+        }
         const {rows}=await db.query(
           "UPDATE finance.cashflow_items SET kind=$3,label=$4,amount_twd=$5::numeric,due_day=$6,memo=$7,updated_at=now(),original_currency=$8,original_amount=$9::numeric,fx_rate_to_twd=$10::numeric,fx_rate_observed_at=$11::timestamptz,fx_rate_provider=$12 WHERE owner_user_id=$1 AND id=$2 RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
           [ctx.owner,itemId,b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider]
         );return rows[0];
       });
       if(!saved)return fail(reply,"CASHFLOW_ITEM_NOT_FOUND",404);
+      if(saved.error)return fail(reply,saved.error,409);
       return {item:saved};
     }catch(error){return databaseError(req,reply,error);}
   });
@@ -364,7 +427,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           if(seen.has(key))return fail(reply,"DUPLICATE_SHEET_DEBT_FUND");
           seen.add(key);prepared.push(op);
         }else if(op.op.endsWith("Item")&&op.op!=="deleteItem"){
-          if(!["income","expense"].includes(op.kind)||typeof op.label!=="string"||
+          if(!["income","expense","borrowing"].includes(op.kind)||typeof op.label!=="string"||
              !trim(op.label)||trim(op.label,140)!==trim(op.label)||
              typeof op.memo!=="string"||op.memo.length>250||
              (op.dueDay!==null&&(!Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31)))
@@ -373,6 +436,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             currencyCode:op.currencyCode,originalAmount:op.originalAmount
           });
           if(amount.error)return fail(reply,amount.error);
+          if(op.kind==="borrowing"&&!id(op.debtId))return fail(reply,"PLAN_LOAN_DEBT_REQUIRED");
           prepared.push({...op,converted:amount});
         }else if(op.op==="updateFund"){
           if(!["debt","goal"].includes(op.fundType)||
@@ -391,11 +455,15 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           let rows=[];
           if(op.op==="createItem"){
             const a=op.converted;
+            if(op.kind==="borrowing"){
+              const err=await validateLoan(db,ctx.owner,op.debtId,a);
+              if(err){const e=new Error(err);e.sheetCode=err;throw e;}
+            }
             ({rows}=await db.query(
-              "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) "+
-              "VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id",
+              "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider,debt_id) "+
+              "VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12,$13) RETURNING id",
               [ctx.owner,startMonth(month),op.kind,trim(op.label,140),a.amountTwd,op.dueDay,
-                op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider]));
+                op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider,op.kind==="borrowing"?op.debtId:null]));
           }else if(op.op==="createFund"){
             const {rows:valid}=await db.query(
               "SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code "+
@@ -422,6 +490,17 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             }
           }else if(op.op==="updateItem"){
             const a=op.converted;
+            const {rows:prior}=await db.query("SELECT kind,debt_id FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 FOR UPDATE",
+              [ctx.owner,startMonth(month),op.id]);
+            if(!prior[0]){const e=new Error("SHEET_STALE_RELOAD");e.sheetCode="SHEET_STALE_RELOAD";throw e;}
+            if((prior[0].kind==="borrowing")!==(op.kind==="borrowing")||
+               (op.kind==="borrowing"&&prior[0].debt_id!==op.debtId)){
+              const e=new Error("PLAN_LOAN_KIND_IMMUTABLE");e.sheetCode="PLAN_LOAN_KIND_IMMUTABLE";throw e;
+            }
+            if(op.kind==="borrowing"){
+              const err=await validateLoan(db,ctx.owner,op.debtId,a);
+              if(err){const e=new Error(err);e.sheetCode=err;throw e;}
+            }
             ({rows}=await db.query(
               "UPDATE finance.cashflow_items SET kind=$4,label=$5,amount_twd=$6::numeric,due_day=$7,"+
               "memo=$8,original_currency=$9,original_amount=$10::numeric,fx_rate_to_twd=$11::numeric,"+
@@ -430,6 +509,12 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
               [ctx.owner,startMonth(month),op.id,op.kind,trim(op.label,140),a.amountTwd,
                 op.dueDay,op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider,op.version]));
           }else if(op.op==="deleteItem"){
+            const {rows:prior}=await db.query("SELECT kind,debt_id FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 FOR UPDATE",
+              [ctx.owner,startMonth(month),op.id]);
+            if(prior[0]?.kind==="borrowing"){
+              const {rows:paid}=await db.query("SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,prior[0].debt_id]);
+              if(paid[0]){const e=new Error("PLAN_LOAN_ALREADY_RECEIVED");e.sheetCode="PLAN_LOAN_ALREADY_RECEIVED";throw e;}
+            }
             ({rows}=await db.query(
               "DELETE FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date "+
               "AND id=$3 AND updated_at=$4::timestamptz RETURNING id",
@@ -464,7 +549,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       reply.header("Cache-Control","private, no-store");
       return {saved:results.length,rows:results,month,ledgerPosted:false};
     }catch(error){
-      if(error.sheetCode)return fail(reply,error.sheetCode,["SHEET_STALE_RELOAD","SHEET_FUND_ALREADY_EXISTS"].includes(error.sheetCode)?409:400);
+      if(error.sheetCode)return fail(reply,error.sheetCode,["SHEET_STALE_RELOAD","SHEET_FUND_ALREADY_EXISTS","PLAN_LOAN_ALREADY_RECEIVED","PLAN_LOAN_KIND_IMMUTABLE"].includes(error.sheetCode)?409:400);
       return databaseError(req,reply,error);
     }
   });

@@ -93,6 +93,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/007_finance_mentor_obligations.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/008_finance_loan_receipts.sql
           psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/008_finance_loan_receipts.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/009_finance_planned_borrowing.sql
+          psql -v ON_ERROR_STOP=1 -d personal_finance_test -f vps/finance/migrations/009_finance_planned_borrowing.sql
       - name: Validate core constraints and kitchen DB isolation
         run: |
           psql -v ON_ERROR_STOP=1 -d personal_finance_test <<'SQL'

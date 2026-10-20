@@ -745,5 +745,68 @@ assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.ac
  "Previewing a future loan/repayment pair cannot post either transaction");
 
 
+// Planned loan receipts: financing inflow forecasts must never become salary,
+// nor mint a wallet balance. Settlement references the SAME debt master.
+const upcomingMonth=new Date(Date.UTC(Number(monthly.slice(0,4)),Number(monthly.slice(5,7)),1)).toISOString().slice(0,7);
+const borrowBefore=(await request("/finance/bootstrap",{cookie:owner})).data;
+const loanPlanBody={month:monthly,name:"Bạn bè sẽ cho vay",currencyCode:"TWD",
+ originalAmount:"20000",dueDay:25,dueDate:upcomingMonth+"-26",
+ annualInterestPercent:"0",creditorType:"friend_family",memo:"Cần nhận trước hạn thuê nhà"};
+assert.equal((await request("/finance/loan-plans",{method:"POST",body:loanPlanBody})).status,401);
+assert.equal((await request("/finance/loan-plans",{method:"POST",cookie:stranger,body:loanPlanBody})).status,403);
+assert.equal((await request("/finance/loan-plans",{method:"POST",cookie:owner,write:false,body:loanPlanBody})).status,403);
+const beforeLoanPlanning=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+const plannedBorrow=(await post("/loan-plans",loanPlanBody));
+assert.equal(plannedBorrow.ledgerPosted,false);
+assert.equal(plannedBorrow.item.kind,"borrowing");
+const masterAfterPlan=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert.equal(masterAfterPlan.debts.length,borrowBefore.debts.length+1);
+assert.equal(Number(masterAfterPlan.accounts.find(x=>x.id===borrowWallet.id).balance),17900,
+ "Planning a future loan must not mint cash in any wallet");
+const afterLoanPlanning=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+assert.equal(Number(afterLoanPlanning.summary.planned_borrowing_twd),20000);
+assert.equal(Number(afterLoanPlanning.summary.planned_income_twd),
+ Number(beforeLoanPlanning.summary.planned_income_twd),"Borrowing must not inflate salary forecasts");
+assert.equal(Number(afterLoanPlanning.summary.planned_net_twd)-
+ Number(beforeLoanPlanning.summary.planned_net_twd),20000);
+assert(afterLoanPlanning.items.some(x=>x.id===plannedBorrow.item.id&&x.debt_id===plannedBorrow.debt.id&&x.received===false));
+const loanYear=(await request("/finance/cashflow/year?year="+monthly.slice(0,4),{cookie:owner})).data;
+assert.equal(Number(loanYear.months.find(x=>x.month===monthly).planned_borrowing_twd),20000);
+const loanVersion=afterLoanPlanning.items.find(x=>x.id===plannedBorrow.item.id).updated_at;
+const loanItemPath="/finance/cashflow/items/"+plannedBorrow.item.id;
+const convertBorrowIncome=await request(loanItemPath,{method:"PUT",cookie:owner,
+ body:{kind:"income",label:"False salary",originalAmount:"20000",currencyCode:"TWD",dueDay:25}});
+assert.equal(convertBorrowIncome.status,409,"Posted financing plan cannot silently switch to earned income");
+const sheetConvert=await request("/finance/cashflow/sheet/batch",{method:"POST",cookie:owner,
+ body:{month:monthly,operations:[{op:"updateItem",id:plannedBorrow.item.id,version:loanVersion,
+ kind:"income",label:"False salary",originalAmount:"20000",currencyCode:"TWD",dueDay:25,memo:""}]}});
+assert.equal(sheetConvert.status,409,"Sheet cannot silently relabel a borrowing as salary");
+const incorrectLoan=await request("/finance/loan-receipts",{method:"POST",cookie:owner,
+ body:{name:loanPlanBody.name,debtId:plannedBorrow.debt.id,accountId:borrowWallet.id,
+ currencyCode:"TWD",principalOriginal:"19000",receivedDate:monthly+"-25",
+ annualInterestPercent:"0",creditorType:"friend_family",idempotencyKey:key()}});
+assert.equal(incorrectLoan.status,409,"Settlement must match principal and currency");
+const pendingAfterRejected=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert.equal(Number(pendingAfterRejected.accounts.find(x=>x.id===borrowWallet.id).balance),17900);
+const settleBody={name:loanPlanBody.name,debtId:plannedBorrow.debt.id,accountId:borrowWallet.id,
+ currencyCode:"TWD",principalOriginal:"20000",receivedDate:monthly+"-25",
+ annualInterestPercent:"0",creditorType:"friend_family",idempotencyKey:key()};
+const settledLoan=await post("/loan-receipts",settleBody);
+assert.equal(settledLoan.debt.id,plannedBorrow.debt.id,"Actual receipt must use planned debt master");
+assert.equal((await request("/finance/loan-receipts",{method:"POST",cookie:owner,body:settleBody})).status,409);
+const masterAfterSettle=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert.equal(masterAfterSettle.debts.length,masterAfterPlan.debts.length,"No duplicate debt on actual loan receipt");
+assert.equal(Number(masterAfterSettle.accounts.find(x=>x.id===borrowWallet.id).balance),37900);
+const settledFlow=(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data;
+assert.equal(Number(settledFlow.summary.planned_borrowing_twd),0,
+ "Disbursed loan must cease to be counted in future inflows");
+assert(settledFlow.items.some(x=>x.id===plannedBorrow.item.id&&x.received===true));
+const postedBorrowingOverview=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
+assert(postedBorrowingOverview.events.some(x=>x.id===settledLoan.receipt.eventId&&x.kind==="borrowing"));
+assert.equal((await request("/finance/debts/"+plannedBorrow.debt.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
+ "Actual posted financing must remain immutable");
+const afterSettleYear=(await request("/finance/cashflow/year?year="+monthly.slice(0,4),{cookie:owner})).data;
+assert.equal(Number(afterSettleYear.months.find(x=>x.month===monthly).planned_borrowing_twd),0);
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money, loan financing classification and linked Mentor obligations");
 

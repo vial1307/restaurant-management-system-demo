@@ -53,7 +53,7 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(m))continue;
     const when=dated(m,item.due_day,null);
     const amt=twdUnits(item.amount_twd);
-    push(when.date,item.kind,item.label,item.kind==="income"?amt:-amt,"cashflow",item.id,when.estimatedDate);
+    push(when.date,item.kind,item.label,["income","borrowing"].includes(item.kind)?amt:-amt,"cashflow",item.id,when.estimatedDate);
   }
   // A posted debt payment is already reflected in real wallets. Remove it from
   // remaining planned monthly debt funding so the projection never debits twice.
@@ -99,7 +99,7 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     a.label.localeCompare(b.label)||a.sourceId.localeCompare(b.sourceId));
   let balance=opening,minimum=opening,minimumDate=asOf;
   let earliestRisk=opening<buffer?{date:asOf,balanceTwd:twdText(opening),gapTwd:twdText(buffer-opening),source:"opening",label:"Dự trữ đầu kỳ"}:null;
-  const totals={income:0n,expense:0n,debt:0n,goal:0n,remittance:0n};
+  const totals={income:0n,borrowing:0n,expense:0n,debt:0n,goal:0n,remittance:0n};
   for(const event of entries){
     const amt=twdUnits(event.amountTwd);
     balance+=amt;

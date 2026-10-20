@@ -29,7 +29,7 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
   const endMonth=through.slice(0,7)+"-01";
       const [wallets,cashItems,debtFunds,goalFunds,debtPayments,fxPlans,goals,debts]=await Promise.all([
         pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
-        pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
+        pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day,original_currency FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date AND (kind<>'borrowing' OR NOT EXISTS(SELECT 1 FROM finance.debt_disbursements d WHERE d.owner_user_id=finance.cashflow_items.owner_user_id AND d.debt_id=finance.cashflow_items.debt_id)) ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
           "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.currency_code "+
@@ -66,10 +66,11 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
       const liveGoals=goalFunds.rows.map(row=>priceFinanceFund(row,fx));
       const unconverted=missingFinanceFundQuotes(liveDebts,liveGoals);
       const advice=calculateFinanceAdvice({asOf,days,bufferTwd,
-        wallets:wallets.rows,cashItems:cashItems.rows,debtFunds:liveDebts.filter(x=>x.planned_twd!==null),
+        wallets:wallets.rows,cashItems:cashItems.rows.filter(x=>x.kind!=="borrowing"||x.original_currency==="TWD"),debtFunds:liveDebts.filter(x=>x.planned_twd!==null),
         goalFunds:liveGoals.filter(x=>x.planned_twd!==null),debtPayments:debtPayments.rows,fxPlans:fxPlans.rows,
         goals:goals.rows,debts:debts.rows});
+      const foreignLoans=cashItems.rows.filter(x=>x.kind==="borrowing"&&x.original_currency!=="TWD");
       return {...advice,unconvertedFunds:unconverted,
-        warnings:[...advice.warnings,...unconverted.map(x=>({code:"FX_RATE_UNAVAILABLE",message:"Quỹ "+x.name+" ("+x.currency+") thiếu tỷ giá hiện tại và chưa được tính vào TWD."}))],
+        warnings:[...advice.warnings,...(foreignLoans.length?[{code:"FOREIGN_LOAN_LIQUIDITY",message:"Không tự coi tiền vay ngoại tệ dự kiến là TWD có thể chi."}]:[]),...unconverted.map(x=>({code:"FX_RATE_UNAVAILABLE",message:"Quỹ "+x.name+" ("+x.currency+") thiếu tỷ giá hiện tại và chưa được tính vào TWD."}))],
         fxEstimateIncomplete:unconverted.length>0};
 }
