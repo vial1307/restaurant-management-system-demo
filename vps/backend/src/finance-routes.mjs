@@ -103,7 +103,7 @@ export async function registerFinanceRoutes(app) {
         ctx.pool.query("SELECT b.id,b.category_id,b.month_date::text AS month_date,b.amount_twd::text AS amount_twd,c.name AS category_name FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date>=date_trunc('month',CURRENT_DATE)-interval '12 months' ORDER BY b.month_date DESC,c.name",[ctx.owner]),
         ctx.pool.query("SELECT id,plan_date::text AS plan_date,plan_kind,from_currency,to_currency,source_amount::text AS source_amount,expected_rate::text AS expected_rate,expected_fee::text AS expected_fee,status,memo FROM finance.fx_plans WHERE owner_user_id=$1 ORDER BY plan_date DESC,created_at DESC LIMIT 100",[ctx.owner]),
         ctx.pool.query("SELECT id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status FROM finance.goals WHERE owner_user_id=$1 ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,target_date NULLS LAST,created_at DESC LIMIT 100",[ctx.owner]),
-        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner])
+        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount,COALESCE(MAX(ld.received_amount),0)::text AS received_amount,MAX(ld.received_date)::text AS received_date FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id LEFT JOIN finance.debt_disbursements ld ON ld.debt_id=d.id AND ld.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner])
       ]);
       return {currencies:currencies.rows,accounts:accounts.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
     } catch(error){return databaseError(request,reply,error);}
@@ -114,7 +114,7 @@ export async function registerFinanceRoutes(app) {
     if(!month)return fail(reply,"INVALID_MONTH");
     const start=month+"-01";
     try {
-      const [flow,budget,events]=await Promise.all([
+      const [flow,budget,events,financing]=await Promise.all([
         ctx.pool.query(
           "SELECT v.kind,COALESCE(SUM(ABS(v.base_amount_twd)),0)::text AS total_twd FROM (SELECT ev.kind,en.base_amount_twd FROM finance.events ev JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.kind IN ('income','expense') AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')) v GROUP BY v.kind",
           [ctx.owner,start]
@@ -124,11 +124,16 @@ export async function registerFinanceRoutes(app) {
           [ctx.owner,start]
         ),
         ctx.pool.query(
-          "SELECT ev.id,ev.kind,ev.description,ev.occurred_at,EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AS reversed,EXISTS(SELECT 1 FROM finance.debt_payments dp WHERE dp.owner_user_id=ev.owner_user_id AND dp.event_id=ev.id) AS debt_payment,COALESCE(json_agg(json_build_object('accountId',en.account_id,'amount',en.amount::text,'currency',en.currency_code,'categoryId',en.category_id)) FILTER (WHERE en.id IS NOT NULL),'[]'::json) AS entries FROM finance.events ev LEFT JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei') GROUP BY ev.id ORDER BY ev.occurred_at DESC,ev.id DESC LIMIT 60",
+          "SELECT ev.id,CASE WHEN EXISTS(SELECT 1 FROM finance.debt_disbursements ld WHERE ld.owner_user_id=ev.owner_user_id AND ld.event_id=ev.id) THEN 'borrowing' ELSE ev.kind END AS kind,ev.description,ev.occurred_at,EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AS reversed,EXISTS(SELECT 1 FROM finance.debt_payments dp WHERE dp.owner_user_id=ev.owner_user_id AND dp.event_id=ev.id) AS debt_payment,COALESCE(json_agg(json_build_object('accountId',en.account_id,'amount',en.amount::text,'currency',en.currency_code,'categoryId',en.category_id)) FILTER (WHERE en.id IS NOT NULL),'[]'::json) AS entries FROM finance.events ev LEFT JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei') GROUP BY ev.id ORDER BY ev.occurred_at DESC,ev.id DESC LIMIT 60",
+          [ctx.owner,start]
+        ),
+        ctx.pool.query(
+          "SELECT COALESCE((SELECT SUM(e.base_amount_twd) FROM finance.debt_disbursements d JOIN finance.entries e ON e.event_id=d.event_id AND e.owner_user_id=d.owner_user_id WHERE d.owner_user_id=$1 AND d.received_date >= $2::date AND d.received_date < ($2::date+interval '1 month')),0)::text AS borrowing_twd, "+
+          "COALESCE((SELECT SUM(p.base_amount_twd) FROM finance.debt_payments p WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month')),0)::text AS debt_paid_twd",
           [ctx.owner,start]
         )
       ]);
-      return {month,flow:flow.rows,budget:budget.rows,events:events.rows};
+      return {month,flow:flow.rows,budget:budget.rows,events:events.rows,financing:financing.rows[0]};
     } catch(error){return databaseError(request,reply,error);}
   });
   app.get("/api/finance/year",async(request,reply)=>{
@@ -362,6 +367,49 @@ export async function registerFinanceRoutes(app) {
       return result;
     }catch(error){return databaseError(request,reply,error);}
   });
+  // This is an actual funding event, not a monthly plan or earned income.
+  // Reuse immutable finance.events/entries and existing finance.debts master.
+  app.post("/api/finance/loan-receipts",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const b=request.body||{};
+    if(!id(b.accountId)||!id(b.idempotencyKey)||!trim(b.name)||
+       !ISO.test(String(b.currencyCode||""))||!positive(b.principalOriginal,6)||
+       !isDate(b.receivedDate)||(b.dueDate&&!isDate(b.dueDate))||
+       !money(String(b.annualInterestPercent??"0"),6)||
+       Number(b.annualInterestPercent??0)>100)return fail(reply,"INVALID_LOAN_RECEIPT");
+    try{
+      const c=await currency(ctx.pool,b.currencyCode);
+      if(!c||!positive(b.principalOriginal,Number(c.minor_units)))return fail(reply,"INVALID_LOAN_AMOUNT");
+      const rate=b.currencyCode==="TWD"?"1":String(b.fxRateToTwd||"");
+      if(!positiveRate(rate))return fail(reply,"LOAN_FX_RATE_REQUIRED");
+      const saved=await financeTransaction(async db=>{
+        const wallet=await account(db,ctx.owner,b.accountId);
+        if(!wallet)return {error:"SOURCE_ACCOUNT_NOT_FOUND",status:404};
+        if(wallet.currency_code!==b.currencyCode)return {error:"LOAN_ACCOUNT_CURRENCY_MISMATCH",status:400};
+        // Unique idempotency key is claimed BEFORE inserting debt master.
+        const eventId=await createEvent(db,ctx.owner,"adjustment","Nhận tiền vay · "+trim(b.name,160),
+          b.receivedDate+"T12:00:00+08:00",b.idempotencyKey);
+        if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
+        const {rows}=await db.query(
+          "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) "+
+          "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) "+
+          "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
+          [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,
+           String(b.annualInterestPercent??"0"),b.dueDate||null]);
+        const debt=rows[0];
+        await entry(db,ctx.owner,eventId,wallet,b.principalOriginal,null,rate);
+        const disbursement=await db.query(
+          "INSERT INTO finance.debt_disbursements(owner_user_id,debt_id,event_id,account_id,currency_code,received_amount,fx_rate_to_twd,received_date) "+
+          "VALUES($1,$2,$3,$4,$5,$6::numeric,$7::numeric,$8::date) RETURNING id,received_amount::text,received_date::text",
+          [ctx.owner,debt.id,eventId,wallet.id,b.currencyCode,b.principalOriginal,rate,b.receivedDate]);
+        await audit(db,ctx.owner,"finance.loan_receipt.post",disbursement.rows[0].id,
+          {eventId,debtId:debt.id,accountId:wallet.id},"finance_debt_disbursement");
+        return {debt,receipt:{...disbursement.rows[0],eventId,accountId:wallet.id}};
+      });
+      if(saved.error)return fail(reply,saved.error,saved.status||400);
+      return reply.code(201).send(saved);
+    }catch(error){return databaseError(request,reply,error);}
+  });
   app.post("/api/finance/debts",async(request,reply)=>{
     const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
     const b=request.body||{};
@@ -415,6 +463,8 @@ export async function registerFinanceRoutes(app) {
         if(!rows[0])return {error:"DEBT_NOT_FOUND",status:404};
         if((await db.query("SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
           return {error:"DEBT_HAS_POSTED_PAYMENTS",status:409};
+        if((await db.query("SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
+          return {error:"DEBT_HAS_POSTED_RECEIPT",status:409};
         const funds=await db.query("DELETE FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND debt_id=$2 RETURNING id",[ctx.owner,d]);
         await db.query("DELETE FROM finance.debt_mentor_terms WHERE owner_user_id=$1 AND debt_id=$2",[ctx.owner,d]);
         await db.query("DELETE FROM finance.debts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
