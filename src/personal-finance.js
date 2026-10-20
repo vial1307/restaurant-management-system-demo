@@ -500,18 +500,18 @@ function open(kind,id=""){
    field("targetBalance","Số dư đúng ("+account.currency_code+")","text",amt(account.balance),'inputmode="decimal"')+
    field("reason","Lý do đối soát (ít nhất 8 ký tự)","text","Đối chiếu số dư thực tế",'minlength="8" maxlength="250"');
  }else if(kind==="borrow"){
-  name="Ghi nhận tiền vay đã nhận · tạo công nợ liên kết";
-  body=field("name","Người cho vay / tên khoản vay","text","",'maxlength="160"')+
+  name=d?"Xác nhận khoản vay kế hoạch · "+d.name:"Ghi nhận tiền vay đã nhận · tạo công nợ liên kết";
+  body=field("name","Người cho vay / tên khoản vay","text",d?.name||"",'maxlength="160"')+
    select("creditorType","Bạn vay từ ai?",[
     ["friend_family","Bạn bè / gia đình"],["bank_loan","Ngân hàng"],["credit_card","Thẻ tín dụng"],["installment_provider","Đơn vị trả góp"],["other","Khác"]
    ].map(([k,v])=>escOption(k,v,k==="friend_family")).join(""))+
-   select("currencyCode","Ngoại tệ nhận",currOpts())+
-   field("principalOriginal","Số tiền vay THỰC NHẬN và gốc phải trả","text","",'inputmode="decimal"')+
+   select("currencyCode","Ngoại tệ nhận",currOpts(d?.currency_code||"TWD"))+
+   field("principalOriginal","Số tiền vay THỰC NHẬN và gốc phải trả","text",d?.principal_original||"",'inputmode="decimal"')+
    '<div class="preview" id="finance-fx-preview">Quy đổi TWD theo tỷ giá tại thời điểm ghi nhận.</div>'+
-   select("accountId","Ví thực nhận",accountOpts("TWD"))+
+   select("accountId","Ví thực nhận",accountOpts(d?.currency_code||"TWD"))+
    field("receivedDate","Ngày đã nhận tiền","date",nowDate())+
-   field("dueDate","Ngày đến hạn (có thể để trống)","date","")+
-   field("annualInterestPercent","Lãi suất năm (%)","number","0",'min="0" max="100" step="0.01"')+
+   field("dueDate","Ngày đến hạn (có thể để trống)","date",d?.due_date||"")+
+   field("annualInterestPercent","Lãi suất năm (%)","number",d?number(val(d.annual_interest_rate)*100,2):"0",'min="0" max="100" step="0.01"')+
    '<div class="notice">Chỉ xác nhận khi tiền ĐÃ vào ví, không chọn nếu chỉ dự kiến vay. Tạo nợ + tăng ví đúng một lần; không được nhập lại khoản này ở Thu nhập. Nếu gốc khác tiền thực nhận do phí khấu trừ, cần tách nghiệp vụ, không ghi sai số dư.</div>';
  }else if(kind==="debt"){
   name="Thêm khoản nợ";
