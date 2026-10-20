@@ -663,7 +663,7 @@ async function submit(event){
    body={name:b.name,currencyCode:b.currencyCode,accountId:b.accountId,creditorType:b.creditorType,
     principalOriginal:original,annualInterestPercent:b.annualInterestPercent||"0",
     receivedDate:b.receivedDate,dueDate:b.dueDate||null,fxRateToTwd:q.rateToTwd||"1",
-    idempotencyKey:form.dataset.key};
+    idempotencyKey:form.dataset.key,...(id?{debtId:id}:{})};
    path="/loan-receipts";
   }else if(type==="debt"){
    body={name:b.name,currencyCode:b.currencyCode,principalOriginal:amountInput(b.principalOriginal,b.currencyCode),
