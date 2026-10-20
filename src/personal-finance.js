@@ -486,6 +486,9 @@ function open(kind,id=""){
  }else if(kind==="borrow"){
   name="Ghi nhận tiền vay đã nhận · tạo công nợ liên kết";
   body=field("name","Người cho vay / tên khoản vay","text","",'maxlength="160"')+
+   select("creditorType","Bạn vay từ ai?",[
+    ["friend_family","Bạn bè / gia đình"],["bank_loan","Ngân hàng"],["credit_card","Thẻ tín dụng"],["installment_provider","Đơn vị trả góp"],["other","Khác"]
+   ].map(([k,v])=>escOption(k,v,k==="friend_family")).join(""))+
    select("currencyCode","Ngoại tệ nhận",currOpts())+
    field("principalOriginal","Số tiền vay THỰC NHẬN và gốc phải trả","text","",'inputmode="decimal"')+
    '<div class="preview" id="finance-fx-preview">Quy đổi TWD theo tỷ giá tại thời điểm ghi nhận.</div>'+
@@ -631,7 +634,7 @@ async function submit(event){
    const original=amountInput(b.principalOriginal,b.currencyCode);
    if(Number(original)<=0)throw new Error("Tiền vay phải lớn hơn 0.");
    if(!confirm("Xác nhận bạn ĐÃ nhận "+money(original,b.currencyCode)+" vào ví? App sẽ tăng số dư, tạo công nợ và lưu lịch sử không thể xóa."))return;
-   body={name:b.name,currencyCode:b.currencyCode,accountId:b.accountId,
+   body={name:b.name,currencyCode:b.currencyCode,accountId:b.accountId,creditorType:b.creditorType,
     principalOriginal:original,annualInterestPercent:b.annualInterestPercent||"0",
     receivedDate:b.receivedDate,dueDate:b.dueDate||null,fxRateToTwd:q.rateToTwd||"1",
     idempotencyKey:form.dataset.key};
@@ -672,7 +675,7 @@ async function submit(event){
    body={categoryId:id,month:state.month,amountTwd:amountInput(b.amountTwd,"TWD")};path="/budgets";method="PUT";
   }else{return;}
   state.busy=true;$("#finance-submit").disabled=true;
-  await api(path,body,method);dlg.close();notify("Đã lưu vào Finance Database.");await refresh();
+  await api(path,body,method);dlg.close();if(type==="borrow")mentorUI.reset();notify("Đã lưu vào Finance Database.");await refresh();
  }catch(error){notify(errorText(error));if(error.message==="BALANCE_CHANGED_RELOAD"){dlg.close();await refresh();}}
  finally{state.busy=false;$("#finance-submit").disabled=false;}
 }
