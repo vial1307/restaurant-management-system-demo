@@ -217,7 +217,9 @@ function planTable(limit=100){
   '<tr><td>'+safe(r.date.slice(8)+"/"+r.date.slice(5,7))+(r.estimated?' <small>ước tính</small>':'')+'</td><td>'+tag(r.kind)+'</td><td><strong>'+safe(r.name)+'</strong></td>'+
   '<td>'+safe(money(r.native,r.code))+'</td><td class="num positive">'+(["income","borrowing"].includes(r.kind)?(r.received?"Đã nhận vào ví":safe(money(r.twd))):"—")+'</td>'+
   '<td class="num negative">'+(!["income","borrowing"].includes(r.kind)?(r.unallocated?"Chưa lập quỹ":r.twd===null?"Chưa có tỷ giá":safe(money(r.twd))):"—")+'</td>'+
-  '<td>'+safe(r.detail||"—")+'</td><td>'+btn("Sửa",r.source==="item"?"editPlan":r.source==="debt"?"fundDebt":"fundGoal","small soft",'data-id="'+safe(r.source==="item"?r.id:r.ref)+'"')+'</td></tr>').join("")+
+  '<td>'+safe(r.detail||"—")+'</td><td>'+
+  (r.kind==="borrowing"&&!r.received?btn("Đã nhận tiền","borrow","small primary",'data-id="'+safe(r.debtId)+'"'):"")+
+  btn("Sửa",r.source==="item"?"editPlan":r.source==="debt"?"fundDebt":"fundGoal","small soft",'data-id="'+safe(r.source==="item"?r.id:r.ref)+'"')+'</td></tr>').join("")+
   '</tbody></table></div>';
 }
 function actualIncome(){return (state.overview?.flow||[]).filter(x=>x.kind==="income").reduce((n,x)=>n+val(x.total_twd),0);}
@@ -249,7 +251,7 @@ function overview(){
 function planning(){
  const sum=planSummary();const incomplete=sum.incomplete;
  return title("Kế hoạch tài chính",fmtMonth(state.month)+" · Quy đổi TWD cho dự báo, giữ nguyên số tiền gốc.",btn("+ Thêm thu/chi dự kiến","newPlan","primary"))+
- '<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(sum.income)+'</strong></div><div><small>Chi & quỹ dự kiến</small><strong class="negative">'+money(sum.expenses)+'</strong></div><div><small>Chênh lệch trong tháng</small><strong>'+money(sum.net)+'</strong></div></div><div style="height:14px"></div>'+
+ '<div class="mini-list"><div><small>Thu nhập dự kiến</small><strong class="positive">'+money(sum.income)+'</strong></div><div><small>Thu từ khoản vay dự kiến</small><strong class="positive">'+money(sum.borrowing)+'</strong></div><div><small>Tổng tiền vào dự kiến</small><strong>'+money(sum.inflow)+'</strong></div><div><small>Chi & quỹ dự kiến</small><strong class="negative">'+money(sum.expenses)+'</strong></div><div><small>Chênh lệch trong tháng</small><strong>'+money(sum.net)+'</strong></div></div><div style="height:14px"></div>'+
  (incomplete?'<div class="notice warn">Có khoản ngoại tệ thiếu tỷ giá cập nhật; tổng TWD phía trên chưa bao gồm những khoản đó.</div><div style="height:12px"></div>':"")+
  priorityRibbon()+card("Bảng kế hoạch theo tháng",sheet.html(),"","Nhập trực tiếp trên ô, chọn nhiều dòng, dán từ Excel/Google Sheets và lưu đồng bộ PostgreSQL.")+
  card("Phân tích dòng tiền theo tháng đã chọn",linkedInsights(),btn("Xem mô phỏng đầy đủ","goSim","small soft"))+
@@ -306,7 +308,7 @@ function reporting(){
  return title("Dòng tiền & báo cáo","Kế hoạch và phát sinh thực được đối chiếu riêng theo "+fmtMonth(state.month)+".",btn("+ Thu / chi","transaction","primary")+btn("Xuất CSV","export","ghost"))+
  '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Ròng thu/chi + vay/trả nợ",value:money(inc-out+received-paid)},{color:"purple",label:"Số giao dịch",value:String((state.overview?.events||[]).filter(x=>!x.reversed&&x.kind!=="reversal").length)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
  card("Dòng tiền tài trợ thực tế",'<div class="mini-list"><div><small>Tiền vay thực nhận (không là thu nhập)</small><strong class="positive">'+money(received)+'</strong></div><div><small>Thanh toán nợ thực tế (gốc + lãi + phí)</small><strong class="negative">'+money(paid)+'</strong></div><div><small>Thu nhập phát sinh (không gồm tiền vay)</small><strong>'+money(inc)+'</strong></div></div><div class="notice">Ròng thu/chi + vay/trả nợ chưa bao gồm biến động do đổi ngoại tệ và điều chỉnh số dư. Ví thực tế vẫn được tính từ tất cả bút toán gốc.</div>')+
- card("Dòng tiền dự kiến từ Kế hoạch tài chính",'<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(planned.income)+'</strong></div><div><small>Chi và quỹ dự kiến</small><strong class="negative">'+money(planned.expenses)+'</strong></div><div><small>Chênh lệch dự kiến</small><strong>'+money(planned.net)+'</strong></div></div><div style="height:10px"></div>'+
+ card("Dòng tiền dự kiến từ Kế hoạch tài chính",'<div class="mini-list"><div><small>Thu nhập dự kiến</small><strong class="positive">'+money(planned.income)+'</strong></div><div><small>Thu từ khoản vay dự kiến</small><strong class="positive">'+money(planned.borrowing)+'</strong></div><div><small>Tổng tiền vào dự kiến</small><strong>'+money(planned.inflow)+'</strong></div><div><small>Chi và quỹ dự kiến</small><strong class="negative">'+money(planned.expenses)+'</strong></div><div><small>Chênh lệch dự kiến</small><strong>'+money(planned.net)+'</strong></div></div><div style="height:10px"></div>'+
    '<div class="notice">Kế hoạch ≠ phát sinh thực tế. Các khoản đã nhập ở tab Kế hoạch được tự đồng bộ vào đây, không yêu cầu nhập lại. Tránh cộng hai cột thành một số dư.</div>',btn("Xem kế hoạch","goPlan","small soft"))+
  '<div class="layout-2 equal">'+card("Số dư dự báo & hành động",linkedInsights())+
  card("Lịch tiền theo ngày",linkedCashTable(22))+"</div>"+
