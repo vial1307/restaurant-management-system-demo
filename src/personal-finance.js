@@ -259,6 +259,69 @@ function planning(){
  '<div class="layout-2 equal">'+card("Số dư và các ví",walletList(),btn("Tạo ví","account","small soft"))+
  card("Tỷ giá đang sử dụng",quoteCards(),btn("Cập nhật","reloadFx","small soft"))+'</div>';
 }
+function debtProgressPanels(){
+ const progress=state.progress;
+ if(!progress)return '<div class="notice warn">Chưa tải được lịch sử trả nợ theo tháng từ Finance Database. Hãy tải lại để đối chiếu.</div>';
+ if(!progress.debts?.length)return empty("Chưa khai báo khoản nợ để theo dõi.");
+ const rows=progress.debts.map(d=>{
+  const paidYear=d.months.reduce((n,m)=>n+val(m.paidTotalNative),0);
+  const active=d.months.filter(m=>m.month===state.month||val(m.plannedNative)>0||m.paymentCount>0||
+   m.month===nowDate().slice(0,7));
+  const details=active.length?active.map(m=>{
+   const paid=m.paymentCount>0?money(m.paidTotalNative,d.currency):"Chưa có bút toán";
+   const planned=money(m.plannedNative,d.currency);
+   const note=m.status==="unreconciled"?
+    '<small class="negative">Chưa đối chiếu khoản trả của tháng đã qua</small>':
+    m.status==="planned"?'<small>Kế hoạch, chưa xác nhận thanh toán</small>':
+    m.status==="posted"?'<small class="positive">Đã ghi nhận '+m.paymentCount+' giao dịch</small>':
+    '<small>Chưa lập quỹ / chưa ghi trả</small>';
+   return '<tr><td>'+safe(m.month)+'</td>'+
+    '<td class="num">'+planned+'</td>'+
+    '<td class="num positive">'+paid+'</td>'+
+    '<td class="num">'+money(m.paidPrincipalNative,d.currency)+'</td>'+
+    '<td class="num">'+money(m.paidInterestNative,d.currency)+'</td>'+
+    '<td class="num">'+money(m.closingPrincipalNative,d.currency)+'</td>'+
+    '<td>'+note+(m.plannedPaymentDate?'<small>Ngày tự chọn: '+safe(m.plannedPaymentDate)+'</small>':"")+'</td></tr>';
+  }).join(""):'<tr><td colspan="7">Không có kế hoạch hay thanh toán trong năm được chọn.</td></tr>';
+  const dueLabel=d.dueDate?
+    ((d.obligationType==="fixed")?"Hạn đã khai báo: ":"Ngày ghi trong hồ sơ (chưa xác minh cam kết): ")+d.dueDate:
+    "Chưa có hạn cố định · chủ động lập lịch trả";
+  return '<details class="finance-debt-progress"><summary><strong>'+safe(d.name)+'</strong>'+
+   ' · Đã trả năm '+progress.year+': '+money(paidYear,d.currency)+
+   ' · Dư nợ hiện ghi: '+money(d.months.at(-1)?.closingPrincipalNative||d.principalOriginal,d.currency)+
+   '</summary><div class="notice">'+safe(dueLabel)+
+   '. Quỹ dự kiến KHÔNG phải tiền đã trả. Dư nợ sau tháng chỉ giảm theo bút toán thực tế.</div>'+
+   '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tháng</th><th class="num">Quỹ dự kiến</th>'+
+   '<th class="num">Đã trả thật</th><th class="num">Gốc trả</th><th class="num">Lãi trả</th>'+
+   '<th class="num">Dư gốc thực</th><th>Đối chiếu</th></tr></thead><tbody>'+details+
+   '</tbody></table></div></details>';
+ }).join("");
+ return '<div class="notice">Đọc từ PostgreSQL theo từng khoản và từng tháng. Số tiền gốc, lãi, phí đã trả chỉ lấy từ giao dịch “Đã trả nợ” được xác nhận. Nếu trước đây bạn chỉ nhập số tiền vào Kế hoạch, hệ thống chưa thể khẳng định đã trả.</div>'+
+  rows+(progress.warnings||[]).slice(0,5).map(w=>'<div class="notice warn">'+safe(w)+'</div>').join("");
+}
+function datedDebtAgenda(){
+ const advice=state.advice;
+ if(!advice)return '<div class="notice">Đang tải lịch phân tích theo ngày từ dòng tiền thực và kế hoạch.</div>';
+ const actions=(advice.debtActions||[]).slice(0,15);
+ const gap=advice.earliestRisk;
+ const overview=gap?'<div class="notice warn"><strong>Cần chuẩn bị trước '+safe(gap.date)+'</strong> · Dự báo thiếu '+money(gap.gapTwd)+
+  ' so với mức dự trữ. Kiểm tra ngày lương về và khoản bắt buộc trước mốc này.</div>':
+  '<div class="notice">Chưa thấy điểm hụt quỹ dự trữ trong phạm vi dự báo. Điều này chỉ đúng nếu các ngày thu, chi đã nhập được thực hiện.</div>';
+ if(!actions.length)return overview+
+  '<div class="notice">Chưa có quỹ trả nợ được lập cho các ngày sắp tới. Với khoản vay bạn bè không cố định, hãy chọn một tháng, lập quỹ và nhập ngày tự dự kiến trả.</div>';
+ return overview+actions.map(x=>{
+  const isGap=val(x.gapToBufferTwd)>0;
+  const dateLabel=x.dateType==="owner_target"?"Ngày tự chọn":x.dateType==="recorded_due_date"?"Ngày nợ đã khai báo":"Cuối tháng tạm tính";
+  return '<div class="rowitem"><div><strong>'+safe(x.name)+'</strong>'+
+   '<p>Chuẩn bị từ '+safe(x.reviewBy)+' · '+dateLabel+': '+safe(x.plannedDate)+
+   ' · Khoản dự kiến '+money(x.amountTwd)+'</p>'+
+   '<small>Số dư sau kế hoạch: '+money(x.projectedBalanceAfterTwd)+
+   (isGap?' · Thiếu dự trữ '+money(x.gapToBufferTwd):' · Không hụt mức dự trữ theo dữ liệu đang có')+'</small>'+
+   (x.nextIncomeAfterDate?'<small>Nguồn thu tiếp theo ngày '+safe(x.nextIncomeAfterDate)+' đến SAU mốc trả dự kiến.</small>':"")+
+   '<small>'+(x.estimatedDate?"Ngày này chỉ tạm tính; chưa được coi là hạn trả bắt buộc. ":"")+
+   safe(x.message)+'</small></div></div>';
+ }).join("");
+}
 function commitments(){
  const debts=state.data?.debts||[];const funds=state.cashflow?.debtFunds||[];
  const debtHtml=debts.length?debts.map(d=>{const f=funds.find(x=>x.debt_id===d.id),rate=quote(d.currency_code);
