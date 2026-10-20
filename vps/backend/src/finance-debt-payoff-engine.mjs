@@ -10,7 +10,7 @@ const rounded=n=>Math.round(n);
 const mm=date=>String(date||"").slice(0,7);
 const fmt=n=>String(rounded(n));
 const rank=(a,b)=>{
- const aDue=a.due_date||"9999-12-31",bDue=b.due_date||"9999-12-31";
+ const aDue=a.obligation_type&&a.obligation_type!=="fixed"?"9999-12-31":a.due_date||"9999-12-31",bDue=b.obligation_type&&b.obligation_type!=="fixed"?"9999-12-31":b.due_date||"9999-12-31";
  if(aDue!==bDue)return aDue.localeCompare(bDue);
  if(a.apr!==b.apr)return b.apr-a.apr;
  return a.name.localeCompare(b.name);
@@ -30,7 +30,7 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],payments=[],quot
  const forecastStart=mm(asOf),forecastEnd=mm(baseline.months.at(-1)?.month);
  for(const debt of outstanding){
   const due=debt.due_date||"";
-  if(due&&mm(due)>=forecastStart&&mm(due)<=forecastEnd&&
+  if(due&&(!debt.obligation_type||debt.obligation_type==="fixed")&&mm(due)>=forecastStart&&mm(due)<=forecastEnd&&
    !funds.some(f=>f.debt_id===debt.id&&mm(f.month_date)===mm(due)&&asMoney(f.planned_amount)>0))
    warnings.push("Nợ “"+debt.name+"” đến hạn "+due+" nhưng chưa có quỹ trả trong tháng; dự báo chưa tự coi toàn bộ dư nợ là tiền đã chi.");
  }
@@ -101,8 +101,9 @@ export function planDebtPayoff({asOf,baseline,debts=[],funds=[],payments=[],quot
   remainingNative:fmt(d.remainingNative),
   remainingTwd:d.rate===null?null:fmt(d.remainingNative*d.rate),
   missingRate:d.rate===null}));
- if(outstanding.some(d=>d.due_date&&d.due_date<asOf))
+ if(outstanding.some(d=>d.due_date&&d.due_date<asOf&&(!d.obligation_type||d.obligation_type==="fixed")))
   warnings.push("Có nợ đã quá hạn. Cần đối chiếu với chủ nợ về lãi/phí thực tế trước khi thực hiện.");
+ if(outstanding.some(d=>d.due_date&&d.obligation_type==="unconfirmed"))warnings.push("Một số khoản nợ có ngày ghi trong hồ sơ nhưng chưa xác nhận cam kết trả cố định. Không tự coi là quá hạn; hãy kiểm tra lại với chủ nợ.");
  if(outstanding.some(d=>d.apr>0))
   warnings.push("Lãi dự kiến chỉ ước tính theo lãi suất năm / 12; không bao gồm lãi phạt, sao kê hoặc thay đổi theo ngày.");
  if(!allMonths.length)warnings.push("Chưa có dữ liệu thu/chi cho khoảng dự báo.");
