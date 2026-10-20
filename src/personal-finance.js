@@ -5,7 +5,7 @@ import {createFinancePlanSheet} from "./finance-plan-sheet.js";
 const $=s=>document.querySelector(s);
 const root=$("#finance-content"),dlg=$("#finance-dialog"),form=$("#finance-form"),fields=$("#finance-fields");
 const nowDate=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-const state={tab:"overview",month:nowDate().slice(0,7),user:null,data:null,overview:null,cashflow:null,year:null,yearPlan:null,fx:null,advice:null,payoff:null,days:90,buffer:"0",scenarioList:[],preview:null,baseline:null,baselineBusy:false,baselineError:null,analysisVersion:0,busy:false,ready:false,partial:[],error:null,editing:null,
+const state={tab:"overview",month:nowDate().slice(0,7),user:null,data:null,overview:null,cashflow:null,year:null,yearPlan:null,fx:null,advice:null,payoff:null,days:90,buffer:"0",scenarioList:[],scenarioId:null,preview:null,baseline:null,baselineBusy:false,baselineError:null,analysisVersion:0,busy:false,ready:false,partial:[],error:null,editing:null,
  sim:{name:"Kế hoạch của tôi",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]}};
 const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const number=(v,d=0)=>Number(v||0).toLocaleString("vi-VN",{maximumFractionDigits:d});
@@ -25,7 +25,7 @@ const quote=code=>code==="TWD"?{status:"base",rateToTwd:"1"}:
 const estimate=(amount,currency)=>{const q=quote(currency);return q&&Number.isFinite(+amount)?Number(amount)*Number(q.rateToTwd):null;};
 const errorText=err=>{
  const m=String(err?.message||err||"");
- const known={FINANCE_OWNER_REQUIRED:"Tài khoản này không có quyền dùng Finance OS.",FX_RATE_UNAVAILABLE:"Chưa có tỷ giá cập nhật. Giữ nguyên số tiền gốc và thử lại khi có tỷ giá.",BALANCE_CHANGED_RELOAD:"Số dư vừa thay đổi từ nơi khác. Hãy tải lại trước khi chỉnh.",FINANCE_DUPLICATE_REQUEST:"Giao dịch này đã được nhận. Hãy tải lại lịch sử, không gửi hai lần.",TWD_RATE_REQUIRED:"Cần tỷ giá ngoại tệ mới trước khi lưu.",DEBT_FUND_RATE_REQUIRED:"Không có tỷ giá mới cho quỹ nợ. Chưa tính TWD để tránh sai lệch.",GOAL_FUND_RATE_REQUIRED:"Không có tỷ giá mới cho quỹ mục tiêu.",SOURCE_ACCOUNT_NOT_FOUND:"Chưa có ví phù hợp. Tạo ví tại phần Tài khoản.",CATEGORY_REQUIRED:"Hãy tạo một danh mục thu/chi trước.",INVALID_CURRENCY_PRECISION:"Số tiền có quá nhiều chữ số thập phân.",BALANCE_UNCHANGED:"Số dư không thay đổi.",TRANSACTION_CURRENCY_ACCOUNT_MISMATCH:"Ví và khoản thu/chi phải cùng ngoại tệ."};
+ const known={FINANCE_OWNER_REQUIRED:"Tài khoản này không có quyền dùng Finance OS.",FX_RATE_UNAVAILABLE:"Chưa có tỷ giá cập nhật. Giữ nguyên số tiền gốc và thử lại khi có tỷ giá.",BALANCE_CHANGED_RELOAD:"Số dư vừa thay đổi từ nơi khác. Hãy tải lại trước khi chỉnh.",FINANCE_DUPLICATE_REQUEST:"Giao dịch này đã được nhận. Hãy tải lại lịch sử, không gửi hai lần.",TWD_RATE_REQUIRED:"Cần tỷ giá ngoại tệ mới trước khi lưu.",DEBT_FUND_RATE_REQUIRED:"Không có tỷ giá mới cho quỹ nợ. Chưa tính TWD để tránh sai lệch.",GOAL_FUND_RATE_REQUIRED:"Không có tỷ giá mới cho quỹ mục tiêu.",SOURCE_ACCOUNT_NOT_FOUND:"Chưa có ví phù hợp. Tạo ví tại phần Tài khoản.",CATEGORY_REQUIRED:"Hãy tạo một danh mục thu/chi trước.",INVALID_CURRENCY_PRECISION:"Số tiền có quá nhiều chữ số thập phân.",BALANCE_UNCHANGED:"Số dư không thay đổi.",TRANSACTION_CURRENCY_ACCOUNT_MISMATCH:"Ví và khoản thu/chi phải cùng ngoại tệ.",DEBT_HAS_POSTED_PAYMENTS:"Nợ đã có khoản thanh toán thực tế; không thể xóa.",ACCOUNT_HAS_POSTED_TRANSACTIONS:"Ví đã có giao dịch thực tế; không thể xóa.",CATEGORY_HAS_POSTED_TRANSACTIONS:"Danh mục đã sử dụng trong giao dịch; không thể xóa.",TRANSACTION_ALREADY_ADJUSTED:"Giao dịch đã sửa hoặc hủy trước đó.",DEBT_PAYMENT_IS_IMMUTABLE:"Thanh toán nợ không thể sửa/xóa trực tiếp.",TRANSACTION_NOT_CORRECTABLE:"Chỉ hỗ trợ sửa/hủy giao dịch thu và chi thông thường."};
  return known[m]|| (err?.status===503?"Finance Database đang gián đoạn; dữ liệu không bị xóa.":m);
 };
 async function api(path,body,method="GET"){
@@ -191,7 +191,11 @@ function walletTwd(){return (state.data?.accounts||[]).filter(x=>x.currency_code
 function goalPercent(g){return Math.max(0,Math.min(100,val(g.current_amount)/Math.max(1,val(g.target_amount))*100));}
 function walletList(){
  const accounts=state.data?.accounts||[];
- return accounts.length?accounts.map(a=>'<div class="rowitem"><div><strong>'+safe(a.name)+'</strong><p>'+safe(a.currency_code)+' · '+safe(a.kind)+'</p></div><div class="right"><strong>'+safe(money(a.balance,a.currency_code))+'</strong> '+btn("Chỉnh số dư","reconcile","small soft",'data-id="'+safe(a.id)+'"')+'</div></div>').join(""):empty("Chưa có ví. Hãy thêm ví hoặc tài khoản ngân hàng.");
+ return accounts.length?accounts.map(a=>'<div class="rowitem"><div><strong>'+safe(a.name)+'</strong><p>'+safe(a.currency_code)+' · '+safe(a.kind)+'</p></div><div class="right"><strong>'+safe(money(a.balance,a.currency_code))+'</strong><div class="tools">'+
+ btn("Đối soát","reconcile","small soft",'data-id="'+safe(a.id)+'"')+
+ btn("Sửa","editAccount","small ghost",'data-id="'+safe(a.id)+'"')+
+ btn("Xóa","deleteAccount","small danger",'data-id="'+safe(a.id)+'"')+
+ '</div></div></div>').join(""):empty("Chưa có ví. Hãy thêm ví hoặc tài khoản ngân hàng.");
 }
 function goalList(limit=99){
  const goals=(state.data?.goals||[]).filter(x=>x.status==="active").slice(0,limit);
@@ -256,11 +260,11 @@ function commitments(){
  const debtHtml=debts.length?debts.map(d=>{const f=funds.find(x=>x.debt_id===d.id),rate=quote(d.currency_code);
  return '<div class="rowitem"><div><strong>'+safe(d.name)+'</strong><p>Dư nợ: '+safe(money(d.outstanding_amount,d.currency_code))+
   (d.due_date?' · Hạn '+safe(d.due_date):' · Chưa có hạn')+' · Lãi '+number(val(d.annual_interest_rate)*100,2)+'%/năm</p><small>'+(f?'Quỹ tháng: '+money(f.planned_amount,d.currency_code)+(f.planned_twd!==null?' (≈ '+money(f.planned_twd)+')':' · chưa có tỷ giá'):'Chưa có quỹ tháng này')+'</small></div>'+
-  '<div class="tools">'+btn("Lập quỹ","fundDebt","small soft",'data-id="'+safe(d.id)+'"')+btn("Sửa hạn/lãi","editDebt","small ghost",'data-id="'+safe(d.id)+'"')+btn("Đã trả nợ","payDebt","small ghost",'data-id="'+safe(d.id)+'"')+'</div></div>';}).join(""):empty("Chưa khai báo công nợ.");
+  '<div class="tools">'+btn("Lập quỹ","fundDebt","small soft",'data-id="'+safe(d.id)+'"')+btn("Sửa hạn/lãi","editDebt","small ghost",'data-id="'+safe(d.id)+'"')+btn("Đã trả nợ","payDebt","small ghost",'data-id="'+safe(d.id)+'"')+btn("Xóa","deleteDebt","small danger",'data-id="'+safe(d.id)+'"')+'</div></div>';}).join(""):empty("Chưa khai báo công nợ.");
  const goals=state.data?.goals||[];const gf=state.cashflow?.goalFunds||[];
  const goalHtml=goals.length?goals.map(g=>{const f=gf.find(x=>x.goal_id===g.id);
  return '<div class="rowitem"><div style="flex:1"><strong>'+safe(g.name)+'</strong><p>'+money(g.current_amount,g.currency_code)+" / "+money(g.target_amount,g.currency_code)+(g.target_date?" · "+safe(g.target_date):"")+'</p><div class="progress"><i style="width:'+goalPercent(g)+'%"></i></div>'+(f?'<small>Quỹ tháng: '+money(f.planned_amount,g.currency_code)+'</small>':"")+'</div>'+
- '<div class="tools">'+btn("Phân bổ","fundGoal","small soft",'data-id="'+safe(g.id)+'"')+btn("Tiến độ","editGoal","small ghost",'data-id="'+safe(g.id)+'"')+'</div></div>';}).join(""):empty("Chưa có mục tiêu.");
+ '<div class="tools">'+btn("Phân bổ","fundGoal","small soft",'data-id="'+safe(g.id)+'"')+btn("Sửa","editGoal","small ghost",'data-id="'+safe(g.id)+'"')+btn("Xóa","deleteGoal","small danger",'data-id="'+safe(g.id)+'"')+'</div></div>';}).join(""):empty("Chưa có mục tiêu.");
  return title("Công nợ & mục tiêu","Quản lý khoản cần trả và mục tiêu tích lũy trong cùng một trang.",btn("+ Khoản nợ","debt","primary")+btn("+ Mục tiêu","goal","soft"))+
  priorityRibbon()+'<div class="layout-2 equal">'+card("Danh sách khoản nợ",debtHtml)+card("Mục tiêu và quỹ tích lũy",goalHtml)+'</div>'+
  card("Phân bổ nguồn lương để trả nợ trong 12 tháng",payoffSchedule(),btn("Mở mô phỏng","goSim","small soft"))+
@@ -270,9 +274,16 @@ function commitments(){
 function reportRows(){
  const records=state.overview?.events||[];
  if(!records.length)return empty("Chưa có giao dịch thực tế trong tháng.");
- return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Ví</th><th class="num">Số tiền gốc</th></tr></thead><tbody>'+
+ return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Ví</th><th class="num">Số tiền gốc</th><th>Thao tác</th></tr></thead><tbody>'+
  records.map(e=>{const first=e.entries?.[0]||{},wallet=(state.data?.accounts||[]).find(a=>a.id===first.accountId);
-  return '<tr><td>'+safe(String(e.occurred_at||"").slice(0,10))+'</td><td>'+tag(e.kind)+'</td><td>'+safe(e.description||"Giao dịch")+'</td><td>'+safe(wallet?.name||"—")+'</td><td class="num">'+safe(money(first.amount,first.currency||"TWD"))+'</td></tr>';
+  const editable=["income","expense"].includes(e.kind)&&!e.reversed&&!e.debt_payment;
+  return '<tr><td>'+safe(String(e.occurred_at||"").slice(0,10))+'</td><td>'+tag(e.kind)+(e.reversed?' <span class="tag">Đã hủy/sửa</span>':'')+
+   '</td><td>'+safe(e.description||"Giao dịch")+'</td><td>'+safe(wallet?.name||"—")+'</td><td class="num">'+safe(money(first.amount,first.currency||"TWD"))+
+   '</td><td><div class="tools">'+(editable?
+   btn("Sửa","editTransaction","small soft",'data-id="'+safe(e.id)+'"')+
+   btn("Hủy","reverseTransaction","small danger",'data-id="'+safe(e.id)+'"'):
+   '<span class="sheet-readonly">'+(e.reversed?"Đã điều chỉnh":e.debt_payment?"Thanh toán không thể sửa":"Bút toán hệ thống")+'</span>')+
+   '</div></td></tr>';
  }).join("")+'</tbody></table></div>';
 }
 function reporting(){
@@ -290,7 +301,7 @@ function reporting(){
 
  const categories=(state.overview?.budget||[]).filter(x=>x.kind==="expense");
  return title("Dòng tiền & báo cáo","Kế hoạch và phát sinh thực được đối chiếu riêng theo "+fmtMonth(state.month)+".",btn("+ Thu / chi","transaction","primary")+btn("Xuất CSV","export","ghost"))+
- '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Dòng tiền thực",value:money(inc-out)},{color:"purple",label:"Số giao dịch",value:String(state.overview?.events?.length||0)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
+ '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Dòng tiền thực",value:money(inc-out)},{color:"purple",label:"Số giao dịch",value:String((state.overview?.events||[]).filter(x=>!x.reversed&&x.kind!=="reversal").length)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
  card("Dòng tiền dự kiến từ Kế hoạch tài chính",'<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(planned.income)+'</strong></div><div><small>Chi và quỹ dự kiến</small><strong class="negative">'+money(planned.expenses)+'</strong></div><div><small>Chênh lệch dự kiến</small><strong>'+money(planned.net)+'</strong></div></div><div style="height:10px"></div>'+
    '<div class="notice">Kế hoạch ≠ phát sinh thực tế. Các khoản đã nhập ở tab Kế hoạch được tự đồng bộ vào đây, không yêu cầu nhập lại. Tránh cộng hai cột thành một số dư.</div>',btn("Xem kế hoạch","goPlan","small soft"))+
  '<div class="layout-2 equal">'+card("Số dư dự báo & hành động",linkedInsights())+
@@ -344,13 +355,13 @@ function scenario(){
  card("Lịch phân bổ lương và nguồn thu để trả nợ",payoffSchedule())+
  card("Lịch thu/chi và số dư dự kiến",linkedCashTable(24))+
  
- card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div>'+btn("Mở","openScenario","small soft",'data-id="'+safe(x.id)+'"')+'</div>').join(""):empty("Chưa lưu kịch bản nào."))+
+ card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div><div class="tools">'+btn("Mở / Sửa","openScenario","small soft",'data-id="'+safe(x.id)+'"')+btn("Xóa","deleteScenario","small danger",'data-id="'+safe(x.id)+'"')+'</div></div>').join(""):empty("Chưa lưu kịch bản nào."))+
  '</div></div>';
 }
 function settings(){
  return title("Tài khoản & cài đặt","Chỉ giữ những chức năng cần thiết để quản lý ví, danh mục và ngoại tệ.",btn("+ Ví mới","account","primary")+btn("+ Danh mục","category","soft"))+
  '<div class="layout-2 equal">'+card("Ví và số dư",walletList())+card("Ngoại tệ tham chiếu",quoteCards(),btn("↻ Làm mới","reloadFx","small soft"))+'</div>'+
- card("Danh mục thu / chi",(state.data?.categories||[]).map(c=>'<div class="rowitem"><div><strong>'+safe(c.name)+'</strong><p>'+safe(c.kind==="income"?"Thu nhập":"Chi tiêu")+'</p></div></div>').join("")||empty("Chưa có danh mục."))+
+ card("Danh mục thu / chi",(state.data?.categories||[]).map(c=>'<div class="rowitem"><div><strong>'+safe(c.name)+'</strong><p>'+safe(c.kind==="income"?"Thu nhập":"Chi tiêu")+'</p></div><div class="tools">'+btn("Sửa","editCategory","small ghost",'data-id="'+safe(c.id)+'"')+btn("Xóa","deleteCategory","small danger",'data-id="'+safe(c.id)+'"')+'</div></div>').join("")||empty("Chưa có danh mục."))+
  '<div class="notice">Finance OS dùng cơ sở dữ liệu riêng. Số dư được đối soát bằng bút toán có lý do, không sửa ngược lịch sử. Các màn hình cũ không còn được tải.</div>';
 }
 function render(){
@@ -448,11 +459,22 @@ function open(kind,id=""){
    select("categoryId","Danh mục",options((state.data?.categories||[]).filter(x=>x.kind==="expense"),"id",x=>x.name))+
    '<label>Ghi chú<textarea name="description" maxlength="250"></textarea></label>'+
    '<div class="notice">Ghi vào ví đúng ngoại tệ. Không tự đổi hoặc chuyển tiền giữa các ví.</div>';
- }else if(kind==="account"){
-  name="Thêm ví / tài khoản";
-  body=field("name","Tên ví / ngân hàng","text","",'maxlength="120"')+
-   select("currencyCode","Ngoại tệ",currOpts())+
-   select("kind","Loại ví",["cash","bank","ewallet","other"].map(k=>escOption(k,{cash:"Tiền mặt",bank:"Ngân hàng",ewallet:"Ví điện tử",other:"Khác"}[k])).join(""));
+ }else if(kind==="editTransaction"){
+  const ev=(state.overview?.events||[]).find(x=>x.id===id);
+  if(!ev||ev.reversed||ev.debt_payment||!["income","expense"].includes(ev.kind))return;
+  const old=ev.entries?.[0]||{},code=old.currency||"TWD";
+  name="Sửa giao dịch thực tế";
+  body='<div class="notice">Không sửa bút toán đã ghi sổ: hệ thống sẽ đảo khoản cũ và tạo giao dịch thay thế cùng một lần. Lịch sử vẫn được lưu.</div>'+
+   field("occurredAt","Ngày phát sinh","date",String(ev.occurred_at).slice(0,10))+
+   field("amount","Số tiền ("+code+")","text",amt(Math.abs(val(old.amount))),'inputmode="decimal"')+
+   select("categoryId","Danh mục",options((state.data?.categories||[]).filter(x=>x.kind===ev.kind),"id",x=>x.name,old.categoryId))+
+   '<label>Ghi chú<textarea name="description" maxlength="250">'+safe(ev.description||"")+'</textarea></label>'+
+   '<div class="notice">Giữ nguyên loại thu/chi, ví và ngoại tệ. Muốn đổi ví, hủy giao dịch cũ và tạo giao dịch mới.</div>';
+ }else if(kind==="account"||kind==="editAccount"){
+  name=kind==="account"?"Thêm ví / tài khoản":"Sửa ví · "+(account?.name||"");
+  body=field("name","Tên ví / ngân hàng","text",kind==="editAccount"?account?.name||"":"",'maxlength="120"')+
+   (kind==="account"?select("currencyCode","Ngoại tệ",currOpts()):'<div class="notice">Không thay đổi ngoại tệ '+safe(account?.currency_code||"")+' để bảo toàn lịch sử.</div>')+
+   select("kind","Loại ví",["cash","bank","ewallet","other"].map(k=>escOption(k,{cash:"Tiền mặt",bank:"Ngân hàng",ewallet:"Ví điện tử",other:"Khác"}[k],account?.kind===k)).join(""));
  }else if(kind==="reconcile"&&account){
   name="Chỉnh số dư · "+account.name;
   body='<div class="notice">Số dư thực tế được chỉnh bằng bút toán đối soát có lý do. Lịch sử giao dịch sẽ được giữ nguyên.</div>'+
@@ -494,13 +516,18 @@ function open(kind,id=""){
    field("feePaid","Phí đã trả","text","0",'inputmode="decimal"')+
    '<div class="notice">Chỉ lưu khi tiền đã thật sự thanh toán. Gốc sẽ giảm dư nợ; tiền được trừ ở ví đã chọn.</div>';
  }else if(kind==="editGoal"&&g){
-  name="Cập nhật mục tiêu · "+g.name;
-  body=field("currentAmount","Đã tích lũy ("+g.currency_code+")","text",amt(g.current_amount),'inputmode="decimal"')+
+  name="Sửa mục tiêu · "+g.name;
+  body=field("name","Tên mục tiêu","text",g.name,'maxlength="160"')+
+   field("targetAmount","Số tiền mục tiêu ("+g.currency_code+")","text",amt(g.target_amount),'inputmode="decimal"')+
+   field("currentAmount","Đã tích lũy ("+g.currency_code+")","text",amt(g.current_amount),'inputmode="decimal"')+
+   field("targetDate","Ngày đạt mục tiêu (có thể để trống)","date",g.target_date||"")+
    select("status","Trạng thái",["active","achieved","archived"].map(k=>escOption(k,{active:"Đang thực hiện",achieved:"Đã hoàn thành",archived:"Lưu trữ"}[k],g.status===k)).join(""));
- }else if(kind==="category"){
-  name="Thêm danh mục";
-  body=field("name","Tên danh mục","text","",'maxlength="100"')+
-   select("kind","Phân loại",escOption("expense","Chi tiêu")+escOption("income","Thu nhập"));
+ }else if(kind==="category"||kind==="editCategory"){
+  const cat=(state.data?.categories||[]).find(x=>x.id===id);
+  name=kind==="category"?"Thêm danh mục":"Sửa danh mục · "+(cat?.name||"");
+  body=field("name","Tên danh mục","text",cat?.name||"",'maxlength="100"')+
+   (kind==="category"?select("kind","Phân loại",escOption("expense","Chi tiêu")+escOption("income","Thu nhập")):
+   '<div class="notice">Loại danh mục không thay đổi để giữ đúng các giao dịch.</div>');
  }else if(kind==="budget"){
   const cat=(state.data?.categories||[]).find(c=>c.id===id);
   name="Đặt ngân sách"+(cat?" · "+cat.name:"");
@@ -564,14 +591,24 @@ async function submit(event){
   }else if(type==="plan"||type==="editPlan"){
    body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,originalAmount:amountInput(b.originalAmount,b.currencyCode),dueDay:+b.dueDay||null,memo:b.memo||""};
    path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
+  }else if(type==="editTransaction"){
+   const ev=(state.overview?.events||[]).find(x=>x.id===id);
+   const old=ev?.entries?.[0];
+   if(!ev||!old)throw new Error("Không tìm thấy giao dịch. Hãy tải lại.");
+   body={action:"correct",idempotencyKey:form.dataset.key,correction:{
+    amount:amountInput(b.amount,old.currency||"TWD"),categoryId:b.categoryId,
+    occurredAt:new Date(b.occurredAt+"T12:00:00+08:00").toISOString(),
+    description:b.description||""}};
+   path="/transactions/"+id+"/adjust";
   }else if(type==="transaction"){
    if(!quote(b.currencyCode))throw new Error("Chưa có tỷ giá tham chiếu hợp lệ. Hãy cập nhật trước khi ghi sổ.");
    if(!b.accountId||!b.categoryId)throw new Error("Cần tạo ví và danh mục cùng ngoại tệ trước khi ghi giao dịch thực.");
    body={kind:b.kind,currencyCode:b.currencyCode,accountId:b.accountId,categoryId:b.categoryId,
     amount:amountInput(b.amount,b.currencyCode),description:b.description||"",occurredAt:new Date().toISOString(),
     fxRateMode:"estimate",idempotencyKey:form.dataset.key};path="/transactions";
-  }else if(type==="account"){
-   body={name:b.name,kind:b.kind,currencyCode:b.currencyCode};path="/accounts";
+  }else if(type==="account"||type==="editAccount"){
+   body={name:b.name,kind:b.kind,...(type==="account"?{currencyCode:b.currencyCode}:{})};
+   path=type==="account"?"/accounts":"/accounts/"+id;method=type==="account"?"POST":"PUT";
   }else if(type==="reconcile"){
    const account=getAccount(id);body={targetBalance:amountInput(b.targetBalance,account.currency_code),
     expectedBalance:amt(b.expectedBalance),reason:b.reason,idempotencyKey:form.dataset.key};path="/accounts/"+id+"/reconcile";
@@ -600,10 +637,13 @@ async function submit(event){
     feePaid:amountInput(b.feePaid,d.currency_code),fxRateToTwd:q.rateToTwd||"1",
     memo:"Thanh toán đã thực hiện",idempotencyKey:form.dataset.key};path="/debt-payments";
   }else if(type==="editGoal"){
-   const g=state.data.goals.find(x=>x.id===id);body={currentAmount:amountInput(b.currentAmount,g.currency_code),status:b.status};
+   const g=state.data.goals.find(x=>x.id===id);
+   body={name:b.name,targetAmount:amountInput(b.targetAmount,g.currency_code),
+     currentAmount:amountInput(b.currentAmount,g.currency_code),targetDate:b.targetDate||null,status:b.status};
    path="/goals/"+id;method="PUT";
-  }else if(type==="category"){
-   body={name:b.name,kind:b.kind};path="/categories";
+  }else if(type==="category"||type==="editCategory"){
+   body={name:b.name,...(type==="category"?{kind:b.kind}:{})};
+   path=type==="category"?"/categories":"/categories/"+id;method=type==="category"?"POST":"PUT";
   }else if(type==="budget"){
    body={categoryId:id,month:state.month,amountTwd:amountInput(b.amountTwd,"TWD")};path="/budgets";method="PUT";
   }else{return;}
@@ -633,7 +673,8 @@ async function simulate(save=false){
   rows:+b.rowAmount>0?[{key:uuid(),date:b.rowDate,kind:b.kind,label:b.rowLabel||"Giả định",amountTwd:b.rowAmount}]:[]
  };}
  try{
-  if(save){await api("/workbench/scenarios",{scenario:state.sim});notify("Đã lưu kịch bản.");await refresh();nav("simulator");return;}
+  if(save){await api(state.scenarioId?"/workbench/scenarios/"+state.scenarioId:"/workbench/scenarios",
+    {scenario:state.sim},state.scenarioId?"PUT":"POST");notify("Đã lưu kịch bản.");await refresh();nav("simulator");return;}
   const r=await api("/workbench/preview",{scenario:state.sim},"POST");state.preview=r.projection;render();
  }catch(e){notify(errorText(e));}
 }
@@ -646,9 +687,9 @@ async function act(action,id){
  if(action==="export"){exportCsv();return;}
  if(action==="simulate"){await simulate(false);return;}
  if(action==="saveScenario"){await simulate(true);return;}
- if(action==="newScenario"){state.sim={name:"Kế hoạch mới",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]};state.preview=null;render();return;}
+ if(action==="newScenario"){state.scenarioId=null;state.sim={name:"Kế hoạch mới",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]};state.preview=null;render();return;}
  if(action==="openScenario"){
-  const v=state.scenarioList.find(x=>x.id===id);if(v){state.sim=structuredClone(v.settings);state.preview=null;render();}return;
+  const v=state.scenarioList.find(x=>x.id===id);if(v){state.scenarioId=id;state.sim=structuredClone(v.settings);state.preview=null;render();}return;
  }
  if(action==="newPlan")return open("plan");
  if(action==="editPlan")return open("editPlan",id);
@@ -663,7 +704,27 @@ async function act(action,id){
   return;
  }
  if(action==="deletePlan")return deletePlan(id);
- if(["transaction","account","reconcile","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
+ if(action==="reverseTransaction"){
+  const ev=(state.overview?.events||[]).find(x=>x.id===id);
+  if(!ev||!confirm("Hủy giao dịch “"+(ev.description||"giao dịch")+"”? Hệ thống ghi bút toán đảo, giữ nguyên lịch sử gốc."))return;
+  try{await api("/transactions/"+id+"/adjust",{action:"reverse",idempotencyKey:uuid()},"POST");
+   notify("Đã hủy bằng bút toán đảo và tính lại số dư.");await refresh();
+  }catch(e){notify(errorText(e));}return;
+ }
+ const removal={deleteDebt:["/debts/","khoản nợ","Nợ đã trả không thể xóa, quỹ dự kiến được xóa kèm."],
+   deleteGoal:["/goals/","mục tiêu","Quỹ phân bổ liên quan sẽ bị xóa kèm."],
+   deleteAccount:["/accounts/","ví","Ví đã có giao dịch thật không thể xóa."],
+   deleteCategory:["/categories/","danh mục","Danh mục đã dùng trong giao dịch thật không thể xóa."],
+   deleteScenario:["/workbench/scenarios/","kịch bản",""]};
+ if(removal[action]){
+   const [route,what,note]=removal[action];
+   if(!confirm("Xóa "+what+" này? "+note+" Hành động không thể hoàn tác."))return;
+   try{await api(route+id,{},"DELETE");
+    if(action==="deleteScenario"&&state.scenarioId===id)state.scenarioId=null;
+    notify("Đã xóa "+what+".");await refresh();
+   }catch(e){notify(errorText(e));}return;
+ }
+ if(["transaction","editTransaction","account","editAccount","reconcile","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","editCategory","budget"].includes(action))return open(action,id);
 }
 document.body.addEventListener("click",async event=>{
  const tab=event.target.closest("[data-tab]");if(tab){nav(tab.dataset.tab);return;}
