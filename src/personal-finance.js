@@ -274,9 +274,16 @@ function commitments(){
 function reportRows(){
  const records=state.overview?.events||[];
  if(!records.length)return empty("Chưa có giao dịch thực tế trong tháng.");
- return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Ví</th><th class="num">Số tiền gốc</th></tr></thead><tbody>'+
+ return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ngày</th><th>Loại</th><th>Nội dung</th><th>Ví</th><th class="num">Số tiền gốc</th><th>Thao tác</th></tr></thead><tbody>'+
  records.map(e=>{const first=e.entries?.[0]||{},wallet=(state.data?.accounts||[]).find(a=>a.id===first.accountId);
-  return '<tr><td>'+safe(String(e.occurred_at||"").slice(0,10))+'</td><td>'+tag(e.kind)+'</td><td>'+safe(e.description||"Giao dịch")+'</td><td>'+safe(wallet?.name||"—")+'</td><td class="num">'+safe(money(first.amount,first.currency||"TWD"))+'</td></tr>';
+  const editable=["income","expense"].includes(e.kind)&&!e.reversed&&!e.debt_payment;
+  return '<tr><td>'+safe(String(e.occurred_at||"").slice(0,10))+'</td><td>'+tag(e.kind)+(e.reversed?' <span class="tag">Đã hủy/sửa</span>':'')+
+   '</td><td>'+safe(e.description||"Giao dịch")+'</td><td>'+safe(wallet?.name||"—")+'</td><td class="num">'+safe(money(first.amount,first.currency||"TWD"))+
+   '</td><td><div class="tools">'+(editable?
+   btn("Sửa","editTransaction","small soft",'data-id="'+safe(e.id)+'"')+
+   btn("Hủy","reverseTransaction","small danger",'data-id="'+safe(e.id)+'"'):
+   '<span class="sheet-readonly">'+(e.reversed?"Đã điều chỉnh":e.debt_payment?"Thanh toán không thể sửa":"Bút toán hệ thống")+'</span>')+
+   '</div></td></tr>';
  }).join("")+'</tbody></table></div>';
 }
 function reporting(){
@@ -294,7 +301,7 @@ function reporting(){
 
  const categories=(state.overview?.budget||[]).filter(x=>x.kind==="expense");
  return title("Dòng tiền & báo cáo","Kế hoạch và phát sinh thực được đối chiếu riêng theo "+fmtMonth(state.month)+".",btn("+ Thu / chi","transaction","primary")+btn("Xuất CSV","export","ghost"))+
- '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Dòng tiền thực",value:money(inc-out)},{color:"purple",label:"Số giao dịch",value:String(state.overview?.events?.length||0)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
+ '<div class="metrics">'+[{color:"green",label:"Đã thu tháng này",value:money(inc)},{color:"orange",label:"Đã chi tháng này",value:money(out)},{color:"blue",label:"Dòng tiền thực",value:money(inc-out)},{color:"purple",label:"Số giao dịch",value:String((state.overview?.events||[]).filter(x=>!x.reversed&&x.kind!=="reversal").length)}].map(x=>'<div class="metric '+x.color+'"><small>'+x.label+'</small><strong>'+x.value+'</strong></div>').join("")+'</div>'+
  card("Dòng tiền dự kiến từ Kế hoạch tài chính",'<div class="mini-list"><div><small>Thu dự kiến</small><strong class="positive">'+money(planned.income)+'</strong></div><div><small>Chi và quỹ dự kiến</small><strong class="negative">'+money(planned.expenses)+'</strong></div><div><small>Chênh lệch dự kiến</small><strong>'+money(planned.net)+'</strong></div></div><div style="height:10px"></div>'+
    '<div class="notice">Kế hoạch ≠ phát sinh thực tế. Các khoản đã nhập ở tab Kế hoạch được tự đồng bộ vào đây, không yêu cầu nhập lại. Tránh cộng hai cột thành một số dư.</div>',btn("Xem kế hoạch","goPlan","small soft"))+
  '<div class="layout-2 equal">'+card("Số dư dự báo & hành động",linkedInsights())+
@@ -348,7 +355,7 @@ function scenario(){
  card("Lịch phân bổ lương và nguồn thu để trả nợ",payoffSchedule())+
  card("Lịch thu/chi và số dư dự kiến",linkedCashTable(24))+
  
- card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div>'+btn("Mở","openScenario","small soft",'data-id="'+safe(x.id)+'"')+'</div>').join(""):empty("Chưa lưu kịch bản nào."))+
+ card("Các kịch bản đã lưu",(state.scenarioList||[]).length?state.scenarioList.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>Cập nhật '+safe(String(x.updated_at).slice(0,10))+'</p></div><div class="tools">'+btn("Mở / Sửa","openScenario","small soft",'data-id="'+safe(x.id)+'"')+btn("Xóa","deleteScenario","small danger",'data-id="'+safe(x.id)+'"')+'</div></div>').join(""):empty("Chưa lưu kịch bản nào."))+
  '</div></div>';
 }
 function settings(){
@@ -452,6 +459,17 @@ function open(kind,id=""){
    select("categoryId","Danh mục",options((state.data?.categories||[]).filter(x=>x.kind==="expense"),"id",x=>x.name))+
    '<label>Ghi chú<textarea name="description" maxlength="250"></textarea></label>'+
    '<div class="notice">Ghi vào ví đúng ngoại tệ. Không tự đổi hoặc chuyển tiền giữa các ví.</div>';
+ }else if(kind==="editTransaction"){
+  const ev=(state.overview?.events||[]).find(x=>x.id===id);
+  if(!ev||ev.reversed||ev.debt_payment||!["income","expense"].includes(ev.kind))return;
+  const old=ev.entries?.[0]||{},code=old.currency||"TWD";
+  name="Sửa giao dịch thực tế";
+  body='<div class="notice">Không sửa bút toán đã ghi sổ: hệ thống sẽ đảo khoản cũ và tạo giao dịch thay thế cùng một lần. Lịch sử vẫn được lưu.</div>'+
+   field("occurredAt","Ngày phát sinh","date",String(ev.occurred_at).slice(0,10))+
+   field("amount","Số tiền ("+code+")","text",amt(Math.abs(val(old.amount))),'inputmode="decimal"')+
+   select("categoryId","Danh mục",options((state.data?.categories||[]).filter(x=>x.kind===ev.kind),"id",x=>x.name,old.categoryId))+
+   '<label>Ghi chú<textarea name="description" maxlength="250">'+safe(ev.description||"")+'</textarea></label>'+
+   '<div class="notice">Giữ nguyên loại thu/chi, ví và ngoại tệ. Muốn đổi ví, hủy giao dịch cũ và tạo giao dịch mới.</div>';
  }else if(kind==="account"||kind==="editAccount"){
   name=kind==="account"?"Thêm ví / tài khoản":"Sửa ví · "+(account?.name||"");
   body=field("name","Tên ví / ngân hàng","text",kind==="editAccount"?account?.name||"":"",'maxlength="120"')+
@@ -573,6 +591,15 @@ async function submit(event){
   }else if(type==="plan"||type==="editPlan"){
    body={month:state.month,kind:b.kind,label:b.label,currencyCode:b.currencyCode,originalAmount:amountInput(b.originalAmount,b.currencyCode),dueDay:+b.dueDay||null,memo:b.memo||""};
    path=type==="plan"?"/cashflow/items":"/cashflow/items/"+id;method=type==="plan"?"POST":"PUT";
+  }else if(type==="editTransaction"){
+   const ev=(state.overview?.events||[]).find(x=>x.id===id);
+   const old=ev?.entries?.[0];
+   if(!ev||!old)throw new Error("Không tìm thấy giao dịch. Hãy tải lại.");
+   body={action:"correct",idempotencyKey:form.dataset.key,correction:{
+    amount:amountInput(b.amount,old.currency||"TWD"),categoryId:b.categoryId,
+    occurredAt:new Date(b.occurredAt+"T12:00:00+08:00").toISOString(),
+    description:b.description||""}};
+   path="/transactions/"+id+"/adjust";
   }else if(type==="transaction"){
    if(!quote(b.currencyCode))throw new Error("Chưa có tỷ giá tham chiếu hợp lệ. Hãy cập nhật trước khi ghi sổ.");
    if(!b.accountId||!b.categoryId)throw new Error("Cần tạo ví và danh mục cùng ngoại tệ trước khi ghi giao dịch thực.");
@@ -646,7 +673,8 @@ async function simulate(save=false){
   rows:+b.rowAmount>0?[{key:uuid(),date:b.rowDate,kind:b.kind,label:b.rowLabel||"Giả định",amountTwd:b.rowAmount}]:[]
  };}
  try{
-  if(save){await api("/workbench/scenarios",{scenario:state.sim});notify("Đã lưu kịch bản.");await refresh();nav("simulator");return;}
+  if(save){await api(state.scenarioId?"/workbench/scenarios/"+state.scenarioId:"/workbench/scenarios",
+    {scenario:state.sim},state.scenarioId?"PUT":"POST");notify("Đã lưu kịch bản.");await refresh();nav("simulator");return;}
   const r=await api("/workbench/preview",{scenario:state.sim},"POST");state.preview=r.projection;render();
  }catch(e){notify(errorText(e));}
 }
@@ -659,9 +687,9 @@ async function act(action,id){
  if(action==="export"){exportCsv();return;}
  if(action==="simulate"){await simulate(false);return;}
  if(action==="saveScenario"){await simulate(true);return;}
- if(action==="newScenario"){state.sim={name:"Kế hoạch mới",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]};state.preview=null;render();return;}
+ if(action==="newScenario"){state.scenarioId=null;state.sim={name:"Kế hoạch mới",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",rows:[]};state.preview=null;render();return;}
  if(action==="openScenario"){
-  const v=state.scenarioList.find(x=>x.id===id);if(v){state.sim=structuredClone(v.settings);state.preview=null;render();}return;
+  const v=state.scenarioList.find(x=>x.id===id);if(v){state.scenarioId=id;state.sim=structuredClone(v.settings);state.preview=null;render();}return;
  }
  if(action==="newPlan")return open("plan");
  if(action==="editPlan")return open("editPlan",id);
@@ -676,7 +704,27 @@ async function act(action,id){
   return;
  }
  if(action==="deletePlan")return deletePlan(id);
- if(["transaction","account","reconcile","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","budget"].includes(action))return open(action,id);
+ if(action==="reverseTransaction"){
+  const ev=(state.overview?.events||[]).find(x=>x.id===id);
+  if(!ev||!confirm("Hủy giao dịch “"+(ev.description||"giao dịch")+"”? Hệ thống ghi bút toán đảo, giữ nguyên lịch sử gốc."))return;
+  try{await api("/transactions/"+id+"/adjust",{action:"reverse",idempotencyKey:uuid()},"POST");
+   notify("Đã hủy bằng bút toán đảo và tính lại số dư.");await refresh();
+  }catch(e){notify(errorText(e));}return;
+ }
+ const removal={deleteDebt:["/debts/","khoản nợ","Nợ đã trả không thể xóa, quỹ dự kiến được xóa kèm."],
+   deleteGoal:["/goals/","mục tiêu","Quỹ phân bổ liên quan sẽ bị xóa kèm."],
+   deleteAccount:["/accounts/","ví","Ví đã có giao dịch thật không thể xóa."],
+   deleteCategory:["/categories/","danh mục","Danh mục đã dùng trong giao dịch thật không thể xóa."],
+   deleteScenario:["/workbench/scenarios/","kịch bản",""]};
+ if(removal[action]){
+   const [route,what,note]=removal[action];
+   if(!confirm("Xóa "+what+" này? "+note+" Hành động không thể hoàn tác."))return;
+   try{await api(route+id,{},"DELETE");
+    if(action==="deleteScenario"&&state.scenarioId===id)state.scenarioId=null;
+    notify("Đã xóa "+what+".");await refresh();
+   }catch(e){notify(errorText(e));}return;
+ }
+ if(["transaction","editTransaction","account","editAccount","reconcile","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","editCategory","budget"].includes(action))return open(action,id);
 }
 document.body.addEventListener("click",async event=>{
  const tab=event.target.closest("[data-tab]");if(tab){nav(tab.dataset.tab);return;}
