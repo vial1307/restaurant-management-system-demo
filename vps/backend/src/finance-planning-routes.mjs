@@ -219,6 +219,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "WITH months AS (SELECT generate_series(make_date($2,1,1),make_date($2,12,1),interval '1 month')::date AS dt) "+
         "SELECT to_char(m.dt,'YYYY-MM') AS month,"+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='income'),0)::text AS planned_income_twd,"+
+        "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='borrowing' AND NOT EXISTS(SELECT 1 FROM finance.debt_disbursements ld WHERE ld.owner_user_id=finance.cashflow_items.owner_user_id AND ld.debt_id=finance.cashflow_items.debt_id)),0)::text AS planned_borrowing_twd,"+
         "COALESCE((SELECT SUM(amount_twd) FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=m.dt AND kind='expense'),0)::text AS planned_expense_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS debt_fund_twd,"+
         "COALESCE((SELECT SUM(planned_amount*fx_rate_to_twd) FROM finance.goal_fund_allocations WHERE owner_user_id=$1 AND month_date=m.dt),0)::text AS goal_fund_twd,"+
@@ -284,38 +285,54 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   app.post("/api/finance/cashflow/items",async(req,reply)=>{
     const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
     const b=req.body||{};
-    if(!monthKey(b.month)||!["income","expense"].includes(b.kind)||!trim(b.label)
+    if(!monthKey(b.month)||!["income","expense","borrowing"].includes(b.kind)||!trim(b.label)
       ||!(b.dueDay==null||b.dueDay===""||(Number.isInteger(Number(b.dueDay))&&Number(b.dueDay)>=1&&Number(b.dueDay)<=31)))
       return fail(reply,"INVALID_CASHFLOW_ITEM");
     try{
       const converted=await plannedAmount(ctx,b);
       if(converted.error)return fail(reply,converted.error);
       const saved=await auditedWrite(ctx,"finance.cashflow.create","finance_cashflow_item",async db=>{
+        if(b.kind==="borrowing"){
+          if(!id(b.debtId))return {error:"PLAN_LOAN_DEBT_REQUIRED"};
+          const err=await validateLoan(db,ctx.owner,b.debtId,converted);
+          if(err)return {error:err};
+        }
         const {rows}=await db.query(
-          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
-          [ctx.owner,startMonth(b.month),b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider]
+          "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider,debt_id) VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12,$13) RETURNING id,kind,debt_id,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
+          [ctx.owner,startMonth(b.month),b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider,b.kind==="borrowing"?b.debtId:null]
         );
         return rows[0];
       });
+      if(saved.error)return fail(reply,saved.error,409);
       return reply.code(201).send({item:saved});
     }catch(error){return databaseError(req,reply,error);}
   });
   app.put("/api/finance/cashflow/items/:itemId",async(req,reply)=>{
     const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
     const b=req.body||{},itemId=req.params?.itemId;
-    if(!id(itemId)||!["income","expense"].includes(b.kind)||!trim(b.label)
+    if(!id(itemId)||!["income","expense","borrowing"].includes(b.kind)||!trim(b.label)
       ||!(b.dueDay==null||b.dueDay===""||(Number.isInteger(Number(b.dueDay))&&Number(b.dueDay)>=1&&Number(b.dueDay)<=31)))
       return fail(reply,"INVALID_CASHFLOW_ITEM");
     try{
       const converted=await plannedAmount(ctx,b);
       if(converted.error)return fail(reply,converted.error);
       const saved=await auditedWrite(ctx,"finance.cashflow.update","finance_cashflow_item",async db=>{
+        const {rows:old}=await db.query("SELECT kind,debt_id FROM finance.cashflow_items WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,itemId]);
+        if(!old[0])return null;
+        if((old[0].kind==="borrowing")!==(b.kind==="borrowing"))
+          return {error:"PLAN_LOAN_KIND_IMMUTABLE"};
+        if(b.kind==="borrowing"){
+          if(!id(b.debtId)||old[0].debt_id!==b.debtId)return {error:"PLAN_LOAN_DEBT_IMMUTABLE"};
+          const err=await validateLoan(db,ctx.owner,b.debtId,converted);
+          if(err)return {error:err};
+        }
         const {rows}=await db.query(
           "UPDATE finance.cashflow_items SET kind=$3,label=$4,amount_twd=$5::numeric,due_day=$6,memo=$7,updated_at=now(),original_currency=$8,original_amount=$9::numeric,fx_rate_to_twd=$10::numeric,fx_rate_observed_at=$11::timestamptz,fx_rate_provider=$12 WHERE owner_user_id=$1 AND id=$2 RETURNING id,kind,label,amount_twd::text,original_currency,original_amount::text,fx_rate_to_twd::text,month_date::text,due_day,memo",
           [ctx.owner,itemId,b.kind,trim(b.label,140),converted.amountTwd,b.dueDay||null,trim(b.memo,250),converted.originalCurrency,converted.originalAmount,converted.rate,converted.observedAt,converted.provider]
         );return rows[0];
       });
       if(!saved)return fail(reply,"CASHFLOW_ITEM_NOT_FOUND",404);
+      if(saved.error)return fail(reply,saved.error,409);
       return {item:saved};
     }catch(error){return databaseError(req,reply,error);}
   });
