@@ -132,8 +132,8 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
    const debtPicker='<select data-sheet-field="debtId" data-sheet-key="'+s(a.key)+'" aria-label="Chọn khoản nợ hiện tại">'+
     '<option value="">'+(debts.length?"Chọn khoản nợ hiện tại…":"Không có khoản nợ còn dư")+'</option>'+
     debts.map(d=>'<option value="'+s(d.id)+'"'+(d.id===a.debtId?" selected":"")+
-     (taken.has(d.id)?" disabled":"")+'>'+s(d.name)+" · "+s(showNativeAmount(d.outstanding_amount))+
-     " "+s(d.currency_code)+(taken.has(d.id)?" (Đã có quỹ tháng này)":"")+'</option>').join("")+'</select>';
+     (isDebt&&taken.has(d.id)?" disabled":"")+'>'+s(d.name)+" · "+s(showNativeAmount(d.outstanding_amount))+
+     " "+s(d.currency_code)+(isDebt&&taken.has(d.id)?" (Đã có quỹ tháng này)":"")+'</option>').join("")+'</select>';
    const amount=(isDebt||isLoan)?'<div class="sheet-debt-amount">'+debtPicker+
     (debt?'<small>Số dư nợ gốc: <strong>'+s(showNativeAmount(debt.outstanding_amount))+
       ' '+s(debt.currency_code)+'</strong></small>':"")+
