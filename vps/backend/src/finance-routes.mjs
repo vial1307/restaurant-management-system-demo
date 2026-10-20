@@ -374,6 +374,7 @@ export async function registerFinanceRoutes(app) {
     const b=request.body||{};
     if(!id(b.accountId)||!id(b.idempotencyKey)||!trim(b.name)||
        !ISO.test(String(b.currencyCode||""))||!positive(b.principalOriginal,6)||
+       (b.debtId!==undefined&&!id(b.debtId))||
        !isDate(b.receivedDate)||(b.dueDate&&!isDate(b.dueDate))||
        !money(String(b.annualInterestPercent??"0"),6)||
        Number(b.annualInterestPercent??0)>100||
@@ -391,15 +392,38 @@ export async function registerFinanceRoutes(app) {
         const eventId=await createEvent(db,ctx.owner,"adjustment","Nhận tiền vay · "+trim(b.name,160),
           b.receivedDate+"T12:00:00+08:00",b.idempotencyKey);
         if(!eventId)return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
-        const {rows}=await db.query(
-          "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) "+
-          "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) "+
-          "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
-          [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,
-           String(b.annualInterestPercent??"0"),b.dueDate||null]);
-        const debt=rows[0];
-        await db.query("INSERT INTO finance.debt_mentor_terms(owner_user_id,debt_id,creditor_type) VALUES($1,$2,$3)",
-          [ctx.owner,debt.id,b.creditorType||"other"]);
+        let debt;
+        if(b.debtId){
+          const {rows}=await db.query(
+            "SELECT id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text "+
+            "FROM finance.debts WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",
+            [ctx.owner,b.debtId]);
+          debt=rows[0];
+          if(!debt)return {error:"PLAN_DEBT_NOT_FOUND",status:404};
+          if(debt.currency_code!==b.currencyCode||Number(debt.principal_original)!==Number(b.principalOriginal))
+            return {error:"PLAN_LOAN_PRINCIPAL_MISMATCH",status:409};
+          const {rows:planned}=await db.query(
+            "SELECT original_amount::text,original_currency FROM finance.cashflow_items WHERE owner_user_id=$1 AND debt_id=$2 AND kind='borrowing'",
+            [ctx.owner,b.debtId]);
+          if(!planned[0]||planned[0].original_currency!==b.currencyCode||
+             Number(planned[0].original_amount)!==Number(b.principalOriginal))
+            return {error:"PLAN_LOAN_NOT_FOUND",status:409};
+          const {rows:already}=await db.query(
+            "SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 "+
+            "UNION ALL SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",
+            [ctx.owner,b.debtId]);
+          if(already[0])return {error:"PLAN_LOAN_ALREADY_RECEIVED",status:409};
+        }else{
+          const {rows}=await db.query(
+            "INSERT INTO finance.debts(owner_user_id,name,currency_code,principal_original,annual_interest_rate,due_date) "+
+            "VALUES($1,$2,$3,$4::numeric,$5::numeric/100,$6::date) "+
+            "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
+            [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,
+             String(b.annualInterestPercent??"0"),b.dueDate||null]);
+          debt=rows[0];
+          await db.query("INSERT INTO finance.debt_mentor_terms(owner_user_id,debt_id,creditor_type) VALUES($1,$2,$3)",
+            [ctx.owner,debt.id,b.creditorType||"other"]);
+        }
         await entry(db,ctx.owner,eventId,wallet,b.principalOriginal,null,rate);
         const disbursement=await db.query(
           "INSERT INTO finance.debt_disbursements(owner_user_id,debt_id,event_id,account_id,currency_code,received_amount,fx_rate_to_twd,received_date) "+
