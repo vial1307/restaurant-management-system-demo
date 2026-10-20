@@ -15,7 +15,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  const nativeAmount=v=>String(v??"").replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,"");
  const showNativeAmount=v=>{const [whole,fraction]=nativeAmount(v).split(".");return whole.replace(/\B(?=(\d{3})+(?!\d))/g,".")+(fraction?","+fraction:"");};
  const writable=r=>r.source==="item"||r.source==="debt"||r.source==="goal";
- const editable=r=>r.source==="item"||(r.source==="debt"||r.source==="goal")&&!r.unallocated;
+ const editable=r=>(r.source==="item"&&!r.received)||(r.source==="debt"||r.source==="goal")&&!r.unallocated;
  const existing=()=>getRows().filter(r=>r.source!=="debt"||!r.unallocated); // include unallocated goals
  const fieldValues=r=>({kind:r.kind,label:r.name||"",day:r.source==="item"&&r.estimated?"":String(Number(day(r))),
   amount:nativeAmount(r.native),currency:r.code||"TWD",memo:r.source==="item"?(r.detail||""):""});
@@ -28,6 +28,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  }
  function hasChanges(){return changes()>0;}
  function selectionHtml(r){
+  if(r.received)return '<input type="checkbox" class="sheet-row-check" disabled aria-label="Khoản vay đã được giải ngân vào ví thật">';
   if(r.unallocated)return '<input type="checkbox" class="sheet-row-check" disabled aria-label="Chưa lập quỹ, không thể xóa tại bảng kế hoạch" title="Đây là công nợ/mục tiêu gốc chưa có phân bổ tháng. Hãy dùng Lập quỹ hoặc chỉnh ở Công nợ & mục tiêu.">';
   return '<input type="checkbox" class="sheet-row-check" data-sheet-key="'+s(key(r))+'" aria-label="Chọn '+s(r.name)+'"'+(state.selected.has(key(r))?" checked":"")+'>';
  }
@@ -57,7 +58,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
   const label=r.source==="item"?editor(r,"label",s(r.name)):
    '<strong>'+s(r.name)+'</strong>'+(isFund?'<small class="sheet-linked">'+
      (linked?"Nợ/mục tiêu gốc · Chưa lập quỹ":"Liên kết công nợ/mục tiêu")+'</small>':"");
-  const actions=r.source==="item"?
+  const actions=r.received?'<span class="sheet-readonly">Đã nhận vào ví · lịch sử được bảo toàn</span>':r.source==="item"?
    '<button type="button" class="btn small ghost" data-action="editPlan" data-id="'+s(r.id)+'">Chi tiết / Sửa</button>':
    '<div class="sheet-row-actions">'+
     '<button type="button" class="btn small ghost" data-sheet-action="linked" data-sheet-key="'+s(k)+'">'+
@@ -108,7 +109,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
      ["date","Ngày"],["name","Tên A–Z"],["amount","Số tiền giảm dần"]].map(([v,t])=>
       '<option value="'+v+'"'+(state.sort===v?" selected":"")+'>'+t+'</option>').join("")+'</select>'+
    '</div></div>';
-  const selectable=all.filter(r=>!r.unallocated);
+  const selectable=all.filter(r=>!r.unallocated&&!r.received);
   const selectBar='<div class="sheet-selection-bar"><label class="sheet-select-mobile">'+
    '<input type="checkbox" id="sheet-select-visible" aria-label="Chọn các dòng có thể chỉnh hoặc xóa đang hiển thị">'+
    '<span>Chọn dòng đang hiển thị</span></label><span class="sheet-selection-summary" aria-live="polite">'+
@@ -170,6 +171,7 @@ export function createFinancePlanSheet({api,safe,notify,refresh,getMonth,getRows
  }
  const getRow=k=>getRows().find(r=>key(r)===k);
  const buildItem=(r,d,op)=>({op,id:r?.id,version:r?.version,kind:d.kind,label:d.label,
+  ...(d.kind==="borrowing"?{debtId:r?.debtId||d.debtId||null}:{}),
   originalAmount:String(d.amount).trim(),currencyCode:d.currency,dueDay:String(d.day??"").trim()===""?null:Number(d.day),memo:d.memo||""});
  function collect(){
   const ops=[];
