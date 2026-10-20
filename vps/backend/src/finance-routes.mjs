@@ -376,7 +376,8 @@ export async function registerFinanceRoutes(app) {
        !ISO.test(String(b.currencyCode||""))||!positive(b.principalOriginal,6)||
        !isDate(b.receivedDate)||(b.dueDate&&!isDate(b.dueDate))||
        !money(String(b.annualInterestPercent??"0"),6)||
-       Number(b.annualInterestPercent??0)>100)return fail(reply,"INVALID_LOAN_RECEIPT");
+       Number(b.annualInterestPercent??0)>100||
+       !["friend_family","bank_loan","credit_card","installment_provider","other"].includes(b.creditorType||"other"))return fail(reply,"INVALID_LOAN_RECEIPT");
     try{
       const c=await currency(ctx.pool,b.currencyCode);
       if(!c||!positive(b.principalOriginal,Number(c.minor_units)))return fail(reply,"INVALID_LOAN_AMOUNT");
@@ -397,6 +398,8 @@ export async function registerFinanceRoutes(app) {
           [ctx.owner,trim(b.name,160),b.currencyCode,b.principalOriginal,
            String(b.annualInterestPercent??"0"),b.dueDate||null]);
         const debt=rows[0];
+        await db.query("INSERT INTO finance.debt_mentor_terms(owner_user_id,debt_id,creditor_type) VALUES($1,$2,$3)",
+          [ctx.owner,debt.id,b.creditorType||"other"]);
         await entry(db,ctx.owner,eventId,wallet,b.principalOriginal,null,rate);
         const disbursement=await db.query(
           "INSERT INTO finance.debt_disbursements(owner_user_id,debt_id,event_id,account_id,currency_code,received_amount,fx_rate_to_twd,received_date) "+
