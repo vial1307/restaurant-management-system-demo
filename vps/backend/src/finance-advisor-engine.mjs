@@ -41,12 +41,12 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
   }
   const warnings=[],entries=[],excludedFxPlans=[];
   let pastDueCount=0,estimatedDateCount=0,foreignFxCount=0;
-  const push=(date,kind,label,amount,source,id,estimatedDate=false)=>{
+  const push=(date,kind,label,amount,source,id,estimatedDate=false,additional={})=>{
     if(date<asOf){pastDueCount++;return;}
     if(date>through)return;
     if(estimatedDate)estimatedDateCount++;
     if(amount===0n)return;
-    entries.push({date,kind,label,amountTwd:twdText(amount),source,sourceId:id||"",estimatedDate});
+    entries.push({date,kind,label,amountTwd:twdText(amount),source,sourceId:id||"",estimatedDate,...additional});
   };
   for(const item of cashItems){
     const m=monthOf(item);
@@ -68,7 +68,9 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     const paid=settled.get(String(fund.debt_id)+"|"+m)||0n;
     const remainder=gross>paid?gross-paid:0n;
     const when=dated(m,null,fund.planned_payment_date||fund.due_date);
-    push(when.date,"debt",(fund.due_date?"Quỹ nợ · ":"Dự kiến trả nợ linh hoạt · ")+fund.debt_name,-remainder,"debt_fund",fund.debt_id,when.estimatedDate);
+    push(when.date,"debt",(fund.due_date?"Quỹ nợ · ":"Dự kiến trả nợ linh hoạt · ")+fund.debt_name,-remainder,"debt_fund",fund.debt_id,when.estimatedDate,
+      {dateType:fund.planned_payment_date?"owner_target":fund.due_date?.slice(0,7)===m?"recorded_due_date":"month_estimate",
+       paymentPlanId:fund.id,currency:fund.currency_code});
   }
   for(const fund of goalFunds){
     const m=monthOf(fund);
@@ -108,6 +110,25 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     if(balance<minimum){minimum=balance;minimumDate=event.date;}
     if(!earliestRisk&&balance<buffer)earliestRisk={date:event.date,balanceTwd:twdText(balance),gapTwd:twdText(buffer-balance),source:event.source,label:event.label};
   }
+  // Date-specific funding actions are read-only recommendations on posted
+  // balances + unposted plans. Dates without an explicit owner choice remain estimates.
+  const debtActions=entries.filter(x=>x.source==="debt_fund"&&twdUnits(x.amountTwd)<0n)
+   .map(x=>{
+     const after=twdUnits(x.projectedBalanceTwd),shortfall=after<buffer?buffer-after:0n;
+     const upcomingIncome=entries.find(e=>["income","borrowing"].includes(e.kind)&&e.date>x.date);
+     const reviewDate=addDays(x.date,-3);
+     return {debtId:x.sourceId,name:x.label,plannedDate:x.date,
+       reviewBy:reviewDate<asOf?asOf:reviewDate,
+       dateType:x.dateType||"month_estimate",estimatedDate:x.estimatedDate,
+       amountTwd:twdText(-twdUnits(x.amountTwd)),
+       projectedBalanceAfterTwd:x.projectedBalanceTwd,
+       gapToBufferTwd:twdText(shortfall),
+       nextIncomeAfterDate:upcomingIncome?.date||null,
+       priority:shortfall>0n?"funding_gap":"scheduled",
+       message:shortfall>0n?
+        "Dự kiến thiếu "+twdText(shortfall)+" TWD để giữ mức dự trữ khi thanh toán. Cần đối chiếu lương/tiền hiện có và thương lượng thời điểm nếu khoản trả linh hoạt.":
+        "Có thể bố trí theo kế hoạch nếu các khoản thu và số dư thực tế đúng như khai báo."};
+   });
   const recommendations=[];
   if(earliestRisk){
     recommendations.push({kind:"liquidity_gap",title:"Ưu tiên xử lý thiếu hụt vào "+earliestRisk.date,
@@ -129,7 +150,7 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     projectedEndingTwd:twdText(balance),minimumBalanceTwd:twdText(minimum),minimumDate,
     earliestRisk,totals:Object.fromEntries(Object.entries(totals).map(([k,v])=>[k,twdText(v)])),
     totalOutflowTwd:twdText(totals.expense+totals.debt+totals.goal+totals.remittance),
-    entries,warnings,recommendations,foreignWallets,excludedFxPlans,
+    entries,debtActions,warnings,recommendations,foreignWallets,excludedFxPlans,
     metadata:{currency:"TWD",timeZone:"Asia/Taipei",countedWallets:wallets.length-foreignWallets.length,source:"finance_postgresql",readOnly:true}
   };
 }
