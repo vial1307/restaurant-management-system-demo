@@ -427,7 +427,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           if(seen.has(key))return fail(reply,"DUPLICATE_SHEET_DEBT_FUND");
           seen.add(key);prepared.push(op);
         }else if(op.op.endsWith("Item")&&op.op!=="deleteItem"){
-          if(!["income","expense"].includes(op.kind)||typeof op.label!=="string"||
+          if(!["income","expense","borrowing"].includes(op.kind)||typeof op.label!=="string"||
              !trim(op.label)||trim(op.label,140)!==trim(op.label)||
              typeof op.memo!=="string"||op.memo.length>250||
              (op.dueDay!==null&&(!Number.isInteger(op.dueDay)||op.dueDay<1||op.dueDay>31)))
@@ -436,6 +436,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             currencyCode:op.currencyCode,originalAmount:op.originalAmount
           });
           if(amount.error)return fail(reply,amount.error);
+          if(op.kind==="borrowing"&&!id(op.debtId))return fail(reply,"PLAN_LOAN_DEBT_REQUIRED");
           prepared.push({...op,converted:amount});
         }else if(op.op==="updateFund"){
           if(!["debt","goal"].includes(op.fundType)||
@@ -454,11 +455,15 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
           let rows=[];
           if(op.op==="createItem"){
             const a=op.converted;
+            if(op.kind==="borrowing"){
+              const err=await validateLoan(db,ctx.owner,op.debtId,a);
+              if(err){const e=new Error(err);e.sheetCode=err;throw e;}
+            }
             ({rows}=await db.query(
-              "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider) "+
-              "VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12) RETURNING id",
+              "INSERT INTO finance.cashflow_items(owner_user_id,month_date,kind,label,amount_twd,due_day,memo,original_currency,original_amount,fx_rate_to_twd,fx_rate_observed_at,fx_rate_provider,debt_id) "+
+              "VALUES($1,$2::date,$3,$4,$5::numeric,$6,$7,$8,$9::numeric,$10::numeric,$11::timestamptz,$12,$13) RETURNING id",
               [ctx.owner,startMonth(month),op.kind,trim(op.label,140),a.amountTwd,op.dueDay,
-                op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider]));
+                op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider,op.kind==="borrowing"?op.debtId:null]));
           }else if(op.op==="createFund"){
             const {rows:valid}=await db.query(
               "SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code "+
@@ -485,6 +490,17 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
             }
           }else if(op.op==="updateItem"){
             const a=op.converted;
+            const {rows:prior}=await db.query("SELECT kind,debt_id FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 FOR UPDATE",
+              [ctx.owner,startMonth(month),op.id]);
+            if(!prior[0]){const e=new Error("SHEET_STALE_RELOAD");e.sheetCode="SHEET_STALE_RELOAD";throw e;}
+            if((prior[0].kind==="borrowing")!==(op.kind==="borrowing")||
+               (op.kind==="borrowing"&&prior[0].debt_id!==op.debtId)){
+              const e=new Error("PLAN_LOAN_KIND_IMMUTABLE");e.sheetCode="PLAN_LOAN_KIND_IMMUTABLE";throw e;
+            }
+            if(op.kind==="borrowing"){
+              const err=await validateLoan(db,ctx.owner,op.debtId,a);
+              if(err){const e=new Error(err);e.sheetCode=err;throw e;}
+            }
             ({rows}=await db.query(
               "UPDATE finance.cashflow_items SET kind=$4,label=$5,amount_twd=$6::numeric,due_day=$7,"+
               "memo=$8,original_currency=$9,original_amount=$10::numeric,fx_rate_to_twd=$11::numeric,"+
@@ -493,6 +509,12 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
               [ctx.owner,startMonth(month),op.id,op.kind,trim(op.label,140),a.amountTwd,
                 op.dueDay,op.memo,a.originalCurrency,a.originalAmount,a.rate,a.observedAt,a.provider,op.version]));
           }else if(op.op==="deleteItem"){
+            const {rows:prior}=await db.query("SELECT kind,debt_id FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date AND id=$3 FOR UPDATE",
+              [ctx.owner,startMonth(month),op.id]);
+            if(prior[0]?.kind==="borrowing"){
+              const {rows:paid}=await db.query("SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,prior[0].debt_id]);
+              if(paid[0]){const e=new Error("PLAN_LOAN_ALREADY_RECEIVED");e.sheetCode="PLAN_LOAN_ALREADY_RECEIVED";throw e;}
+            }
             ({rows}=await db.query(
               "DELETE FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date "+
               "AND id=$3 AND updated_at=$4::timestamptz RETURNING id",
@@ -527,7 +549,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       reply.header("Cache-Control","private, no-store");
       return {saved:results.length,rows:results,month,ledgerPosted:false};
     }catch(error){
-      if(error.sheetCode)return fail(reply,error.sheetCode,["SHEET_STALE_RELOAD","SHEET_FUND_ALREADY_EXISTS"].includes(error.sheetCode)?409:400);
+      if(error.sheetCode)return fail(reply,error.sheetCode,["SHEET_STALE_RELOAD","SHEET_FUND_ALREADY_EXISTS","PLAN_LOAN_ALREADY_RECEIVED","PLAN_LOAN_KIND_IMMUTABLE"].includes(error.sheetCode)?409:400);
       return databaseError(req,reply,error);
     }
   });
