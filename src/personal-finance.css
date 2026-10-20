@@ -381,3 +381,18 @@
  .finance-sheet .sheet-debt-amount select{width:100%;min-width:0}
  .finance-sheet .sheet-debt-amount>label input{min-height:44px}
 }
+
+
+/* Finance CRUD actions stay usable on both Desktop and compact mobile screens. */
+.rowitem .tools,.tbl .tools{display:flex;gap:5px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.rowitem .right{white-space:normal;min-width:0}
+.rowitem .right>.tools{margin-top:7px}
+.rowitem .tools .btn,.tbl .tools .btn{white-space:nowrap}
+.tbl td:last-child .tools{min-width:124px}
+@media(max-width:520px){
+ .rowitem{align-items:flex-start;flex-wrap:wrap}
+ .rowitem>.tools{margin-left:auto;max-width:100%;justify-content:flex-start}
+ .rowitem>.right{flex:1 1 100%;text-align:left}
+ .rowitem .right>.tools{justify-content:flex-start}
+ .tbl td:last-child .tools{justify-content:flex-start}
+}
