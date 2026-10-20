@@ -116,15 +116,15 @@ export async function registerFinanceRoutes(app) {
     try {
       const [flow,budget,events]=await Promise.all([
         ctx.pool.query(
-          "SELECT v.kind,COALESCE(SUM(ABS(v.base_amount_twd)),0)::text AS total_twd FROM (SELECT ev.kind,en.base_amount_twd FROM finance.events ev JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.kind IN ('income','expense') AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')) v GROUP BY v.kind",
+          "SELECT v.kind,COALESCE(SUM(ABS(v.base_amount_twd)),0)::text AS total_twd FROM (SELECT ev.kind,en.base_amount_twd FROM finance.events ev JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.kind IN ('income','expense') AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')) v GROUP BY v.kind",
           [ctx.owner,start]
         ),
         ctx.pool.query(
-          "SELECT c.id AS category_id,c.name,c.kind,COALESCE(b.amount_twd,0)::text AS budget_twd,COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND en.category_id=c.id AND ev.kind=c.kind AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS actual_twd FROM finance.categories c LEFT JOIN finance.monthly_budgets b ON b.owner_user_id=c.owner_user_id AND b.category_id=c.id AND b.month_date=$2::date WHERE c.owner_user_id=$1 ORDER BY c.kind,c.name",
+          "SELECT c.id AS category_id,c.name,c.kind,COALESCE(b.amount_twd,0)::text AS budget_twd,COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND en.category_id=c.id AND ev.kind=c.kind AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS actual_twd FROM finance.categories c LEFT JOIN finance.monthly_budgets b ON b.owner_user_id=c.owner_user_id AND b.category_id=c.id AND b.month_date=$2::date WHERE c.owner_user_id=$1 ORDER BY c.kind,c.name",
           [ctx.owner,start]
         ),
         ctx.pool.query(
-          "SELECT ev.id,ev.kind,ev.description,ev.occurred_at,COALESCE(json_agg(json_build_object('accountId',en.account_id,'amount',en.amount::text,'currency',en.currency_code,'categoryId',en.category_id)) FILTER (WHERE en.id IS NOT NULL),'[]'::json) AS entries FROM finance.events ev LEFT JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei') GROUP BY ev.id ORDER BY ev.occurred_at DESC,ev.id DESC LIMIT 60",
+          "SELECT ev.id,ev.kind,ev.description,ev.occurred_at,EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AS reversed,EXISTS(SELECT 1 FROM finance.debt_payments dp WHERE dp.owner_user_id=ev.owner_user_id AND dp.event_id=ev.id) AS debt_payment,COALESCE(json_agg(json_build_object('accountId',en.account_id,'amount',en.amount::text,'currency',en.currency_code,'categoryId',en.category_id)) FILTER (WHERE en.id IS NOT NULL),'[]'::json) AS entries FROM finance.events ev LEFT JOIN finance.entries en ON en.event_id=ev.id AND en.owner_user_id=ev.owner_user_id WHERE ev.owner_user_id=$1 AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei') GROUP BY ev.id ORDER BY ev.occurred_at DESC,ev.id DESC LIMIT 60",
           [ctx.owner,start]
         )
       ]);
@@ -137,7 +137,7 @@ export async function registerFinanceRoutes(app) {
     if(!Number.isInteger(year)||year<2000||year>2100)return fail(reply,"INVALID_YEAR");
     try{
       const {rows}=await ctx.pool.query(
-        "WITH months AS (SELECT generate_series(make_date($2::int,1,1),make_date($2::int,12,1),interval '1 month')::date AS first_day) SELECT to_char(m.first_day,'YYYY-MM') AS month, COALESCE((SELECT SUM(b.amount_twd) FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date=m.first_day AND c.kind='expense'),0)::text AS budget_twd, COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND ev.kind='income' AND ev.occurred_at>=(m.first_day AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at<((m.first_day+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS income_twd, COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND ev.kind='expense' AND ev.occurred_at>=(m.first_day AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at<((m.first_day+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS expense_twd FROM months m ORDER BY m.first_day",
+        "WITH months AS (SELECT generate_series(make_date($2::int,1,1),make_date($2::int,12,1),interval '1 month')::date AS first_day) SELECT to_char(m.first_day,'YYYY-MM') AS month, COALESCE((SELECT SUM(b.amount_twd) FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date=m.first_day AND c.kind='expense'),0)::text AS budget_twd, COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND ev.kind='income' AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at>=(m.first_day AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at<((m.first_day+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS income_twd, COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND ev.kind='expense' AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at>=(m.first_day AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at<((m.first_day+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS expense_twd FROM months m ORDER BY m.first_day",
         [ctx.owner,year]
       );
       return {year,months:rows};
@@ -521,6 +521,69 @@ export async function registerFinanceRoutes(app) {
       });
       if(result.error)return fail(reply,result.error,result.status||400);
       return reply.code(201).send({event:result});
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  // Posted transactions are immutable. Corrections and cancellations are
+  // append-only reversal events, keeping balances, audits and reports consistent.
+  app.post("/api/finance/transactions/:eventId/adjust",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const eventId=request.params?.eventId,b=request.body||{},action=b.action;
+    if(!id(eventId)||!id(b.idempotencyKey)||!["reverse","correct"].includes(action))
+      return fail(reply,"INVALID_TRANSACTION_ADJUSTMENT");
+    const correction=b.correction||{};
+    if(action==="correct"&&(!positive(correction.amount,6)||!id(correction.categoryId)||
+      typeof correction.occurredAt!=="string"||Number.isNaN(Date.parse(correction.occurredAt))||
+      !/[zZ]|[+-]\d\d:\d\d$/.test(correction.occurredAt)))
+      return fail(reply,"INVALID_TRANSACTION_CORRECTION");
+    try{
+      const result=await financeTransaction(async db=>{
+        const {rows:events}=await db.query(
+          "SELECT id,kind,description FROM finance.events WHERE owner_user_id=$1 AND id=$2 AND kind IN ('income','expense') FOR UPDATE",
+          [ctx.owner,eventId]);
+        const ev=events[0];if(!ev)return {error:"TRANSACTION_NOT_CORRECTABLE",status:404};
+        if((await db.query("SELECT 1 FROM finance.events WHERE owner_user_id=$1 AND reverses_event_id=$2 LIMIT 1",[ctx.owner,eventId])).rows[0])
+          return {error:"TRANSACTION_ALREADY_ADJUSTED",status:409};
+        if((await db.query("SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND event_id=$2 LIMIT 1",[ctx.owner,eventId])).rows[0])
+          return {error:"DEBT_PAYMENT_IS_IMMUTABLE",status:409};
+        const {rows:entries}=await db.query(
+          "SELECT account_id,currency_code,amount::text,category_id,fx_rate_to_twd::text AS rate FROM finance.entries WHERE owner_user_id=$1 AND event_id=$2",
+          [ctx.owner,eventId]);
+        if(entries.length!==1)return {error:"TRANSACTION_NOT_CORRECTABLE",status:409};
+        const old=entries[0],wallet=await account(db,ctx.owner,old.account_id);
+        if(!wallet)return {error:"ACCOUNT_NOT_FOUND",status:409};
+        if(action==="correct"){
+          if(!positive(correction.amount,Number(wallet.minor_units)))return {error:"INVALID_TRANSACTION_CORRECTION"};
+          const {rows:category}=await db.query(
+            "SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND kind=$3",
+            [ctx.owner,correction.categoryId,ev.kind]);
+          if(!category[0])return {error:"CATEGORY_NOT_FOUND"};
+        }
+        const {rows:reversals}=await db.query(
+          "INSERT INTO finance.events(owner_user_id,kind,description,occurred_at,idempotency_key,reverses_event_id) "+
+          "VALUES($1,'reversal',$2,now(),$3,$4) ON CONFLICT(owner_user_id,idempotency_key) DO NOTHING RETURNING id",
+          [ctx.owner,action==="correct"?"Điều chỉnh giao dịch: "+ev.description:"Hủy giao dịch: "+ev.description,b.idempotencyKey,eventId]);
+        if(!reversals[0])return {error:"FINANCE_DUPLICATE_REQUEST",status:409};
+        await db.query(
+          "INSERT INTO finance.entries(event_id,owner_user_id,account_id,currency_code,amount,category_id,base_amount_twd,fx_rate_to_twd) "+
+          "SELECT $1,owner_user_id,account_id,currency_code,-amount,category_id,-base_amount_twd,fx_rate_to_twd "+
+          "FROM finance.entries WHERE owner_user_id=$2 AND event_id=$3",
+          [reversals[0].id,ctx.owner,eventId]);
+        let newEventId=null;
+        if(action==="correct"){
+          newEventId=await createEvent(db,ctx.owner,ev.kind,trim(correction.description,250),
+            correction.occurredAt,crypto.randomUUID());
+          if(!newEventId)throw new Error("FINANCE_NEW_CORRECTION_EVENT_FAILED");
+          const signed=(ev.kind==="expense"?"-":"")+correction.amount;
+          await entry(db,ctx.owner,newEventId,wallet,signed,correction.categoryId,old.rate);
+        }
+        await audit(db,ctx.owner,action==="correct"?"finance.transaction.correct":"finance.transaction.reverse",
+          reversals[0].id,{originalEventId:eventId,replacementEventId:newEventId},
+          "finance_event");
+        return {reversedEventId:eventId,reversalEventId:reversals[0].id,
+          replacementEventId:newEventId,action};
+      });
+      if(result.error)return fail(reply,result.error,result.status||400);
+      return {adjustment:result};
     }catch(error){return databaseError(request,reply,error);}
   });
   registerFinancePlanningRoutes(app,{authorized,fail,databaseError,id,money,positive,positiveRate,monthKey,isDate,trim,auditedWrite,financeTransaction,account,createEvent,entry,audit});
