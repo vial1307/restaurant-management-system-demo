@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import {debtMentorAlerts,creditorLabels,obligationLabels} from "./finance-mentor-engine.mjs";
 import {loadFinanceAdvice} from "./finance-advisor-routes.mjs";
+import {loadFinanceDebtProgress} from "./finance-debt-progress-routes.mjs";
 import {buildFinanceMentorBrief} from "./finance-mentor-brief.mjs";
 
 const dateTaipei=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Taipei",
@@ -55,7 +56,10 @@ const instructions=[
  "Trình bày: Kết luận; lý do và mốc ngày; ưu tiên thanh toán; phương án A/B; dữ liệu còn thiếu.",
  "Không tự tính ra số dư khác với tính toán tất định; nếu muốn mô phỏng chưa có phép tính, nói rõ cần chạy mô phỏng.",
  "Dùng datedObligationBrief làm nguồn chuẩn cho số tiền chưa đủ quỹ trước hạn và tình trạng trước kỳ lương; chỉ rõ khoản nào còn thiếu dữ liệu.",
- "Phân biệt ngày nhắc liên hệ với hạn nợ pháp lý/đã cam kết."
+ "Phân biệt ngày nhắc liên hệ với hạn nợ pháp lý/đã cam kết.",
+ "Số tiền đã trả theo tháng chỉ dựa trên finance.debt_payments; quỹ dự kiến không được coi như thanh toán thực tế.",
+ "Nợ bạn bè không có hạn cố định không tự coi là quá hạn; ngày tự chọn trong tháng chỉ là lịch trả dự kiến.",
+ "Đưa ra ngày cần chuẩn bị nguồn tiền theo cảnh báo thanh khoản và từng quỹ trả nợ, không tự bịa dòng tiền hoặc khả năng vay thêm."
 ].join("\n");
 
 async function requestOpenAI(input){
@@ -103,13 +107,14 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
     return fail(reply,"INVALID_MENTOR_ANALYSIS_REQUEST");
   try{
    const asOf=dateTaipei();
-   const [forecast,debts]=await Promise.all([
+   const [forecast,debts,progress]=await Promise.all([
     loadFinanceAdvice({pool:ctx.pool,owner:ctx.owner,asOf,days:Number(range),bufferTwd:buffer}),
-    listFinanceDebtObligations(ctx.pool,ctx.owner)
+    listFinanceDebtObligations(ctx.pool,ctx.owner),
+    loadFinanceDebtProgress(ctx.pool,ctx.owner,Number(asOf.slice(0,4)))
    ]);
    const analysis=buildFinanceMentorBrief({forecast,debts,asOf});
    reply.header("Cache-Control","private, no-store");
-   return {analysis,configuredAi:enabled(),source:"finance_postgresql",readOnly:true};
+   return {analysis,debtProgress:progress,configuredAi:enabled(),source:"finance_postgresql",readOnly:true};
   }catch(e){return databaseError(req,reply,e);}
  });
  app.put("/api/finance/mentor/debts/:id/terms",async(req,reply)=>{
@@ -222,9 +227,10 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
     [ctx.owner]);
    if(count.rows[0].n>=Math.max(1,Math.min(100,Number(process.env.FINANCE_AI_DAILY_LIMIT||35))))
     return fail(reply,"AI_MENTOR_DAILY_LIMIT",429);
-   const [projection,debts]=await Promise.all([
+   const [projection,debts,progress]=await Promise.all([
     loadFinanceAdvice({pool:ctx.pool,owner:ctx.owner,asOf,days,bufferTwd:buffer}),
-    listFinanceDebtObligations(ctx.pool,ctx.owner)
+    listFinanceDebtObligations(ctx.pool,ctx.owner),
+    loadFinanceDebtProgress(ctx.pool,ctx.owner,Number(asOf.slice(0,4)))
    ]);
    const ctxProjection={
     asOf,through:projection.through,bufferTwd:projection.bufferTwd,
@@ -232,6 +238,7 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
     projectedEndingTwd:projection.projectedEndingTwd,
     minimumBalanceTwd:projection.minimumBalanceTwd,minimumDate:projection.minimumDate,
     earliestRisk:projection.earliestRisk,totals:projection.totals,
+    debtActions:projection.debtActions?.slice(0,30)||[],
     totalEvents:projection.entries.length,eventsTruncated:projection.entries.length>100,
     entries:projection.entries.slice(0,100),warnings:projection.warnings.slice(0,25),
     excludedFxPlans:projection.excludedFxPlans
@@ -250,6 +257,10 @@ export function registerFinanceMentorRoutes(app,{authorized,fail,databaseError,a
      flags:datedBrief.flags.slice(0,12),
      limitations:datedBrief.limitations
     },
+    debtProgress:progress.debts.map(d=>({name:d.name,currency:d.currency,contractualDue:d.dueDate,
+     months:d.months.filter(m=>Number(m.plannedNative)>0||m.paymentCount>0).map(m=>({month:m.month,
+      plannedNative:m.plannedNative,paidPrincipalNative:m.paidPrincipalNative,paidInterestNative:m.paidInterestNative,
+      paidFeesNative:m.paidFeesNative,closingPrincipalNative:m.closingPrincipalNative,plannedPaymentDate:m.plannedPaymentDate}))})),
     obligations:debts.map(d=>({
      name:d.name,currency:d.currency_code,outstandingAmount:d.outstanding_amount,
      dueDate:d.due_date,annualInterestRate:d.annual_interest_rate,

@@ -808,5 +808,53 @@ assert.equal((await request("/finance/debts/"+plannedBorrow.debt.id,{method:"DEL
 const afterSettleYear=(await request("/finance/cashflow/year?year="+monthly.slice(0,4),{cookie:owner})).data;
 assert.equal(Number(afterSettleYear.months.find(x=>x.month===monthly).planned_borrowing_twd),0);
 
+// Flexible friend debt, month-by-month plan vs actual: no phantom repayments.
+const previousMonth=new Date(Date.UTC(Number(monthly.slice(0,4)),Number(monthly.slice(5))-2,1)).toISOString().slice(0,7);
+const friendDebt=(await post("/debts",{name:"Bạn bè trả linh hoạt",currencyCode:"TWD",
+  principalOriginal:"10000",annualInterestPercent:"0",dueDate:null})).debt;
+assert.equal(friendDebt.due_date,null,"No invented fixed deadline");
+assert.equal((await request("/finance/debt-progress?year="+monthly.slice(0,4))).status,401);
+assert.equal((await request("/finance/debt-progress?year="+monthly.slice(0,4),{cookie:stranger})).status,403);
+const fundPrev=await request("/finance/debt-funds",{method:"PUT",cookie:owner,
+ body:{debtId:friendDebt.id,month:previousMonth,plannedAmount:"1500",earmarkedAmount:"0"}});
+assert.equal(fundPrev.status,200,JSON.stringify(fundPrev.data));
+const fundNow=await request("/finance/debt-funds",{method:"PUT",cookie:owner,
+ body:{debtId:friendDebt.id,month:monthly,plannedAmount:"5000",earmarkedAmount:"0",
+ plannedPaymentDate:monthly+"-27"}});
+assert.equal(fundNow.status,200,JSON.stringify(fundNow.data));
+assert.equal(fundNow.data.fund.planned_payment_date,monthly+"-27");
+const badMonthTarget=await request("/finance/debt-funds",{method:"PUT",cookie:owner,
+ body:{debtId:friendDebt.id,month:monthly,plannedAmount:"5000",earmarkedAmount:"0",
+ plannedPaymentDate:previousMonth+"-27"}});
+assert.equal(badMonthTarget.status,400,"Voluntary target must be in matching plan month");
+let friendHistory=(await request("/finance/debt-progress?year="+monthly.slice(0,4),{cookie:owner})).data;
+let friend=friendHistory.debts.find(d=>d.id===friendDebt.id);
+assert(friend&&friend.scheduleType==="flexible_or_unconfirmed");
+assert.equal(Number(friend.months.find(m=>m.month===monthly).plannedNative),5000);
+assert.equal(Number(friend.months.find(m=>m.month===monthly).paidTotalNative),0,
+ "A planned allocation is never an actual payment");
+const friendAdvice=(await request("/finance/advisor?days=90&bufferTwd=0",{cookie:owner})).data;
+assert.equal(friendAdvice.status,undefined);
+assert(friendAdvice.debtActions.some(x=>x.debtId===friendDebt.id&&x.plannedDate===monthly+"-27"&&
+ x.dateType==="owner_target"&&x.reviewBy),"Upcoming friend payment must have an owner-selected target and prepare-by date");
+await post("/debt-payments",{debtId:friendDebt.id,accountId:borrowWallet.id,
+ paymentDate:previousMonth+"-15",principalPaid:"1000",interestPaid:"0",feePaid:"0",fxRateToTwd:"1",idempotencyKey:key()});
+await post("/debt-payments",{debtId:friendDebt.id,accountId:borrowWallet.id,
+ paymentDate:monthly+"-20",principalPaid:"3000",interestPaid:"100",feePaid:"0",fxRateToTwd:"1",idempotencyKey:key()});
+friendHistory=(await request("/finance/debt-progress?year="+monthly.slice(0,4),{cookie:owner})).data;
+friend=friendHistory.debts.find(d=>d.id===friendDebt.id);
+const prev=friend.months.find(m=>m.month===previousMonth);
+const curr=friend.months.find(m=>m.month===monthly);
+assert.equal(Number(prev.paidTotalNative),1000);
+assert.equal(Number(prev.closingPrincipalNative),9000);
+assert.equal(Number(curr.plannedNative),5000);
+assert.equal(Number(curr.paidPrincipalNative),3000);
+assert.equal(Number(curr.paidInterestNative),100);
+assert.equal(Number(curr.paidTotalNative),3100);
+assert.equal(Number(curr.closingPrincipalNative),6000);
+assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.debts.find(d=>d.id===friendDebt.id).outstanding_amount),6000);
+assert.equal((await request("/finance/mentor/analysis?days=90&bufferTwd=0",{cookie:owner})).data.debtProgress.debts
+ .find(d=>d.id===friendDebt.id).months.find(m=>m.month===monthly).paidTotalNative,"3100");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money, loan financing classification and linked Mentor obligations");
 

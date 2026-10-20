@@ -4,6 +4,7 @@ import { financeConfigured, getFinancePool, financeTransaction } from "./finance
 import { registerFinancePlanningRoutes } from "./finance-planning-routes.mjs";
 import { registerFinanceAdvisorRoutes } from "./finance-advisor-routes.mjs";
 import {registerFinanceMentorRoutes} from "./finance-mentor-routes.mjs";
+import {registerFinanceDebtProgressRoutes} from "./finance-debt-progress-routes.mjs";
 import { registerFinanceScenarioRoutes } from "./finance-scenario-routes.mjs";
 import {getFinanceFxSnapshot} from "./finance-fx-valuation.mjs";
 
@@ -667,5 +668,6 @@ export async function registerFinanceRoutes(app) {
   registerFinancePlanningRoutes(app,{authorized,fail,databaseError,id,money,positive,positiveRate,monthKey,isDate,trim,auditedWrite,financeTransaction,account,createEvent,entry,audit});
   registerFinanceAdvisorRoutes(app,{authorized,fail,databaseError});
   registerFinanceMentorRoutes(app,{authorized,fail,databaseError,auditedWrite,id});
+  registerFinanceDebtProgressRoutes(app,{authorized,fail,databaseError});
   registerFinanceScenarioRoutes(app,{authorized,fail,databaseError,auditedWrite,id});
 }

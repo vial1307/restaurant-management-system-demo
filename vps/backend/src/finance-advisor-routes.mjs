@@ -32,7 +32,7 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
         pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day,original_currency FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date AND (kind<>'borrowing' OR NOT EXISTS(SELECT 1 FROM finance.debt_disbursements d WHERE d.owner_user_id=finance.cashflow_items.owner_user_id AND d.debt_id=finance.cashflow_items.debt_id)) ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
-          "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.currency_code "+
+          "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,f.planned_payment_date::text,d.currency_code "+
           "FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id "+
           "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]

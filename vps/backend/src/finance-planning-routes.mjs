@@ -47,7 +47,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
     const date=startMonth(m);
     const [items,funds,payments,sums,goalFunds]=await Promise.all([
       ctx.pool.query("SELECT id,kind,debt_id,label,amount_twd::text,EXISTS(SELECT 1 FROM finance.debt_disbursements ld WHERE ld.debt_id=finance.cashflow_items.debt_id AND ld.owner_user_id=finance.cashflow_items.owner_user_id) AS received,original_currency,original_amount::text,fx_rate_to_twd::text,fx_rate_observed_at,fx_rate_provider,due_day,memo,month_date::text,updated_at::text AS updated_at FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date=$2::date ORDER BY kind,due_day NULLS LAST,label,id",[ctx.owner,date]),
-      ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.due_date::text,f.updated_at::text AS updated_at FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
+      ctx.pool.query("SELECT f.id,f.debt_id,d.name AS debt_name,d.currency_code,f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,d.due_date::text,f.planned_payment_date::text,f.updated_at::text AS updated_at FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id WHERE f.owner_user_id=$1 AND f.month_date=$2::date ORDER BY d.name,f.id",[ctx.owner,date]),
       ctx.pool.query("SELECT p.id,p.debt_id,d.name AS debt_name,d.currency_code,p.payment_date::text,p.principal_paid::text,p.interest_paid::text,p.fee_paid::text,p.base_amount_twd::text,p.event_id FROM finance.debt_payments p JOIN finance.debts d ON d.id=p.debt_id AND d.owner_user_id=p.owner_user_id WHERE p.owner_user_id=$1 AND p.payment_date >= $2::date AND p.payment_date < ($2::date+interval '1 month') ORDER BY p.payment_date DESC,p.created_at DESC LIMIT 100",[ctx.owner,date]),
       ctx.pool.query(
         "SELECT "+
@@ -136,10 +136,12 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
        financeScenarioSources(ctx.pool,ctx.owner,today,through),
        ctx.pool.query(
         "SELECT d.id,d.name,d.currency_code,d.annual_interest_rate::text,d.due_date::text,"+
+        "COALESCE(t.obligation_type,'unconfirmed') AS obligation_type,"+
         "(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount "+
         "FROM finance.debts d LEFT JOIN finance.debt_payments p "+
         "ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
-        "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
+        "LEFT JOIN finance.debt_mentor_terms t ON t.debt_id=d.id AND t.owner_user_id=d.owner_user_id "+
+        "WHERE d.owner_user_id=$1 GROUP BY d.id,t.obligation_type ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
        getFinanceFxSnapshot(ctx.pool)
       ]);
       const [fundRows,paymentRows]=await Promise.all([
@@ -379,7 +381,8 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
   app.put("/api/finance/debt-funds",async(req,reply)=>{
     const ctx=await authorized(req,reply,{write:true});if(!ctx)return;
     const b=req.body||{};
-    if(!id(b.debtId)||!monthKey(b.month)||typeof b.plannedAmount!=="string"||typeof b.earmarkedAmount!=="string")
+    if(!id(b.debtId)||!monthKey(b.month)||typeof b.plannedAmount!=="string"||typeof b.earmarkedAmount!=="string"||
+       (b.plannedPaymentDate!=null&&b.plannedPaymentDate!==""&&(!isDate(b.plannedPaymentDate)||b.plannedPaymentDate.slice(0,7)!==b.month)))
       return fail(reply,"INVALID_DEBT_FUND");
     try{
       const saved=await auditedWrite(ctx,"finance.debt_fund.save","finance_debt_fund",async db=>{
@@ -391,8 +394,11 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         const rate=debt.currency_code==="TWD"?"1":positiveRate(snapRate)?snapRate:positiveRate(b.fxRateToTwd)?b.fxRateToTwd:null;
         if(!positiveRate(rate))return {error:"DEBT_FUND_RATE_REQUIRED"};
         const {rows:funds}=await db.query(
-          "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric) ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,updated_at=now() RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text",
-          [ctx.owner,b.debtId,startMonth(b.month),b.plannedAmount,b.earmarkedAmount,rate]
+          "INSERT INTO finance.debt_fund_allocations(owner_user_id,debt_id,month_date,planned_amount,earmarked_amount,fx_rate_to_twd,planned_payment_date) VALUES($1,$2,$3::date,$4::numeric,$5::numeric,$6::numeric,$7::date) "+
+          "ON CONFLICT(owner_user_id,debt_id,month_date) DO UPDATE SET planned_amount=EXCLUDED.planned_amount,earmarked_amount=EXCLUDED.earmarked_amount,fx_rate_to_twd=EXCLUDED.fx_rate_to_twd,"+
+          "planned_payment_date=CASE WHEN $8::boolean THEN EXCLUDED.planned_payment_date ELSE finance.debt_fund_allocations.planned_payment_date END,updated_at=now() "+
+          "RETURNING id,debt_id,planned_amount::text,earmarked_amount::text,fx_rate_to_twd::text,planned_payment_date::text",
+          [ctx.owner,b.debtId,startMonth(b.month),b.plannedAmount,b.earmarkedAmount,rate,b.plannedPaymentDate||null,Object.prototype.hasOwnProperty.call(b,"plannedPaymentDate")]
         );
         return funds[0];
       });
