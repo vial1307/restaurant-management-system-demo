@@ -136,10 +136,12 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
        financeScenarioSources(ctx.pool,ctx.owner,today,through),
        ctx.pool.query(
         "SELECT d.id,d.name,d.currency_code,d.annual_interest_rate::text,d.due_date::text,"+
+        "COALESCE(t.obligation_type,'unconfirmed') AS obligation_type,"+
         "(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount "+
         "FROM finance.debts d LEFT JOIN finance.debt_payments p "+
         "ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
-        "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
+        "LEFT JOIN finance.debt_mentor_terms t ON t.debt_id=d.id AND t.owner_user_id=d.owner_user_id "+
+        "WHERE d.owner_user_id=$1 GROUP BY d.id,t.obligation_type ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
        getFinanceFxSnapshot(ctx.pool)
       ]);
       const [fundRows,paymentRows]=await Promise.all([
