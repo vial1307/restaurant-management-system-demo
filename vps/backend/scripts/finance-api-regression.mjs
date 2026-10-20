@@ -677,5 +677,60 @@ try{
  const allPosted=(await request("/finance/overview?month="+monthly,{cookie:owner})).data.flow;
  assert(!allPosted.some(x=>Number(x.total_twd)<0),"Correction must preserve valid overview aggregates");
 
-console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
+// Actual borrowing must create precisely one linked debt + posted wallet receipt.
+// It is financing, not salary/income, and must flow to the existing Mentor/forecast.
+const borrowWallet=(await post("/accounts",{name:"Ví nhận vay thực tế",kind:"bank",currencyCode:"TWD"})).account;
+const borrowKey=key(),receiptDate=monthly+"-20";
+const loanBody={name:"Bạn thân cho vay · test",creditorType:"friend_family",currencyCode:"TWD",
+  accountId:borrowWallet.id,principalOriginal:"20000",annualInterestPercent:"0",
+  receivedDate:receiptDate,dueDate:monthly+"-28",idempotencyKey:borrowKey};
+const loanBefore=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
+const earlierDebts=(await request("/finance/bootstrap",{cookie:owner})).data.debts.length;
+assert.equal((await request("/finance/loan-receipts",{method:"POST",body:loanBody})).status,401);
+assert.equal((await request("/finance/loan-receipts",{method:"POST",cookie:stranger,body:loanBody})).status,403);
+assert.equal((await request("/finance/loan-receipts",{method:"POST",cookie:owner,write:false,body:loanBody})).status,403);
+const badWallet=await request("/finance/loan-receipts",{method:"POST",cookie:owner,
+  body:{...loanBody,idempotencyKey:key(),currencyCode:"VND",principalOriginal:"2000000",fxRateToTwd:"0.00004"}});
+assert.equal(badWallet.status,400,"Loan currency must equal target wallet currency");
+assert.equal((await request("/finance/bootstrap",{cookie:owner})).data.debts.length,earlierDebts,
+ "Invalid loan receipt must not create a debt, event or wallet entry");
+const postedLoan=await post("/loan-receipts",loanBody);
+assert(postedLoan.debt.id&&postedLoan.receipt.eventId);
+const loanAfter=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert.equal(loanAfter.debts.length,earlierDebts+1);
+assert.equal(Number(loanAfter.accounts.find(x=>x.id===borrowWallet.id).balance),20000);
+assert.equal(Number(loanAfter.debts.find(x=>x.id===postedLoan.debt.id).outstanding_amount),20000);
+assert.equal(Number(loanAfter.debts.find(x=>x.id===postedLoan.debt.id).received_amount),20000);
+const creditedOverview=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
+assert.equal(Number(creditedOverview.financing.borrowing_twd)-Number(loanBefore.financing.borrowing_twd),20000);
+assert.equal(Number(creditedOverview.flow.find(x=>x.kind==="income")?.total_twd||0),
+ Number(loanBefore.flow.find(x=>x.kind==="income")?.total_twd||0),
+ "Cash borrowed must NOT inflate earned income or salary reports");
+assert(creditedOverview.events.some(x=>x.id===postedLoan.receipt.eventId&&x.kind==="borrowing"));
+const mentorLoan=(await request("/finance/mentor/obligations",{cookie:owner})).data.debts.find(x=>x.id===postedLoan.debt.id);
+assert.equal(mentorLoan?.creditor_type,"friend_family");
+assert.equal(mentorLoan?.obligation_type,"unconfirmed","Do not infer contractual payment terms");
+assert.equal((await request("/finance/loan-receipts",{method:"POST",cookie:owner,body:loanBody})).status,409,
+ "A repeated loan funding idempotency key must not mint money twice");
+assert.equal((await request("/finance/debts/"+postedLoan.debt.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
+ "Posted loan liabilities cannot be deleted even before first repayment");
+assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===borrowWallet.id).balance),20000);
+const payLoan=await post("/debt-payments",{debtId:postedLoan.debt.id,accountId:borrowWallet.id,paymentDate:receiptDate,
+  principalPaid:"2000",interestPaid:"100",feePaid:"0",fxRateToTwd:"1",memo:"Trả gốc + lãi",idempotencyKey:key()});
+assert(payLoan.payment.id);
+const loanFinal=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert.equal(Number(loanFinal.accounts.find(x=>x.id===borrowWallet.id).balance),17900);
+assert.equal(Number(loanFinal.debts.find(x=>x.id===postedLoan.debt.id).outstanding_amount),18000);
+const paidOverview=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
+assert.equal(Number(paidOverview.financing.debt_paid_twd)-Number(loanBefore.financing.debt_paid_twd),2100);
+assert.equal(Number(paidOverview.flow.find(x=>x.kind==="income")?.total_twd||0),
+ Number(loanBefore.flow.find(x=>x.kind==="income")?.total_twd||0));
+const afterPreview=await request("/finance/workbench/preview",{method:"POST",cookie:owner,
+ body:{scenario:{name:"Dòng tiền theo nợ đã ghi",months:3,salaryDay:10,bufferTwd:"0",
+  monthlyExtraIncomeTwd:"0",rows:[]}}});
+assert.equal(afterPreview.status,200,JSON.stringify(afterPreview.data));
+assert(!afterPreview.data.projection.timeline.some(x=>x.kind==="borrow"),
+ "An already-posted loan must only count in wallet opening, not be added to future salary or income");
+
+console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money, loan financing classification and linked Mentor obligations");
 
