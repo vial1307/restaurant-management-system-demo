@@ -84,7 +84,7 @@ export function sourceEvents({asOf,through,accounts=[],cashItems=[],debtFunds=[]
    const month=String(row.month_date).slice(0,7);
    const d=dateFor(month,row.due_day);
    if(d.estimatedDate)warnings.push("Có khoản thu/chi thiếu ngày chính xác, tạm xếp cuối tháng.");
-   include({date:d.date,kind:row.kind,label:row.label,amountTwd:plain(units(row.amount_twd)*(row.kind==="income"?1n:-1n)),
+   include({date:d.date,kind:row.kind==="borrowing"?"borrow":row.kind,label:row.label,amountTwd:plain(units(row.amount_twd)*(["income","borrowing"].includes(row.kind)?1n:-1n)),
     source:"cashflow",estimatedDate:d.estimatedDate});
  }
  const posted=new Map();
