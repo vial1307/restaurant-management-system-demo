@@ -731,6 +731,19 @@ const afterPreview=await request("/finance/workbench/preview",{method:"POST",coo
 assert.equal(afterPreview.status,200,JSON.stringify(afterPreview.data));
 assert(!afterPreview.data.projection.timeline.some(x=>x.kind==="borrow"),
  "An already-posted loan must only count in wallet opening, not be added to future salary or income");
+const loanDate=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+const repayDate=new Date(Date.now()+17*86400000).toISOString().slice(0,10);
+const simulatedLoan=await request("/finance/workbench/preview",{method:"POST",cookie:owner,
+ body:{scenario:{name:"Vay tạm rồi trả",months:3,salaryDay:10,bufferTwd:"0",monthlyExtraIncomeTwd:"0",
+  rows:[{key:key(),linkId:"hypothetical-loan",kind:"borrow",date:loanDate,
+    label:"Bạn bè cho vay giả định",amountTwd:"1000"},
+   {key:key(),linkId:"hypothetical-loan",kind:"repay",date:repayDate,
+    label:"Trả cả gốc lãi giả định",amountTwd:"1030"}]}}});
+assert.equal(simulatedLoan.status,200,JSON.stringify(simulatedLoan.data));
+assert.equal(simulatedLoan.data.projection.loans[0].financingCostTwd,"30");
+assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===borrowWallet.id).balance),17900,
+ "Previewing a future loan/repayment pair cannot post either transaction");
+
 
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money, loan financing classification and linked Mentor obligations");
 
