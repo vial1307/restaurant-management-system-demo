@@ -605,5 +605,77 @@ try{
  assert.equal(a.rows[0].n,4,"Each successful spreadsheet change is audited once");
 }finally{await auditSheet.end();}
 
+
+ // Editing/removing Finance master records is owner-scoped and does not change
+ // the posted ledger. Only unposted master data is eligible for deletion.
+ const unusedWallet=(await post("/accounts",{name:"Ví dùng thử",kind:"cash",currencyCode:"TWD"})).account;
+ const editWallet=await request("/finance/accounts/"+unusedWallet.id,{method:"PUT",cookie:owner,
+  body:{name:"Ví đã đổi tên",kind:"ewallet"}});
+ assert.equal(editWallet.status,200,JSON.stringify(editWallet.data));
+ assert.equal(editWallet.data.account.name,"Ví đã đổi tên");
+ assert.equal((await request("/finance/accounts/"+unusedWallet.id,{method:"DELETE",cookie:stranger,body:{}})).status,403);
+ assert.equal((await request("/finance/accounts/"+unusedWallet.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
+ assert.equal((await request("/finance/accounts/"+bank.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
+  "A posted wallet cannot be deleted");
+
+ const unusedCategory=(await post("/categories",{name:"Thu thử không dùng",kind:"income"})).category;
+ const renameCategory=await request("/finance/categories/"+unusedCategory.id,{method:"PUT",cookie:owner,
+  body:{name:"Thu thử đổi tên"}});
+ assert.equal(renameCategory.status,200,JSON.stringify(renameCategory.data));
+ assert.equal(renameCategory.data.category.kind,"income");
+ assert.equal((await request("/finance/categories/"+unusedCategory.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
+ assert.equal((await request("/finance/categories/"+salary.id,{method:"DELETE",cookie:owner,body:{}})).status,409);
+
+ const removableGoal=(await post("/goals",{name:"Mục tiêu xóa được",currencyCode:"TWD",
+  targetAmount:"1000",targetDate:monthly+"-27"})).goal;
+ const goalEdit=await request("/finance/goals/"+removableGoal.id,{method:"PUT",cookie:owner,
+  body:{name:"Mục tiêu đã sửa",targetAmount:"2000",currentAmount:"150",targetDate:monthly+"-25",status:"active"}});
+ assert.equal(goalEdit.status,200,JSON.stringify(goalEdit.data));
+ assert.equal(goalEdit.data.goal.name,"Mục tiêu đã sửa");
+ assert.equal(Number(goalEdit.data.goal.target_amount),2000);
+ assert.equal(goalEdit.data.goal.target_date,monthly+"-25");
+ assert.equal((await request("/finance/goals/"+removableGoal.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
+ assert(!(await request("/finance/bootstrap",{cookie:owner})).data.goals.some(g=>g.id===removableGoal.id));
+
+ const removableDebt=(await post("/debts",{name:"Nợ chưa phát sinh",currencyCode:"TWD",
+  principalOriginal:"1000",annualInterestPercent:"0",dueDate:monthly+"-25"})).debt;
+ assert.equal((await request("/finance/debts/"+removableDebt.id,{method:"DELETE",cookie:stranger,body:{}})).status,403);
+ assert.equal((await request("/finance/debts/"+removableDebt.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
+ assert.equal((await request("/finance/debts/"+debt.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
+  "Any debt with a posted repayment is immutable");
+
+ // Posted income corrections use reversal + replacement, never UPDATE or DELETE.
+ // Correct and then cancel the corrected entry to restore the exact starting balance.
+ const ledgerWallet=(await post("/accounts",{name:"Ví kiểm thử sửa giao dịch",kind:"cash",currencyCode:"TWD"})).account;
+ const ledgerCategory=(await post("/categories",{name:"Thu nhập kiểm thử sửa",kind:"income"})).category;
+ const posted=(await post("/transactions",{kind:"income",accountId:ledgerWallet.id,
+  categoryId:ledgerCategory.id,currencyCode:"TWD",amount:"120",
+  description:"Ghi sai ban đầu",occurredAt:new Date().toISOString(),
+  toTwdRate:"1",idempotencyKey:key()})).event;
+ const correctPath="/finance/transactions/"+posted.id+"/adjust";
+ const corrected=await request(correctPath,{method:"POST",cookie:owner,
+  body:{action:"correct",idempotencyKey:key(),correction:{amount:"150",
+   categoryId:ledgerCategory.id,occurredAt:new Date().toISOString(),description:"Sửa thành 150"}}});
+ assert.equal(corrected.status,200,JSON.stringify(corrected.data));
+ assert(corrected.data.adjustment.replacementEventId);
+ const originalAfter=(await request("/finance/overview?month="+monthly,{cookie:owner})).data.events.find(e=>e.id===posted.id);
+ assert(originalAfter?.reversed,"Original posted income should be visibly reversed");
+ const walletAfterCorrection=(await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(a=>a.id===ledgerWallet.id);
+ assert.equal(Number(walletAfterCorrection.balance),150,"Correction replaces the original amount, not doubles it");
+ assert.equal((await request(correctPath,{method:"POST",cookie:owner,
+  body:{action:"reverse",idempotencyKey:key()}})).status,409,"Prevent reversing one original twice");
+ const replacementId=corrected.data.adjustment.replacementEventId;
+ assert.equal((await request("/finance/transactions/"+replacementId+"/adjust",{method:"POST",cookie:stranger,
+  body:{action:"reverse",idempotencyKey:key()}})).status,403);
+ const cancelled=await request("/finance/transactions/"+replacementId+"/adjust",{method:"POST",cookie:owner,
+  body:{action:"reverse",idempotencyKey:key()}});
+ assert.equal(cancelled.status,200,JSON.stringify(cancelled.data));
+ const walletAfterCancel=(await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(a=>a.id===ledgerWallet.id);
+ assert.equal(Number(walletAfterCancel.balance),0,"Cancel corrected transaction restores wallet balance");
+ assert.equal((await request("/finance/transactions/"+replacementId+"/adjust",{method:"POST",cookie:owner,
+  body:{action:"reverse",idempotencyKey:key()}})).status,409);
+ const allPosted=(await request("/finance/overview?month="+monthly,{cookie:owner})).data.flow;
+ assert(!allPosted.some(x=>Number(x.total_twd)<0),"Correction must preserve valid overview aggregates");
+
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money");
 
