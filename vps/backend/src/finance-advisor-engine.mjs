@@ -67,8 +67,8 @@ export function calculateFinanceAdvice({asOf,days,bufferTwd="0",wallets=[],cashI
     const gross=twdUnits(fund.planned_twd);
     const paid=settled.get(String(fund.debt_id)+"|"+m)||0n;
     const remainder=gross>paid?gross-paid:0n;
-    const when=dated(m,null,fund.due_date);
-    push(when.date,"debt","Quỹ nợ · "+fund.debt_name,-remainder,"debt_fund",fund.debt_id,when.estimatedDate);
+    const when=dated(m,null,fund.planned_payment_date||fund.due_date);
+    push(when.date,"debt",(fund.due_date?"Quỹ nợ · ":"Dự kiến trả nợ linh hoạt · ")+fund.debt_name,-remainder,"debt_fund",fund.debt_id,when.estimatedDate);
   }
   for(const fund of goalFunds){
     const m=monthOf(fund);
