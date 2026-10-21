@@ -34,14 +34,14 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
           "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,f.planned_payment_date::text,d.currency_code "+
           "FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id "+
-          "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
+          "WHERE f.owner_user_id=$1 AND d.archived_at IS NULL AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]
         ),
         pool.query(
           "SELECT f.id,f.goal_id,g.name AS goal_name,g.target_date::text,f.month_date::text,"+
           "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,g.currency_code "+
           "FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id "+
-          "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
+          "WHERE f.owner_user_id=$1 AND d.archived_at IS NULL AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]
         ),
         pool.query(
@@ -58,7 +58,7 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
         pool.query(
           "SELECT d.id,d.name,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount "+
           "FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
-          "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.name",[owner]
+          "WHERE d.owner_user_id=$1 AND d.archived_at IS NULL GROUP BY d.id ORDER BY d.name",[owner]
         )
       ]);
       const fx=await getFinanceFxSnapshot(pool);
