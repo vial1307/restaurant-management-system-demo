@@ -28,13 +28,13 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
   const startMonth=asOf.slice(0,7)+"-01";
   const endMonth=through.slice(0,7)+"-01";
       const [wallets,cashItems,debtFunds,goalFunds,debtPayments,fxPlans,goals,debts]=await Promise.all([
-        pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
+        pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=true GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
         pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day,original_currency FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date AND (kind<>'borrowing' OR NOT EXISTS(SELECT 1 FROM finance.debt_disbursements d WHERE d.owner_user_id=finance.cashflow_items.owner_user_id AND d.debt_id=finance.cashflow_items.debt_id)) ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
           "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,f.planned_payment_date::text,d.currency_code "+
           "FROM finance.debt_fund_allocations f JOIN finance.debts d ON d.id=f.debt_id AND d.owner_user_id=f.owner_user_id "+
-          "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
+          "WHERE f.owner_user_id=$1 AND d.archived_at IS NULL AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]
         ),
         pool.query(
@@ -58,7 +58,7 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
         pool.query(
           "SELECT d.id,d.name,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount "+
           "FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
-          "WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.name",[owner]
+          "WHERE d.owner_user_id=$1 AND d.archived_at IS NULL GROUP BY d.id ORDER BY d.name",[owner]
         )
       ]);
       const fx=await getFinanceFxSnapshot(pool);

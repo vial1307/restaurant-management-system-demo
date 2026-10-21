@@ -25,7 +25,7 @@ export async function loadFinanceDebtProgress(pool,owner,year){
   "LEFT JOIN finance.debt_mentor_terms t ON t.debt_id=d.id AND t.owner_user_id=d.owner_user_id "+
   "LEFT JOIN finance.debt_fund_allocations f ON f.debt_id=d.id AND f.owner_user_id=d.owner_user_id AND f.month_date=m.month_date "+
   "LEFT JOIN monthly_paid p ON p.debt_id=d.id AND p.month_date=m.month_date "+
-  "WHERE d.owner_user_id=$1 ORDER BY d.due_date NULLS LAST,d.name,d.id,m.month_date",
+  "WHERE d.owner_user_id=$1 AND d.archived_at IS NULL ORDER BY d.due_date NULLS LAST,d.name,d.id,m.month_date",
   [owner,year]
  );
  const byDebt=new Map(),asOf=todayTaipei(),warnings=[];

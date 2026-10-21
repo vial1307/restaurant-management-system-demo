@@ -97,16 +97,19 @@ export async function registerFinanceRoutes(app) {
   app.get("/api/finance/bootstrap",async(request,reply)=>{
     const ctx=await authorized(request,reply);if(!ctx)return;
     try {
-      const [currencies,accounts,categories,budgets,plans,goals,debts]=await Promise.all([
+      const [currencies,accounts,categories,budgets,plans,goals,debts,archivedAccounts,archivedDebts,archivedCategories]=await Promise.all([
         ctx.pool.query("SELECT code,name_vi,symbol,minor_units FROM finance.currencies WHERE enabled=true ORDER BY CASE code WHEN 'TWD' THEN 0 WHEN 'VND' THEN 1 ELSE 2 END,code"),
         ctx.pool.query("SELECT a.id,a.name,a.kind,a.currency_code,a.created_at,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=true GROUP BY a.id ORDER BY a.created_at",[ctx.owner]),
-        ctx.pool.query("SELECT id,name,kind FROM finance.categories WHERE owner_user_id=$1 ORDER BY kind,name",[ctx.owner]),
+        ctx.pool.query("SELECT id,name,kind FROM finance.categories WHERE owner_user_id=$1 AND archived_at IS NULL ORDER BY kind,name",[ctx.owner]),
         ctx.pool.query("SELECT b.id,b.category_id,b.month_date::text AS month_date,b.amount_twd::text AS amount_twd,c.name AS category_name FROM finance.monthly_budgets b JOIN finance.categories c ON c.id=b.category_id AND c.owner_user_id=b.owner_user_id WHERE b.owner_user_id=$1 AND b.month_date>=date_trunc('month',CURRENT_DATE)-interval '12 months' ORDER BY b.month_date DESC,c.name",[ctx.owner]),
         ctx.pool.query("SELECT id,plan_date::text AS plan_date,plan_kind,from_currency,to_currency,source_amount::text AS source_amount,expected_rate::text AS expected_rate,expected_fee::text AS expected_fee,status,memo FROM finance.fx_plans WHERE owner_user_id=$1 ORDER BY plan_date DESC,created_at DESC LIMIT 100",[ctx.owner]),
         ctx.pool.query("SELECT id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status FROM finance.goals WHERE owner_user_id=$1 ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,target_date NULLS LAST,created_at DESC LIMIT 100",[ctx.owner]),
-        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount,COALESCE(MAX(ld.received_amount),0)::text AS received_amount,MAX(ld.received_date)::text AS received_date,MAX(cp.amount_twd)::text AS planned_borrowing_twd,MAX(cp.month_date)::text AS planned_borrowing_month FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id LEFT JOIN finance.debt_disbursements ld ON ld.debt_id=d.id AND ld.owner_user_id=d.owner_user_id LEFT JOIN finance.cashflow_items cp ON cp.debt_id=d.id AND cp.owner_user_id=d.owner_user_id AND cp.kind=\'borrowing\' WHERE d.owner_user_id=$1 GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner])
+        ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount,COALESCE(MAX(ld.received_amount),0)::text AS received_amount,MAX(ld.received_date)::text AS received_date,MAX(cp.amount_twd)::text AS planned_borrowing_twd,MAX(cp.month_date)::text AS planned_borrowing_month FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id LEFT JOIN finance.debt_disbursements ld ON ld.debt_id=d.id AND ld.owner_user_id=d.owner_user_id LEFT JOIN finance.cashflow_items cp ON cp.debt_id=d.id AND cp.owner_user_id=d.owner_user_id AND cp.kind=\'borrowing\' WHERE d.owner_user_id=$1 AND d.archived_at IS NULL GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner]),
+        ctx.pool.query("SELECT a.id,a.name,a.kind,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=false GROUP BY a.id ORDER BY a.created_at",[ctx.owner]),
+        ctx.pool.query("SELECT id,name,currency_code,principal_original::text,archived_at FROM finance.debts WHERE owner_user_id=$1 AND archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT 100",[ctx.owner]),
+        ctx.pool.query("SELECT id,name,kind,archived_at FROM finance.categories WHERE owner_user_id=$1 AND archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT 100",[ctx.owner])
       ]);
-      return {currencies:currencies.rows,accounts:accounts.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
+      return {currencies:currencies.rows,accounts:accounts.rows,archivedAccounts:archivedAccounts.rows,archivedDebts:archivedDebts.rows,archivedCategories:archivedCategories.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
     } catch(error){return databaseError(request,reply,error);}
   });
   app.get("/api/finance/overview",async(request,reply)=>{
@@ -121,7 +124,7 @@ export async function registerFinanceRoutes(app) {
           [ctx.owner,start]
         ),
         ctx.pool.query(
-          "SELECT c.id AS category_id,c.name,c.kind,COALESCE(b.amount_twd,0)::text AS budget_twd,COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND en.category_id=c.id AND ev.kind=c.kind AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS actual_twd FROM finance.categories c LEFT JOIN finance.monthly_budgets b ON b.owner_user_id=c.owner_user_id AND b.category_id=c.id AND b.month_date=$2::date WHERE c.owner_user_id=$1 ORDER BY c.kind,c.name",
+          "SELECT c.id AS category_id,c.name,c.kind,COALESCE(b.amount_twd,0)::text AS budget_twd,COALESCE((SELECT SUM(ABS(en.base_amount_twd)) FROM finance.entries en JOIN finance.events ev ON ev.id=en.event_id AND ev.owner_user_id=en.owner_user_id WHERE en.owner_user_id=$1 AND en.category_id=c.id AND ev.kind=c.kind AND NOT EXISTS(SELECT 1 FROM finance.events rev WHERE rev.owner_user_id=ev.owner_user_id AND rev.reverses_event_id=ev.id) AND ev.occurred_at >= ($2::date AT TIME ZONE 'Asia/Taipei') AND ev.occurred_at < (($2::date+interval '1 month') AT TIME ZONE 'Asia/Taipei')),0)::text AS actual_twd FROM finance.categories c LEFT JOIN finance.monthly_budgets b ON b.owner_user_id=c.owner_user_id AND b.category_id=c.id AND b.month_date=$2::date WHERE c.owner_user_id=$1 AND c.archived_at IS NULL ORDER BY c.kind,c.name",
           [ctx.owner,start]
         ),
         ctx.pool.query(
@@ -183,14 +186,31 @@ export async function registerFinanceRoutes(app) {
       const result=await financeTransaction(async db=>{
         const {rows}=await db.query("SELECT id FROM finance.accounts WHERE owner_user_id=$1 AND id=$2 AND active=true FOR UPDATE",[ctx.owner,a]);
         if(!rows[0])return {error:"ACCOUNT_NOT_FOUND",status:404};
-        if((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,a])).rows[0])
-          return {error:"ACCOUNT_HAS_POSTED_TRANSACTIONS",status:409};
+        const used=Boolean((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,a])).rows[0]);
+        if(used){
+          const {rows:summary}=await db.query("SELECT COALESCE(SUM(amount),0)::text AS balance FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2",[ctx.owner,a]);
+          await db.query("UPDATE finance.accounts SET active=false WHERE owner_user_id=$1 AND id=$2",[ctx.owner,a]);
+          await audit(db,ctx.owner,"finance.account.archive",a,{balanceAtRemoval:summary[0].balance,ledgerPreserved:true},"finance_account");
+          return {deleted:true,archived:true,id:a,balanceAtRemoval:summary[0].balance};
+        }
         await db.query("DELETE FROM finance.accounts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,a]);
-        await audit(db,ctx.owner,"finance.account.delete",a,{},"finance_account");
-        return {deleted:true,id:a};
+        await audit(db,ctx.owner,"finance.account.delete",a,{ledgerPreserved:false},"finance_account");
+        return {deleted:true,archived:false,id:a};
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/accounts/:accountId/restore",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const a=request.params?.accountId;if(!id(a))return fail(reply,"INVALID_ACCOUNT");
+    try{
+      const result=await auditedWrite(ctx,"finance.account.restore","finance_account",async db=>{
+        const {rows}=await db.query("UPDATE finance.accounts SET active=true WHERE owner_user_id=$1 AND id=$2 AND active=false RETURNING id",[ctx.owner,a]);
+        return rows[0]||null;
+      });
+      if(!result)return fail(reply,"ACCOUNT_NOT_ARCHIVED",404);
+      return {restored:true,id:result.id};
     }catch(error){return databaseError(request,reply,error);}
   });
   // Owner-only balance reconciliation. Never rewrite the immutable ledger:
@@ -253,7 +273,7 @@ export async function registerFinanceRoutes(app) {
     if(!id(c)||!trim(b.name))return fail(reply,"INVALID_CATEGORY_UPDATE");
     try{
       const saved=await auditedWrite(ctx,"finance.category.update","finance_category",async db=>{
-        const {rows}=await db.query("UPDATE finance.categories SET name=$3 WHERE owner_user_id=$1 AND id=$2 RETURNING id,name,kind",
+        const {rows}=await db.query("UPDATE finance.categories SET name=$3 WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL RETURNING id,name,kind",
           [ctx.owner,c,trim(b.name,100)]);return rows[0];
       });
       if(!saved)return fail(reply,"CATEGORY_NOT_FOUND",404);
@@ -265,17 +285,29 @@ export async function registerFinanceRoutes(app) {
     const c=request.params?.categoryId;if(!id(c))return fail(reply,"INVALID_CATEGORY");
     try{
       const result=await financeTransaction(async db=>{
-        const {rows}=await db.query("SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,c]);
+        const {rows}=await db.query("SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL FOR UPDATE",[ctx.owner,c]);
         if(!rows[0])return {error:"CATEGORY_NOT_FOUND",status:404};
-        if((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND category_id=$2 LIMIT 1",[ctx.owner,c])).rows[0])
-          return {error:"CATEGORY_HAS_POSTED_TRANSACTIONS",status:409};
+        const used=Boolean((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND category_id=$2 LIMIT 1",[ctx.owner,c])).rows[0]);
         await db.query("DELETE FROM finance.monthly_budgets WHERE owner_user_id=$1 AND category_id=$2",[ctx.owner,c]);
-        await db.query("DELETE FROM finance.categories WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
-        await audit(db,ctx.owner,"finance.category.delete",c,{},"finance_category");
-        return {deleted:true,id:c};
+        if(used)await db.query("UPDATE finance.categories SET archived_at=now() WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
+        else await db.query("DELETE FROM finance.categories WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
+        await audit(db,ctx.owner,used?"finance.category.archive":"finance.category.delete",c,{ledgerPreserved:used},"finance_category");
+        return {deleted:true,archived:used,id:c};
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/categories/:categoryId/restore",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const c=request.params?.categoryId;if(!id(c))return fail(reply,"INVALID_CATEGORY");
+    try{
+      const result=await auditedWrite(ctx,"finance.category.restore","finance_category",async db=>{
+        const {rows}=await db.query("UPDATE finance.categories SET archived_at=NULL WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NOT NULL RETURNING id",[ctx.owner,c]);
+        return rows[0]||null;
+      });
+      if(!result)return fail(reply,"CATEGORY_NOT_ARCHIVED",404);
+      return {restored:true,id:result.id};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.put("/api/finance/budgets",async(request,reply)=>{
@@ -397,7 +429,7 @@ export async function registerFinanceRoutes(app) {
         if(b.debtId){
           const {rows}=await db.query(
             "SELECT id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text "+
-            "FROM finance.debts WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",
+            "FROM finance.debts WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL FOR UPDATE",
             [ctx.owner,b.debtId]);
           debt=rows[0];
           if(!debt)return {error:"PLAN_DEBT_NOT_FOUND",status:404};
@@ -473,7 +505,7 @@ export async function registerFinanceRoutes(app) {
       const saved=await auditedWrite(ctx,"finance.debt.update","finance_debt",async db=>{
         const {rows}=await db.query(
          "UPDATE finance.debts SET name=$3,annual_interest_rate=$4::numeric/100,due_date=$5::date "+
-         "WHERE owner_user_id=$1 AND id=$2 "+
+         "WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL "+
          "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
          [ctx.owner,debtId,trim(b.name,160),String(b.annualInterestPercent||"0"),b.dueDate||null]);
         return rows[0]||null;
@@ -487,21 +519,40 @@ export async function registerFinanceRoutes(app) {
     const d=request.params?.debtId;if(!id(d))return fail(reply,"INVALID_DEBT");
     try{
       const result=await financeTransaction(async db=>{
-        const {rows}=await db.query("SELECT id FROM finance.debts WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,d]);
+        const {rows}=await db.query("SELECT id FROM finance.debts WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL FOR UPDATE",[ctx.owner,d]);
         if(!rows[0])return {error:"DEBT_NOT_FOUND",status:404};
-        if((await db.query("SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
-          return {error:"DEBT_HAS_POSTED_PAYMENTS",status:409};
-        if((await db.query("SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
-          return {error:"DEBT_HAS_POSTED_RECEIPT",status:409};
+        const used=Boolean((await db.query(
+          "SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 "+
+          "UNION ALL SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",
+          [ctx.owner,d])).rows[0]);
         const plans=await db.query("DELETE FROM finance.cashflow_items WHERE owner_user_id=$1 AND debt_id=$2 RETURNING id",[ctx.owner,d]);
         const funds=await db.query("DELETE FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND debt_id=$2 RETURNING id",[ctx.owner,d]);
-        await db.query("DELETE FROM finance.debt_mentor_terms WHERE owner_user_id=$1 AND debt_id=$2",[ctx.owner,d]);
-        await db.query("DELETE FROM finance.debts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
-        await audit(db,ctx.owner,"finance.debt.delete",d,{removedPlanAllocations:funds.rowCount,removedBorrowingPlans:plans.rowCount},"finance_debt");
-        return {deleted:true,id:d,removedPlanAllocations:funds.rowCount};
+        if(used){
+          await db.query("UPDATE finance.debts SET archived_at=now() WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
+        }else{
+          await db.query("DELETE FROM finance.debt_mentor_terms WHERE owner_user_id=$1 AND debt_id=$2",[ctx.owner,d]);
+          await db.query("DELETE FROM finance.debts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
+        }
+        await audit(db,ctx.owner,used?"finance.debt.archive":"finance.debt.delete",d,{
+          removedPlanAllocations:funds.rowCount,removedBorrowingPlans:plans.rowCount,
+          retainedPostedPaymentsAndReceipts:used
+        },"finance_debt");
+        return {deleted:true,archived:used,id:d,removedPlanAllocations:funds.rowCount};
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/debts/:debtId/restore",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const d=request.params?.debtId;if(!id(d))return fail(reply,"INVALID_DEBT");
+    try{
+      const result=await auditedWrite(ctx,"finance.debt.restore","finance_debt",async db=>{
+        const {rows}=await db.query("UPDATE finance.debts SET archived_at=NULL WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NOT NULL RETURNING id",[ctx.owner,d]);
+        return rows[0]||null;
+      });
+      if(!result)return fail(reply,"DEBT_NOT_ARCHIVED",404);
+      return {restored:true,id:result.id,plansRestored:false};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/fx-plans/:planId/cancel",async(request,reply)=>{
@@ -561,7 +612,7 @@ export async function registerFinanceRoutes(app) {
           if(!positive(b.receivedAmount,Number(secondary.minor_units)) || !money(b.feeAmount||"0",Number(primary.minor_units)))return {error:"INVALID_EXCHANGE_AMOUNT"};
         }else if(kind==="income"||kind==="expense"){
           if(!id(b.categoryId))return {error:"CATEGORY_REQUIRED"};
-          const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3",[b.categoryId,ctx.owner,kind]);
+          const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3 AND archived_at IS NULL",[b.categoryId,ctx.owner,kind]);
           if(!check.rows[0])return {error:"CATEGORY_NOT_FOUND"};
           categoryId=b.categoryId;
           // The source account always remains in its original currency.
@@ -633,7 +684,7 @@ export async function registerFinanceRoutes(app) {
         if(action==="correct"){
           if(!positive(correction.amount,Number(wallet.minor_units)))return {error:"INVALID_TRANSACTION_CORRECTION"};
           const {rows:category}=await db.query(
-            "SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND kind=$3",
+            "SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND kind=$3 AND archived_at IS NULL",
             [ctx.owner,correction.categoryId,ev.kind]);
           if(!category[0])return {error:"CATEGORY_NOT_FOUND"};
         }

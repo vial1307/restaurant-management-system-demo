@@ -35,7 +35,7 @@ export async function listFinanceDebtObligations(pool,owner){
   "LEFT JOIN (SELECT owner_user_id,debt_id,SUM(principal_paid) AS paid FROM finance.debt_payments "+
   "WHERE owner_user_id=$1 GROUP BY owner_user_id,debt_id) p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
   "LEFT JOIN finance.debt_mentor_terms t ON t.debt_id=d.id AND t.owner_user_id=d.owner_user_id "+
-  "WHERE d.owner_user_id=$1 ORDER BY d.due_date NULLS LAST,d.name",
+  "WHERE d.owner_user_id=$1 AND d.archived_at IS NULL ORDER BY d.due_date NULLS LAST,d.name",
   [owner]
  );
  return rows;
