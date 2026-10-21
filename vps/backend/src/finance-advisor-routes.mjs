@@ -28,7 +28,7 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
   const startMonth=asOf.slice(0,7)+"-01";
   const endMonth=through.slice(0,7)+"-01";
       const [wallets,cashItems,debtFunds,goalFunds,debtPayments,fxPlans,goals,debts]=await Promise.all([
-        pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
+        pool.query("SELECT a.id,a.name,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=true GROUP BY a.id,a.name,a.currency_code ORDER BY a.currency_code,a.name",[owner]),
         pool.query("SELECT id,kind,label,amount_twd::text,month_date::text,due_day,original_currency FROM finance.cashflow_items WHERE owner_user_id=$1 AND month_date BETWEEN $2::date AND $3::date AND (kind<>'borrowing' OR NOT EXISTS(SELECT 1 FROM finance.debt_disbursements d WHERE d.owner_user_id=finance.cashflow_items.owner_user_id AND d.debt_id=finance.cashflow_items.debt_id)) ORDER BY month_date,due_day NULLS LAST,id",[owner,startMonth,endMonth]),
         pool.query(
           "SELECT f.id,f.debt_id,d.name AS debt_name,d.due_date::text,f.month_date::text,"+
