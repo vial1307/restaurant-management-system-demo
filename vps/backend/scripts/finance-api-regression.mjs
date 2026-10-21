@@ -615,8 +615,7 @@ try{
  assert.equal(editWallet.data.account.name,"Ví đã đổi tên");
  assert.equal((await request("/finance/accounts/"+unusedWallet.id,{method:"DELETE",cookie:stranger,body:{}})).status,403);
  assert.equal((await request("/finance/accounts/"+unusedWallet.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
- assert.equal((await request("/finance/accounts/"+bank.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
-  "A posted wallet cannot be deleted");
+ // Keep the posted wallet active until the final accounting tests; confirmed archive is tested below.
 
  const unusedCategory=(await post("/categories",{name:"Thu thử không dùng",kind:"income"})).category;
  const renameCategory=await request("/finance/categories/"+unusedCategory.id,{method:"PUT",cookie:owner,
@@ -624,7 +623,7 @@ try{
  assert.equal(renameCategory.status,200,JSON.stringify(renameCategory.data));
  assert.equal(renameCategory.data.category.kind,"income");
  assert.equal((await request("/finance/categories/"+unusedCategory.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
- assert.equal((await request("/finance/categories/"+salary.id,{method:"DELETE",cookie:owner,body:{}})).status,409);
+ // The used salary category is archived only after posting/editing tests complete.
 
  const removableGoal=(await post("/goals",{name:"Mục tiêu xóa được",currencyCode:"TWD",
   targetAmount:"1000",targetDate:monthly+"-27"})).goal;
@@ -641,8 +640,7 @@ try{
   principalOriginal:"1000",annualInterestPercent:"0",dueDate:monthly+"-25"})).debt;
  assert.equal((await request("/finance/debts/"+removableDebt.id,{method:"DELETE",cookie:stranger,body:{}})).status,403);
  assert.equal((await request("/finance/debts/"+removableDebt.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
- assert.equal((await request("/finance/debts/"+debt.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
-  "Any debt with a posted repayment is immutable");
+ // Archive posted debt only after the historical/payment regressions finish.
 
  // Posted income corrections use reversal + replacement, never UPDATE or DELETE.
  // Correct and then cancel the corrected entry to restore the exact starting balance.
@@ -712,8 +710,7 @@ assert.equal(mentorLoan?.creditor_type,"friend_family");
 assert.equal(mentorLoan?.obligation_type,"unconfirmed","Do not infer contractual payment terms");
 assert.equal((await request("/finance/loan-receipts",{method:"POST",cookie:owner,body:loanBody})).status,409,
  "A repeated loan funding idempotency key must not mint money twice");
-assert.equal((await request("/finance/debts/"+postedLoan.debt.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
- "Posted loan liabilities cannot be deleted even before first repayment");
+// A posted loan may be archived by its owner; the journal remains append-only.
 assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===borrowWallet.id).balance),20000);
 const payLoan=await post("/debt-payments",{debtId:postedLoan.debt.id,accountId:borrowWallet.id,paymentDate:receiptDate,
   principalPaid:"2000",interestPaid:"100",feePaid:"0",fxRateToTwd:"1",memo:"Trả gốc + lãi",idempotencyKey:key()});
@@ -855,6 +852,55 @@ assert.equal(Number(curr.closingPrincipalNative),6000);
 assert.equal(Number((await request("/finance/bootstrap",{cookie:owner})).data.debts.find(d=>d.id===friendDebt.id).outstanding_amount),6000);
 assert.equal((await request("/finance/mentor/analysis?days=90&bufferTwd=0",{cookie:owner})).data.debtProgress.debts
  .find(d=>d.id===friendDebt.id).months.find(m=>m.month===monthly).paidTotalNative,"3100");
+
+
+// Owner-confirmed delete now archives used records, while preserving posted
+// wallet movements, receipts, paid principal/interest and historical reports.
+const beforeArchiveOverview=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
+const beforeArchiveWallet=(await request("/finance/bootstrap",{cookie:owner})).data.accounts.find(x=>x.id===bank.id)?.balance;
+const dropUsedDebt=await request("/finance/debts/"+debt.id,{method:"DELETE",cookie:owner,body:{}});
+assert.equal(dropUsedDebt.status,200,JSON.stringify(dropUsedDebt.data));
+assert.equal(dropUsedDebt.data.archived,true);
+let afterArchive=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert(!afterArchive.debts.some(x=>x.id===debt.id));
+assert(afterArchive.archivedDebts.some(x=>x.id===debt.id));
+assert(!(await request("/finance/debt-progress?year="+monthly.slice(0,4),{cookie:owner})).data.debts.some(x=>x.id===debt.id));
+assert(!(await request("/finance/mentor/obligations",{cookie:owner})).data.debts.some(x=>x.id===debt.id));
+const blockedArchivedPayment=await request("/finance/debt-payments",{method:"POST",cookie:owner,
+ body:{debtId:debt.id,accountId:vnd.id,paymentDate:date,principalPaid:"10",interestPaid:"0",feePaid:"0",fxRateToTwd:"1",idempotencyKey:key()}});
+assert.equal(blockedArchivedPayment.status,404);
+const restoredDebt=await request("/finance/debts/"+debt.id+"/restore",{method:"POST",cookie:owner,body:{}});
+assert.equal(restoredDebt.status,200);
+assert((await request("/finance/bootstrap",{cookie:owner})).data.debts.some(x=>x.id===debt.id));
+const removePostedLoan=await request("/finance/debts/"+plannedBorrow.debt.id,{method:"DELETE",cookie:owner,body:{}});
+assert.equal(removePostedLoan.status,200);
+assert.equal(removePostedLoan.data.archived,true);
+assert(!(await request("/finance/cashflow?month="+monthly,{cookie:owner})).data.items.some(x=>x.debt_id===plannedBorrow.debt.id));
+assert.equal((await request("/finance/debts/"+plannedBorrow.debt.id+"/restore",{method:"POST",cookie:owner,body:{}})).status,200);
+const dropCategory=await request("/finance/categories/"+salary.id,{method:"DELETE",cookie:owner,body:{}});
+assert.equal(dropCategory.status,200,JSON.stringify(dropCategory.data));
+assert.equal(dropCategory.data.archived,true);
+afterArchive=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert(!afterArchive.categories.some(x=>x.id===salary.id));
+assert(afterArchive.archivedCategories.some(x=>x.id===salary.id));
+const newSalary=(await post("/categories",{name:"Lương",kind:"income"})).category;
+assert.notEqual(newSalary.id,salary.id,"Removed category label must be reusable");
+assert.equal((await request("/finance/categories/"+newSalary.id,{method:"DELETE",cookie:owner,body:{}})).status,200);
+assert.equal((await request("/finance/categories/"+salary.id+"/restore",{method:"POST",cookie:owner,body:{}})).status,200);
+const archivedWallet=await request("/finance/accounts/"+bank.id,{method:"DELETE",cookie:owner,body:{}});
+assert.equal(archivedWallet.status,200,JSON.stringify(archivedWallet.data));
+assert.equal(archivedWallet.data.archived,true);
+afterArchive=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert(!afterArchive.accounts.some(x=>x.id===bank.id));
+assert.equal(afterArchive.archivedAccounts.find(x=>x.id===bank.id).balance,beforeArchiveWallet);
+const archivedAdvice=(await request("/finance/advisor?days=30&bufferTwd=0",{cookie:owner})).data;
+assert(!archivedAdvice.metadata.countedWallets || archivedAdvice.metadata.countedWallets<afterArchive.accounts.length+1);
+assert.equal((await request("/finance/accounts/"+bank.id+"/restore",{method:"POST",cookie:owner,body:{}})).status,200);
+const afterReopen=(await request("/finance/bootstrap",{cookie:owner})).data;
+assert.equal(afterReopen.accounts.find(x=>x.id===bank.id).balance,beforeArchiveWallet);
+const afterArchiveOverview=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
+assert.deepEqual(afterArchiveOverview.financing,beforeArchiveOverview.financing,
+ "Owner deletion cannot silently erase actual borrowing/repayment events");
 
 console.log("PASS monthly cashflow CRUD, multi-currency debt reserve, actual repayment immutable ledger, idempotency/RBAC, year summary and no phantom money, loan financing classification and linked Mentor obligations");
 
