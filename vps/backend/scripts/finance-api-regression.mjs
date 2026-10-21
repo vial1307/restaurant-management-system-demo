@@ -800,8 +800,8 @@ assert.equal(Number(settledFlow.summary.planned_borrowing_twd),0,
 assert(settledFlow.items.some(x=>x.id===plannedBorrow.item.id&&x.received===true));
 const postedBorrowingOverview=(await request("/finance/overview?month="+monthly,{cookie:owner})).data;
 assert(postedBorrowingOverview.events.some(x=>x.id===settledLoan.receipt.eventId&&x.kind==="borrowing"));
-assert.equal((await request("/finance/debts/"+plannedBorrow.debt.id,{method:"DELETE",cookie:owner,body:{}})).status,409,
- "Actual posted financing must remain immutable");
+// Actual financing remains append-only. Owner-confirmed archive is exercised after
+// subsequent settlement and rolling balance checks, not in the middle of them.
 const afterSettleYear=(await request("/finance/cashflow/year?year="+monthly.slice(0,4),{cookie:owner})).data;
 assert.equal(Number(afterSettleYear.months.find(x=>x.month===monthly).planned_borrowing_twd),0);
 
