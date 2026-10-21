@@ -184,11 +184,16 @@ export async function registerFinanceRoutes(app) {
       const result=await financeTransaction(async db=>{
         const {rows}=await db.query("SELECT id FROM finance.accounts WHERE owner_user_id=$1 AND id=$2 AND active=true FOR UPDATE",[ctx.owner,a]);
         if(!rows[0])return {error:"ACCOUNT_NOT_FOUND",status:404};
-        if((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,a])).rows[0])
-          return {error:"ACCOUNT_HAS_POSTED_TRANSACTIONS",status:409};
+        const used=Boolean((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2 LIMIT 1",[ctx.owner,a])).rows[0]);
+        if(used){
+          const {rows:summary}=await db.query("SELECT COALESCE(SUM(amount),0)::text AS balance FROM finance.entries WHERE owner_user_id=$1 AND account_id=$2",[ctx.owner,a]);
+          await db.query("UPDATE finance.accounts SET active=false WHERE owner_user_id=$1 AND id=$2",[ctx.owner,a]);
+          await audit(db,ctx.owner,"finance.account.archive",a,{balanceAtRemoval:summary[0].balance,ledgerPreserved:true},"finance_account");
+          return {deleted:true,archived:true,id:a,balanceAtRemoval:summary[0].balance};
+        }
         await db.query("DELETE FROM finance.accounts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,a]);
-        await audit(db,ctx.owner,"finance.account.delete",a,{},"finance_account");
-        return {deleted:true,id:a};
+        await audit(db,ctx.owner,"finance.account.delete",a,{ledgerPreserved:false},"finance_account");
+        return {deleted:true,archived:false,id:a};
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
@@ -254,7 +259,7 @@ export async function registerFinanceRoutes(app) {
     if(!id(c)||!trim(b.name))return fail(reply,"INVALID_CATEGORY_UPDATE");
     try{
       const saved=await auditedWrite(ctx,"finance.category.update","finance_category",async db=>{
-        const {rows}=await db.query("UPDATE finance.categories SET name=$3 WHERE owner_user_id=$1 AND id=$2 RETURNING id,name,kind",
+        const {rows}=await db.query("UPDATE finance.categories SET name=$3 WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL RETURNING id,name,kind",
           [ctx.owner,c,trim(b.name,100)]);return rows[0];
       });
       if(!saved)return fail(reply,"CATEGORY_NOT_FOUND",404);
@@ -266,14 +271,14 @@ export async function registerFinanceRoutes(app) {
     const c=request.params?.categoryId;if(!id(c))return fail(reply,"INVALID_CATEGORY");
     try{
       const result=await financeTransaction(async db=>{
-        const {rows}=await db.query("SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,c]);
+        const {rows}=await db.query("SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL FOR UPDATE",[ctx.owner,c]);
         if(!rows[0])return {error:"CATEGORY_NOT_FOUND",status:404};
-        if((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND category_id=$2 LIMIT 1",[ctx.owner,c])).rows[0])
-          return {error:"CATEGORY_HAS_POSTED_TRANSACTIONS",status:409};
+        const used=Boolean((await db.query("SELECT 1 FROM finance.entries WHERE owner_user_id=$1 AND category_id=$2 LIMIT 1",[ctx.owner,c])).rows[0]);
         await db.query("DELETE FROM finance.monthly_budgets WHERE owner_user_id=$1 AND category_id=$2",[ctx.owner,c]);
-        await db.query("DELETE FROM finance.categories WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
-        await audit(db,ctx.owner,"finance.category.delete",c,{},"finance_category");
-        return {deleted:true,id:c};
+        if(used)await db.query("UPDATE finance.categories SET archived_at=now() WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
+        else await db.query("DELETE FROM finance.categories WHERE owner_user_id=$1 AND id=$2",[ctx.owner,c]);
+        await audit(db,ctx.owner,used?"finance.category.archive":"finance.category.delete",c,{ledgerPreserved:used},"finance_category");
+        return {deleted:true,archived:used,id:c};
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
@@ -562,7 +567,7 @@ export async function registerFinanceRoutes(app) {
           if(!positive(b.receivedAmount,Number(secondary.minor_units)) || !money(b.feeAmount||"0",Number(primary.minor_units)))return {error:"INVALID_EXCHANGE_AMOUNT"};
         }else if(kind==="income"||kind==="expense"){
           if(!id(b.categoryId))return {error:"CATEGORY_REQUIRED"};
-          const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3",[b.categoryId,ctx.owner,kind]);
+          const check=await client.query("SELECT id FROM finance.categories WHERE id=$1 AND owner_user_id=$2 AND kind=$3 AND archived_at IS NULL",[b.categoryId,ctx.owner,kind]);
           if(!check.rows[0])return {error:"CATEGORY_NOT_FOUND"};
           categoryId=b.categoryId;
           // The source account always remains in its original currency.
@@ -634,7 +639,7 @@ export async function registerFinanceRoutes(app) {
         if(action==="correct"){
           if(!positive(correction.amount,Number(wallet.minor_units)))return {error:"INVALID_TRANSACTION_CORRECTION"};
           const {rows:category}=await db.query(
-            "SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND kind=$3",
+            "SELECT id FROM finance.categories WHERE owner_user_id=$1 AND id=$2 AND kind=$3 AND archived_at IS NULL",
             [ctx.owner,correction.categoryId,ev.kind]);
           if(!category[0])return {error:"CATEGORY_NOT_FOUND"};
         }
