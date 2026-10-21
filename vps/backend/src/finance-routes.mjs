@@ -403,7 +403,7 @@ export async function registerFinanceRoutes(app) {
         if(b.debtId){
           const {rows}=await db.query(
             "SELECT id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text "+
-            "FROM finance.debts WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",
+            "FROM finance.debts WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL FOR UPDATE",
             [ctx.owner,b.debtId]);
           debt=rows[0];
           if(!debt)return {error:"PLAN_DEBT_NOT_FOUND",status:404};
@@ -479,7 +479,7 @@ export async function registerFinanceRoutes(app) {
       const saved=await auditedWrite(ctx,"finance.debt.update","finance_debt",async db=>{
         const {rows}=await db.query(
          "UPDATE finance.debts SET name=$3,annual_interest_rate=$4::numeric/100,due_date=$5::date "+
-         "WHERE owner_user_id=$1 AND id=$2 "+
+         "WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL "+
          "RETURNING id,name,currency_code,principal_original::text,annual_interest_rate::text,due_date::text",
          [ctx.owner,debtId,trim(b.name,160),String(b.annualInterestPercent||"0"),b.dueDate||null]);
         return rows[0]||null;
@@ -493,18 +493,25 @@ export async function registerFinanceRoutes(app) {
     const d=request.params?.debtId;if(!id(d))return fail(reply,"INVALID_DEBT");
     try{
       const result=await financeTransaction(async db=>{
-        const {rows}=await db.query("SELECT id FROM finance.debts WHERE owner_user_id=$1 AND id=$2 FOR UPDATE",[ctx.owner,d]);
+        const {rows}=await db.query("SELECT id FROM finance.debts WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NULL FOR UPDATE",[ctx.owner,d]);
         if(!rows[0])return {error:"DEBT_NOT_FOUND",status:404};
-        if((await db.query("SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
-          return {error:"DEBT_HAS_POSTED_PAYMENTS",status:409};
-        if((await db.query("SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",[ctx.owner,d])).rows[0])
-          return {error:"DEBT_HAS_POSTED_RECEIPT",status:409};
+        const used=Boolean((await db.query(
+          "SELECT 1 FROM finance.debt_payments WHERE owner_user_id=$1 AND debt_id=$2 "+
+          "UNION ALL SELECT 1 FROM finance.debt_disbursements WHERE owner_user_id=$1 AND debt_id=$2 LIMIT 1",
+          [ctx.owner,d])).rows[0]);
         const plans=await db.query("DELETE FROM finance.cashflow_items WHERE owner_user_id=$1 AND debt_id=$2 RETURNING id",[ctx.owner,d]);
         const funds=await db.query("DELETE FROM finance.debt_fund_allocations WHERE owner_user_id=$1 AND debt_id=$2 RETURNING id",[ctx.owner,d]);
-        await db.query("DELETE FROM finance.debt_mentor_terms WHERE owner_user_id=$1 AND debt_id=$2",[ctx.owner,d]);
-        await db.query("DELETE FROM finance.debts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
-        await audit(db,ctx.owner,"finance.debt.delete",d,{removedPlanAllocations:funds.rowCount,removedBorrowingPlans:plans.rowCount},"finance_debt");
-        return {deleted:true,id:d,removedPlanAllocations:funds.rowCount};
+        if(used){
+          await db.query("UPDATE finance.debts SET archived_at=now() WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
+        }else{
+          await db.query("DELETE FROM finance.debt_mentor_terms WHERE owner_user_id=$1 AND debt_id=$2",[ctx.owner,d]);
+          await db.query("DELETE FROM finance.debts WHERE owner_user_id=$1 AND id=$2",[ctx.owner,d]);
+        }
+        await audit(db,ctx.owner,used?"finance.debt.archive":"finance.debt.delete",d,{
+          removedPlanAllocations:funds.rowCount,removedBorrowingPlans:plans.rowCount,
+          retainedPostedPaymentsAndReceipts:used
+        },"finance_debt");
+        return {deleted:true,archived:used,id:d,removedPlanAllocations:funds.rowCount};
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
