@@ -41,7 +41,7 @@ export async function loadFinanceAdvice({pool,owner,asOf,days,bufferTwd}){
           "SELECT f.id,f.goal_id,g.name AS goal_name,g.target_date::text,f.month_date::text,"+
           "f.planned_amount::text,f.earmarked_amount::text,f.fx_rate_to_twd::text,g.currency_code "+
           "FROM finance.goal_fund_allocations f JOIN finance.goals g ON g.id=f.goal_id AND g.owner_user_id=f.owner_user_id "+
-          "WHERE f.owner_user_id=$1 AND d.archived_at IS NULL AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
+          "WHERE f.owner_user_id=$1 AND f.month_date BETWEEN $2::date AND $3::date ORDER BY f.month_date,f.id",
           [owner,startMonth,endMonth]
         ),
         pool.query(
