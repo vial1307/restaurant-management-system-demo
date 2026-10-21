@@ -141,7 +141,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         "FROM finance.debts d LEFT JOIN finance.debt_payments p "+
         "ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id "+
         "LEFT JOIN finance.debt_mentor_terms t ON t.debt_id=d.id AND t.owner_user_id=d.owner_user_id "+
-        "WHERE d.owner_user_id=$1 GROUP BY d.id,t.obligation_type ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
+        "WHERE d.owner_user_id=$1 AND d.archived_at IS NULL GROUP BY d.id,t.obligation_type ORDER BY d.due_date NULLS LAST,d.name",[ctx.owner]),
        getFinanceFxSnapshot(ctx.pool)
       ]);
       const [fundRows,paymentRows]=await Promise.all([
@@ -386,7 +386,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
       return fail(reply,"INVALID_DEBT_FUND");
     try{
       const saved=await auditedWrite(ctx,"finance.debt_fund.save","finance_debt_fund",async db=>{
-        const {rows}=await db.query("SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code WHERE d.id=$1 AND d.owner_user_id=$2",[b.debtId,ctx.owner]);
+        const {rows}=await db.query("SELECT d.currency_code,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code WHERE d.id=$1 AND d.owner_user_id=$2 AND d.archived_at IS NULL",[b.debtId,ctx.owner]);
         const debt=rows[0];
         if(!debt)return null;
         if(!money(b.plannedAmount,Number(debt.minor_units))||!money(b.earmarkedAmount,Number(debt.minor_units)))return {error:"INVALID_DEBT_FUND"};
@@ -571,7 +571,7 @@ export function registerFinancePlanningRoutes(app,{authorized,fail,databaseError
         // Wallet always locked first, then debtor; consistent with other finance ledger operations.
         const source=await account(db,ctx.owner,b.accountId);
         if(!source)return {error:"SOURCE_ACCOUNT_NOT_FOUND",status:404};
-        const {rows}=await db.query("SELECT d.id,d.currency_code,d.principal_original,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code WHERE d.id=$1 AND d.owner_user_id=$2 FOR UPDATE OF d",[b.debtId,ctx.owner]);
+        const {rows}=await db.query("SELECT d.id,d.currency_code,d.principal_original,c.minor_units FROM finance.debts d JOIN finance.currencies c ON c.code=d.currency_code WHERE d.id=$1 AND d.owner_user_id=$2 AND d.archived_at IS NULL FOR UPDATE OF d",[b.debtId,ctx.owner]);
         const debt=rows[0];if(!debt)return {error:"DEBT_NOT_FOUND",status:404};
         if(source.currency_code!==debt.currency_code)return {error:"DEBT_CURRENCY_MISMATCH"};
         const minor=Number(debt.minor_units);
