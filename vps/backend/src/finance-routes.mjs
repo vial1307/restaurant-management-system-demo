@@ -97,7 +97,7 @@ export async function registerFinanceRoutes(app) {
   app.get("/api/finance/bootstrap",async(request,reply)=>{
     const ctx=await authorized(request,reply);if(!ctx)return;
     try {
-      const [currencies,accounts,categories,budgets,plans,goals,debts,archivedAccounts]=await Promise.all([
+      const [currencies,accounts,categories,budgets,plans,goals,debts,archivedAccounts,archivedDebts,archivedCategories]=await Promise.all([
         ctx.pool.query("SELECT code,name_vi,symbol,minor_units FROM finance.currencies WHERE enabled=true ORDER BY CASE code WHEN 'TWD' THEN 0 WHEN 'VND' THEN 1 ELSE 2 END,code"),
         ctx.pool.query("SELECT a.id,a.name,a.kind,a.currency_code,a.created_at,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=true GROUP BY a.id ORDER BY a.created_at",[ctx.owner]),
         ctx.pool.query("SELECT id,name,kind FROM finance.categories WHERE owner_user_id=$1 AND archived_at IS NULL ORDER BY kind,name",[ctx.owner]),
@@ -105,9 +105,11 @@ export async function registerFinanceRoutes(app) {
         ctx.pool.query("SELECT id,plan_date::text AS plan_date,plan_kind,from_currency,to_currency,source_amount::text AS source_amount,expected_rate::text AS expected_rate,expected_fee::text AS expected_fee,status,memo FROM finance.fx_plans WHERE owner_user_id=$1 ORDER BY plan_date DESC,created_at DESC LIMIT 100",[ctx.owner]),
         ctx.pool.query("SELECT id,name,currency_code,target_amount::text,current_amount::text,target_date::text,status FROM finance.goals WHERE owner_user_id=$1 ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END,target_date NULLS LAST,created_at DESC LIMIT 100",[ctx.owner]),
         ctx.pool.query("SELECT d.id,d.name,d.currency_code,d.principal_original::text,d.annual_interest_rate::text,d.due_date::text,COALESCE(SUM(p.principal_paid),0)::text AS principal_paid,(d.principal_original-COALESCE(SUM(p.principal_paid),0))::text AS outstanding_amount,COALESCE(MAX(ld.received_amount),0)::text AS received_amount,MAX(ld.received_date)::text AS received_date,MAX(cp.amount_twd)::text AS planned_borrowing_twd,MAX(cp.month_date)::text AS planned_borrowing_month FROM finance.debts d LEFT JOIN finance.debt_payments p ON p.debt_id=d.id AND p.owner_user_id=d.owner_user_id LEFT JOIN finance.debt_disbursements ld ON ld.debt_id=d.id AND ld.owner_user_id=d.owner_user_id LEFT JOIN finance.cashflow_items cp ON cp.debt_id=d.id AND cp.owner_user_id=d.owner_user_id AND cp.kind=\'borrowing\' WHERE d.owner_user_id=$1 AND d.archived_at IS NULL GROUP BY d.id ORDER BY d.due_date NULLS LAST,d.created_at DESC LIMIT 100",[ctx.owner]),
-        ctx.pool.query("SELECT a.id,a.name,a.kind,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=false GROUP BY a.id ORDER BY a.created_at",[ctx.owner])
+        ctx.pool.query("SELECT a.id,a.name,a.kind,a.currency_code,COALESCE(SUM(e.amount),0)::text AS balance FROM finance.accounts a LEFT JOIN finance.entries e ON e.account_id=a.id AND e.owner_user_id=a.owner_user_id WHERE a.owner_user_id=$1 AND a.active=false GROUP BY a.id ORDER BY a.created_at",[ctx.owner]),
+        ctx.pool.query("SELECT id,name,currency_code,principal_original::text,archived_at FROM finance.debts WHERE owner_user_id=$1 AND archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT 100",[ctx.owner]),
+        ctx.pool.query("SELECT id,name,kind,archived_at FROM finance.categories WHERE owner_user_id=$1 AND archived_at IS NOT NULL ORDER BY archived_at DESC LIMIT 100",[ctx.owner])
       ]);
-      return {currencies:currencies.rows,accounts:accounts.rows,archivedAccounts:archivedAccounts.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
+      return {currencies:currencies.rows,accounts:accounts.rows,archivedAccounts:archivedAccounts.rows,archivedDebts:archivedDebts.rows,archivedCategories:archivedCategories.rows,categories:categories.rows,budgets:budgets.rows,plans:plans.rows,goals:goals.rows,debts:debts.rows,reportCurrency:"TWD"};
     } catch(error){return databaseError(request,reply,error);}
   });
   app.get("/api/finance/overview",async(request,reply)=>{
@@ -199,6 +201,18 @@ export async function registerFinanceRoutes(app) {
       return result;
     }catch(error){return databaseError(request,reply,error);}
   });
+  app.post("/api/finance/accounts/:accountId/restore",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const a=request.params?.accountId;if(!id(a))return fail(reply,"INVALID_ACCOUNT");
+    try{
+      const result=await auditedWrite(ctx,"finance.account.restore","finance_account",async db=>{
+        const {rows}=await db.query("UPDATE finance.accounts SET active=true WHERE owner_user_id=$1 AND id=$2 AND active=false RETURNING id",[ctx.owner,a]);
+        return rows[0]||null;
+      });
+      if(!result)return fail(reply,"ACCOUNT_NOT_ARCHIVED",404);
+      return {restored:true,id:result.id};
+    }catch(error){return databaseError(request,reply,error);}
+  });
   // Owner-only balance reconciliation. Never rewrite the immutable ledger:
   // insert one signed correcting entry after locking the owned account.
   app.post("/api/finance/accounts/:accountId/reconcile",async(request,reply)=>{
@@ -282,6 +296,18 @@ export async function registerFinanceRoutes(app) {
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/categories/:categoryId/restore",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const c=request.params?.categoryId;if(!id(c))return fail(reply,"INVALID_CATEGORY");
+    try{
+      const result=await auditedWrite(ctx,"finance.category.restore","finance_category",async db=>{
+        const {rows}=await db.query("UPDATE finance.categories SET archived_at=NULL WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NOT NULL RETURNING id",[ctx.owner,c]);
+        return rows[0]||null;
+      });
+      if(!result)return fail(reply,"CATEGORY_NOT_ARCHIVED",404);
+      return {restored:true,id:result.id};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.put("/api/finance/budgets",async(request,reply)=>{
@@ -515,6 +541,18 @@ export async function registerFinanceRoutes(app) {
       });
       if(result.error)return fail(reply,result.error,result.status);
       return result;
+    }catch(error){return databaseError(request,reply,error);}
+  });
+  app.post("/api/finance/debts/:debtId/restore",async(request,reply)=>{
+    const ctx=await authorized(request,reply,{write:true});if(!ctx)return;
+    const d=request.params?.debtId;if(!id(d))return fail(reply,"INVALID_DEBT");
+    try{
+      const result=await auditedWrite(ctx,"finance.debt.restore","finance_debt",async db=>{
+        const {rows}=await db.query("UPDATE finance.debts SET archived_at=NULL WHERE owner_user_id=$1 AND id=$2 AND archived_at IS NOT NULL RETURNING id",[ctx.owner,d]);
+        return rows[0]||null;
+      });
+      if(!result)return fail(reply,"DEBT_NOT_ARCHIVED",404);
+      return {restored:true,id:result.id,plansRestored:false};
     }catch(error){return databaseError(request,reply,error);}
   });
   app.post("/api/finance/fx-plans/:planId/cancel",async(request,reply)=>{
