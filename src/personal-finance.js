@@ -839,17 +839,17 @@ async function act(action,id){
    notify("Đã hủy bằng bút toán đảo và tính lại số dư.");await refresh();
   }catch(e){notify(errorText(e));}return;
  }
- const removal={deleteDebt:["/debts/","khoản nợ","Nợ đã trả không thể xóa, quỹ dự kiến được xóa kèm."],
+ const removal={deleteDebt:["/debts/","khoản nợ","Nếu có thu/trả thực tế, khoản nợ sẽ được ẩn khỏi quản lý và ngừng tham gia tư vấn; lịch sử tiền thật vẫn được giữ. Các quỹ dự kiến liên quan bị xóa."],
    deleteGoal:["/goals/","mục tiêu","Quỹ phân bổ liên quan sẽ bị xóa kèm."],
-   deleteAccount:["/accounts/","ví","Ví đã có giao dịch thật không thể xóa."],
-   deleteCategory:["/categories/","danh mục","Danh mục đã dùng trong giao dịch thật không thể xóa."],
+   deleteAccount:["/accounts/","ví","Nếu đã có giao dịch, ví sẽ chuyển vào danh sách đã lưu trữ. Số dư còn lại không còn tính là tiền khả dụng; lịch sử vẫn được giữ và bạn có thể khôi phục."],
+   deleteCategory:["/categories/","danh mục","Nếu đã sử dụng, danh mục sẽ được ẩn khỏi phần nhập mới; các giao dịch đã ghi vẫn giữ nguyên. Bạn có thể khôi phục khi cần."],
    deleteScenario:["/workbench/scenarios/","kịch bản",""]};
  if(removal[action]){
    const [route,what,note]=removal[action];
-   if(!confirm("Xóa "+what+" này? "+note+" Hành động không thể hoàn tác."))return;
-   try{await api(route+id,{},"DELETE");
+   if(!confirm("Bạn xác nhận xóa "+what+" này khỏi quản lý?\n\n"+note+"\n\nNhấn OK để tiếp tục hoặc Cancel để giữ nguyên."))return;
+   try{const removed=await api(route+id,{},"DELETE");
     if(action==="deleteScenario"&&state.scenarioId===id)state.scenarioId=null;
-    notify("Đã xóa "+what+".");await refresh();
+    notify(removed.archived?"Đã ẩn "+what+" khỏi quản lý. Có thể khôi phục trong mục Đã xóa/lưu trữ.":"Đã xóa "+what+".");await refresh();
    }catch(e){notify(errorText(e));}return;
  }
  if(["transaction","editTransaction","account","editAccount","reconcile","borrow","debt","editDebt","goal","fundDebt","fundGoal","payDebt","editGoal","category","editCategory","budget"].includes(action))return open(action,id);
