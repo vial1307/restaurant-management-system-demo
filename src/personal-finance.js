@@ -199,6 +199,18 @@ function walletList(){
  btn("Xóa","deleteAccount","small danger",'data-id="'+safe(a.id)+'"')+
  '</div></div></div>').join(""):empty("Chưa có ví. Hãy thêm ví hoặc tài khoản ngân hàng.");
 }
+function archivedFinanceList(kind){
+ const types={
+  debt:{items:state.data?.archivedDebts||[],title:"Khoản nợ đã xóa khỏi quản lý",restore:"restoreDebt",desc:x=>x.currency_code+" · gốc ban đầu "+money(x.principal_original,x.currency_code)},
+  account:{items:state.data?.archivedAccounts||[],title:"Ví đã xóa khỏi quản lý",restore:"restoreAccount",desc:x=>x.currency_code+" · số dư sổ cái vẫn còn "+money(x.balance,x.currency_code)},
+  category:{items:state.data?.archivedCategories||[],title:"Danh mục đã xóa khỏi quản lý",restore:"restoreCategory",desc:x=>x.kind==="income"?"Danh mục thu nhập":"Danh mục chi tiêu"}
+ };
+ const o=types[kind];if(!o.items.length)return "";
+ return '<details class="finance-archived"><summary>'+safe(o.title)+' ('+o.items.length+')</summary>'+
+  '<div class="notice">Các mục có bút toán thực tế được lưu trữ để bảo toàn số liệu. Khôi phục không tự tạo lại kế hoạch đã xóa.</div>'+
+  o.items.map(x=>'<div class="rowitem"><div><strong>'+safe(x.name)+'</strong><p>'+safe(o.desc(x))+'</p></div>'+
+   btn("Khôi phục",o.restore,"small soft",'data-id="'+safe(x.id)+'"')+'</div>').join("")+'</details>';
+}
 function goalList(limit=99){
  const goals=(state.data?.goals||[]).filter(x=>x.status==="active").slice(0,limit);
  return goals.length?goals.map(g=>'<div class="goal-card"><div class="goal-head"><strong>'+safe(g.name)+'</strong><b>'+Math.round(goalPercent(g))+'%</b></div><small>'+money(g.current_amount,g.currency_code)+' / '+money(g.target_amount,g.currency_code)+'</small><div class="progress"><i style="width:'+goalPercent(g)+'%"></i></div></div>').join(""):empty("Chưa có mục tiêu. Tạo mục tiêu đầu tiên.");
@@ -336,6 +348,7 @@ function commitments(){
  return title("Công nợ & mục tiêu","Quản lý khoản cần trả và mục tiêu tích lũy trong cùng một trang.",btn("+ Nhận tiền vay","borrow","primary")+btn("+ Khoản nợ chưa giải ngân","debt","soft")+btn("+ Mục tiêu","goal","soft"))+
  priorityRibbon()+'<div class="layout-2 equal">'+card("Danh sách khoản nợ",debtHtml)+card("Mục tiêu và quỹ tích lũy",goalHtml)+'</div>'+
  card("Tiến độ trả nợ theo tháng · "+state.month.slice(0,4),debtProgressPanels())+
+ archivedFinanceList("debt")+
  card("Lịch cần xoay tiền và dự kiến trả",datedDebtAgenda(),btn("Xem mô phỏng","goSim","small soft"))+
  card("Phân bổ nguồn lương để trả nợ trong 12 tháng",payoffSchedule(),btn("Mở mô phỏng","goSim","small soft"))+
  card("Quỹ trong kế hoạch tháng",planTable(),btn("Xem kế hoạch","goPlan","small soft"))+
@@ -441,7 +454,8 @@ function settings(){
  return title("Tài khoản & cài đặt","Chỉ giữ những chức năng cần thiết để quản lý ví, danh mục và ngoại tệ.",btn("+ Ví mới","account","primary")+btn("+ Danh mục","category","soft"))+
  '<div class="layout-2 equal">'+card("Ví và số dư",walletList())+card("Ngoại tệ tham chiếu",quoteCards(),btn("↻ Làm mới","reloadFx","small soft"))+'</div>'+
  card("Danh mục thu / chi",(state.data?.categories||[]).map(c=>'<div class="rowitem"><div><strong>'+safe(c.name)+'</strong><p>'+safe(c.kind==="income"?"Thu nhập":"Chi tiêu")+'</p></div><div class="tools">'+btn("Sửa","editCategory","small ghost",'data-id="'+safe(c.id)+'"')+btn("Xóa","deleteCategory","small danger",'data-id="'+safe(c.id)+'"')+'</div></div>').join("")||empty("Chưa có danh mục."))+
- '<div class="notice">Finance OS dùng cơ sở dữ liệu riêng. Số dư được đối soát bằng bút toán có lý do, không sửa ngược lịch sử. Các màn hình cũ không còn được tải.</div>';
+ archivedFinanceList("account")+archivedFinanceList("category")+
+ '<div class="notice">Các mục có giao dịch đã xóa khỏi danh sách được lưu trữ. Tiền trong ví lưu trữ không tính là tiền khả dụng trong tư vấn; khôi phục ví để dùng lại. Lịch sử bút toán gốc không bị xóa.</div>';
 }
 function render(){
  $("#finance-month").value=state.month;
@@ -832,6 +846,14 @@ async function act(action,id){
   return;
  }
  if(action==="deletePlan")return deletePlan(id);
+ const restore={restoreDebt:["/debts/","khoản nợ"],restoreAccount:["/accounts/","ví"],restoreCategory:["/categories/","danh mục"]};
+ if(restore[action]){
+  const [url,label]=restore[action];
+  if(!confirm("Khôi phục "+label+" này để tiếp tục quản lý? Kế hoạch dự kiến đã xóa trước đó không tự phục hồi."))return;
+  try{await api(url+id+"/restore",{},"POST");notify("Đã khôi phục "+label+".");await refresh();}
+  catch(error){notify(errorText(error));}
+  return;
+ }
  if(action==="reverseTransaction"){
   const ev=(state.overview?.events||[]).find(x=>x.id===id);
   if(!ev||!confirm("Hủy giao dịch “"+(ev.description||"giao dịch")+"”? Hệ thống ghi bút toán đảo, giữ nguyên lịch sử gốc."))return;
